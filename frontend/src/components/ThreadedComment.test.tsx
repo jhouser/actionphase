@@ -5,6 +5,7 @@ import { ThreadedComment } from './ThreadedComment';
 import type { Message } from '../types/messages';
 import { MemoryRouter } from 'react-router-dom';
 import { useScreenshotMode } from '../hooks/useScreenshotMode';
+import { useGamePermissions } from '../hooks/useGamePermissions';
 
 // Mock heavy dependencies
 vi.mock('../hooks/useAdminMode', () => ({
@@ -16,7 +17,7 @@ vi.mock('../hooks/useScreenshotMode', () => ({
 }));
 
 vi.mock('../hooks/useGamePermissions', () => ({
-  useGamePermissions: () => ({ isGM: false, isPlayer: true }),
+  useGamePermissions: vi.fn(() => ({ isGM: false, isPlayer: true })),
 }));
 
 vi.mock('../hooks/useCommentMutations', () => ({
@@ -96,6 +97,7 @@ describe('ThreadedComment — manual read mode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useScreenshotMode).mockReturnValue({ screenshotModeEnabled: false, toggleScreenshotMode: vi.fn() });
+    vi.mocked(useGamePermissions).mockReturnValue({ isGM: false, isPlayer: true } as never);
   });
 
   describe('Screenshot Mode', () => {
@@ -119,6 +121,38 @@ describe('ThreadedComment — manual read mode', () => {
       vi.mocked(useScreenshotMode).mockReturnValue({ screenshotModeEnabled: true, toggleScreenshotMode: vi.fn() });
       renderComment();
       expect(screen.queryByText('You')).not.toBeInTheDocument();
+    });
+
+    it('shows the Edit and Delete buttons for the comment author when disabled', () => {
+      renderComment();
+      expect(screen.getByRole('button', { name: /edit this comment/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /delete this comment/i })).toBeInTheDocument();
+    });
+
+    // Edit/Delete only render for the author, so leaving them visible identifies
+    // which character the screenshotter plays just as plainly as the username.
+    it('hides the Edit and Delete buttons when enabled', () => {
+      vi.mocked(useScreenshotMode).mockReturnValue({ screenshotModeEnabled: true, toggleScreenshotMode: vi.fn() });
+      renderComment();
+      expect(screen.queryByRole('button', { name: /edit this comment/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /delete this comment/i })).not.toBeInTheDocument();
+      // The comment itself still renders — only the authorship tells are hidden.
+      expect(screen.getByTestId('markdown-preview')).toBeInTheDocument();
+    });
+
+    // Delete also renders for GMs/admins on other people's comments; a visible
+    // Delete button would reveal that the screenshotter is the GM.
+    it('shows the Delete button for a GM viewing another author\'s comment when disabled', () => {
+      vi.mocked(useGamePermissions).mockReturnValue({ isGM: true, isPlayer: false } as never);
+      renderComment({ currentUserId: 12345 });
+      expect(screen.getByRole('button', { name: /delete this comment/i })).toBeInTheDocument();
+    });
+
+    it('hides the Delete button for a GM viewing another author\'s comment when enabled', () => {
+      vi.mocked(useGamePermissions).mockReturnValue({ isGM: true, isPlayer: false } as never);
+      vi.mocked(useScreenshotMode).mockReturnValue({ screenshotModeEnabled: true, toggleScreenshotMode: vi.fn() });
+      renderComment({ currentUserId: 12345 });
+      expect(screen.queryByRole('button', { name: /delete this comment/i })).not.toBeInTheDocument();
     });
   });
 

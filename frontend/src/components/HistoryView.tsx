@@ -191,8 +191,13 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
             phaseId={selectedPhaseId}
             phaseTitle={selectedPhase.title || getActionPhaseLabel(selectedPhase)}
             phaseDescription={selectedPhase.description}
+            // The phase being viewed, not necessarily the game's active phase.
+            // Utility Drawer panels (e.g. Mark All Read) need the phase object,
+            // not just its id, to scope their actions.
+            currentPhase={selectedPhase}
             isCurrentPhase={false} // Always read-only in history view
             isGM={isGM}
+            isAudience={isAudience}
             isGameCompleted={isGameCompleted}
           />
         ) : (

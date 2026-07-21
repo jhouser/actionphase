@@ -239,4 +239,52 @@ describe('HistoryView', () => {
       expect(await screen.findByText('Back to History')).toBeInTheDocument();
     });
   });
+
+  describe('Utility Drawer context on historical phases', () => {
+    /**
+     * Regression guard: HistoryView used to render CommonRoom without the
+     * `currentPhase` prop, passing only `phaseId`. The Mark All Read utility
+     * gates on `!!ctx.currentPhase` (it needs the phase object, not just an id,
+     * to scope the bulk mark-read), so it silently vanished from the drawer on
+     * the History tab while working fine on the live phase. The failure mode is
+     * invisible — a missing list item, no error — so it needs an explicit test.
+     */
+    it('offers Mark All Read in the drawer for a historical common_room phase', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+
+      renderWithProviders(
+        <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />,
+        { initialRoute: '/games/1?tab=history&phase=1', gameId: mockGameId }
+      );
+
+      // Phase 1 (a past common_room phase) is selected via the URL param.
+      expect(await screen.findByText('Back to History')).toBeInTheDocument();
+
+      await user.click(await screen.findByTestId('utility-drawer-toggle'));
+
+      // The utility must be listed, not filtered out by its isAvailable gate.
+      expect(await screen.findByTestId('utility-list')).toBeInTheDocument();
+      expect(screen.getByTestId('utility-mark-all-read')).toBeInTheDocument();
+    });
+
+    it('enables the mark-all-read action for a historical phase', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+
+      renderWithProviders(
+        <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />,
+        { initialRoute: '/games/1?tab=history&phase=1', gameId: mockGameId }
+      );
+
+      expect(await screen.findByText('Back to History')).toBeInTheDocument();
+      await user.click(await screen.findByTestId('utility-drawer-toggle'));
+      await user.click(await screen.findByTestId('utility-mark-all-read'));
+
+      // Without a resolved phase the panel renders its button disabled, so an
+      // enabled button proves the phase object actually reached the panel.
+      const markAllButton = await screen.findByRole('button', {
+        name: /mark all comments as read/i,
+      });
+      expect(markAllButton).toBeEnabled();
+    });
+  });
 });

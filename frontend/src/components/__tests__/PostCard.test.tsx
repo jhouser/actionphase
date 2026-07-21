@@ -190,6 +190,45 @@ describe('PostCard', () => {
       expect(screen.queryByText('You')).not.toBeInTheDocument();
     });
 
+    it('shows the Edit button for the post author when Screenshot Mode is disabled', () => {
+      renderWithProviders(
+        <PostCard
+          post={mockPost}
+          gameId={1}
+          characters={mockCharacters}
+          controllableCharacters={mockCharacters}
+          onCreateComment={mockOnCreateComment}
+          currentUserId={100}
+        />
+      );
+
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+
+    // The Edit button only renders for the post's author, so leaving it visible
+    // reveals which character the screenshotter plays.
+    it('hides the Edit button when Screenshot Mode is enabled', () => {
+      vi.mocked(useScreenshotModeHook.useScreenshotMode).mockReturnValue({
+        screenshotModeEnabled: true,
+        toggleScreenshotMode: vi.fn(),
+      });
+
+      renderWithProviders(
+        <PostCard
+          post={mockPost}
+          gameId={1}
+          characters={mockCharacters}
+          controllableCharacters={mockCharacters}
+          onCreateComment={mockOnCreateComment}
+          currentUserId={100}
+        />
+      );
+
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+      // The post itself still renders — only the authorship tell is hidden.
+      expect(screen.getByText('This is a test GM post')).toBeInTheDocument();
+    });
+
     it('shows edited indicator when post is edited', () => {
       renderWithProviders(
         <PostCard

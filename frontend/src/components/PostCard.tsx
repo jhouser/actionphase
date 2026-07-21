@@ -474,7 +474,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
                       {isAuthor && !screenshotModeEnabled && (
                         <span className="ml-2 text-xs bg-interactive-primary-subtle text-interactive-primary px-2 py-0.5 rounded">You</span>
                       )}
-                      {isAuthor && !readOnly && !isEditing && (
+                      {isAuthor && !readOnly && !isEditing && !screenshotModeEnabled && (
                         <button
                           onClick={handleEdit}
                           className="ml-2 text-xs text-interactive-primary hover:text-interactive-primary-hover underline"
@@ -543,7 +543,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
                         {isAuthor && !screenshotModeEnabled && (
                           <span className="ml-2 text-xs bg-interactive-primary-subtle text-interactive-primary px-2 py-0.5 rounded">You</span>
                         )}
-                        {isAuthor && !readOnly && !isEditing && (
+                        {isAuthor && !readOnly && !isEditing && !screenshotModeEnabled && (
                           <button
                             onClick={handleEdit}
                             className="ml-2 text-xs text-interactive-primary hover:text-interactive-primary-hover underline"

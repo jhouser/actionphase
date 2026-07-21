@@ -695,7 +695,10 @@ export const ThreadedComment = memo(function ThreadedComment({
             </Button>
           )}
 
-          {isAuthor && !isEditing && !comment.is_deleted && !readOnly && (
+          {/* Screenshot Mode hides Edit/Delete too: they only render for the
+              author (or the GM/admin), so a visible control gives away who's
+              behind the character just as plainly as the username would. */}
+          {isAuthor && !isEditing && !comment.is_deleted && !readOnly && !screenshotModeEnabled && (
             <Button
               variant="ghost"
               onClick={handleEdit}
@@ -710,7 +713,7 @@ export const ThreadedComment = memo(function ThreadedComment({
             </Button>
           )}
 
-          {(isAuthor || isGM || adminModeEnabled) && !isEditing && !comment.is_deleted && !readOnly && (
+          {(isAuthor || isGM || adminModeEnabled) && !isEditing && !comment.is_deleted && !readOnly && !screenshotModeEnabled && (
             <Button
               variant="ghost"
               onClick={handleDeleteClick}

@@ -65,8 +65,11 @@ export function CommentWithParentCard({
 
   const portraitAvatars = game?.portrait_avatars ?? false;
   const isAuthor = currentUser?.id === comment.author_id;
-  const canDelete = (isAuthor || isGM || adminModeEnabled) && !comment.is_deleted && !!comment.post_id;
-  const canEdit = isAuthor && !comment.is_deleted && !!comment.post_id;
+  // Screenshot Mode hides Edit/Delete too: they only render for the author (or
+  // the GM/admin), so a visible control gives away who's behind the character
+  // just as plainly as the username would.
+  const canDelete = (isAuthor || isGM || adminModeEnabled) && !comment.is_deleted && !!comment.post_id && !screenshotModeEnabled;
+  const canEdit = isAuthor && !comment.is_deleted && !!comment.post_id && !screenshotModeEnabled;
   const canReply = !comment.is_deleted && userCharacters.length > 0 && !!comment.post_id;
 
   const handleCopyLink = async () => {

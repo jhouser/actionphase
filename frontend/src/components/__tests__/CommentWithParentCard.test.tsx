@@ -482,5 +482,33 @@ describe('CommentWithParentCard', () => {
       // Character name remains visible — only the real username is hidden.
       expect(screen.getByText('Test Character')).toBeInTheDocument();
     });
+
+    const commentWithPostId: CommentWithParent = { ...mockComment, post_id: 42 };
+
+    it('shows the Edit and Delete buttons for the comment author when disabled', () => {
+      vi.mocked(useAuth).mockReturnValue({ currentUser: { id: mockComment.author_id } } as never);
+
+      renderWithProviders(<CommentWithParentCard comment={commentWithPostId} gameId={1} />, { gameId: 1 });
+
+      expect(screen.getByRole('button', { name: /edit this comment/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /delete this comment/i })).toBeInTheDocument();
+    });
+
+    // Edit/Delete only render for the author, so leaving them visible identifies
+    // which character the screenshotter plays just as plainly as the username.
+    it('hides the Edit and Delete buttons when enabled', () => {
+      vi.mocked(useAuth).mockReturnValue({ currentUser: { id: mockComment.author_id } } as never);
+      vi.mocked(useScreenshotModeHook.useScreenshotMode).mockReturnValue({
+        screenshotModeEnabled: true,
+        toggleScreenshotMode: vi.fn(),
+      });
+
+      renderWithProviders(<CommentWithParentCard comment={commentWithPostId} gameId={1} />, { gameId: 1 });
+
+      expect(screen.queryByRole('button', { name: /edit this comment/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /delete this comment/i })).not.toBeInTheDocument();
+      // The comment itself still renders — only the authorship tells are hidden.
+      expect(screen.getByText('This is a test comment')).toBeInTheDocument();
+    });
   });
 });
