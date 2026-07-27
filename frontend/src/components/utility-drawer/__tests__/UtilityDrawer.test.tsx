@@ -100,6 +100,41 @@ describe('UtilityDrawer', () => {
     await waitFor(() => expect(openCharacterSheet).toHaveBeenCalledWith(7));
   });
 
+  it('reopens on the utility list after a sole-character sheet closed it externally', async () => {
+    // Regression: with exactly one character, selecting the Character Sheet
+    // utility opens the sheet, which closes the drawer via openCharacterSheet
+    // (setting `open` to false in the parent) — NOT via the drawer's own back
+    // button or onClose, so activeId was never reset. On reopen, the drawer was
+    // still on the character-sheet panel; its mount effect re-fired and opened
+    // the sheet again immediately, making the drawer unusable — you could never
+    // reach the utility list to pick a different utility until a page refresh.
+    const openCharacterSheet = vi.fn();
+    const ctx = makeCtx({
+      userCharacters: [makeCharacter({ id: 7 })],
+      openCharacterSheet,
+    });
+
+    const { rerender } = renderWithProviders(
+      <UtilityDrawer open onClose={vi.fn()} ctx={ctx} />
+    );
+
+    // Select the character sheet — the sole character's sheet opens immediately.
+    fireEvent.click(screen.getByTestId('utility-character-sheet'));
+    await waitFor(() => expect(openCharacterSheet).toHaveBeenCalledWith(7));
+
+    // The parent closes the drawer in response to openCharacterSheet.
+    rerender(<UtilityDrawer open={false} onClose={vi.fn()} ctx={ctx} />);
+
+    // Reopen the drawer (e.g. after the user closes the sheet modal).
+    rerender(<UtilityDrawer open onClose={vi.fn()} ctx={ctx} />);
+
+    // It must show the utility list again, not a blank stuck panel.
+    await waitFor(() =>
+      expect(screen.getByTestId('utility-list')).toBeInTheDocument()
+    );
+    expect(screen.getByTestId('utility-character-sheet')).toBeInTheDocument();
+  });
+
   it('shows a character picker when the user controls more than one character', async () => {
     const openCharacterSheet = vi.fn();
     renderWithProviders(
@@ -141,12 +176,13 @@ describe('UtilityDrawer', () => {
     );
 
     const toggle = screen.getByTestId('screenshot-mode-toggle');
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(toggle).toHaveAttribute('role', 'switch');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
 
     fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
 
     fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
   });
 });

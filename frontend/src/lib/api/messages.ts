@@ -12,7 +12,8 @@ import type {
   ManualCommentReads,
   PaginatedCommentsResponse,
   RecentCommentsResponse,
-  CommentWithParent
+  CommentWithParent,
+  MessageThreadContext
 } from '../../types/messages';
 import { COMMENT_MAX_DEPTH } from '@/config/comments';
 
@@ -81,6 +82,15 @@ export class MessagesApi extends BaseApiClient {
   // Get a single message by ID (for deep linking to nested comments)
   async getMessage(gameId: number, messageId: number) {
     return this.client.get<Message>(`/api/v1/games/${gameId}/messages/${messageId}`);
+  }
+
+  // Get a message plus a bounded slice of its ancestor chain (target + up to
+  // maxParents nearest ancestors) and the true root post ID, in a single request.
+  // Replaces the per-level getMessage waterfall for deep-linked nested comments.
+  // chain is ordered parent-to-child (nearest included ancestor → target).
+  async getMessageThreadContext(gameId: number, messageId: number, maxParents?: number) {
+    const query = maxParents !== undefined ? `?max_parents=${maxParents}` : '';
+    return this.client.get<MessageThreadContext>(`/api/v1/games/${gameId}/messages/${messageId}/thread-context${query}`);
   }
 
   // Read tracking endpoints

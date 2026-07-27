@@ -174,7 +174,7 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
                 )}
               </div>
               <div className="text-sm text-content-primary surface-base p-3 rounded border border-theme-default" data-testid="action-content">
-                <MarkdownPreview content={isCollapsible && !isCurrentActionExpanded ? previewContent : currentAction.content} sheetItemRefs={sheetItems} />
+                <MarkdownPreview content={isCollapsible && !isCurrentActionExpanded ? previewContent : currentAction.content} fullWidth sheetItemRefs={sheetItems} />
               </div>
               {isCollapsible && (
                 <button
@@ -430,7 +430,7 @@ function ActionHistory({ actions, currentPhaseId, sheetItems = [] }: ActionHisto
               </span>
             </div>
             <div className="text-sm text-content-primary surface-raised p-3 rounded">
-              <MarkdownPreview content={isCollapsible && !isExpanded ? previewContent : action.content} sheetItemRefs={sheetItems} />
+              <MarkdownPreview content={isCollapsible && !isExpanded ? previewContent : action.content} fullWidth sheetItemRefs={sheetItems} />
             </div>
             {isCollapsible && (
               <button

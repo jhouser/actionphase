@@ -226,8 +226,6 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null);
   const [hoveredSheetRefId, setHoveredSheetRefId] = useState<string | null>(null);
   const [sheetTooltipPosition, setSheetTooltipPosition] = useState<{ top: number; left: number } | null>(null);
-  const [expandedSheetRefId, setExpandedSheetRefId] = useState<string | null>(null);
-  const expandedSheetRefIdRef = useRef<string | null>(null);
   const mouseOverTooltip = useRef(false);
   const sheetHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -247,11 +245,6 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   );
 
   const htmlContent = React.useMemo(() => renderMarkdown(processedContent), [processedContent]);
-
-  // Keep ref in sync so event handlers always see the current value without stale closures
-  useEffect(() => {
-    expandedSheetRefIdRef.current = expandedSheetRefId;
-  }, [expandedSheetRefId]);
 
   // Event delegation for mention and sheet item tooltips
   const handleMouseOver = useCallback((e: MouseEvent) => {
@@ -374,8 +367,6 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
     const dismiss = (e: MouseEvent | TouchEvent) => {
       const el = (e instanceof TouchEvent ? e.touches[0]?.target : e.target) as Element | null;
       if (el && !el.closest('mark[data-sheet-ref-id]') && !el.closest('[data-sheet-tooltip]')) {
-        expandedSheetRefIdRef.current = null;
-        setExpandedSheetRefId(null);
         setHoveredSheetRefId(null);
         setSheetTooltipPosition(null);
       }
@@ -421,10 +412,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       )}
 
       {hoveredSheetItem && sheetTooltipPosition && (() => {
-        const isExpanded = expandedSheetRefId === hoveredSheetItem.id;
-        const TRUNCATE = 200;
         const desc = hoveredSheetItem.description ?? '';
-        const needsTruncation = desc.length > TRUNCATE;
         return (
           <div
             data-sheet-tooltip
@@ -439,10 +427,8 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
             }}
             onMouseLeave={() => {
               mouseOverTooltip.current = false;
-              if (!expandedSheetRefIdRef.current) {
-                setHoveredSheetRefId(null);
-                setSheetTooltipPosition(null);
-              }
+              setHoveredSheetRefId(null);
+              setSheetTooltipPosition(null);
             }}
           >
             <div className="relative pr-6">
@@ -455,26 +441,9 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
                   <div className="text-xs text-content-tertiary mt-0.5">{hoveredSheetItem.metadata}</div>
                 )}
                 {desc && (
-                  <div
-                    className={`text-xs text-content-secondary mt-1 leading-relaxed whitespace-pre-line ${isExpanded ? 'max-h-64 overflow-y-auto' : ''}`}
-                  >
-                    {isExpanded ? desc : needsTruncation ? desc.slice(0, TRUNCATE) + '…' : desc}
+                  <div className="text-xs mt-1 leading-relaxed max-h-64 overflow-y-auto">
+                    <MarkdownPreview content={desc} fullWidth className="!text-xs" />
                   </div>
-                )}
-                {needsTruncation && !isExpanded && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      expandedSheetRefIdRef.current = hoveredSheetItem.id;
-                      setExpandedSheetRefId(hoveredSheetItem.id);
-                    }}
-                    className="mt-1 px-0 text-semantic-warning hover:text-interactive-primary-hover underline"
-                  >
-                    Read more
-                  </Button>
                 )}
               </div>
               <Button
@@ -483,8 +452,6 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  expandedSheetRefIdRef.current = null;
-                  setExpandedSheetRefId(null);
                   setHoveredSheetRefId(null);
                   setSheetTooltipPosition(null);
                 }}

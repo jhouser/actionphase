@@ -636,5 +636,65 @@ describe('MarkdownPreview', () => {
       // Tooltip with item name should appear
       expect(screen.getByText('Fire Bolt')).toBeInTheDocument();
     });
+
+    it('renders markdown in the tooltip description', () => {
+      const markdownItems = [
+        {
+          id: 'md-1',
+          name: 'Power Attack',
+          type: 'ability' as const,
+          description: 'Deals **massive** damage.\n\n| Roll | Effect |\n| --- | --- |\n| 6 | Critical |',
+          metadata: 'innate',
+        },
+      ];
+      const { container } = render(
+        <MarkdownPreview
+          content="I use [[Power Attack|ability:md-1]]"
+          sheetItemRefs={markdownItems}
+        />
+      );
+      const mark = container.querySelector('[data-sheet-ref-id="md-1"]') as HTMLElement;
+      fireEvent.mouseOver(mark);
+
+      const tooltip = document.querySelector('[data-sheet-tooltip]') as HTMLElement;
+      expect(tooltip).toBeInTheDocument();
+
+      // Bold markdown must render as a <strong>, not literal "**massive**"
+      const strong = tooltip.querySelector('strong');
+      expect(strong).toBeInTheDocument();
+      expect(strong?.textContent).toBe('massive');
+      expect(tooltip.textContent).not.toContain('**massive**');
+
+      // A markdown table must render as an actual <table> (can't be truncated mid-table)
+      expect(tooltip.querySelector('table')).toBeInTheDocument();
+    });
+
+    it('shows the full description without a "Read more" truncation link', () => {
+      const longDescription = 'A very long description. '.repeat(30); // > 200 chars
+      const longItems = [
+        {
+          id: 'long-1',
+          name: 'Epic Spell',
+          type: 'ability' as const,
+          description: longDescription,
+        },
+      ];
+      render(
+        <MarkdownPreview
+          content="I cast [[Epic Spell|ability:long-1]]"
+          sheetItemRefs={longItems}
+        />
+      );
+      const mark = document.querySelector('[data-sheet-ref-id="long-1"]') as HTMLElement;
+      fireEvent.mouseOver(mark);
+
+      const tooltip = document.querySelector('[data-sheet-tooltip]') as HTMLElement;
+      expect(tooltip).toBeInTheDocument();
+
+      // No truncation control — full content is always shown
+      expect(screen.queryByText('Read more')).not.toBeInTheDocument();
+      // Full text present, not cut off with an ellipsis
+      expect(tooltip.textContent).toContain(longDescription.trim());
+    });
   });
 });

@@ -182,8 +182,13 @@ export function CommentWithParentCard({
   const isEdited = comment.edit_count > 0;
   const showReadButton = commentReadMode === 'manual' && !comment.is_deleted && onToggleRead;
 
+  // Only manual reads drive the faded appearance. In auto mode a comment can be
+  // in the manual-read set (e.g. the backend auto-marks your own reply as read),
+  // but manual reads must not fade it — matching ThreadedComment's behavior.
+  const isFadedAsRead = commentReadMode === 'manual' && isRead;
+
   return (
-    <Card className={`hover:shadow-md transition-shadow${isRead ? ' opacity-50' : ''}`}>
+    <Card className={`hover:shadow-md transition-shadow${isFadedAsRead ? ' opacity-50' : ''}`}>
       <CardBody>
         {/* Parent context preview */}
         <ParentCommentPreview
