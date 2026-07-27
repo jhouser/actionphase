@@ -102,6 +102,18 @@ export interface PaginatedCommentsResponse {
   offset: number;
 }
 
+// Deep-link thread context (for jumping to a nested comment).
+// Returned by GET /games/{id}/messages/{messageId}/thread-context.
+export interface MessageThreadContext {
+  // Target comment plus up to max_parents nearest ancestors,
+  // ordered parent-to-child (nearest included ancestor → target).
+  chain: Message[];
+  // True top-level post ID, even when the chain is trimmed above the target.
+  root_post_id: number;
+  // Whether the chain reaches the root post (nothing trimmed above).
+  has_full_thread: boolean;
+}
+
 // Comment with parent context (for "New Comments" view)
 export interface CommentWithParent {
   // Comment data

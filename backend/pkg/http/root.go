@@ -282,6 +282,7 @@ func (h *Handler) Start() {
 			r.Patch("/{gameId}/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)             // Edit comment
 			r.Delete("/{gameId}/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)            // Delete comment
 			r.Get("/{gameId}/messages/{messageId}", messageHandler.GetMessage)                                 // For deep linking to nested comments
+			r.Get("/{gameId}/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)     // Target + full ancestor chain in one request
 			r.Get("/{gameId}/comments/recent", messageHandler.ListRecentCommentsWithParents)                   // New Comments view
 
 			// Read tracking for common room

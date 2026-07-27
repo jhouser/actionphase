@@ -220,54 +220,45 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
           const fetchAndShowComment = async () => {
             setFetchingComment(true);
             try {
-              // First, fetch the comment to check its phase_id
-              const commentResponse = await apiClient.messages.getMessage(gameId, parseInt(commentIdParam));
-              const commentMeta = commentResponse.data;
+              // Fetch the target comment plus a bounded slice of its ancestor chain
+              // (target + up to 3 nearest parents) and the true root post ID, in a
+              // single request. chain is ordered parent-to-child (ancestor → target).
+              const contextResponse = await apiClient.messages.getMessageThreadContext(
+                gameId,
+                parseInt(commentIdParam),
+                3 // parent levels of context for the modal
+              );
+              const { chain, root_post_id, has_full_thread } = contextResponse.data;
+
+              if (chain.length === 0) {
+                throw new Error('No messages fetched');
+              }
+
+              // The target comment is the last one in the chain.
+              const targetComment = chain[chain.length - 1];
 
               // If the comment belongs to a different phase, redirect to History.
               // Only redirect when phaseId is known (defined) — if CommonRoom has no phase
               // context, we can't know whether the comment is "elsewhere", so fall through
               // to the thread modal as before.
-              if (phaseId !== undefined && commentMeta.phase_id && commentMeta.phase_id !== phaseId) {
+              if (phaseId !== undefined && targetComment.phase_id && targetComment.phase_id !== phaseId) {
                 logger.debug('Comment is in a different phase, redirecting to History', {
                   commentId: commentIdParam,
-                  commentPhaseId: commentMeta.phase_id,
+                  commentPhaseId: targetComment.phase_id,
                   currentPhaseId: phaseId,
                 });
-                navigate(`/games/${gameId}?tab=history&phase=${commentMeta.phase_id}&comment=${commentIdParam}`, { replace: true });
+                navigate(`/games/${gameId}?tab=history&phase=${targetComment.phase_id}&comment=${commentIdParam}`, { replace: true });
                 return;
               }
 
-              // Comment is in the current phase but deeply nested — open in ThreadViewModal
-              const { fetchCommentWithParents, findRootPostId } = await import('../utils/threadUtils');
-              const { messages, hasFullThread } = await fetchCommentWithParents(
-                gameId,
-                parseInt(commentIdParam),
-                3 // Fetch up to 3 parent levels for context
-              );
-
-              if (messages.length === 0) {
-                throw new Error('No messages fetched');
-              }
-
-              // The target comment is the last one in the array
-              const targetComment = messages[messages.length - 1];
-
-              // Derive the root post ID from the parent chain.
-              // When hasFullThread=true, messages[0] is the root (no parent_id).
-              // When hasFullThread=false (deep chain truncated at maxDepth), walk further up.
-              const rootMessage = messages[0];
-              const resolvedPostId = (hasFullThread && rootMessage.message_type === 'post')
-                ? rootMessage.id
-                : await findRootPostId(gameId, rootMessage);
-
-              // Store the comment and its context for the modal
+              // Store the comment and its context for the modal. root_post_id is the
+              // true top-level post even if the chain was trimmed above the target.
               setThreadModalComment(targetComment);
               setThreadModalContext({
-                parentChain: messages,
-                hasFullThread,
+                parentChain: chain,
+                hasFullThread: has_full_thread,
                 targetCommentId: parseInt(commentIdParam),
-                postId: resolvedPostId,
+                postId: root_post_id,
               });
 
               // Clear the comment parameter from URL

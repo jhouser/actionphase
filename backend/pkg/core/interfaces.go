@@ -782,6 +782,11 @@ type MessageServiceInterface interface {
 	// GetMessage retrieves a specific message (post or comment) by ID with metadata
 	GetMessage(ctx context.Context, messageID int32) (*MessageWithDetails, error)
 
+	// GetMessageWithParentContext retrieves a message plus up to maxParents nearest
+	// ancestors (ordered parent-to-child) and the true root post ID, in a single query.
+	// Used for deep-linking to nested comments without a per-level request waterfall.
+	GetMessageWithParentContext(ctx context.Context, messageID int32, maxParents int32) (*MessageThreadContext, error)
+
 	// CanUserEditPost checks if a user can edit a post (must be author)
 	CanUserEditPost(ctx context.Context, postID int32, userID int32) (bool, error)
 
@@ -929,6 +934,19 @@ type MessageWithDetails struct {
 	CharacterAvatarUrl *string // Optional - character's avatar URL
 	CommentCount       int64   // For posts
 	ReplyCount         int64   // For comments
+}
+
+// MessageThreadContext is a deep-linked comment plus a bounded slice of its
+// ancestor chain and the true root post ID (for read tracking / replies).
+type MessageThreadContext struct {
+	// Chain is the target comment plus up to MaxParents nearest ancestors,
+	// ordered parent-to-child (nearest included ancestor → target).
+	Chain []MessageWithDetails
+	// RootPostID is the top-level post at the head of the full thread, even when
+	// Chain is trimmed and does not itself reach the root.
+	RootPostID int32
+	// HasFullThread is true when Chain reaches the root post (nothing was trimmed above).
+	HasFullThread bool
 }
 
 // CommentWithDepth represents a comment with its nesting depth for tree building
