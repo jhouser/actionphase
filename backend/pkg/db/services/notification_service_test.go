@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"actionphase/pkg/core"
@@ -368,6 +369,39 @@ func TestNotificationService_NotifyPhaseCreated(t *testing.T) {
 	gmNotifications, err := service.GetUserNotifications(ctx, int32(gm.ID), 10, 0)
 	require.NoError(t, err)
 	assert.Len(t, gmNotifications, 0)
+}
+
+// TestNotificationService_NotifyHandoutPublished_LinksToSpecificHandout verifies that a
+// handout-published notification links directly to the specific handout (via the `handout`
+// query param) rather than just the handouts tab, so clicking the notification opens the
+// relevant handout instead of the tab's default view.
+func TestNotificationService_NotifyHandoutPublished_LinksToSpecificHandout(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	ctx := context.Background()
+	app := core.NewTestApp(testDB.Pool)
+	service := &NotificationService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	gm := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	player := testDB.CreateTestUser(t, "player", "player@example.com")
+
+	game := testDB.CreateTestGame(t, int32(gm.ID), "Test Game")
+	testDB.AddTestGameParticipant(t, int32(game.ID), int32(player.ID), "player")
+
+	const handoutID int32 = 4242
+	err := service.NotifyHandoutPublished(ctx, int32(game.ID), handoutID, "The Map", int32(gm.ID))
+	require.NoError(t, err)
+
+	playerNotifications, err := service.GetUserNotifications(ctx, int32(player.ID), 10, 0)
+	require.NoError(t, err)
+	require.Len(t, playerNotifications, 1)
+
+	notif := playerNotifications[0]
+	require.NotNil(t, notif.LinkURL)
+	expected := fmt.Sprintf("/games/%d?tab=handouts&handout=%d", game.ID, handoutID)
+	assert.Equal(t, expected, *notif.LinkURL,
+		"handout notification should link to the specific handout, not just the handouts tab")
 }
 
 func TestNotificationService_DeleteOldReadNotifications(t *testing.T) {

@@ -90,11 +90,6 @@ export function SheetPanel({ items, onInsert, characterName }: SheetPanelProps) 
                               </Badge>
                             )}
                           </div>
-                          {item.description && (
-                            <p className="text-xs text-content-secondary mt-0.5 line-clamp-2">
-                              {item.description}
-                            </p>
-                          )}
                         </div>
                       </div>
                     </button>
