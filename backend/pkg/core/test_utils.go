@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,74 @@ import (
 	models "actionphase/pkg/db/models"
 	"actionphase/pkg/observability"
 )
+
+// Per-package (per test binary) isolated database provisioning.
+//
+// Test packages run as separate processes and `go test` runs them concurrently.
+// They all point at the same PostgreSQL server, so sharing one database causes
+// cross-package interference: pkey collisions (cleanup resets ID sequences),
+// deadlocks (overlapping multi-table DELETEs), and FK violations (one package's
+// cleanup deleting another's rows). To make packages independent, the first
+// NewTestDatabase call in a process clones a private database from a migrated
+// template and every subsequent call in that process reuses it.
+//
+// The clone is exactly one per process (sync.Once). Leftover clones are named
+// actionphase_test_p<pid> and swept by `just _prepare-test-template` before a run.
+var (
+	isolatedDBOnce sync.Once
+	isolatedDBURL  string
+	isolatedDBErr  error
+)
+
+// provisionIsolatedDB creates a per-process database cloned from the migrated
+// template and returns a connection URL pointing at it. baseURL supplies the
+// server/credentials; the database name is swapped for the private clone.
+func provisionIsolatedDB(baseURL string) (string, error) {
+	isolatedDBOnce.Do(func() {
+		u, err := url.Parse(baseURL)
+		if err != nil {
+			isolatedDBErr = fmt.Errorf("invalid test database URL %q: %w", baseURL, err)
+			return
+		}
+
+		// Template to clone from: the migrated template DB when the harness set it,
+		// otherwise the base test DB name (so a bare `go test` is still isolated).
+		template := os.Getenv("TEST_TEMPLATE_DB")
+		if template == "" {
+			template = strings.TrimPrefix(u.Path, "/")
+		}
+
+		cloneName := fmt.Sprintf("actionphase_test_p%d", os.Getpid())
+
+		// Connect to the maintenance `postgres` database to run CREATE/DROP DATABASE.
+		adminURL := *u
+		adminURL.Path = "/postgres"
+		ctx := context.Background()
+		conn, err := pgxpool.New(ctx, adminURL.String())
+		if err != nil {
+			isolatedDBErr = fmt.Errorf("connect to admin db for test isolation: %w", err)
+			return
+		}
+		defer conn.Close()
+
+		// Drop a stale clone from a previous run with the same pid, then clone fresh.
+		// WITH (FORCE) terminates any lingering connections to the old clone.
+		if _, err := conn.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", cloneName)); err != nil {
+			isolatedDBErr = fmt.Errorf("drop stale test clone %s: %w", cloneName, err)
+			return
+		}
+		if _, err := conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s TEMPLATE %s", cloneName, template)); err != nil {
+			isolatedDBErr = fmt.Errorf("clone test db %s from template %s: %w", cloneName, template, err)
+			return
+		}
+
+		cloneURL := *u
+		cloneURL.Path = "/" + cloneName
+		isolatedDBURL = cloneURL.String()
+	})
+
+	return isolatedDBURL, isolatedDBErr
+}
 
 // TestDatabase provides utilities for database testing
 type TestDatabase struct {
@@ -53,6 +122,16 @@ func NewTestDatabase(t TestingInterface) *TestDatabase {
 	// Validate connection string format
 	if _, err := url.Parse(connectionString); err != nil {
 		t.Fatalf("Invalid test database URL '%s': %v", connectionString, err)
+	}
+
+	// Provision (or reuse) a database private to this test binary so packages
+	// running concurrently never share rows, sequences, or locks. Falls back to
+	// the shared DB if provisioning fails (e.g. server unreachable) so the usual
+	// skip-on-unavailable path below still applies.
+	if isolatedURL, err := provisionIsolatedDB(connectionString); err != nil {
+		t.Logf("Warning: could not provision isolated test database, using shared DB: %v", err)
+	} else if isolatedURL != "" {
+		connectionString = isolatedURL
 	}
 
 	pool, err := pgxpool.New(context.Background(), connectionString)

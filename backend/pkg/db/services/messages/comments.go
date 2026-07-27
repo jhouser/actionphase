@@ -202,6 +202,72 @@ func (s *MessageService) GetMessage(ctx context.Context, messageID int32) (*core
 	return result, nil
 }
 
+// GetMessageWithParentContext retrieves a message plus up to maxParents nearest
+// ancestors (ordered parent-to-child) and the true root post ID, in a single
+// recursive query. Used for deep-linking to nested comments so the client avoids
+// a per-level request waterfall.
+func (s *MessageService) GetMessageWithParentContext(ctx context.Context, messageID int32, maxParents int32) (*core.MessageThreadContext, error) {
+	queries := models.New(s.DB)
+
+	rows, err := queries.GetMessageWithParentContext(ctx, models.GetMessageWithParentContextParams{
+		MessageID:  messageID,
+		MaxParents: maxParents,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message with parent context: %w", err)
+	}
+
+	chain := make([]core.MessageWithDetails, len(rows))
+	var rootPostID int32
+	for i, row := range rows {
+		var avatarURL *string
+		if row.CharacterAvatarUrl.Valid {
+			avatarURL = &row.CharacterAvatarUrl.String
+		}
+
+		chain[i] = core.MessageWithDetails{
+			Message: models.Message{
+				ID:                    row.ID,
+				GameID:                row.GameID,
+				PhaseID:               row.PhaseID,
+				AuthorID:              row.AuthorID,
+				CharacterID:           row.CharacterID,
+				Content:               row.Content,
+				MessageType:           row.MessageType,
+				ParentID:              row.ParentID,
+				ThreadDepth:           row.ThreadDepth,
+				Visibility:            row.Visibility,
+				MentionedCharacterIds: row.MentionedCharacterIds,
+				IsEdited:              row.IsEdited,
+				IsDeleted:             row.IsDeleted,
+				CreatedAt:             row.CreatedAt,
+				DeletedAt:             row.DeletedAt,
+				DeletedByUserID:       row.DeletedByUserID,
+				EditedAt:              row.EditedAt,
+				EditCount:             row.EditCount,
+			},
+			AuthorUsername:     row.AuthorUsername,
+			CharacterName:      row.CharacterName.String,
+			CharacterAvatarUrl: avatarURL,
+			ReplyCount:         row.ReplyCount,
+		}
+
+		// root_post_id is identical on every row; capture it once.
+		if row.RootPostID.Valid {
+			rootPostID = row.RootPostID.Int32
+		}
+	}
+
+	// The chain reaches root when its first (shallowest) element is the root post.
+	hasFullThread := len(chain) > 0 && !chain[0].ParentID.Valid
+
+	return &core.MessageThreadContext{
+		Chain:         chain,
+		RootPostID:    rootPostID,
+		HasFullThread: hasFullThread,
+	}, nil
+}
+
 // GetPostComments retrieves direct child comments for a post or comment
 func (s *MessageService) GetPostComments(ctx context.Context, parentID int32) ([]core.MessageWithDetails, error) {
 	queries := models.New(s.DB)

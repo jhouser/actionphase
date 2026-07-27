@@ -304,6 +304,79 @@ func (h *Handler) GetMessage(w http.ResponseWriter, r *http.Request) {
 	render.Render(w, r, response)
 }
 
+// defaultThreadContextMaxParents is how many ancestor levels above the target
+// comment we include for context when the client does not specify max_parents.
+// Matches the depth the deep-link modal renders as parent context.
+const defaultThreadContextMaxParents = 3
+
+// maxThreadContextMaxParents caps the requestable parent count to bound query cost.
+const maxThreadContextMaxParents = 20
+
+// GetMessageThreadContext retrieves a message plus a bounded slice of its ancestor
+// chain (target + up to max_parents nearest ancestors) and the true root post ID,
+// in a single request, for deep-linking to nested comments.
+// Query param: max_parents (optional, default 3, max 20).
+func (h *Handler) GetMessageThreadContext(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	defer h.App.ObsLogger.LogOperation(ctx, "api_get_message_thread_context")()
+
+	gameIDStr := chi.URLParam(r, "gameId")
+	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get message thread context request")
+		return
+	}
+
+	messageIDStr := chi.URLParam(r, "messageId")
+	messageID, err := strconv.ParseInt(messageIDStr, 10, 32)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid message ID")), "Invalid get message thread context request")
+		return
+	}
+
+	maxParents := int32(defaultThreadContextMaxParents)
+	if mp := r.URL.Query().Get("max_parents"); mp != "" {
+		parsed, perr := strconv.ParseInt(mp, 10, 32)
+		if perr != nil || parsed < 0 || parsed > maxThreadContextMaxParents {
+			h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid max_parents parameter (must be 0-%d)", maxThreadContextMaxParents)), "Invalid get message thread context request")
+			return
+		}
+		maxParents = int32(parsed)
+	}
+
+	queries := models.New(h.App.Pool)
+	game, err := queries.GetGame(ctx, int32(gameID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game", "error", err, "game_id", gameID)
+		return
+	}
+
+	userID, _ := h.getUserIDFromToken(r)
+	showUsernames := core.CanSeeUsernamesInAnonymousGame(ctx, h.App.Pool, game, userID)
+
+	threadCtx, err := h.MessageService.GetMessageWithParentContext(ctx, int32(messageID), maxParents)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get message thread context", "error", err, "message_id", messageID)
+		return
+	}
+
+	chain := make([]*MessageResponse, len(threadCtx.Chain))
+	for i := range threadCtx.Chain {
+		resp := messageWithDetailsToResponse(&threadCtx.Chain[i])
+		if !showUsernames {
+			resp.AuthorUsername = ""
+		}
+		chain[i] = resp
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(MessageThreadContextResponse{
+		Chain:         chain,
+		RootPostID:    threadCtx.RootPostID,
+		HasFullThread: threadCtx.HasFullThread,
+	})
+}
+
 // GetPostComments retrieves direct comments for a post
 func (h *Handler) GetPostComments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

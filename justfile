@@ -173,7 +173,11 @@ TEST_DB_URL := "postgres://postgres:example@db:5432/actionphase_test?sslmode=dis
 # ENVIRONMENT=development (via .env), which flips on dev-mode bypasses in the
 # app (e.g. registration rate limiting / uniqueness checks are skipped). Tests
 # assert the production code paths, so force ENVIRONMENT=test when running them.
-TEST_ENV := "ENVIRONMENT=test TEST_DATABASE_URL=\"" + TEST_DB_URL + "\" SKIP_DB_TESTS=false"
+# TEST_DATABASE_URL points at the base test DB; TEST_TEMPLATE_DB tells the Go
+# harness which migrated template to clone a private per-package database from.
+# When TEST_TEMPLATE_DB is set, NewTestDatabase provisions an isolated DB per test
+# binary, so packages can run concurrently (no -p=1 needed).
+TEST_ENV := "ENVIRONMENT=test TEST_DATABASE_URL=\"" + TEST_DB_URL + "\" TEST_TEMPLATE_DB=" + TEST_TEMPLATE_DB + " SKIP_DB_TESTS=false"
 
 # Migration operations: create, status, rollback, test (runs in backend container)
 migration action="" name="":
@@ -222,6 +226,31 @@ reset-test-db:
   echo "Applying migrations..."
   just migration test
   echo "✅ Test database reset complete"
+
+# Name of the migrated template DB that per-package test databases are cloned from.
+TEST_TEMPLATE_DB := "actionphase_test_template"
+TEST_TEMPLATE_URL := "postgres://postgres:example@db:5432/" + TEST_TEMPLATE_DB + "?sslmode=disable"
+
+# Rebuild the migrated test template DB and sweep leftover per-package clones.
+# Each test binary (package) clones this template into its own database at runtime
+# (see NewTestDatabase), so packages never share rows/sequences and can run in
+# parallel. Run before a test suite; cheap because migrations are fast.
+_prepare-test-template:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  # Drop any leftover per-package clones from previous (possibly interrupted) runs,
+  # then rebuild the template so it always matches current migrations. The sweep uses
+  # psql's \gexec to run one DROP per clone server-side (DROP DATABASE can't run inside
+  # a DO/function body), so it is robust to how many clones exist with no shell loop.
+  {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -q -v ON_ERROR_STOP=1 <<'"'"'SQL'"'"'
+  SELECT format('"'"'DROP DATABASE IF EXISTS %I WITH (FORCE)'"'"', datname)
+  FROM pg_database WHERE datname LIKE '"'"'actionphase_test_p%'"'"'
+  \gexec
+  DROP DATABASE IF EXISTS {{TEST_TEMPLATE_DB}} WITH (FORCE);
+  CREATE DATABASE {{TEST_TEMPLATE_DB}};
+  SQL'
+  {{BE}} migrate -source file://pkg/db/migrations -database "{{TEST_TEMPLATE_URL}}" up
+  echo "✅ Test template ready ({{TEST_TEMPLATE_DB}})"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TEST DATA COMMANDS
@@ -401,10 +430,12 @@ _clean_test_db:
   echo "✅ Test database cleaned"
 
 # Run all backend tests (default: everything with database)
+# Each package clones its own DB from the migrated template, so packages run in
+# parallel safely (no -p=1). Set TEST_P (e.g. TEST_P=1) to override concurrency.
 test:
   @echo "🧪 Running all backend tests (integration + mocks)..."
-  @just _clean_test_db
-  {{BE}} env {{TEST_ENV}} go test -p=1 ./...
+  @just _prepare-test-template
+  {{BE}} env {{TEST_ENV}} go test ./...
 
 # Run fast mock tests only (no database required)
 test-mocks:
@@ -414,14 +445,14 @@ test-mocks:
 # Run database service integration tests only
 test-integration:
   @echo "🗄️  Running database integration tests..."
-  @just _clean_test_db
-  {{BE}} env {{TEST_ENV}} go test -p=1 ./pkg/db/services/...
+  @just _prepare-test-template
+  {{BE}} env {{TEST_ENV}} go test ./pkg/db/services/...
 
 # Run tests with coverage report
 test-coverage:
   @echo "📊 Running all tests with coverage..."
-  @just _clean_test_db
-  {{BE}} env {{TEST_ENV}} go test -p=1 -coverprofile=coverage.out ./...
+  @just _prepare-test-template
+  {{BE}} env {{TEST_ENV}} go test -coverprofile=coverage.out ./...
   @echo ""
   @echo "Coverage report generated: backend/coverage.out"
   @{{BE}} go tool cover -func=coverage.out | tail -1
@@ -429,8 +460,8 @@ test-coverage:
 # Run tests with race detector
 test-race:
   @echo "🔍 Running tests with race detector..."
-  @just _clean_test_db
-  {{BE}} env {{TEST_ENV}} CGO_ENABLED=1 go test -p=1 -race ./...
+  @just _prepare-test-template
+  {{BE}} env {{TEST_ENV}} CGO_ENABLED=1 go test -race ./...
 
 # Clean test cache
 test-clean:
@@ -440,8 +471,8 @@ test-clean:
 # Run specific test by name
 test-run pattern:
   @echo "🎯 Running tests matching: {{pattern}}"
-  @just _clean_test_db
-  {{BE}} env {{TEST_ENV}} go test -p=1 -v -run {{pattern}} ./...
+  @just _prepare-test-template
+  {{BE}} env {{TEST_ENV}} go test -v -run {{pattern}} ./...
 
 # ═══════════════════════════════════════════════════════════════════════════
 # FRONTEND TESTING
