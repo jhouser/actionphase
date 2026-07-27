@@ -253,6 +253,31 @@ describe('CommentWithParentCard', () => {
     expect(card).toBeInTheDocument();
   });
 
+  describe('Read fading', () => {
+    it('fades a read comment in manual mode', () => {
+      const { container } = renderWithProviders(
+        <CommentWithParentCard comment={mockComment} gameId={1} commentReadMode="manual" isRead />,
+        { gameId: 1 }
+      );
+
+      const card = container.querySelector('.hover\\:shadow-md');
+      expect(card).toHaveClass('opacity-50');
+    });
+
+    it('does not fade a read comment in auto mode', () => {
+      // In auto mode a comment can be in the manual-read set (e.g. the backend
+      // auto-marks your own reply as read), but manual reads must not drive the
+      // faded appearance — only auto-mode unread highlighting applies.
+      const { container } = renderWithProviders(
+        <CommentWithParentCard comment={mockComment} gameId={1} commentReadMode="auto" isRead />,
+        { gameId: 1 }
+      );
+
+      const card = container.querySelector('.hover\\:shadow-md');
+      expect(card).not.toHaveClass('opacity-50');
+    });
+  });
+
   it('renders "View in thread" as proper anchor tag with href', () => {
     const mockNavigate = vi.fn();
     renderWithProviders(
