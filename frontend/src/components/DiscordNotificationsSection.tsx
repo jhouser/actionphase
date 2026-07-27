@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Button, Card, CardBody, CardHeader, Spinner, Alert } from '@/components/ui';
+import { Button, Card, CardBody, CardHeader, Spinner, Alert, Toggle } from '@/components/ui';
 import { useDiscordStatus } from '../hooks/useDiscordStatus';
 import { useUserPreferences, useUpdateUserPreferences } from '../hooks/useUserPreferences';
 import { apiClient } from '../lib/api';
@@ -108,31 +108,16 @@ interface ToggleRowProps {
 function ToggleRow({ info, enabled, onChange }: ToggleRowProps) {
   return (
     <div
-      className="flex items-center justify-between py-3 border-b border-border-primary last:border-0"
+      className="py-3 border-b border-theme-default last:border-0"
       data-testid={`discord-toggle-${info.key}`}
     >
-      <div className="flex-1 min-w-0 mr-4">
-        <div className="text-sm font-medium text-text-primary">{info.label}</div>
-        <div className="text-xs text-text-secondary mt-0.5">{info.description}</div>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
+      <Toggle
+        checked={enabled}
+        onChange={(next) => onChange(info.key, next)}
+        label={info.label}
+        description={info.description}
         aria-label={`Toggle ${info.label} Discord notifications`}
-        onClick={() => onChange(info.key, !enabled)}
-        className={[
-          'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-interactive-primary focus:ring-offset-2 shrink-0',
-          enabled ? 'bg-interactive-primary' : 'bg-bg-secondary',
-        ].join(' ')}
-      >
-        <span
-          className={[
-            'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-            enabled ? 'translate-x-6' : 'translate-x-1',
-          ].join(' ')}
-        />
-      </button>
+      />
     </div>
   );
 }

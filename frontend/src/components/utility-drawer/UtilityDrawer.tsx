@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
-import { Drawer } from '../ui';
+import { Drawer, Toggle } from '../ui';
 import { COMMON_ROOM_UTILITIES } from './registry';
 import type { UtilityContext } from './types';
 import { useScreenshotMode } from '../../hooks/useScreenshotMode';
@@ -61,37 +61,17 @@ export function UtilityDrawer({ open, onClose, ctx }: UtilityDrawerProps) {
         <ul className="p-2" data-testid="utility-list">
           {ctx.isAnonymous && (
             <li>
-              <button
-                type="button"
-                onClick={toggleScreenshotMode}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-md hover:surface-raised transition-colors text-left group"
+              <Toggle
+                checked={screenshotModeEnabled}
+                onChange={toggleScreenshotMode}
+                size="sm"
+                icon={<EyeOff className="w-5 h-5" />}
+                label="Screenshot Mode"
+                description="Hide all usernames so screenshots don't reveal who's playing."
+                className="px-3 py-3 hover:surface-raised"
                 data-testid="screenshot-mode-toggle"
                 data-faro-user-action-name="toggle-screenshot-mode"
-                aria-pressed={screenshotModeEnabled}
-              >
-                <span className="shrink-0 text-content-secondary group-hover:text-interactive-primary">
-                  <EyeOff className="w-5 h-5" />
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-medium text-content-primary">
-                    Screenshot Mode
-                  </span>
-                  <span className="block text-xs text-content-secondary">
-                    Hide all usernames so screenshots don't reveal who's playing.
-                  </span>
-                </span>
-                <span
-                  className={`shrink-0 w-9 h-5 rounded-full transition-colors relative ${
-                    screenshotModeEnabled ? 'bg-interactive-primary' : 'bg-border-primary'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                      screenshotModeEnabled ? 'translate-x-4' : ''
-                    }`}
-                  />
-                </span>
-              </button>
+              />
             </li>
           )}
           {available.length === 0 && !ctx.isAnonymous && (
