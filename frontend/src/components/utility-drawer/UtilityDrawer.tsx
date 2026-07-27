@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
 import { Drawer, Toggle } from '../ui';
 import { COMMON_ROOM_UTILITIES } from './registry';
@@ -30,16 +30,22 @@ export function UtilityDrawer({ open, onClose, ctx }: UtilityDrawerProps) {
 
   const active = activeId ? available.find((u) => u.id === activeId) ?? null : null;
 
-  const handleClose = () => {
-    onClose();
-    // Reset to the list after the close transition so it reopens on the menu.
-    setTimeout(() => setActiveId(null), 200);
-  };
+  // Reset to the utility list whenever the drawer closes — however it closed.
+  // A panel may close the drawer itself (e.g. the character sheet opens its own
+  // modal via ctx.openCharacterSheet, which sets `open` to false directly rather
+  // than calling onClose). Without this, activeId stays on that panel and the
+  // drawer reopens straight into it, re-firing the panel's open-on-mount effect
+  // and never showing the list again until a page refresh.
+  useEffect(() => {
+    if (!open) {
+      setActiveId(null);
+    }
+  }, [open]);
 
   return (
     <Drawer
       open={open}
-      onClose={handleClose}
+      onClose={onClose}
       title={active ? active.label : 'Utilities'}
     >
       {active ? (
