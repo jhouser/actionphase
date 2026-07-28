@@ -59,10 +59,32 @@ func (s *MessageService) CreateComment(ctx context.Context, req core.CreateComme
 		mentionedIDs = []int32{}
 	}
 
+	// A comment always belongs to the same phase as what it replies to, so the
+	// phase is derived here rather than trusted from the client. Reply surfaces
+	// that render flat, cross-phase comment lists (the Dashboard unread inbox and
+	// the New Comments view) have no phase in scope and omit it. Without this
+	// fallback those replies stored phase_id = NULL, which reads fine inline but
+	// makes them undeep-linkable: GetMessage omits a NULL phase_id from the
+	// response, so HistoryView cannot tell which phase to open.
+	phaseID := int32ToPgInt4(req.PhaseID)
+	if !phaseID.Valid {
+		inherited, perr := queries.GetMessagePhaseID(ctx, req.ParentID)
+		if perr != nil {
+			// Non-fatal: a comment with no phase is still a valid comment (legacy
+			// rows predate phase tracking), so don't fail the write over it.
+			s.Logger.LogError(ctx, perr, "Failed to inherit phase from parent message",
+				"game_id", req.GameID,
+				"parent_id", req.ParentID,
+			)
+		} else {
+			phaseID = inherited
+		}
+	}
+
 	// Create the comment using sqlc-generated query
 	message, err := queries.CreateComment(ctx, models.CreateCommentParams{
 		GameID:                req.GameID,
-		PhaseID:               int32ToPgInt4(req.PhaseID),
+		PhaseID:               phaseID,
 		AuthorID:              req.AuthorID,
 		CharacterID:           req.CharacterID,
 		Content:               req.Content,

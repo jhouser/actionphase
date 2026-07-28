@@ -238,6 +238,64 @@ describe('HistoryView', () => {
       // and render CommonRoom, showing the "Back to History" button
       expect(await screen.findByText('Back to History')).toBeInTheDocument();
     });
+
+    /**
+     * Documents the API contract this resolver depends on.
+     *
+     * The resolver can only pick a phase if the comment tells it which one. The
+     * API serialises phase_id with `omitempty`, so a NULL column disappears from
+     * the response entirely rather than arriving as null — and the resolver's
+     * `if (message.phase_id)` guard then returns without selecting anything. The
+     * user lands on the History tab with no phase and no comment loaded, which is
+     * exactly the reported notification bug.
+     *
+     * Replies posted from the Dashboard unread inbox and the New Comments view
+     * used to store phase_id = NULL because neither surface has a phase in scope.
+     * The backend now derives it from the parent message, so this response shape
+     * should no longer occur in practice. This test pins the frontend's half of
+     * that contract: the resolver degrades gracefully (phase list stays visible,
+     * no crash, no bogus phase selected) rather than doing something worse.
+     */
+    it('falls back to the phase list when the comment has no phase_id', async () => {
+      const commentWithoutPhase = {
+        id: 99,
+        game_id: mockGameId,
+        // phase_id intentionally absent — what `omitempty` produces for a NULL.
+        author_id: 1,
+        character_id: 1,
+        content: 'A comment with no phase',
+        message_type: 'comment',
+        parent_id: 42,
+        thread_depth: 5,
+        author_username: 'testuser',
+        character_name: 'TestChar',
+        comment_count: 0,
+        is_edited: false,
+        is_deleted: false,
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+      };
+
+      server.use(
+        http.get('/api/v1/games/:gameId/messages/:messageId', () =>
+          HttpResponse.json(commentWithoutPhase)
+        )
+      );
+
+      renderWithProviders(
+        <HistoryView
+          gameId={mockGameId}
+          currentPhaseId={mockCurrentPhaseId}
+          isGM={false}
+        />,
+        { initialRoute: '/games/1?tab=history&comment=99', gameId: mockGameId }
+      );
+
+      // The phase list remains, and no phase is auto-selected.
+      const phases = await screen.findAllByText('Opening Ceremony');
+      expect(phases.length).toBeGreaterThan(0);
+      expect(screen.queryByText('Back to History')).not.toBeInTheDocument();
+    });
   });
 
   describe('Utility Drawer context on historical phases', () => {
