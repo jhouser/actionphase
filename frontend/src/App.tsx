@@ -11,11 +11,13 @@ import { ScreenshotModeProvider } from './contexts/ScreenshotModeContext';
 import { GameProvider } from './contexts/GameContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { UtilityDrawerProvider } from './contexts/UtilityDrawerContext';
 import { FontSizeApplier } from './components/FontSizeApplier';
 import { logger } from '@/services/LoggingService';
 
 // Lazy load Layout and all page components for better code splitting
 const Layout = lazy(() => import('./components/Layout').then(m => ({ default: m.Layout })));
+const GlobalUtilityDrawer = lazy(() => import('./components/utility-drawer/GlobalUtilityDrawer').then(m => ({ default: m.GlobalUtilityDrawer })));
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })));
@@ -109,16 +111,29 @@ function GamePageSkeleton() {
   );
 }
 
-// Root layout: wraps every route with the shared Layout + Suspense
+// Root layout: wraps every route with the shared Layout + Suspense.
+//
+// UtilityDrawerProvider sits above Layout so the nav's Utilities button and the
+// drawer/character-sheet modal it controls are available on every page. Game
+// pages contribute their game context to it from further down the tree.
 function RootLayout() {
   const { isAuthenticated } = useAuth();
   return (
-    <Layout>
-      {isAuthenticated && <FontSizeApplier />}
-      <Suspense fallback={<PageLoader />}>
-        <Outlet />
-      </Suspense>
-    </Layout>
+    <UtilityDrawerProvider>
+      <Layout>
+        {isAuthenticated && <FontSizeApplier />}
+        <Suspense fallback={<PageLoader />}>
+          <Outlet />
+        </Suspense>
+      </Layout>
+      {/* No fallback: the drawer renders nothing until opened, so there is
+          nothing to show while its chunk loads. */}
+      {isAuthenticated && (
+        <Suspense fallback={null}>
+          <GlobalUtilityDrawer />
+        </Suspense>
+      )}
+    </UtilityDrawerProvider>
   );
 }
 

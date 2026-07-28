@@ -127,10 +127,13 @@ export class MessagesApi extends BaseApiClient {
   }
 
   // Recent comments (New Comments view)
-  async getRecentComments(gameId: number, limit: number = 20, offset: number = 0) {
+  async getRecentComments(gameId: number, limit: number = 20, offset: number = 0, unreadOnly: boolean = false) {
     const queryParams = new URLSearchParams();
     queryParams.append('limit', limit.toString());
     queryParams.append('offset', offset.toString());
+    if (unreadOnly) {
+      queryParams.append('unread_only', 'true');
+    }
 
     const url = `/api/v1/games/${gameId}/comments/recent?${queryParams.toString()}`;
     const response = await this.client.get<RecentCommentsResponse>(url);

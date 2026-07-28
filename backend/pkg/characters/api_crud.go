@@ -441,6 +441,66 @@ func (h *Handler) GetUserControllableCharacters(w http.ResponseWriter, r *http.R
 	json.NewEncoder(w).Encode(response)
 }
 
+// GetUserControllableCharactersAcrossGames retrieves every character the current
+// user can control across all their in_progress games. Unlike the per-game
+// endpoint this takes no game in the path, so it can back surfaces that have no
+// game in scope (e.g. the global Utility Drawer).
+//
+// Each entry carries its game context (title, state, flags) and the user's role
+// in that game, which the client needs to resolve sheet permissions without a
+// request per game.
+func (h *Handler) GetUserControllableCharactersAcrossGames(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	defer h.App.ObsLogger.LogOperation(ctx, "api_get_user_controllable_characters_across_games")()
+
+	userID, err := h.getUserIDFromToken(r)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrUnauthorized(err.Error()), "Failed to get user from token", "error", err)
+		return
+	}
+
+	characters, err := h.CharacterService.GetUserControllableCharactersAcrossGames(ctx, userID)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get cross-game controllable characters", "error", err, "user_id", userID)
+		return
+	}
+
+	// Initialize as empty slice to ensure JSON encodes as [] not null
+	response := make([]map[string]interface{}, 0)
+	for _, char := range characters {
+		charData := map[string]interface{}{
+			"id":                    char.ID,
+			"game_id":               char.GameID,
+			"name":                  char.Name,
+			"character_type":        char.CharacterType,
+			"created_at":            char.CreatedAt.Time,
+			"updated_at":            char.UpdatedAt.Time,
+			"game_title":            char.GameTitle,
+			"game_is_anonymous":     char.GameIsAnonymous,
+			"game_portrait_avatars": char.GamePortraitAvatars,
+			"user_role":             char.UserRole,
+		}
+
+		if char.UserID.Valid {
+			charData["user_id"] = char.UserID.Int32
+		}
+		if char.Status.Valid {
+			charData["status"] = char.Status.String
+		}
+		if char.AvatarUrl.Valid {
+			charData["avatar_url"] = char.AvatarUrl.String
+		}
+		if char.GameState.Valid {
+			charData["game_state"] = char.GameState.String
+		}
+
+		response = append(response, charData)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // DeleteCharacter deletes a character (GM only, character must have no activity)
 func (h *Handler) DeleteCharacter(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

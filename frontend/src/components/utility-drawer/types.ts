@@ -6,11 +6,11 @@ import type { UserGameRole } from '../../contexts/GameContext';
 import type { CommentReadMode } from '../../lib/api/auth';
 
 /**
- * Shared context passed to every Utility Drawer panel and to each utility's
- * `isAvailable` gate. Assembled by CommonRoom from GameContext + its own props,
- * so panels stay decoupled from how that data is sourced.
+ * The parts of the Utility Drawer's context that only exist inside a game.
+ * Assembled by CommonRoom from GameContext + its own props and contributed to
+ * the global drawer, so panels stay decoupled from how that data is sourced.
  */
-export interface UtilityContext {
+export interface GameUtilityContext {
   gameId: number;
   currentPhase?: GamePhase | null;
   isGM: boolean;
@@ -26,16 +26,42 @@ export interface UtilityContext {
   userCharacters: Character[];
   /** All characters in the game (for reference/lookup within panels). */
   allGameCharacters: Character[];
+  /** The current user's comment read tracking mode ('auto' or 'manual'). */
+  commentReadMode: CommentReadMode;
+}
+
+/**
+ * Everything a panel needs to open a character sheet. Inside a game these come
+ * from GameContext; outside one they ride along with each character from the
+ * cross-game endpoint, since there is no GameContext to read them from.
+ */
+export interface OpenCharacterSheetOptions {
+  canEdit: boolean;
+  canEditStats: boolean;
+  isAnonymous: boolean;
+  userRole: string;
+  gameState: string;
+}
+
+/**
+ * Shared context passed to every Utility Drawer panel and to each utility's
+ * `isAvailable` gate.
+ *
+ * The drawer is mounted globally, so `game` is absent on pages outside a game
+ * route. Utilities that need a game must gate on it in `isAvailable` rather
+ * than assume it — see the registry.
+ */
+export interface UtilityContext {
+  /** Game-scoped context, or null when the drawer is open outside a game. */
+  game: GameUtilityContext | null;
   /**
    * Open the standard character-sheet modal for a character, as if the user
    * clicked "View/Edit Sheet" on the Characters tab. Closes the drawer first,
-   * so the modal stacks cleanly over the common room.
+   * so the modal stacks cleanly over the page.
    */
-  openCharacterSheet: (characterId: number) => void;
+  openCharacterSheet: (characterId: number, options: OpenCharacterSheetOptions) => void;
   /** Close the Utility Drawer, e.g. after a panel action completes. */
   closeDrawer: () => void;
-  /** The current user's comment read tracking mode ('auto' or 'manual'). */
-  commentReadMode: CommentReadMode;
 }
 
 /** Props every utility panel receives when rendered inside the drawer. */
@@ -44,13 +70,13 @@ export interface UtilityPanelProps {
 }
 
 /**
- * Describes a single utility available in the common-room Utility Drawer.
+ * Describes a single utility available in the Utility Drawer.
  *
  * Adding a new utility is a matter of appending one descriptor to the registry
  * (registry.ts) and supplying a Panel component — no changes to the drawer
- * container or CommonRoom are required.
+ * container or its hosts are required.
  */
-export interface CommonRoomUtility {
+export interface UtilityDrawerUtility {
   /** Stable identifier, e.g. 'character-sheet'. */
   id: string;
   /** Short label shown in the utility list and as the panel title. */
@@ -60,7 +86,7 @@ export interface CommonRoomUtility {
   icon: LucideIcon;
   /**
    * Whether this utility should be offered in the current context.
-   * e.g. the character sheet is only useful when the user controls a character.
+   * e.g. mark-all-read needs a game; the character sheet needs a character.
    */
   isAvailable: (ctx: UtilityContext) => boolean;
   /** The panel body rendered inside the drawer when this utility is selected. */
