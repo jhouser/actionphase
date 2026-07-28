@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Wrench } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useOptionalUtilityDrawer } from '../contexts/UtilityDrawerContext';
 import NotificationBell from './NotificationBell';
 import { AdminBanner } from './AdminBanner';
 import { EmailVerificationBanner } from './EmailVerificationBanner';
@@ -16,6 +18,9 @@ export const Layout = ({ children }: LayoutProps) => {
   const { isAuthenticated, logout, currentUser } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  // Optional: the nav renders in contexts without the drawer mounted (and in
+  // tests that render Layout standalone). No drawer, no button.
+  const utilityDrawer = useOptionalUtilityDrawer();
 
   // Reset menu states on route changes to prevent stale menu visibility
   useEffect(() => {
@@ -73,6 +78,22 @@ export const Layout = ({ children }: LayoutProps) => {
 
               {/* Right side: Notification + User Menu (Desktop) / Hamburger (Mobile) */}
               <div className="flex items-center space-x-2 sm:space-x-4">
+                {/* Utilities — character sheet, dice roller, and friends.
+                    Available on every page, not just the common room. */}
+                {utilityDrawer && (
+                  <button
+                    type="button"
+                    onClick={utilityDrawer.openDrawer}
+                    className="p-2 rounded-md text-white/90 hover:bg-interactive-primary-hover hover:text-white transition-colors"
+                    title="Utilities"
+                    aria-label="Utilities"
+                    data-testid="global-utility-drawer-toggle"
+                    data-faro-user-action-name="open-utility-drawer"
+                  >
+                    <Wrench className="w-5 h-5" />
+                  </button>
+                )}
+
                 {/* Notification Bell */}
                 <NotificationBell />
 

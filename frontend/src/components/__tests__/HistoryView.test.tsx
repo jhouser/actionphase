@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
 import { renderWithProviders } from '../../test-utils/render';
 import { HistoryView } from '../HistoryView';
+import { UtilityDrawerHarness } from '../../test-utils/utilityDrawer';
 import type { GamePhase } from '../../types/phases';
 
 describe('HistoryView', () => {
@@ -311,7 +312,13 @@ describe('HistoryView', () => {
       const user = (await import('@testing-library/user-event')).default.setup();
 
       renderWithProviders(
-        <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />,
+        <>
+          <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />
+          {/* The drawer is mounted at the app root now, and opened from the
+              global nav, so both come from the harness alongside the view
+              that contributes its game context. */}
+          <UtilityDrawerHarness />
+        </>,
         { initialRoute: '/games/1?tab=history&phase=1', gameId: mockGameId }
       );
 
@@ -329,7 +336,13 @@ describe('HistoryView', () => {
       const user = (await import('@testing-library/user-event')).default.setup();
 
       renderWithProviders(
-        <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />,
+        <>
+          <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />
+          {/* The drawer is mounted at the app root now, and opened from the
+              global nav, so both come from the harness alongside the view
+              that contributes its game context. */}
+          <UtilityDrawerHarness />
+        </>,
         { initialRoute: '/games/1?tab=history&phase=1', gameId: mockGameId }
       );
 

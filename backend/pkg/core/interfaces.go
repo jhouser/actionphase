@@ -1703,6 +1703,11 @@ type CharacterServiceInterface interface {
 	GetPlayerCharacters(ctx context.Context, gameID int32) ([]models.GetPlayerCharactersByGameRow, error)
 	GetNPCs(ctx context.Context, gameID int32) ([]models.GetNPCsByGameRow, error)
 	GetUserControllableCharacters(ctx context.Context, gameID, userID int32) ([]models.GetUserControllableCharactersRow, error)
+	// GetUserControllableCharactersAcrossGames returns the user's controllable
+	// characters in all in_progress games, each carrying the game context its
+	// sheet permissions depend on. Backs surfaces with no game in scope, such as
+	// the global Utility Drawer.
+	GetUserControllableCharactersAcrossGames(ctx context.Context, userID int32) ([]models.GetUserControllableCharactersAcrossGamesRow, error)
 	ApproveCharacter(ctx context.Context, characterID int32) (*models.Character, error)
 	AssignNPCToUser(ctx context.Context, characterID, assignedUserID, assignedByUserID int32) error
 	SetCharacterData(ctx context.Context, req CharacterDataRequest) error

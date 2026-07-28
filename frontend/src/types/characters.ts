@@ -20,6 +20,30 @@ export interface Character {
   updated_at: string;
 }
 
+/**
+ * A controllable character returned by the cross-game endpoint, carrying the
+ * game context its sheet needs. Surfaces with no game in scope (the global
+ * Utility Drawer) have no GameContext to read role/state from, so the backend
+ * sends them alongside each character.
+ *
+ * `is_active` is omitted rather than optional: the endpoint filters to active
+ * characters, so the field is absent from the payload and callers must not
+ * branch on it. It's the only required `Character` field the endpoint drops —
+ * everything else it leaves out (username, ownership and assignment fields) is
+ * already optional there.
+ */
+export interface ControllableCharacterWithGame extends Omit<Character, 'is_active'> {
+  game_title: string;
+  game_state: string;
+  game_is_anonymous: boolean;
+  game_portrait_avatars: boolean;
+  /**
+   * The current user's role in that character's game. `audience` is reachable:
+   * an audience member assigned an NPC controls it, so it comes back here.
+   */
+  user_role: 'gm' | 'co_gm' | 'player' | 'audience';
+}
+
 export interface CharacterData {
   id: number;
   character_id: number;

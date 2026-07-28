@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
 import { Drawer, Toggle } from '../ui';
-import { COMMON_ROOM_UTILITIES } from './registry';
+import { UTILITY_DRAWER_UTILITIES } from './registry';
 import type { UtilityContext } from './types';
 import { useScreenshotMode } from '../../hooks/useScreenshotMode';
 
@@ -23,8 +23,12 @@ export function UtilityDrawer({ open, onClose, ctx }: UtilityDrawerProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const { screenshotModeEnabled, toggleScreenshotMode } = useScreenshotMode();
 
+  // Screenshot mode hides usernames within an anonymous game, so it's only
+  // offered there — not on pages outside a game.
+  const isAnonymousGame = ctx.game?.isAnonymous ?? false;
+
   const available = useMemo(
-    () => COMMON_ROOM_UTILITIES.filter((u) => u.isAvailable(ctx)),
+    () => UTILITY_DRAWER_UTILITIES.filter((u) => u.isAvailable(ctx)),
     [ctx]
   );
 
@@ -65,7 +69,7 @@ export function UtilityDrawer({ open, onClose, ctx }: UtilityDrawerProps) {
         </div>
       ) : (
         <ul className="p-2" data-testid="utility-list">
-          {ctx.isAnonymous && (
+          {isAnonymousGame && (
             <li>
               <Toggle
                 checked={screenshotModeEnabled}
@@ -80,7 +84,7 @@ export function UtilityDrawer({ open, onClose, ctx }: UtilityDrawerProps) {
               />
             </li>
           )}
-          {available.length === 0 && !ctx.isAnonymous && (
+          {available.length === 0 && !isAnonymousGame && (
             <li className="text-sm text-content-secondary text-center py-6 px-2">
               No utilities available.
             </li>
