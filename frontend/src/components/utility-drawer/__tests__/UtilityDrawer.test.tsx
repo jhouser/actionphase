@@ -78,6 +78,45 @@ describe('UtilityDrawer', () => {
     expect(screen.getByTestId('utility-dice-roller')).toBeInTheDocument();
   });
 
+  /**
+   * The GM's panel lists the whole cast, so the utility is useful to them even
+   * with no character of their own — gating it on userCharacters would hide the
+   * feature from exactly the role it was added for.
+   */
+  it('offers the character sheet to a GM who controls no character', () => {
+    renderWithProviders(
+      <UtilityDrawer
+        open
+        onClose={vi.fn()}
+        ctx={makeCtx({
+          isGM: true,
+          userRole: 'gm',
+          userCharacters: [],
+          allGameCharacters: [makeCharacter({ id: 3, name: 'Someone' })],
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('utility-character-sheet')).toBeInTheDocument();
+  });
+
+  it('hides the character sheet from a GM when the game has no characters', () => {
+    renderWithProviders(
+      <UtilityDrawer
+        open
+        onClose={vi.fn()}
+        ctx={makeCtx({
+          isGM: true,
+          userRole: 'gm',
+          userCharacters: [],
+          allGameCharacters: [],
+        })}
+      />
+    );
+
+    expect(screen.queryByTestId('utility-character-sheet')).not.toBeInTheDocument();
+  });
+
   it('opens a utility panel and can navigate back to the list', async () => {
     renderWithProviders(
       <UtilityDrawer open onClose={vi.fn()} ctx={makeCtx()} />

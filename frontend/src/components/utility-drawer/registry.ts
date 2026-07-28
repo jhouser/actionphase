@@ -18,13 +18,20 @@ export const UTILITY_DRAWER_UTILITIES: UtilityDrawerUtility[] = [
   {
     id: 'character-sheet',
     label: 'Character Sheet',
-    description: 'View your abilities, skills, and inventory.',
+    // Worded to fit both readings of the panel: a player sees their own
+    // characters, a GM sees the game's whole cast. Descriptors are static
+    // strings, so it can't say "your" without being wrong for one of them.
+    description: 'View abilities, skills, and inventory.',
     icon: UserRound,
-    // Inside a game, only useful when the user controls a character there.
+    // Inside a game, only useful when there's a sheet to open: a character the
+    // user controls, or — for the GM, who can reference the whole cast — any
+    // character in the game.
     // Outside one the panel loads the user's characters across all their games,
     // so offer it unconditionally and let the panel report an empty result —
     // gating here would require the list before the drawer is even opened.
-    isAvailable: (ctx) => !ctx.game || ctx.game.userCharacters.length > 0,
+    isAvailable: (ctx) =>
+      !ctx.game ||
+      (ctx.game.isGM ? ctx.game.allGameCharacters.length > 0 : ctx.game.userCharacters.length > 0),
     Panel: CharacterSheetPanel,
   },
   {
