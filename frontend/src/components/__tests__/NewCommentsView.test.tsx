@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import type { UseInfiniteQueryResult } from '@tanstack/react-query';
 import { NewCommentsView } from '../NewCommentsView';
@@ -15,8 +16,10 @@ vi.mock('../../hooks/useReadTracking', () => ({
   useToggleCommentRead: () => ({ mutate: vi.fn() }),
 }));
 
+// Read mode is mutable per-test: the unread-only filter is manual-mode only.
+let mockReadMode: 'auto' | 'manual' = 'auto';
 vi.mock('../../hooks/useUserPreferences', () => ({
-  useCommentReadMode: () => 'auto',
+  useCommentReadMode: () => mockReadMode,
 }));
 
 // Mock navigate function
@@ -94,6 +97,10 @@ describe('NewCommentsView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReadMode = 'auto';
+    // The unread-only filter persists to localStorage; clear it so each test
+    // starts from the default rather than inheriting the previous test's toggle.
+    localStorage.clear();
   });
 
   it('shows loading spinner while loading', () => {
@@ -568,6 +575,164 @@ describe('NewCommentsView', () => {
       // In this case, the component shows loading state before rendering the refresh button
       // So we expect the button to not be in the document during initial load
       expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('unread-only filter', () => {
+    const loadedComments = (comments: CommentWithParent[]) =>
+      ({
+        data: { pages: [{ comments, total: comments.length, limit: 20, offset: 0 }] },
+        isLoading: false,
+        isError: false,
+        error: null,
+        fetchNextPage: vi.fn(),
+        hasNextPage: false,
+        isFetchingNextPage: false,
+        refetch: vi.fn(),
+      }) as Partial<UseInfiniteQueryResult<CommentWithParent[], Error>>;
+
+    it('does not offer the filter in auto read mode', () => {
+      mockReadMode = 'auto';
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockReturnValue(
+        loadedComments([{ ...mockComment, id: 1 }])
+      );
+
+      render(<NewCommentsView gameId={1} />, { wrapper });
+
+      expect(screen.queryByRole('switch', { name: /unread only/i })).not.toBeInTheDocument();
+    });
+
+    it('offers the filter in manual read mode, off by default', () => {
+      mockReadMode = 'manual';
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockReturnValue(
+        loadedComments([{ ...mockComment, id: 1 }])
+      );
+
+      render(<NewCommentsView gameId={1} />, { wrapper });
+
+      const toggle = screen.getByRole('switch', { name: /unread only/i });
+      expect(toggle).toBeInTheDocument();
+      expect(toggle).not.toBeChecked();
+      // Unfiltered until the user opts in
+      expect(useRecentCommentsModule.useRecentComments).toHaveBeenCalledWith(1, false);
+    });
+
+    it('restores a previously enabled filter on mount', () => {
+      mockReadMode = 'manual';
+      localStorage.setItem('newCommentsUnreadOnly', JSON.stringify({ 1: true }));
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockReturnValue(
+        loadedComments([{ ...mockComment, id: 1 }])
+      );
+
+      render(<NewCommentsView gameId={1} />, { wrapper });
+
+      // Filter is on without the user touching it, and the first fetch is filtered
+      expect(screen.getByRole('switch', { name: /unread only/i })).toBeChecked();
+      expect(useRecentCommentsModule.useRecentComments).toHaveBeenCalledWith(1, true);
+    });
+
+    it('does not apply another game\'s stored filter', () => {
+      mockReadMode = 'manual';
+      localStorage.setItem('newCommentsUnreadOnly', JSON.stringify({ 99: true }));
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockReturnValue(
+        loadedComments([{ ...mockComment, id: 1 }])
+      );
+
+      render(<NewCommentsView gameId={1} />, { wrapper });
+
+      expect(screen.getByRole('switch', { name: /unread only/i })).not.toBeChecked();
+      expect(useRecentCommentsModule.useRecentComments).toHaveBeenCalledWith(1, false);
+    });
+
+    it('requests only unread comments once the filter is enabled', async () => {
+      const user = userEvent.setup();
+      mockReadMode = 'manual';
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockReturnValue(
+        loadedComments([{ ...mockComment, id: 1 }])
+      );
+
+      render(<NewCommentsView gameId={1} />, { wrapper });
+
+      await user.click(screen.getByLabelText(/unread only/i));
+
+      expect(screen.getByLabelText(/unread only/i)).toBeChecked();
+      expect(useRecentCommentsModule.useRecentComments).toHaveBeenLastCalledWith(1, true);
+    });
+
+    it('stays unfiltered in auto mode even though the filter state exists', () => {
+      mockReadMode = 'auto';
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockReturnValue(
+        loadedComments([{ ...mockComment, id: 1 }])
+      );
+
+      render(<NewCommentsView gameId={1} />, { wrapper });
+
+      expect(useRecentCommentsModule.useRecentComments).toHaveBeenCalledWith(1, false);
+    });
+
+    it('shows an "all read" empty state when the filter hides everything', async () => {
+      const user = userEvent.setup();
+      mockReadMode = 'manual';
+
+      // Comments exist unfiltered; once filtered, the server returns none.
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockImplementation(
+        (_gameId, unreadOnly) =>
+          loadedComments(
+            unreadOnly ? [] : [{ ...mockComment, id: 1 }]
+          ) as UseInfiniteQueryResult<CommentWithParent[], Error>
+      );
+
+      render(<NewCommentsView gameId={1} />, { wrapper });
+      await user.click(screen.getByLabelText(/unread only/i));
+
+      expect(screen.getByText(/no unread comments/i)).toBeInTheDocument();
+      // Must not claim the game has no comments at all
+      expect(screen.queryByText(/be the first to start a conversation/i)).not.toBeInTheDocument();
+    });
+
+    it('lets the user clear the filter from the empty state', async () => {
+      const user = userEvent.setup();
+      mockReadMode = 'manual';
+
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockImplementation(
+        (_gameId, unreadOnly) =>
+          loadedComments(
+            unreadOnly ? [] : [{ ...mockComment, id: 1, content: 'Only comment' }]
+          ) as UseInfiniteQueryResult<CommentWithParent[], Error>
+      );
+
+      render(<NewCommentsView gameId={1} />, { wrapper });
+      await user.click(screen.getByLabelText(/unread only/i));
+
+      await user.click(screen.getByRole('button', { name: /show all comments/i }));
+
+      expect(screen.getByTestId('comment-1')).toBeInTheDocument();
+      expect(screen.getByLabelText(/unread only/i)).not.toBeChecked();
+    });
+
+    it('renders the filtered list the server returns', async () => {
+      const user = userEvent.setup();
+      mockReadMode = 'manual';
+
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockImplementation(
+        (_gameId, unreadOnly) =>
+          loadedComments(
+            unreadOnly
+              ? [{ ...mockComment, id: 2, content: 'Unread' }]
+              : [
+                  { ...mockComment, id: 1, content: 'Read' },
+                  { ...mockComment, id: 2, content: 'Unread' },
+                ]
+          ) as UseInfiniteQueryResult<CommentWithParent[], Error>
+      );
+
+      render(<NewCommentsView gameId={1} />, { wrapper });
+      expect(screen.getByTestId('comment-1')).toBeInTheDocument();
+
+      await user.click(screen.getByLabelText(/unread only/i));
+
+      expect(screen.queryByTestId('comment-1')).not.toBeInTheDocument();
+      expect(screen.getByTestId('comment-2')).toBeInTheDocument();
     });
   });
 });

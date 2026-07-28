@@ -731,6 +731,43 @@ func (s *MessageService) CanUserDeleteComment(ctx context.Context, commentID int
 	return false, nil
 }
 
+// recentCommentRow is the field set shared by the read and unread variants of the
+// recent-comments query. sqlc generates a distinct (but identical) struct per query,
+// so both are normalized through this type before conversion to the domain model.
+type recentCommentRow = models.ListRecentCommentsWithParentsRow
+
+// recentCommentRowToDomain converts a recent-comments query row to the domain model.
+func recentCommentRowToDomain(row recentCommentRow) core.CommentWithParent {
+	return core.CommentWithParent{
+		// Comment data
+		ID:                 row.ID,
+		GameID:             row.GameID,
+		ParentID:           pgInt4ToInt32Ptr(row.ParentID),
+		PostID:             pgInt4ToInt32Ptr(row.PostID),
+		AuthorID:           row.AuthorID,
+		CharacterID:        row.CharacterID,
+		Content:            row.Content,
+		CreatedAt:          pgTimestampToTime(row.CreatedAt),
+		EditedAt:           pgTimestamptzToTimePtr(row.EditedAt),
+		EditCount:          row.EditCount,
+		DeletedAt:          pgTimestampToTimePtr(row.DeletedAt),
+		IsDeleted:          row.IsDeleted,
+		AuthorUsername:     row.AuthorUsername,
+		CharacterName:      pgTextToStringPtr(row.CharacterName),
+		CharacterAvatarUrl: pgTextToStringPtr(row.CharacterAvatarUrl),
+
+		// Parent data
+		ParentContent:            pgTextToStringPtr(row.ParentContent),
+		ParentCreatedAt:          pgTimestampToTimePtr(row.ParentCreatedAt),
+		ParentDeletedAt:          pgTimestampToTimePtr(row.ParentDeletedAt),
+		ParentIsDeleted:          pgBoolToBoolPtr(row.ParentIsDeleted),
+		ParentMessageType:        nullMessageTypeToStringPtr(row.ParentMessageType),
+		ParentAuthorUsername:     pgTextToStringPtr(row.ParentAuthorUsername),
+		ParentCharacterName:      pgTextToStringPtr(row.ParentCharacterName),
+		ParentCharacterAvatarUrl: pgTextToStringPtr(row.ParentCharacterAvatarUrl),
+	}
+}
+
 // ListRecentCommentsWithParents retrieves recent comments with their parent messages/posts
 // for the "New Comments" view. Supports pagination via limit/offset.
 func (s *MessageService) ListRecentCommentsWithParents(ctx context.Context, gameID int32, limit, offset int32) ([]core.CommentWithParent, error) {
@@ -746,41 +783,69 @@ func (s *MessageService) ListRecentCommentsWithParents(ctx context.Context, game
 		return nil, fmt.Errorf("failed to list recent comments with parents: %w", err)
 	}
 
-	// Convert sqlc generated rows to domain models
 	comments := make([]core.CommentWithParent, len(rows))
 	for i, row := range rows {
-		comments[i] = core.CommentWithParent{
-			// Comment data
-			ID:                 row.ID,
-			GameID:             row.GameID,
-			ParentID:           pgInt4ToInt32Ptr(row.ParentID),
-			PostID:             pgInt4ToInt32Ptr(row.PostID),
-			AuthorID:           row.AuthorID,
-			CharacterID:        row.CharacterID,
-			Content:            row.Content,
-			CreatedAt:          pgTimestampToTime(row.CreatedAt),
-			EditedAt:           pgTimestamptzToTimePtr(row.EditedAt),
-			EditCount:          row.EditCount,
-			DeletedAt:          pgTimestampToTimePtr(row.DeletedAt),
-			IsDeleted:          row.IsDeleted,
-			AuthorUsername:     row.AuthorUsername,
-			CharacterName:      pgTextToStringPtr(row.CharacterName),
-			CharacterAvatarUrl: pgTextToStringPtr(row.CharacterAvatarUrl),
-
-			// Parent data
-			ParentContent:            pgTextToStringPtr(row.ParentContent),
-			ParentCreatedAt:          pgTimestampToTimePtr(row.ParentCreatedAt),
-			ParentDeletedAt:          pgTimestampToTimePtr(row.ParentDeletedAt),
-			ParentIsDeleted:          pgBoolToBoolPtr(row.ParentIsDeleted),
-			ParentMessageType:        nullMessageTypeToStringPtr(row.ParentMessageType),
-			ParentAuthorUsername:     pgTextToStringPtr(row.ParentAuthorUsername),
-			ParentCharacterName:      pgTextToStringPtr(row.ParentCharacterName),
-			ParentCharacterAvatarUrl: pgTextToStringPtr(row.ParentCharacterAvatarUrl),
-		}
+		comments[i] = recentCommentRowToDomain(row)
 	}
 
 	s.Logger.Info(ctx, "Listed recent comments with parents",
 		"game_id", gameID,
+		"limit", limit,
+		"offset", offset,
+		"count", len(comments),
+	)
+
+	return comments, nil
+}
+
+// ListRecentUnreadCommentsWithParents retrieves recent comments with their parent
+// messages/posts, omitting comments the user has manually marked as read.
+// Backs the "New Comments" view's unread-only filter in manual read mode.
+func (s *MessageService) ListRecentUnreadCommentsWithParents(ctx context.Context, gameID, userID int32, limit, offset int32) ([]core.CommentWithParent, error) {
+	queries := models.New(s.DB)
+
+	rows, err := queries.ListRecentUnreadCommentsWithParents(ctx, models.ListRecentUnreadCommentsWithParentsParams{
+		GameID: gameID,
+		UserID: userID,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recent unread comments with parents: %w", err)
+	}
+
+	comments := make([]core.CommentWithParent, len(rows))
+	for i, row := range rows {
+		comments[i] = recentCommentRowToDomain(recentCommentRow{
+			ID:                       row.ID,
+			GameID:                   row.GameID,
+			ParentID:                 row.ParentID,
+			PostID:                   row.PostID,
+			AuthorID:                 row.AuthorID,
+			CharacterID:              row.CharacterID,
+			Content:                  row.Content,
+			CreatedAt:                row.CreatedAt,
+			EditedAt:                 row.EditedAt,
+			EditCount:                row.EditCount,
+			DeletedAt:                row.DeletedAt,
+			IsDeleted:                row.IsDeleted,
+			AuthorUsername:           row.AuthorUsername,
+			CharacterName:            row.CharacterName,
+			CharacterAvatarUrl:       row.CharacterAvatarUrl,
+			ParentContent:            row.ParentContent,
+			ParentCreatedAt:          row.ParentCreatedAt,
+			ParentDeletedAt:          row.ParentDeletedAt,
+			ParentIsDeleted:          row.ParentIsDeleted,
+			ParentMessageType:        row.ParentMessageType,
+			ParentAuthorUsername:     row.ParentAuthorUsername,
+			ParentCharacterName:      row.ParentCharacterName,
+			ParentCharacterAvatarUrl: row.ParentCharacterAvatarUrl,
+		})
+	}
+
+	s.Logger.Info(ctx, "Listed recent unread comments with parents",
+		"game_id", gameID,
+		"user_id", userID,
 		"limit", limit,
 		"offset", offset,
 		"count", len(comments),
@@ -796,6 +861,22 @@ func (s *MessageService) GetTotalCommentCount(ctx context.Context, gameID int32)
 	count, err := queries.GetTotalCommentCount(ctx, gameID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get total comment count: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetTotalUnreadCommentCount returns the count of non-deleted comments in a game
+// that the user has not manually marked as read
+func (s *MessageService) GetTotalUnreadCommentCount(ctx context.Context, gameID, userID int32) (int64, error) {
+	queries := models.New(s.DB)
+
+	count, err := queries.GetTotalUnreadCommentCount(ctx, models.GetTotalUnreadCommentCountParams{
+		GameID: gameID,
+		UserID: userID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to get total unread comment count: %w", err)
 	}
 
 	return count, nil

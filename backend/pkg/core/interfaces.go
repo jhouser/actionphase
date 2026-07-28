@@ -728,8 +728,17 @@ type MessageServiceInterface interface {
 	// for the "New Comments" view. Supports pagination via limit/offset.
 	ListRecentCommentsWithParents(ctx context.Context, gameID int32, limit, offset int32) ([]CommentWithParent, error)
 
+	// ListRecentUnreadCommentsWithParents behaves like ListRecentCommentsWithParents but
+	// omits comments the user has manually marked as read. Backs the "New Comments"
+	// view's unread-only filter in manual read mode.
+	ListRecentUnreadCommentsWithParents(ctx context.Context, gameID, userID int32, limit, offset int32) ([]CommentWithParent, error)
+
 	// GetTotalCommentCount returns the total count of non-deleted comments in a game
 	GetTotalCommentCount(ctx context.Context, gameID int32) (int64, error)
+
+	// GetTotalUnreadCommentCount returns the count of non-deleted comments in a game
+	// that the user has not manually marked as read
+	GetTotalUnreadCommentCount(ctx context.Context, gameID, userID int32) (int64, error)
 
 	// GetPostCommentsWithThreads retrieves paginated top-level comments with all nested replies
 	// Uses a recursive CTE to load entire comment trees in a single query (eliminates N+1 pattern)
