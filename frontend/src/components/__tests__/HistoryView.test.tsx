@@ -299,6 +299,74 @@ describe('HistoryView', () => {
     });
   });
 
+  describe('character avatars on action phases', () => {
+    /**
+     * Regression guard: HistoryView rendered CharacterAvatar with only
+     * `characterName`, never passing `avatarUrl`. CharacterAvatar falls back to
+     * initials whenever `avatarUrl` is absent, so every submission and result in
+     * the History tab showed a coloured initials bubble even for characters that
+     * had uploaded a portrait — while the same character rendered correctly in
+     * ActionsList and AllActionSubmissionsView, which look the URL up from the
+     * game context by character_id.
+     */
+    const avatarCharacter = {
+      id: 7,
+      game_id: mockGameId,
+      user_id: 1,
+      name: 'Portrait Pat',
+      avatar_url: 'https://cdn.example.com/avatars/pat.jpg',
+      status: 'active',
+      created_at: '2025-01-01T00:00:00Z',
+      updated_at: '2025-01-01T00:00:00Z',
+    };
+
+    const setupAvatarHandlers = () => {
+      server.use(
+        // Populates GameContext.allGameCharacters, the avatar_url source.
+        http.get('/api/v1/games/:gameId/characters', () =>
+          HttpResponse.json([avatarCharacter])
+        ),
+        http.get('/api/v1/games/:gameId/actions/mine', () =>
+          HttpResponse.json([
+            {
+              id: 501,
+              game_id: mockGameId,
+              phase_id: 2,
+              user_id: 1,
+              character_id: avatarCharacter.id,
+              character_name: avatarCharacter.name,
+              content: 'I scale the north wall under cover of dark.',
+              is_draft: false,
+              submitted_at: '2025-01-03T18:00:00Z',
+              created_at: '2025-01-03T18:00:00Z',
+              updated_at: '2025-01-03T18:00:00Z',
+            },
+          ])
+        )
+      );
+    };
+
+    it('shows the uploaded portrait for an action submission', async () => {
+      setupAvatarHandlers();
+
+      renderWithProviders(
+        <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />,
+        // Phase 2 is the action phase; submissions is the default sub-tab.
+        { initialRoute: '/games/1?tab=history&phase=2&subTab=submissions', gameId: mockGameId }
+      );
+
+      // The submission renders, proving we are on the right phase and tab.
+      expect(
+        await screen.findByText('I scale the north wall under cover of dark.')
+      ).toBeInTheDocument();
+
+      // The avatar must be the real image, not the initials fallback ("PP").
+      const avatar = await screen.findByRole('img', { name: avatarCharacter.name });
+      expect(avatar).toHaveAttribute('src', avatarCharacter.avatar_url);
+      expect(screen.queryByText('PP')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Utility Drawer context on historical phases', () => {
     /**
      * Regression guard: HistoryView used to render CommonRoom without the
