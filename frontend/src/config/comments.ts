@@ -56,3 +56,36 @@ if (COMMENT_MAX_DEPTH_MOBILE < 1 || COMMENT_MAX_DEPTH_MOBILE > 10) {
  * Default: 10 (nearly unlimited for thread view)
  */
 export const THREAD_VIEW_MAX_DEPTH = 10;
+
+/**
+ * Preferred number of ancestor levels to fetch alongside a deep-linked target
+ * comment (e.g. when opening a notification) for enough surrounding context.
+ * The actual count is capped per-viewport by parentContextForViewport so the
+ * target never lands beyond the visible depth.
+ */
+export const DEEP_LINK_PARENT_CONTEXT = 3;
+
+/**
+ * Number of ancestor levels to fetch alongside a deep-linked target comment
+ * (e.g. when opening a notification), given the current viewport.
+ *
+ * The fetched chain is rendered nested starting at depth 0, so the target
+ * comment lands at a depth equal to the number of parents included. The target
+ * must land at a *visible* depth — the deepest visible depth is (maxDepth - 1) —
+ * otherwise the deepest visible level shows a "Continue this thread" button that
+ * hides the very comment the user clicked.
+ *
+ * We therefore fetch DEEP_LINK_PARENT_CONTEXT parents, but never more than the
+ * viewport can render inline. Mobile's shallower max depth is the binding
+ * constraint; this stays correct if COMMENT_MAX_DEPTH_MOBILE is retuned (e.g.
+ * 3 → 2 parents, 4 → 3 parents) without a second code change.
+ */
+export function parentContextForDepth(maxDepth: number): number {
+  // Deepest depth that still renders inline (depth is 0-indexed).
+  const maxVisibleParents = maxDepth - 1;
+  return Math.min(DEEP_LINK_PARENT_CONTEXT, maxVisibleParents);
+}
+
+export function parentContextForViewport(isMobile: boolean): number {
+  return parentContextForDepth(isMobile ? COMMENT_MAX_DEPTH_MOBILE : COMMENT_MAX_DEPTH);
+}

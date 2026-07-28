@@ -24,6 +24,7 @@ import { usePollsByPhase, useDraftPost } from '../hooks';
 import { useToggleCommentRead, usePostManualReadCommentIDs } from '../hooks/useReadTracking';
 import { useCommentReadMode } from '../hooks/useUserPreferences';
 import { logger } from '@/services/LoggingService';
+import { parentContextForViewport } from '@/config/comments';
 
 // Lazy load PollsTab component
 const PollsTab = lazy(() => import('./PollsTab').then(m => ({ default: m.PollsTab })));
@@ -220,13 +221,21 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
           const fetchAndShowComment = async () => {
             setFetchingComment(true);
             try {
-              // Fetch the target comment plus a bounded slice of its ancestor chain
-              // (target + up to 3 nearest parents) and the true root post ID, in a
-              // single request. chain is ordered parent-to-child (ancestor → target).
+              // Fetch the target comment plus a bounded slice of its ancestor
+              // chain and the true root post ID, in a single request. chain is
+              // ordered parent-to-child (ancestor → target).
+              //
+              // The parent count depends on the viewport: the modal renders the
+              // chain nested from depth 0, so requesting more parents than the
+              // deepest visible level pushes the target behind a "Continue this
+              // thread" button. Mobile's shallower max depth means fewer parents.
+              const isMobile = typeof window !== 'undefined'
+                && typeof window.matchMedia === 'function'
+                && window.matchMedia('(max-width: 767px)').matches;
               const contextResponse = await apiClient.messages.getMessageThreadContext(
                 gameId,
                 parseInt(commentIdParam),
-                3 // parent levels of context for the modal
+                parentContextForViewport(isMobile)
               );
               const { chain, root_post_id, has_full_thread } = contextResponse.data;
 
