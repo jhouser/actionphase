@@ -9,7 +9,7 @@ import { useUtilityDrawer } from '../contexts/UtilityDrawerContext'
  * has no way to open the drawer. This opens it through the same context the nav
  * button uses, so the provider wiring under test is the real one.
  */
-export function UtilityDrawerTestTrigger() {
+function UtilityDrawerTestTrigger() {
   const { openDrawer } = useUtilityDrawer()
   return (
     <button type="button" data-testid="utility-drawer-toggle" onClick={openDrawer}>

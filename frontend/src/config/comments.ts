@@ -63,7 +63,7 @@ export const THREAD_VIEW_MAX_DEPTH = 10;
  * The actual count is capped per-viewport by parentContextForViewport so the
  * target never lands beyond the visible depth.
  */
-export const DEEP_LINK_PARENT_CONTEXT = 3;
+const DEEP_LINK_PARENT_CONTEXT = 3;
 
 /**
  * Number of ancestor levels to fetch alongside a deep-linked target comment
