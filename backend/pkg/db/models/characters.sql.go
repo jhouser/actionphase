@@ -821,6 +821,117 @@ func (q *Queries) GetUserControllableCharacters(ctx context.Context, arg GetUser
 	return items, nil
 }
 
+const getUserControllableCharactersAcrossGames = `-- name: GetUserControllableCharactersAcrossGames :many
+SELECT DISTINCT
+  c.id, c.game_id, c.user_id, c.name, c.character_type, c.status, c.avatar_url,
+  c.created_at, c.updated_at,
+  g.title AS game_title,
+  g.state AS game_state,
+  g.is_anonymous AS game_is_anonymous,
+  g.portrait_avatars AS game_portrait_avatars,
+  CASE
+    WHEN g.gm_user_id = $1 THEN 'gm'
+    WHEN gp_role.role IS NOT NULL THEN gp_role.role
+    ELSE 'player'
+  END AS user_role
+FROM characters c
+LEFT JOIN npc_assignments na ON c.id = na.character_id
+JOIN games g ON c.game_id = g.id
+LEFT JOIN game_participants gp ON c.game_id = gp.game_id AND gp.user_id = $1 AND gp.role = 'co_gm'
+LEFT JOIN game_participants gp_role ON c.game_id = gp_role.game_id AND gp_role.user_id = $1
+WHERE g.state = 'in_progress'
+  -- Characters deactivated when a player leaves a game are not "currently played".
+  AND c.is_active = true
+  AND (
+    -- User's own player characters
+    (c.user_id = $1 AND c.character_type = 'player_character')
+    OR
+    -- NPCs assigned to user
+    (na.assigned_user_id = $1)
+    OR
+    -- If user is GM or co-GM, all NPCs (GMs/co-GMs can control any NPC in their game)
+    ((g.gm_user_id = $1 OR gp.user_id IS NOT NULL) AND c.character_type = 'npc')
+  )
+  AND (
+    -- User's own player characters are always visible regardless of status
+    (c.user_id = $1 AND c.character_type = 'player_character')
+    OR
+    -- If user is GM or co-GM, include all characters regardless of status
+    (g.gm_user_id = $1 OR gp.user_id IS NOT NULL)
+    OR
+    -- For NPCs: exclude pending/rejected unless assigned to this user
+    (c.character_type = 'npc' AND c.status NOT IN ('pending', 'rejected'))
+    OR
+    -- NPCs assigned to this user are always visible to the assignee regardless of status
+    (na.assigned_user_id = $1 AND c.character_type = 'npc')
+  )
+ORDER BY game_title, c.character_type, c.name
+`
+
+type GetUserControllableCharactersAcrossGamesRow struct {
+	ID                  int32              `json:"id"`
+	GameID              int32              `json:"game_id"`
+	UserID              pgtype.Int4        `json:"user_id"`
+	Name                string             `json:"name"`
+	CharacterType       string             `json:"character_type"`
+	Status              pgtype.Text        `json:"status"`
+	AvatarUrl           pgtype.Text        `json:"avatar_url"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	GameTitle           string             `json:"game_title"`
+	GameState           pgtype.Text        `json:"game_state"`
+	GameIsAnonymous     bool               `json:"game_is_anonymous"`
+	GamePortraitAvatars bool               `json:"game_portrait_avatars"`
+	UserRole            string             `json:"user_role"`
+}
+
+// Cross-game variant of GetUserControllableCharacters, for surfaces that need a
+// user's characters without a game in scope (e.g. the global Utility Drawer).
+//
+// Control rules are identical to the per-game query: own player characters,
+// NPCs assigned via npc_assignments, and — for GMs/co-GMs — every NPC in their
+// game. Restricted to in_progress games: this backs "what am I currently
+// playing", and sheets for finished games stay reachable from the game itself.
+//
+// Also returns the game context each character's sheet permissions depend on
+// (game title/state/flags and the user's role in that game). Callers outside a
+// game route have no other way to resolve role per character without a fetch
+// per game, and without it the sheet would fall back to read-only.
+func (q *Queries) GetUserControllableCharactersAcrossGames(ctx context.Context, gmUserID int32) ([]GetUserControllableCharactersAcrossGamesRow, error) {
+	rows, err := q.db.Query(ctx, getUserControllableCharactersAcrossGames, gmUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserControllableCharactersAcrossGamesRow
+	for rows.Next() {
+		var i GetUserControllableCharactersAcrossGamesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameID,
+			&i.UserID,
+			&i.Name,
+			&i.CharacterType,
+			&i.Status,
+			&i.AvatarUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.GameTitle,
+			&i.GameState,
+			&i.GameIsAnonymous,
+			&i.GamePortraitAvatars,
+			&i.UserRole,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserNPCs = `-- name: GetUserNPCs :many
 SELECT c.id, c.game_id, c.user_id, c.name, c.character_type, c.status, c.avatar_url, c.is_active, c.original_owner_user_id, c.created_at, c.updated_at, g.title as game_title
 FROM characters c

@@ -14,8 +14,9 @@ const QUICK_DICE = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
  * player can copy into a common-room reply. Rolls are not server-verified.
  */
 export function DiceRollerPanel({ ctx }: UtilityPanelProps) {
-  const { userCharacters } = ctx;
+  const userCharacters = ctx.game?.userCharacters ?? [];
   // Attribute rolls to the sole controlled character, if there's exactly one.
+  // Outside a game there is no character to attribute to, so rolls are unnamed.
   const characterName =
     userCharacters.length === 1 ? userCharacters[0].name : undefined;
 

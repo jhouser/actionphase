@@ -222,6 +222,14 @@ func (cs *CharacterService) GetUserControllableCharacters(ctx context.Context, g
 	})
 }
 
+// GetUserControllableCharactersAcrossGames returns every character the user can
+// control in games that are currently in_progress, along with the game context
+// (title, state, flags, and the user's role) each character's sheet needs.
+func (cs *CharacterService) GetUserControllableCharactersAcrossGames(ctx context.Context, userID int32) ([]models.GetUserControllableCharactersAcrossGamesRow, error) {
+	queries := models.New(cs.DB)
+	return queries.GetUserControllableCharactersAcrossGames(ctx, userID)
+}
+
 func (cs *CharacterService) ApproveCharacter(ctx context.Context, characterID int32) (*models.Character, error) {
 	defer cs.Logger.LogOperation(ctx, "approve_character", "character_id", characterID)()
 

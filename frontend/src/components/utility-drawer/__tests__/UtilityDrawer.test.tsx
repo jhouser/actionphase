@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../../test-utils';
 import { UtilityDrawer } from '../UtilityDrawer';
-import type { UtilityContext } from '../types';
+import type { GameUtilityContext, UtilityContext } from '../types';
 import type { Character } from '../../../types/characters';
 
 function makeCharacter(overrides: Partial<Character> = {}): Character {
@@ -18,7 +18,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
   };
 }
 
-function makeCtx(overrides: Partial<UtilityContext> = {}): UtilityContext {
+function makeGameCtx(overrides: Partial<GameUtilityContext> = {}): GameUtilityContext {
   return {
     gameId: 10,
     currentPhase: null,
@@ -30,9 +30,30 @@ function makeCtx(overrides: Partial<UtilityContext> = {}): UtilityContext {
     isAnonymous: false,
     userCharacters: [makeCharacter()],
     allGameCharacters: [makeCharacter()],
+    commentReadMode: 'manual',
+    ...overrides,
+  };
+}
+
+/** A drawer context as seen inside a game (the common-room case). */
+function makeCtx(
+  gameOverrides: Partial<GameUtilityContext> = {},
+  overrides: Partial<UtilityContext> = {}
+): UtilityContext {
+  return {
+    game: makeGameCtx(gameOverrides),
     openCharacterSheet: vi.fn(),
     closeDrawer: vi.fn(),
-    commentReadMode: 'manual',
+    ...overrides,
+  };
+}
+
+/** A drawer context as seen outside any game (the global case). */
+function makeGlobalCtx(overrides: Partial<UtilityContext> = {}): UtilityContext {
+  return {
+    game: null,
+    openCharacterSheet: vi.fn(),
+    closeDrawer: vi.fn(),
     ...overrides,
   };
 }
@@ -55,6 +76,45 @@ describe('UtilityDrawer', () => {
     expect(screen.queryByTestId('utility-character-sheet')).not.toBeInTheDocument();
     // Dice roller is always available.
     expect(screen.getByTestId('utility-dice-roller')).toBeInTheDocument();
+  });
+
+  /**
+   * The GM's panel lists the whole cast, so the utility is useful to them even
+   * with no character of their own — gating it on userCharacters would hide the
+   * feature from exactly the role it was added for.
+   */
+  it('offers the character sheet to a GM who controls no character', () => {
+    renderWithProviders(
+      <UtilityDrawer
+        open
+        onClose={vi.fn()}
+        ctx={makeCtx({
+          isGM: true,
+          userRole: 'gm',
+          userCharacters: [],
+          allGameCharacters: [makeCharacter({ id: 3, name: 'Someone' })],
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('utility-character-sheet')).toBeInTheDocument();
+  });
+
+  it('hides the character sheet from a GM when the game has no characters', () => {
+    renderWithProviders(
+      <UtilityDrawer
+        open
+        onClose={vi.fn()}
+        ctx={makeCtx({
+          isGM: true,
+          userRole: 'gm',
+          userCharacters: [],
+          allGameCharacters: [],
+        })}
+      />
+    );
+
+    expect(screen.queryByTestId('utility-character-sheet')).not.toBeInTheDocument();
   });
 
   it('opens a utility panel and can navigate back to the list', async () => {
@@ -88,16 +148,18 @@ describe('UtilityDrawer', () => {
       <UtilityDrawer
         open
         onClose={vi.fn()}
-        ctx={makeCtx({
-          userCharacters: [makeCharacter({ id: 7 })],
-          openCharacterSheet,
-        })}
+        ctx={makeCtx({ userCharacters: [makeCharacter({ id: 7 })] }, { openCharacterSheet })}
       />
     );
 
     fireEvent.click(screen.getByTestId('utility-character-sheet'));
 
-    await waitFor(() => expect(openCharacterSheet).toHaveBeenCalledWith(7));
+    await waitFor(() =>
+      expect(openCharacterSheet).toHaveBeenCalledWith(7, expect.objectContaining({
+        gameState: 'in_progress',
+        userRole: 'player',
+      }))
+    );
   });
 
   it('reopens on the utility list after a sole-character sheet closed it externally', async () => {
@@ -109,10 +171,7 @@ describe('UtilityDrawer', () => {
     // the sheet again immediately, making the drawer unusable — you could never
     // reach the utility list to pick a different utility until a page refresh.
     const openCharacterSheet = vi.fn();
-    const ctx = makeCtx({
-      userCharacters: [makeCharacter({ id: 7 })],
-      openCharacterSheet,
-    });
+    const ctx = makeCtx({ userCharacters: [makeCharacter({ id: 7 })] }, { openCharacterSheet });
 
     const { rerender } = renderWithProviders(
       <UtilityDrawer open onClose={vi.fn()} ctx={ctx} />
@@ -120,7 +179,9 @@ describe('UtilityDrawer', () => {
 
     // Select the character sheet — the sole character's sheet opens immediately.
     fireEvent.click(screen.getByTestId('utility-character-sheet'));
-    await waitFor(() => expect(openCharacterSheet).toHaveBeenCalledWith(7));
+    await waitFor(() =>
+      expect(openCharacterSheet).toHaveBeenCalledWith(7, expect.anything())
+    );
 
     // The parent closes the drawer in response to openCharacterSheet.
     rerender(<UtilityDrawer open={false} onClose={vi.fn()} ctx={ctx} />);
@@ -141,13 +202,15 @@ describe('UtilityDrawer', () => {
       <UtilityDrawer
         open
         onClose={vi.fn()}
-        ctx={makeCtx({
-          userCharacters: [
-            makeCharacter({ id: 1, name: 'Kael' }),
-            makeCharacter({ id: 2, name: 'Mirren' }),
-          ],
-          openCharacterSheet,
-        })}
+        ctx={makeCtx(
+          {
+            userCharacters: [
+              makeCharacter({ id: 1, name: 'Kael' }),
+              makeCharacter({ id: 2, name: 'Mirren' }),
+            ],
+          },
+          { openCharacterSheet }
+        )}
       />
     );
 
@@ -159,7 +222,7 @@ describe('UtilityDrawer', () => {
 
     // Choosing a character opens that sheet.
     fireEvent.click(screen.getByTestId('character-sheet-open-2'));
-    expect(openCharacterSheet).toHaveBeenCalledWith(2);
+    expect(openCharacterSheet).toHaveBeenCalledWith(2, expect.anything());
   });
 
   it('does not show the Screenshot Mode toggle for a non-anonymous game', () => {
@@ -184,5 +247,44 @@ describe('UtilityDrawer', () => {
 
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-checked', 'false');
+  });
+
+  describe('outside a game', () => {
+    it('offers the character sheet and dice roller but not game-scoped utilities', () => {
+      renderWithProviders(
+        <UtilityDrawer open onClose={vi.fn()} ctx={makeGlobalCtx()} />
+      );
+
+      // The sheet is offered unconditionally out here — the panel loads the
+      // user's cross-game characters once opened.
+      expect(screen.getByTestId('utility-character-sheet')).toBeInTheDocument();
+      expect(screen.getByTestId('utility-dice-roller')).toBeInTheDocument();
+
+      // Mark-all-read needs a phase to scope to, so it must not appear.
+      expect(screen.queryByTestId('utility-mark-all-read')).not.toBeInTheDocument();
+    });
+
+    it('does not offer Screenshot Mode without an anonymous game', () => {
+      renderWithProviders(
+        <UtilityDrawer open onClose={vi.fn()} ctx={makeGlobalCtx()} />
+      );
+
+      expect(screen.queryByTestId('screenshot-mode-toggle')).not.toBeInTheDocument();
+    });
+  });
+
+  it('offers mark-all-read inside a game with an active phase in manual mode', () => {
+    renderWithProviders(
+      <UtilityDrawer
+        open
+        onClose={vi.fn()}
+        ctx={makeCtx({
+          currentPhase: { id: 5 } as GameUtilityContext['currentPhase'],
+          commentReadMode: 'manual',
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('utility-mark-all-read')).toBeInTheDocument();
   });
 });

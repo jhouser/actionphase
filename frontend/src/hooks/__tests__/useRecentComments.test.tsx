@@ -85,7 +85,7 @@ describe('useRecentComments', () => {
     expect(result.current.data?.pages).toHaveLength(1);
     expect(result.current.data?.pages[0]).toEqual(mockResponse);
     expect(result.current.error).toBeNull();
-    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 0);
+    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 0, false);
   });
 
   it('handles error state', async () => {
@@ -182,7 +182,7 @@ describe('useRecentComments', () => {
     });
 
     expect(result.current.data?.pages).toHaveLength(1);
-    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 0);
+    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 0, false);
 
     // Fetch next page
     result.current.fetchNextPage();
@@ -192,7 +192,7 @@ describe('useRecentComments', () => {
       expect(result.current.data?.pages).toHaveLength(2);
     });
 
-    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 20);
+    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 20, false);
     expect(result.current.data?.pages[1]).toEqual(secondPageResponse);
   });
 
@@ -204,9 +204,44 @@ describe('useRecentComments', () => {
     renderHook(() => useRecentComments(1), { wrapper });
 
     await waitFor(() => {
-      const cachedData = queryClient.getQueryData(['games', 1, 'recentComments']);
+      const cachedData = queryClient.getQueryData(['games', 1, 'recentComments', { unreadOnly: false }]);
       expect(cachedData).toBeDefined();
     });
+  });
+
+  it('requests unread-only comments when unreadOnly is true', async () => {
+    vi.mocked(apiClient.messages.getRecentComments).mockResolvedValue({
+      data: mockResponse,
+    } as Partial<AxiosResponse<RecentCommentsResponse>>);
+
+    const { result } = renderHook(() => useRecentComments(1, true), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 0, true);
+  });
+
+  it('caches filtered and unfiltered lists under separate query keys', async () => {
+    vi.mocked(apiClient.messages.getRecentComments).mockResolvedValue({
+      data: mockResponse,
+    } as Partial<AxiosResponse<RecentCommentsResponse>>);
+
+    const unfiltered = renderHook(() => useRecentComments(1, false), { wrapper });
+    await waitFor(() => expect(unfiltered.result.current.isSuccess).toBe(true));
+
+    const filtered = renderHook(() => useRecentComments(1, true), { wrapper });
+    await waitFor(() => expect(filtered.result.current.isSuccess).toBe(true));
+
+    // Separate keys mean the filtered view refetches rather than reusing the
+    // unfiltered cache, which would show already-read comments.
+    expect(
+      queryClient.getQueryData(['games', 1, 'recentComments', { unreadOnly: false }])
+    ).toBeDefined();
+    expect(
+      queryClient.getQueryData(['games', 1, 'recentComments', { unreadOnly: true }])
+    ).toBeDefined();
+    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 0, false);
+    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 0, true);
   });
 
   it('handles missing offset in API response', async () => {
@@ -244,7 +279,7 @@ describe('useRecentComments', () => {
     });
 
     // Verify second API call used correct offset calculated from pages
-    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 20);
+    expect(apiClient.messages.getRecentComments).toHaveBeenCalledWith(1, 20, 20, false);
   });
 });
 

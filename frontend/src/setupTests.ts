@@ -22,6 +22,22 @@ beforeEach(() => {
     unobserve() {}
     disconnect() {}
   } as unknown as typeof IntersectionObserver
+
+  // Mock matchMedia — jsdom does not implement it. Default to a non-matching
+  // (desktop / light) query; tests that need mobile or dark-mode behavior
+  // override window.matchMedia locally.
+  if (!window.matchMedia) {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia
+  }
 })
 
 // Establish API mocking before all tests
