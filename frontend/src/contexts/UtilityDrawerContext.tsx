@@ -12,11 +12,16 @@ interface UtilityDrawerContextValue {
   openDrawer: () => void;
   closeDrawer: () => void;
   /**
-   * Contribute the current game's context to the drawer. Called by the surface
-   * that owns a game (CommonRoom); pass null to withdraw it. Withdrawing is
-   * automatic on unmount via useProvideGameUtilityContext.
+   * Contribute a game context to the drawer under a stable key, or withdraw it
+   * by passing null. Contributions are stacked: the most recently published one
+   * wins, and withdrawing it falls back to whatever is still published rather
+   * than to no game at all — the game page publishes a page-wide context, and a
+   * surface within it (CommonRoom) may publish a narrower, phase-scoped one on
+   * top for as long as it is mounted.
+   *
+   * Prefer useProvideGameUtilityContext, which handles withdrawal on unmount.
    */
-  setGameContext: (game: GameUtilityContext | null) => void;
+  setGameContext: (key: string, game: GameUtilityContext | null) => void;
   /** The assembled context handed to the drawer and its panels. */
   utilityContext: UtilityContext;
   /** The character sheet currently open in the modal, if any. */
@@ -66,18 +71,25 @@ interface UtilityDrawerProviderProps {
   children: ReactNode;
 }
 
+/** One publisher's contribution, kept in publish order. */
+interface GameContextEntry {
+  key: string;
+  game: GameUtilityContext;
+}
+
 /**
  * Hosts the Utility Drawer's state above the router, so the drawer and the
  * character-sheet modal it launches are reachable from every page rather than
  * only from the common room.
  *
- * Game-scoped data still comes from the game itself: CommonRoom contributes its
- * GameContext-derived slice via `setGameContext`, and the drawer falls back to
- * cross-game behaviour when no game is mounted.
+ * Game-scoped data still comes from the game itself: the game page contributes
+ * its GameContext-derived slice via `setGameContext`, surfaces within it may
+ * contribute a narrower one on top, and the drawer falls back to cross-game
+ * behaviour when no game is mounted at all.
  */
 export function UtilityDrawerProvider({ children }: UtilityDrawerProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [game, setGame] = useState<GameUtilityContext | null>(null);
+  const [gameStack, setGameStack] = useState<GameContextEntry[]>([]);
   const [openSheet, setOpenSheet] = useState<{
     characterId: number;
     options: OpenCharacterSheetOptions;
@@ -87,13 +99,38 @@ export function UtilityDrawerProvider({ children }: UtilityDrawerProviderProps) 
   const closeDrawer = useCallback(() => setIsOpen(false), []);
   const closeSheet = useCallback(() => setOpenSheet(null), []);
 
-  // Ignore republishes whose contents haven't actually changed. The publishing
-  // component (CommonRoom) re-renders whenever this provider's state changes, so
-  // storing every new object identity it hands us would loop: set state →
-  // re-render → fresh object → set state. Only a real change gets through.
-  const setGameContext = useCallback((next: GameUtilityContext | null) => {
-    setGame((prev) => (isSameGameContext(prev, next) ? prev : next));
-  }, []);
+  // Ignore republishes whose contents haven't actually changed. Publishing
+  // components re-render whenever this provider's state changes, so storing
+  // every new object identity they hand us would loop: set state → re-render →
+  // fresh object → set state. Only a real change gets through.
+  const setGameContext = useCallback(
+    (key: string, next: GameUtilityContext | null) => {
+      setGameStack((prev) => {
+        const index = prev.findIndex((entry) => entry.key === key);
+
+        if (!next) {
+          return index === -1 ? prev : prev.filter((entry) => entry.key !== key);
+        }
+
+        if (index === -1) {
+          return [...prev, { key, game: next }];
+        }
+        if (isSameGameContext(prev[index].game, next)) {
+          return prev;
+        }
+        // Replace in place: a re-publish is an update, not a re-entry, so it
+        // must not jump ahead of a narrower context published above it.
+        const updated = [...prev];
+        updated[index] = { key, game: next };
+        return updated;
+      });
+    },
+    []
+  );
+
+  // The most recently published context wins — the page publishes first and a
+  // surface within it (e.g. a phase-scoped common room) publishes over the top.
+  const game = gameStack.length > 0 ? gameStack[gameStack.length - 1].game : null;
 
   // Opening a sheet closes the drawer so the modal stacks cleanly over the page.
   const openCharacterSheet = useCallback(
@@ -148,14 +185,19 @@ export function useOptionalUtilityDrawer(): UtilityDrawerContextValue | null {
 /**
  * Publish a game's context to the global Utility Drawer for as long as the
  * calling component is mounted, withdrawing it on unmount so the drawer reverts
- * to cross-game behaviour when the user navigates away from the game.
+ * to whatever remains published — a broader context from an ancestor, or
+ * cross-game behaviour once the user leaves the game entirely.
+ *
+ * `key` identifies the publisher, so republishing updates that publisher's
+ * entry rather than stacking a second one. Two publishers that could be mounted
+ * at once must use different keys; the innermost one to publish wins.
  */
 // eslint-disable-next-line react-refresh/only-export-components
-export function useProvideGameUtilityContext(game: GameUtilityContext) {
+export function useProvideGameUtilityContext(key: string, game: GameUtilityContext) {
   const { setGameContext } = useUtilityDrawer();
 
   useEffect(() => {
-    setGameContext(game);
-    return () => setGameContext(null);
-  }, [game, setGameContext]);
+    setGameContext(key, game);
+    return () => setGameContext(key, null);
+  }, [key, game, setGameContext]);
 }

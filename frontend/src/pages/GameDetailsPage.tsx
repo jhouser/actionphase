@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
@@ -9,6 +9,9 @@ import { useGameStateManagement } from '../hooks/useGameStateManagement';
 import { useAutoMarkNotificationRead } from '../hooks/useNotifications';
 import { useGameTabs } from '../hooks/useGameTabs';
 import { usePollsByPhase } from '../hooks';
+import { useCommentReadMode } from '../hooks/useUserPreferences';
+import { useProvideGameUtilityContext } from '../contexts/UtilityDrawerContext';
+import type { GameUtilityContext } from '../components/utility-drawer/types';
 import { GameHeader } from '../components/GameHeader';
 import { GameBanner } from '../components/GameBanner';
 import { GameApplicationStatus } from '../components/GameApplicationStatus';
@@ -48,6 +51,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
     canEditGame,
     userRole,
     userCharacters,
+    allGameCharacters,
     refetchGameData,
   } = useGameContext();
 
@@ -150,6 +154,42 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
     hasSubmittedAction,
     isRoleLoading: isLoadingParticipants,
   });
+
+  // The Utility Drawer lives at the app root and is reachable from every page,
+  // so the game it should act on has to come from whatever game surface is
+  // mounted. Publishing here rather than from a single tab means the drawer is
+  // scoped to the game you are actually looking at on ALL of them — during an
+  // action phase, in a completed game's archive, on People or History — instead
+  // of falling back to cross-game mode and offering a character from an
+  // unrelated game. CommonRoom republishes over this with the viewed phase.
+  const commentReadMode = useCommentReadMode();
+  const gameUtilityContext = useMemo<GameUtilityContext>(
+    () => ({
+      gameId,
+      currentPhase: currentPhaseData?.phase ?? null,
+      isGM,
+      isAudience: userRole === 'audience',
+      isGameCompleted: game?.state === 'completed',
+      userRole,
+      gameState: game?.state ?? '',
+      isAnonymous: game?.is_anonymous ?? false,
+      userCharacters,
+      allGameCharacters,
+      commentReadMode,
+    }),
+    [
+      gameId,
+      currentPhaseData?.phase,
+      isGM,
+      userRole,
+      game?.state,
+      game?.is_anonymous,
+      userCharacters,
+      allGameCharacters,
+      commentReadMode,
+    ]
+  );
+  useProvideGameUtilityContext('game-page', gameUtilityContext);
 
   const getTabHref = useCallback((tabId: string) => {
     const params = new URLSearchParams(searchParams);

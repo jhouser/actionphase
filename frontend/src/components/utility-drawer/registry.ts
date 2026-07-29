@@ -25,10 +25,14 @@ export const UTILITY_DRAWER_UTILITIES: UtilityDrawerUtility[] = [
     icon: UserRound,
     // Inside a game, only useful when there's a sheet to open: a character the
     // user controls, or — for the GM, who can reference the whole cast — any
-    // character in the game.
-    // Outside one the panel loads the user's characters across all their games,
-    // so offer it unconditionally and let the panel report an empty result —
-    // gating here would require the list before the drawer is even opened.
+    // character in the game. A game with nothing to open hides the utility
+    // rather than falling back to the user's other games: the drawer is scoped
+    // to the game on screen, and offering an unrelated character from an active
+    // game while you're reading a completed one's archive is worse than
+    // offering nothing.
+    // Outside a game the panel loads the user's characters across all their
+    // games, so offer it unconditionally and let the panel report an empty
+    // result — gating here would require the list before the drawer is opened.
     isAvailable: (ctx) =>
       !ctx.game ||
       (ctx.game.isGM ? ctx.game.allGameCharacters.length > 0 : ctx.game.userCharacters.length > 0),

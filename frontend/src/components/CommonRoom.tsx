@@ -99,9 +99,13 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
   const isAnonymous = game?.is_anonymous ?? false;
 
   // The drawer itself lives at the app root, opened from the global nav, so
-  // it's reachable from every page; this room contributes the game-scoped half
-  // of its context for as long as it's mounted. Memoized because
-  // useProvideGameUtilityContext republishes whenever the object identity changes.
+  // it's reachable from every page; the game page contributes the game-scoped
+  // half of its context on every tab. This room publishes over the top of that
+  // for as long as it's mounted, because it knows something the page doesn't:
+  // which phase is being viewed. In History that's a past phase, not the game's
+  // current one, and phase-scoped utilities (Mark All Read) must act on the
+  // phase on screen. Memoized because useProvideGameUtilityContext republishes
+  // whenever the object identity changes.
   const gameUtilityContext = useMemo<GameUtilityContext>(
     () => ({
       gameId,
@@ -130,7 +134,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
       commentReadMode,
     ]
   );
-  useProvideGameUtilityContext(gameUtilityContext);
+  useProvideGameUtilityContext('common-room', gameUtilityContext);
 
   // Ref to track scroll attempts (prevents duplicate attempts for same comment)
   const scrollAttemptedRef = useRef<string | null>(null);
