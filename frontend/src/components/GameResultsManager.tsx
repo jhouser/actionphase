@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useGameActionResults, useUpdateActionResult, usePublishActionResult, useDeleteActionResult } from '../hooks/useActionResults';
 import type { ActionResult, GamePhase } from '../types/phases';
-import { Button, Textarea, Badge, Alert } from './ui';
+import { Button, Badge, Alert } from './ui';
 import { UpdateCharacterSheetModal } from './UpdateCharacterSheetModal';
 import { PublishResultConfirmationDialog } from './PublishResultConfirmationDialog';
 import { ConfirmModal } from './ConfirmModal';
 import { MarkdownPreview } from './MarkdownPreview';
+import { CommentEditor } from './CommentEditor';
 import { useDraftUpdateCount } from '../hooks';
 import { logger } from '@/services/LoggingService';
 import { useToast } from '../contexts/ToastContext';
@@ -267,11 +268,14 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit }: Re
 
         {isEditing ? (
           <div className="space-y-3">
-            <Textarea
+            <CommentEditor
               value={editedContent}
-              onChange={(e) => setEditedContent(e.target.value)}
+              onChange={setEditedContent}
               rows={6}
               placeholder="Enter result content..."
+              disabled={updateMutation.isPending}
+              maxLength={100000}
+              showCharacterCount
             />
             <div className="flex justify-end space-x-2">
               <Button

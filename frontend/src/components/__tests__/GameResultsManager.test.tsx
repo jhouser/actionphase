@@ -538,6 +538,52 @@ describe('GameResultsManager', () => {
       expect(saveButton).toBeDisabled();
     });
 
+    it('offers a markdown preview of the draft being edited', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers([mockUnpublishedResult]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: /edit/i }));
+
+      // Replace the draft with markdown, then switch to the Preview tab.
+      const textarea = screen.getByRole('textbox');
+      await user.clear(textarea);
+      await user.type(textarea, '**Bolded result**');
+
+      await user.click(screen.getByRole('button', { name: /preview/i }));
+
+      // The markdown must be rendered, not shown as raw asterisks.
+      const rendered = await screen.findByText('Bolded result');
+      expect(rendered.tagName).toBe('STRONG');
+      expect(screen.queryByText('**Bolded result**')).not.toBeInTheDocument();
+    });
+
+    it('keeps edited content when toggling between Write and Preview', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers([mockUnpublishedResult]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: /edit/i }));
+
+      await user.clear(screen.getByRole('textbox'));
+      await user.type(screen.getByRole('textbox'), 'Draft in progress');
+
+      await user.click(screen.getByRole('button', { name: /preview/i }));
+      await user.click(screen.getByRole('button', { name: /write/i }));
+
+      expect(screen.getByRole('textbox')).toHaveValue('Draft in progress');
+    });
+
     it('can edit only one result at a time', async () => {
       const user = userEvent.setup();
       setupDefaultHandlers([mockUnpublishedResult, mockUnpublishedResult2]);
