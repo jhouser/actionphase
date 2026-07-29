@@ -111,14 +111,53 @@ describe('CharacterSheetPanel — outside a game', () => {
     expect(screen.getByText('Mira Oduya')).toBeInTheDocument();
   });
 
-  it('never auto-opens a sheet, even with a single character', async () => {
+  it('auto-opens the sheet when the user controls exactly one character', async () => {
     const openCharacterSheet = vi.fn();
-    mockCharacters([makeCharacter({ id: 7 })]);
+    mockCharacters([
+      makeCharacter({ id: 7, game_state: 'in_progress', user_role: 'player' }),
+    ]);
 
     renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx(openCharacterSheet)} />);
 
-    // The picker is shown and nothing opened on its own — a global button
-    // shouldn't fling a modal at the user.
+    // Nothing to choose between, so the picker is skipped entirely and the one
+    // sheet opens with that game's permissions.
+    await waitFor(() =>
+      expect(openCharacterSheet).toHaveBeenCalledWith(7, {
+        canEdit: true,
+        canEditStats: false,
+        isAnonymous: false,
+        userRole: 'player',
+        gameState: 'in_progress',
+      })
+    );
+    expect(screen.queryByTestId('global-character-sheet-picker')).not.toBeInTheDocument();
+  });
+
+  it('auto-opens only once, not on every re-render', async () => {
+    const openCharacterSheet = vi.fn();
+    mockCharacters([makeCharacter({ id: 7 })]);
+
+    const { rerender } = renderWithProviders(
+      <CharacterSheetPanel ctx={makeGlobalCtx(openCharacterSheet)} />
+    );
+
+    await waitFor(() => expect(openCharacterSheet).toHaveBeenCalledTimes(1));
+
+    // Opening the sheet updates state above this panel, which re-renders it.
+    // That must not re-fire and fling the modal open again.
+    rerender(<CharacterSheetPanel ctx={makeGlobalCtx(openCharacterSheet)} />);
+    await waitFor(() => expect(openCharacterSheet).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows the picker rather than auto-opening when there is a choice', async () => {
+    const openCharacterSheet = vi.fn();
+    mockCharacters([
+      makeCharacter({ id: 1, name: 'Kael Vance' }),
+      makeCharacter({ id: 2, name: 'Mira Oduya', game_id: 11, game_title: 'Beta Game' }),
+    ]);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx(openCharacterSheet)} />);
+
     expect(await screen.findByTestId('global-character-sheet-picker')).toBeInTheDocument();
     expect(openCharacterSheet).not.toHaveBeenCalled();
   });
@@ -163,8 +202,12 @@ describe('CharacterSheetPanel — outside a game', () => {
 
   it('opens a completed game\'s sheet read-only', async () => {
     const openCharacterSheet = vi.fn();
+    // A second character keeps the picker up, so the click is what opens the
+    // sheet — with one character the panel auto-opens and there's nothing to
+    // click. The read-only rule under test is the same either way.
     mockCharacters([
       makeCharacter({ id: 4, game_state: 'completed', user_role: 'gm' }),
+      makeCharacter({ id: 5, name: 'Mira Oduya', game_id: 11, game_title: 'Beta Game' }),
     ]);
 
     renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx(openCharacterSheet)} />);

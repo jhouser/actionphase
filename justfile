@@ -508,36 +508,44 @@ test-fe mode="run" file="":
   #!/usr/bin/env bash
   FE='docker compose -f docker-compose.dev.yml exec -T frontend'
   FE_IT='docker compose -f docker-compose.dev.yml exec frontend'
+  # `npm test` is bare `vitest`, which watches unless told otherwise. The
+  # non-interactive modes pass `--run` explicitly rather than relying on the
+  # absence of a TTY to imply it.
   case "{{mode}}" in
-    run)
-      $FE npm test
-      ;;
-    watch)
-      $FE_IT npm run test:watch
-      ;;
-    coverage)
-      $FE npm run test:coverage
-      ;;
-    ui)
-      $FE_IT npm run test:ui
-      ;;
-    file)
-      if [ -z "{{file}}" ]; then
+    run|file)
+      # A path narrows the run to matching files; without one the whole suite
+      # runs. `file` is kept as an alias so `just test-fe file <path>` still
+      # works, but it's the same thing as passing a path to `run`.
+      if [ "{{mode}}" = "file" ] && [ -z "{{file}}" ]; then
         echo "❌ File path required for file mode"
         echo "Usage: just test-fe file path/to/test.tsx"
         exit 1
       fi
-      $FE npm test -- {{file}}
+      $FE npx vitest run {{file}}
+      ;;
+    watch)
+      $FE_IT npm run test:watch -- {{file}}
+      ;;
+    coverage)
+      $FE npx vitest run --coverage {{file}}
+      ;;
+    ui)
+      $FE_IT npm run test:ui -- {{file}}
       ;;
     *)
       echo "Usage: just test-fe [mode] [file]"
       echo ""
       echo "Modes:"
-      echo "  run         Run tests once (default)"
-      echo "  watch       Run tests in watch mode"
-      echo "  coverage    Run tests with coverage report"
-      echo "  ui          Run tests with interactive UI"
-      echo "  file <path> Run specific test file"
+      echo "  run [path]      Run tests once (default), optionally filtered to path"
+      echo "  watch [path]    Run tests in watch mode"
+      echo "  coverage [path] Run tests with coverage report"
+      echo "  ui [path]       Run tests with interactive UI"
+      echo "  file <path>     Run specific test file (alias for: run <path>)"
+      echo ""
+      echo "Examples:"
+      echo "  just test-fe"
+      echo "  just test-fe run src/components/Foo.test.tsx"
+      echo "  just test-fe watch src/hooks"
       ;;
   esac
 

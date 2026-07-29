@@ -3,8 +3,16 @@ import { ChevronRight } from 'lucide-react';
 import { Spinner, Alert, Badge } from '../../ui';
 import { useGlobalCharacters, groupCharactersByGame } from '../../../hooks/useGlobalCharacters';
 import { isEditableGameState } from '../../../hooks/useCharacterSheetPermissions';
-import type { Character } from '../../../types/characters';
-import type { GameUtilityContext, UtilityContext, UtilityPanelProps } from '../types';
+import type {
+  Character,
+  ControllableCharacterWithGame,
+} from '../../../types/characters';
+import type {
+  GameUtilityContext,
+  OpenCharacterSheetOptions,
+  UtilityContext,
+  UtilityPanelProps,
+} from '../types';
 
 /**
  * Launches the standard character-sheet modal from the Utility Drawer, exactly
@@ -18,10 +26,11 @@ import type { GameUtilityContext, UtilityContext, UtilityPanelProps } from '../t
  *   reference — they can already open any sheet from the Characters tab, and
  *   running a scene means looking up whoever is in it.
  * - Outside a game: loads the user's characters across all their in_progress
- *   games and shows them grouped by game. Always a picker, even for a single
- *   character — auto-opening a modal from a global button the user pressed to
- *   "see what's here" would be a surprise, and the game grouping is the
- *   information they came for.
+ *   games and shows them grouped by game. Exactly one character opens
+ *   immediately, same as in-game — the overwhelmingly common case is a player
+ *   or audience member with a single character, for whom the picker is a list
+ *   of one standing between them and the only thing it can lead to. The game
+ *   grouping only earns its place once there's actually a choice to make.
  *
  * Opening a sheet closes the drawer (handled by ctx.openCharacterSheet) so the
  * modal stacks cleanly over the page.
@@ -190,6 +199,26 @@ function InGameCharacterSheetPanel({
 }
 
 /**
+ * Sheet permissions for a character reached from outside a game. Every
+ * character the cross-game endpoint returns is one the user controls, so the
+ * rules reduce to the game's state plus the role the backend reports for it:
+ * editing turns on the game still being open, stat editing additionally on
+ * being its GM.
+ */
+function sheetOptionsFor(
+  character: ControllableCharacterWithGame,
+): OpenCharacterSheetOptions {
+  const editable = isEditableGameState(character.game_state);
+  return {
+    canEdit: editable,
+    canEditStats: editable && character.user_role === 'gm',
+    isAnonymous: character.game_is_anonymous,
+    userRole: character.user_role,
+    gameState: character.game_state,
+  };
+}
+
+/**
  * Global mode: characters across all the user's in_progress games, grouped by
  * game. Permissions come from the role the backend reports per character, since
  * there is no GameContext out here to derive them from.
@@ -200,6 +229,28 @@ function GlobalCharacterSheetPanel({
   openCharacterSheet: UtilityContext['openCharacterSheet'];
 }) {
   const { data: characters, isLoading, isError } = useGlobalCharacters();
+
+  // Nothing to choose between, so skip the picker. Unlike the in-game branch
+  // this doesn't exempt the GM: out here the list is "characters you control",
+  // not a cast reference, so one row means the same thing whatever the role —
+  // and a GM's list is every NPC in their game, which is never one for long.
+  const soleCharacter =
+    characters && characters.length === 1 ? characters[0] : null;
+  const soleCharacterId = soleCharacter?.id ?? null;
+
+  // Opening the sheet updates state in the provider above us, which re-renders
+  // this panel. Without a guard that re-entry re-fires the effect and loops, so
+  // track which character we've already opened and only act on a change.
+  const openedForRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!soleCharacter || soleCharacterId === null) return;
+    if (openedForRef.current === soleCharacterId) return;
+    openedForRef.current = soleCharacterId;
+    openCharacterSheet(soleCharacterId, sheetOptionsFor(soleCharacter));
+    // Only fire on mount / when the sole character changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soleCharacterId]);
 
   if (isLoading) {
     return (
@@ -217,6 +268,11 @@ function GlobalCharacterSheetPanel({
         </Alert>
       </div>
     );
+  }
+
+  if (soleCharacterId !== null) {
+    // The effect above opens the sheet; render nothing meaningful meanwhile.
+    return null;
   }
 
   const groups = groupCharactersByGame(characters ?? []);
@@ -241,18 +297,7 @@ function GlobalCharacterSheetPanel({
               <li key={c.id}>
                 <button
                   type="button"
-                  onClick={() =>
-                    openCharacterSheet(c.id, {
-                      // Same rules as the in-game branch: every character here
-                      // is one the user controls, so editing turns on the game
-                      // state, and stat editing additionally on being GM.
-                      canEdit: isEditableGameState(c.game_state),
-                      canEditStats: isEditableGameState(c.game_state) && c.user_role === 'gm',
-                      isAnonymous: c.game_is_anonymous,
-                      userRole: c.user_role,
-                      gameState: c.game_state,
-                    })
-                  }
+                  onClick={() => openCharacterSheet(c.id, sheetOptionsFor(c))}
                   className="w-full flex items-center gap-3 px-3 py-3 rounded-md hover:surface-raised transition-colors text-left group"
                   data-testid={`character-sheet-open-${c.id}`}
                   data-faro-user-action-name="open-character-sheet-from-drawer"
