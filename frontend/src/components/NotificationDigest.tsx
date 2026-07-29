@@ -10,6 +10,7 @@ import {
   CheckCircle,
   Bell,
 } from 'lucide-react';
+import { INBOX_HANDLED_TYPES } from '../utils/activityDigest';
 
 interface NotificationDigestProps {
   notificationsByType: Record<string, number>;
@@ -79,10 +80,6 @@ const DISPLAY_ORDER = [
 
 // GM-facing types that are less urgent for players — collapsed into "other"
 const GM_TYPES = new Set(['action_submitted', 'application_submitted', 'application_approved', 'game_state_changed']);
-
-// Types the Inbox card already lists as repliable rows above this digest.
-// Skipping them here keeps one notification from being counted twice.
-const INBOX_HANDLED_TYPES = new Set(['comment_reply', 'character_mention', 'private_message']);
 
 /**
  * NotificationDigest - Shows a breakdown of unread notifications by type,

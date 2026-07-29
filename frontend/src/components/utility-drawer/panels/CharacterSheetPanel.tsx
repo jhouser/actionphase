@@ -67,7 +67,9 @@ interface InGamePanelProps {
  * of those, this must degrade to just the character name rather than render an
  * empty line if that ever changes.
  */
-function controllerOf(character: Character): string | null {
+function controllerOf(
+  character: Pick<Character, 'character_type' | 'assigned_username' | 'username'>
+): string | null {
   if (character.character_type === 'npc') {
     return character.assigned_username ?? 'Unassigned';
   }
