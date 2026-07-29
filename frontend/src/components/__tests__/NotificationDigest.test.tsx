@@ -30,16 +30,16 @@ describe('NotificationDigest', () => {
 
   it('shows singular label for count of 1', () => {
     renderWithProviders(
-      <NotificationDigest notificationsByType={{ private_message: 1 }} gameId={5} />
+      <NotificationDigest notificationsByType={{ handout_published: 1 }} gameId={5} />
     );
-    expect(screen.getByText('1 private message')).toBeInTheDocument();
+    expect(screen.getByText('1 new handout')).toBeInTheDocument();
   });
 
   it('shows plural label for count > 1', () => {
     renderWithProviders(
-      <NotificationDigest notificationsByType={{ private_message: 3 }} gameId={5} />
+      <NotificationDigest notificationsByType={{ handout_published: 3 }} gameId={5} />
     );
-    expect(screen.getByText('3 private messages')).toBeInTheDocument();
+    expect(screen.getByText('3 new handouts')).toBeInTheDocument();
   });
 
   it('links player-facing notification to the correct game tab', () => {
@@ -75,13 +75,34 @@ describe('NotificationDigest', () => {
   it('renders multiple notification types in priority order', () => {
     renderWithProviders(
       <NotificationDigest
-        notificationsByType={{ comment_reply: 1, private_message: 2 }}
+        notificationsByType={{ handout_published: 1, action_result: 2 }}
         gameId={5}
       />
     );
     const links = screen.getAllByRole('link');
-    // private_message has higher priority than comment_reply
-    expect(links[0]).toHaveTextContent('2 private messages');
-    expect(links[1]).toHaveTextContent('1 reply to your comment');
+    // action_result has higher priority than handout_published
+    expect(links[0]).toHaveTextContent('2 action results published');
+    expect(links[1]).toHaveTextContent('1 new handout');
+  });
+
+  it('omits types the Inbox card already lists as repliable rows', () => {
+    renderWithProviders(
+      <NotificationDigest
+        notificationsByType={{ comment_reply: 1, character_mention: 2, private_message: 3 }}
+        gameId={5}
+      />
+    );
+    // All three are surfaced by the Inbox above; showing them again would
+    // restate the same notification twice on one page.
+    expect(screen.queryByText('1 reply to your comment')).not.toBeInTheDocument();
+    expect(screen.queryByText('2 mentions')).not.toBeInTheDocument();
+    expect(screen.queryByText('3 private messages')).not.toBeInTheDocument();
+  });
+
+  it('renders nothing when only Inbox-handled types are present', () => {
+    const { container } = renderWithProviders(
+      <NotificationDigest notificationsByType={{ comment_reply: 1 }} gameId={5} />
+    );
+    expect(container.firstChild).toBeNull();
   });
 });

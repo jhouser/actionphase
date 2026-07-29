@@ -80,6 +80,10 @@ const DISPLAY_ORDER = [
 // GM-facing types that are less urgent for players — collapsed into "other"
 const GM_TYPES = new Set(['action_submitted', 'application_submitted', 'application_approved', 'game_state_changed']);
 
+// Types the Inbox card already lists as repliable rows above this digest.
+// Skipping them here keeps one notification from being counted twice.
+const INBOX_HANDLED_TYPES = new Set(['comment_reply', 'character_mention', 'private_message']);
+
 /**
  * NotificationDigest - Shows a breakdown of unread notifications by type,
  * each linking directly to the relevant game tab.
@@ -93,6 +97,7 @@ export function NotificationDigest({ notificationsByType, gameId }: Notification
 
   for (const [type, count] of Object.entries(notificationsByType)) {
     if (count === 0) continue;
+    if (INBOX_HANDLED_TYPES.has(type)) continue;
     if (GM_TYPES.has(type)) {
       otherCount += count;
     } else if (NOTIFICATION_CONFIG[type]) {
