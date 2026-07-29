@@ -69,6 +69,7 @@ function makeInGameCtx(
       userRole: 'player',
       gameState: 'in_progress',
       isAnonymous: false,
+      portraitAvatars: false,
       userCharacters: [makeGameCharacter()],
       allGameCharacters: [makeGameCharacter()],
       commentReadMode: 'manual',
@@ -128,9 +129,52 @@ describe('CharacterSheetPanel — outside a game', () => {
         isAnonymous: false,
         userRole: 'player',
         gameState: 'in_progress',
+        portraitAvatars: false,
       })
     );
     expect(screen.queryByTestId('global-character-sheet-picker')).not.toBeInTheDocument();
+  });
+
+  it('carries the game\'s portrait-avatar setting through to the sheet', async () => {
+    const openCharacterSheet = vi.fn();
+    mockCharacters([makeCharacter({ id: 7, game_portrait_avatars: true })]);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx(openCharacterSheet)} />);
+
+    // Out here there is no GameContext for the sheet to read the setting from,
+    // so it has to ride along with the character or the sheet falls back to
+    // circular avatars and misrepresents a portrait game.
+    await waitFor(() =>
+      expect(openCharacterSheet).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ portraitAvatars: true })
+      )
+    );
+  });
+
+  it('opens a picked character with its own game\'s avatar shape', async () => {
+    const openCharacterSheet = vi.fn();
+    mockCharacters([
+      makeCharacter({ id: 1, name: 'Kael Vance', game_portrait_avatars: false }),
+      makeCharacter({
+        id: 2,
+        name: 'Mira Oduya',
+        game_id: 11,
+        game_title: 'Beta Game',
+        game_portrait_avatars: true,
+      }),
+    ]);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx(openCharacterSheet)} />);
+
+    fireEvent.click(await screen.findByTestId('character-sheet-open-2'));
+
+    // The setting is per-game, so picking a character from a portrait game must
+    // use that game's shape and not the first game's.
+    expect(openCharacterSheet).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ portraitAvatars: true })
+    );
   });
 
   it('auto-opens only once, not on every re-render', async () => {
@@ -187,6 +231,7 @@ describe('CharacterSheetPanel — outside a game', () => {
       isAnonymous: false,
       userRole: 'player',
       gameState: 'in_progress',
+      portraitAvatars: false,
     });
 
     // The GM of a different game gets stat editing, and that game's anonymity.
@@ -197,6 +242,7 @@ describe('CharacterSheetPanel — outside a game', () => {
       isAnonymous: true,
       userRole: 'gm',
       gameState: 'in_progress',
+      portraitAvatars: false,
     });
   });
 
@@ -379,7 +425,31 @@ describe('CharacterSheetPanel — in a game, as GM', () => {
       isAnonymous: false,
       userRole: 'gm',
       gameState: 'in_progress',
+      portraitAvatars: false,
     });
+  });
+
+  it('passes the game\'s portrait-avatar setting to the sheet', () => {
+    const openCharacterSheet = vi.fn();
+    renderWithProviders(
+      <CharacterSheetPanel
+        ctx={makeInGameCtx(
+          {
+            isGM: true,
+            userRole: 'gm',
+            allGameCharacters: cast,
+            portraitAvatars: true,
+          },
+          openCharacterSheet
+        )}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('character-sheet-open-2'));
+    expect(openCharacterSheet).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ portraitAvatars: true })
+    );
   });
 
   /**

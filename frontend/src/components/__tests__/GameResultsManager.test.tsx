@@ -584,9 +584,11 @@ describe('GameResultsManager', () => {
       await user.clear(textarea);
       await user.type(textarea, 'Updated content');
 
-      await user.click(screen.getByRole('button', { name: /save changes/i }));
+      // Don't await the click: the mutation resolves after 100ms and exits edit
+      // mode, unmounting this indicator. Awaiting can let the save finish first.
+      void user.click(screen.getByRole('button', { name: /save changes/i }));
 
-      expect(screen.getByText('Saving...')).toBeInTheDocument();
+      expect(await screen.findByText('Saving...')).toBeInTheDocument();
     });
 
     it('disables form controls while saving', async () => {
@@ -614,10 +616,14 @@ describe('GameResultsManager', () => {
       await user.clear(textarea);
       await user.type(textarea, 'Updated content');
 
-      await user.click(screen.getByRole('button', { name: /save changes/i }));
+      // Don't await the click: the mutation resolves after 100ms and exits edit
+      // mode, unmounting these buttons. Awaiting can let the save finish first,
+      // making the assertions race against the mutation.
+      void user.click(screen.getByRole('button', { name: /save changes/i }));
 
+      // findBy retries until the pending state renders, rather than sampling once.
+      expect(await screen.findByRole('button', { name: /saving\.\.\./i })).toBeDisabled();
       expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled();
-      expect(screen.getByRole('button', { name: /saving\.\.\./i })).toBeDisabled();
     });
   });
 

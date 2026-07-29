@@ -81,6 +81,7 @@ function InGameCharacterSheetPanel({
     userRole,
     gameState,
     isAnonymous,
+    portraitAvatars,
     isGM,
   } = game;
 
@@ -100,6 +101,7 @@ function InGameCharacterSheetPanel({
     isAnonymous,
     userRole,
     gameState,
+    portraitAvatars,
   };
 
   // With a single character there is nothing to choose — open it directly. Not
@@ -204,6 +206,10 @@ function InGameCharacterSheetPanel({
  * rules reduce to the game's state plus the role the backend reports for it:
  * editing turns on the game still being open, stat editing additionally on
  * being its GM.
+ *
+ * Presentation settings travel the same way and for the same reason: the sheet
+ * normally reads the avatar shape from GameContext, which does not exist out
+ * here, so it comes from the character's own game rather than defaulting.
  */
 function sheetOptionsFor(
   character: ControllableCharacterWithGame,
@@ -215,6 +221,7 @@ function sheetOptionsFor(
     isAnonymous: character.game_is_anonymous,
     userRole: character.user_role,
     gameState: character.game_state,
+    portraitAvatars: character.game_portrait_avatars,
   };
 }
 
