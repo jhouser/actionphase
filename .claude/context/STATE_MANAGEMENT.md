@@ -73,7 +73,40 @@ const { isGM, canEditGame } = useGamePermissions(gameId);
 const { characters } = useUserCharacters(gameId);
 ```
 
-### 3. Getting User ID
+### 3. UtilityDrawerContext - Global Drawer + Contributed Game Context
+
+The Utility Drawer is mounted **once at the app root** (`RootLayout` in `App.tsx`),
+not inside CommonRoom, so it and the character-sheet modal it launches are
+reachable from every page. Game-scoped data is *contributed upward* by whichever
+game surface is mounted.
+
+```typescript
+// A game surface publishes its slice for as long as it's mounted:
+import { useProvideGameUtilityContext, useUtilityDrawer } from '../contexts/UtilityDrawerContext';
+
+const gameUtilityContext = useMemo<GameUtilityContext>(() => ({
+  gameId, currentPhase, isGM, userRole, gameState, userCharacters, /* … */
+}), [/* all of the above */]);
+useProvideGameUtilityContext(gameUtilityContext);  // withdrawn on unmount
+
+const { openDrawer } = useUtilityDrawer();          // to trigger it
+```
+
+`ctx.game` is **null outside a game route**. Utilities must gate on it in
+`isAvailable` (see `components/utility-drawer/registry.ts`) rather than assume
+a game exists — e.g. Mark All Read requires `!!ctx.game`, while the character
+sheet falls back to a cross-game picker via `useGlobalCharacters()`.
+
+**Gotchas (both caused real bugs during implementation):**
+- The provider **must** compare contributed contexts structurally before storing
+  them (`isSameGameContext`). The publishing component re-renders whenever
+  provider state changes, so storing each new object identity loops infinitely.
+- Effects that call `openCharacterSheet` need a ref guard. Opening a sheet sets
+  provider state → re-renders the panel → the effect re-fires without one.
+- Nav-level consumers use `useOptionalUtilityDrawer()`, which returns null
+  instead of throwing, so Layout still renders where no provider is mounted.
+
+### 4. Getting User ID
 
 ```typescript
 // ✅ CORRECT: Use AuthContext

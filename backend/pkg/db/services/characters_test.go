@@ -776,6 +776,218 @@ func TestCharacterService_GetUserControllableCharacters_PendingAssignedNPC(t *te
 	})
 }
 
+func TestCharacterService_GetUserControllableCharactersAcrossGames(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "character_data", "npc_assignments", "characters", "game_participants", "games", "sessions", "users")
+
+	characterService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	player := testDB.CreateTestUser(t, "xgplayer", "xgplayer@example.com")
+	gm := testDB.CreateTestUser(t, "xggm", "xggm@example.com")
+
+	// Two in_progress games the player has a character in, plus a completed one
+	// that must be excluded, and a game the player has nothing to do with.
+	gameA := testDB.CreateTestGameWithState(t, int32(gm.ID), "Alpha Game", "in_progress")
+	gameB := testDB.CreateTestGameWithState(t, int32(gm.ID), "Beta Game", "in_progress")
+	completedGame := testDB.CreateTestGameWithState(t, int32(gm.ID), "Finished Game", "completed")
+
+	charA, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+		GameID:        gameA.ID,
+		UserID:        core.Int32Ptr(int32(player.ID)),
+		Name:          "Kael Vance",
+		CharacterType: "player_character",
+	})
+	core.AssertNoError(t, err, "Failed to create character in game A")
+
+	charB, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+		GameID:        gameB.ID,
+		UserID:        core.Int32Ptr(int32(player.ID)),
+		Name:          "Mira Oduya",
+		CharacterType: "player_character",
+	})
+	core.AssertNoError(t, err, "Failed to create character in game B")
+
+	completedChar, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+		GameID:        completedGame.ID,
+		UserID:        core.Int32Ptr(int32(player.ID)),
+		Name:          "Retired Hero",
+		CharacterType: "player_character",
+	})
+	core.AssertNoError(t, err, "Failed to create character in completed game")
+
+	t.Run("returns characters from all in_progress games, ordered by game title", func(t *testing.T) {
+		rows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(player.ID))
+		core.AssertNoError(t, err, "Failed to get cross-game controllable characters")
+		core.AssertEqual(t, 2, len(rows), "Expected characters from both in_progress games")
+
+		// ORDER BY game_title puts Alpha before Beta.
+		core.AssertEqual(t, charA.ID, rows[0].ID, "First row should be the Alpha Game character")
+		core.AssertEqual(t, "Alpha Game", rows[0].GameTitle, "Should carry the game title")
+		core.AssertEqual(t, "Kael Vance", rows[0].Name, "Should carry the character name")
+		core.AssertEqual(t, "in_progress", rows[0].GameState.String, "Should carry the game state")
+
+		core.AssertEqual(t, charB.ID, rows[1].ID, "Second row should be the Beta Game character")
+		core.AssertEqual(t, "Beta Game", rows[1].GameTitle, "Should carry the game title")
+	})
+
+	t.Run("excludes characters in completed games", func(t *testing.T) {
+		rows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(player.ID))
+		core.AssertNoError(t, err, "Failed to get cross-game controllable characters")
+
+		for _, row := range rows {
+			if row.ID == completedChar.ID {
+				t.Fatalf("character %d from completed game should not be returned", completedChar.ID)
+			}
+		}
+	})
+
+	t.Run("reports the user's role in each game", func(t *testing.T) {
+		// The player is a plain player in game A; the GM owns it.
+		playerRows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(player.ID))
+		core.AssertNoError(t, err, "Failed to get cross-game controllable characters for player")
+		core.AssertEqual(t, "player", playerRows[0].UserRole, "Player should be reported as 'player'")
+
+		// The GM controls NPCs in their games, so give them one to be reported on.
+		gmNPC, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+			GameID:        gameA.ID,
+			UserID:        nil,
+			Name:          "Role Check NPC",
+			CharacterType: "npc",
+		})
+		core.AssertNoError(t, err, "Failed to create NPC for GM role check")
+
+		gmRows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(gm.ID))
+		core.AssertNoError(t, err, "Failed to get cross-game controllable characters for GM")
+		require.NotEmpty(t, gmRows, "GM should control NPCs in their own games")
+
+		foundGMNPC := false
+		for _, row := range gmRows {
+			core.AssertEqual(t, "gm", row.UserRole, "GM should be reported as 'gm' in their own games")
+			if row.ID == gmNPC.ID {
+				foundGMNPC = true
+			}
+		}
+		core.AssertEqual(t, true, foundGMNPC, "GM should see the NPC they control")
+	})
+
+	t.Run("GM sees unassigned NPCs, players do not", func(t *testing.T) {
+		npc, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+			GameID:        gameA.ID,
+			UserID:        nil,
+			Name:          "Tavern Keeper",
+			CharacterType: "npc",
+		})
+		core.AssertNoError(t, err, "Failed to create unassigned NPC")
+
+		gmRows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(gm.ID))
+		core.AssertNoError(t, err, "Failed to get GM's cross-game characters")
+		gmHasNPC := false
+		for _, row := range gmRows {
+			if row.ID == npc.ID {
+				gmHasNPC = true
+			}
+		}
+		core.AssertEqual(t, true, gmHasNPC, "GM should control unassigned NPCs in their game")
+
+		playerRows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(player.ID))
+		core.AssertNoError(t, err, "Failed to get player's cross-game characters")
+		for _, row := range playerRows {
+			if row.ID == npc.ID {
+				t.Fatal("player should not control an unassigned NPC")
+			}
+		}
+	})
+
+	t.Run("co-GM gets NPCs with the co_gm role", func(t *testing.T) {
+		coGM := testDB.CreateTestUser(t, "xgcogm", "xgcogm@example.com")
+		testDB.AddTestGameParticipant(t, gameB.ID, int32(coGM.ID), "co_gm")
+
+		npc, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+			GameID:        gameB.ID,
+			UserID:        nil,
+			Name:          "Beta NPC",
+			CharacterType: "npc",
+		})
+		core.AssertNoError(t, err, "Failed to create NPC in game B")
+
+		rows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(coGM.ID))
+		core.AssertNoError(t, err, "Failed to get co-GM's cross-game characters")
+
+		found := false
+		for _, row := range rows {
+			if row.ID == npc.ID {
+				found = true
+				core.AssertEqual(t, "co_gm", row.UserRole, "Co-GM should be reported as 'co_gm'")
+			}
+		}
+		core.AssertEqual(t, true, found, "Co-GM should control NPCs in their game")
+	})
+
+	// An audience member controls nothing by default, but a GM can assign them
+	// an NPC — at which point it's a character they play, and the drawer must
+	// offer it like any other. The role travels with it so the sheet resolves
+	// permissions correctly (audience is not GM, so no stat editing).
+	t.Run("audience member gets NPCs assigned to them, with the audience role", func(t *testing.T) {
+		audience := testDB.CreateTestUser(t, "xgaudience", "xgaudience@example.com")
+		testDB.AddTestGameParticipant(t, gameA.ID, int32(audience.ID), "audience")
+
+		npc, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+			GameID:        gameA.ID,
+			UserID:        nil,
+			Name:          "Audience NPC",
+			CharacterType: "npc",
+		})
+		core.AssertNoError(t, err, "Failed to create NPC for audience assignment")
+
+		// Before assignment the audience member controls nothing.
+		before, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(audience.ID))
+		core.AssertNoError(t, err, "Failed to get audience characters before assignment")
+		core.AssertEqual(t, 0, len(before), "Audience should control nothing before assignment")
+
+		err = characterService.AssignNPCToUser(ctx, npc.ID, int32(audience.ID), int32(gm.ID))
+		core.AssertNoError(t, err, "Failed to assign NPC to audience member")
+
+		after, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(audience.ID))
+		core.AssertNoError(t, err, "Failed to get audience characters after assignment")
+		core.AssertEqual(t, 1, len(after), "Audience should control the NPC assigned to them")
+		core.AssertEqual(t, npc.ID, after[0].ID, "Should be the assigned NPC")
+		core.AssertEqual(t, "audience", after[0].UserRole, "Role should be reported as 'audience'")
+	})
+
+	t.Run("excludes deactivated characters", func(t *testing.T) {
+		leaver := testDB.CreateTestUser(t, "xgleaver", "xgleaver@example.com")
+		leaverChar, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+			GameID:        gameA.ID,
+			UserID:        core.Int32Ptr(int32(leaver.ID)),
+			Name:          "Departed Soul",
+			CharacterType: "player_character",
+		})
+		core.AssertNoError(t, err, "Failed to create character for leaving player")
+
+		before, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(leaver.ID))
+		core.AssertNoError(t, err, "Failed to get characters before deactivation")
+		core.AssertEqual(t, 1, len(before), "Character should be returned while active")
+		core.AssertEqual(t, leaverChar.ID, before[0].ID, "Should be the leaver's character")
+
+		err = characterService.DeactivatePlayerCharacters(ctx, gameA.ID, int32(leaver.ID))
+		core.AssertNoError(t, err, "Failed to deactivate characters")
+
+		after, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(leaver.ID))
+		core.AssertNoError(t, err, "Failed to get characters after deactivation")
+		core.AssertEqual(t, 0, len(after), "Deactivated character should not be returned")
+	})
+
+	t.Run("returns empty list for a user with no characters", func(t *testing.T) {
+		stranger := testDB.CreateTestUser(t, "xgstranger", "xgstranger@example.com")
+		rows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(stranger.ID))
+		core.AssertNoError(t, err, "Failed to get cross-game controllable characters")
+		core.AssertEqual(t, 0, len(rows), "Expected no characters")
+	})
+}
+
 func TestCharacterService_AssignNPCToUser_AudienceNPC(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	app := core.NewTestApp(testDB.Pool)

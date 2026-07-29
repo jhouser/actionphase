@@ -728,8 +728,17 @@ type MessageServiceInterface interface {
 	// for the "New Comments" view. Supports pagination via limit/offset.
 	ListRecentCommentsWithParents(ctx context.Context, gameID int32, limit, offset int32) ([]CommentWithParent, error)
 
+	// ListRecentUnreadCommentsWithParents behaves like ListRecentCommentsWithParents but
+	// omits comments the user has manually marked as read. Backs the "New Comments"
+	// view's unread-only filter in manual read mode.
+	ListRecentUnreadCommentsWithParents(ctx context.Context, gameID, userID int32, limit, offset int32) ([]CommentWithParent, error)
+
 	// GetTotalCommentCount returns the total count of non-deleted comments in a game
 	GetTotalCommentCount(ctx context.Context, gameID int32) (int64, error)
+
+	// GetTotalUnreadCommentCount returns the count of non-deleted comments in a game
+	// that the user has not manually marked as read
+	GetTotalUnreadCommentCount(ctx context.Context, gameID, userID int32) (int64, error)
 
 	// GetPostCommentsWithThreads retrieves paginated top-level comments with all nested replies
 	// Uses a recursive CTE to load entire comment trees in a single query (eliminates N+1 pattern)
@@ -1694,6 +1703,11 @@ type CharacterServiceInterface interface {
 	GetPlayerCharacters(ctx context.Context, gameID int32) ([]models.GetPlayerCharactersByGameRow, error)
 	GetNPCs(ctx context.Context, gameID int32) ([]models.GetNPCsByGameRow, error)
 	GetUserControllableCharacters(ctx context.Context, gameID, userID int32) ([]models.GetUserControllableCharactersRow, error)
+	// GetUserControllableCharactersAcrossGames returns the user's controllable
+	// characters in all in_progress games, each carrying the game context its
+	// sheet permissions depend on. Backs surfaces with no game in scope, such as
+	// the global Utility Drawer.
+	GetUserControllableCharactersAcrossGames(ctx context.Context, userID int32) ([]models.GetUserControllableCharactersAcrossGamesRow, error)
 	ApproveCharacter(ctx context.Context, characterID int32) (*models.Character, error)
 	AssignNPCToUser(ctx context.Context, characterID, assignedUserID, assignedByUserID int32) error
 	SetCharacterData(ctx context.Context, req CharacterDataRequest) error

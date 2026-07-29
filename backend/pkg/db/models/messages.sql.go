@@ -1073,6 +1073,22 @@ func (q *Queries) GetMessage(ctx context.Context, id int32) (GetMessageRow, erro
 	return i, err
 }
 
+const getMessagePhaseID = `-- name: GetMessagePhaseID :one
+SELECT phase_id
+FROM messages
+WHERE id = $1
+`
+
+// Get just the phase_id of a message, used when a new comment inherits its
+// phase from the message it replies to. Deliberately does NOT filter on
+// is_deleted: a reply to a soft-deleted parent still belongs to that phase.
+func (q *Queries) GetMessagePhaseID(ctx context.Context, id int32) (pgtype.Int4, error) {
+	row := q.db.QueryRow(ctx, getMessagePhaseID, id)
+	var phase_id pgtype.Int4
+	err := row.Scan(&phase_id)
+	return phase_id, err
+}
+
 const getMessageReactions = `-- name: GetMessageReactions :many
 SELECT mr.id, mr.message_id, mr.user_id, mr.reaction_type, mr.created_at, u.username
 FROM message_reactions mr

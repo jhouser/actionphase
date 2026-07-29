@@ -2,14 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../../test-utils';
 import { DiceRollerPanel } from '../panels/DiceRollerPanel';
-import type { UtilityContext } from '../types';
+import type { GameUtilityContext, UtilityContext } from '../types';
 import { copyToClipboard } from '../../../utils/clipboard';
 
 vi.mock('../../../utils/clipboard', () => ({
   copyToClipboard: vi.fn().mockResolvedValue(true),
 }));
 
-const baseCtx: UtilityContext = {
+const baseGame: GameUtilityContext = {
   gameId: 10,
   currentPhase: null,
   isGM: false,
@@ -20,9 +20,13 @@ const baseCtx: UtilityContext = {
   isAnonymous: false,
   userCharacters: [],
   allGameCharacters: [],
+  commentReadMode: 'manual',
+};
+
+const baseCtx: UtilityContext = {
+  game: baseGame,
   openCharacterSheet: vi.fn(),
   closeDrawer: vi.fn(),
-  commentReadMode: 'manual',
 };
 
 describe('DiceRollerPanel', () => {
@@ -69,17 +73,20 @@ describe('DiceRollerPanel', () => {
       <DiceRollerPanel
         ctx={{
           ...baseCtx,
-          userCharacters: [
-            {
-              id: 1,
-              game_id: 10,
-              name: 'Kael',
-              status: 'approved',
-              is_active: true,
-              created_at: '2024-01-01T00:00:00Z',
-              updated_at: '2024-01-01T00:00:00Z',
-            },
-          ],
+          game: {
+            ...baseGame,
+            userCharacters: [
+              {
+                id: 1,
+                game_id: 10,
+                name: 'Kael',
+                status: 'approved',
+                is_active: true,
+                created_at: '2024-01-01T00:00:00Z',
+                updated_at: '2024-01-01T00:00:00Z',
+              },
+            ],
+          },
         }}
       />
     );

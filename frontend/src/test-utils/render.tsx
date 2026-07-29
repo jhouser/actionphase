@@ -8,6 +8,7 @@ import { ScreenshotModeProvider } from '../contexts/ScreenshotModeContext'
 import { ToastProvider } from '../contexts/ToastContext'
 import { ConversationProvider } from '../contexts/ConversationContext'
 import { GameProvider } from '../contexts/GameContext'
+import { UtilityDrawerProvider } from '../contexts/UtilityDrawerContext'
 
 interface RenderWithProvidersOptions extends Omit<RenderOptions, 'wrapper'> {
   /**
@@ -122,7 +123,9 @@ export function renderWithProviders(
             <ConversationProvider>
               <AdminModeProvider>
                 <ScreenshotModeProvider>
-                  <RouterProvider router={router} />
+                  <UtilityDrawerProvider>
+                    <RouterProvider router={router} />
+                  </UtilityDrawerProvider>
                 </ScreenshotModeProvider>
               </AdminModeProvider>
             </ConversationProvider>

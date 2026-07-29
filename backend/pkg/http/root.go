@@ -382,6 +382,10 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
+			// Cross-game character list for the current user. Static segment, so
+			// chi matches it ahead of the /{id} route below.
+			r.Get("/controllable", characterHandler.GetUserControllableCharactersAcrossGames)
+
 			// Character management
 			r.Get("/{id}", characterHandler.GetCharacter)
 			r.Post("/{id}/approve", characterHandler.ApproveCharacter)

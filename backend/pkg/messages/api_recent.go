@@ -58,26 +58,51 @@ func (h *Handler) ListRecentCommentsWithParents(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	userID, _ := h.getUserIDFromToken(r)
+	userID, userIDErr := h.getUserIDFromToken(r)
 	showUsernames := core.CanSeeUsernamesInAnonymousGame(ctx, h.App.Pool, game, userID)
 
-	messageService := h.MessageService
-	comments, err := messageService.ListRecentCommentsWithParents(ctx, int32(gameID), int32(limit), int32(offset))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to list recent comments", "error", err, "game_id", gameID)
+	// unread_only restricts the list to comments this user has not manually
+	// marked as read (the "New Comments" filter in manual read mode). It needs
+	// an identified user, unlike the default unfiltered listing.
+	unreadOnly := r.URL.Query().Get("unread_only") == "true"
+	if unreadOnly && userIDErr != nil {
+		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required for unread_only"), "Invalid list recent comments with parents request")
 		return
 	}
 
-	totalCount, err := messageService.GetTotalCommentCount(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get total comment count", "error", err, "game_id", gameID)
-		return
+	messageService := h.MessageService
+
+	var comments []core.CommentWithParent
+	var totalCount int64
+	if unreadOnly {
+		comments, err = messageService.ListRecentUnreadCommentsWithParents(ctx, int32(gameID), userID, int32(limit), int32(offset))
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to list recent unread comments", "error", err, "game_id", gameID, "user_id", userID)
+			return
+		}
+		totalCount, err = messageService.GetTotalUnreadCommentCount(ctx, int32(gameID), userID)
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get total unread comment count", "error", err, "game_id", gameID, "user_id", userID)
+			return
+		}
+	} else {
+		comments, err = messageService.ListRecentCommentsWithParents(ctx, int32(gameID), int32(limit), int32(offset))
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to list recent comments", "error", err, "game_id", gameID)
+			return
+		}
+		totalCount, err = messageService.GetTotalCommentCount(ctx, int32(gameID))
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get total comment count", "error", err, "game_id", gameID)
+			return
+		}
 	}
 
 	h.App.ObsLogger.Info(ctx, "Listed recent comments with parents",
 		"game_id", gameID,
 		"limit", limit,
 		"offset", offset,
+		"unread_only", unreadOnly,
 		"count", len(comments),
 		"total", totalCount)
 

@@ -43,6 +43,14 @@ LEFT JOIN characters c ON m.character_id = c.id
 WHERE m.id = $1
   AND m.is_deleted = false;
 
+-- name: GetMessagePhaseID :one
+-- Get just the phase_id of a message, used when a new comment inherits its
+-- phase from the message it replies to. Deliberately does NOT filter on
+-- is_deleted: a reply to a soft-deleted parent still belongs to that phase.
+SELECT phase_id
+FROM messages
+WHERE id = $1;
+
 -- name: GetMessageWithParentContext :many
 -- Get a message plus a bounded slice of its parent chain for deep linking with context.
 -- Walks up from the target, returning the target + up to $2 nearest parents, in a single

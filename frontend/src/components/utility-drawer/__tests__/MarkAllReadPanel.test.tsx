@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../../test-utils';
 import { MarkAllReadPanel } from '../panels/MarkAllReadPanel';
-import type { UtilityContext } from '../types';
+import type { GameUtilityContext, UtilityContext } from '../types';
 
 const mockMarkAllCommentsRead = vi.fn();
 const mockGetGamePosts = vi.fn();
@@ -18,9 +18,9 @@ vi.mock('../../../lib/api', () => ({
   },
 }));
 
-const baseCtx: UtilityContext = {
+const baseGame: GameUtilityContext = {
   gameId: 10,
-  currentPhase: { id: 5, phase_type: 'action' } as UtilityContext['currentPhase'],
+  currentPhase: { id: 5, phase_type: 'action' } as GameUtilityContext['currentPhase'],
   isGM: false,
   isAudience: false,
   isGameCompleted: false,
@@ -29,9 +29,13 @@ const baseCtx: UtilityContext = {
   isAnonymous: false,
   userCharacters: [],
   allGameCharacters: [],
+  commentReadMode: 'manual',
+};
+
+const baseCtx: UtilityContext = {
+  game: baseGame,
   openCharacterSheet: vi.fn(),
   closeDrawer: vi.fn(),
-  commentReadMode: 'manual',
 };
 
 describe('MarkAllReadPanel', () => {
@@ -71,7 +75,9 @@ describe('MarkAllReadPanel', () => {
   });
 
   it('disables the button when there is no current phase', () => {
-    renderWithProviders(<MarkAllReadPanel ctx={{ ...baseCtx, currentPhase: null }} />);
+    renderWithProviders(
+      <MarkAllReadPanel ctx={{ ...baseCtx, game: { ...baseGame, currentPhase: null } }} />
+    );
 
     expect(screen.getByRole('button', { name: /mark all comments as read/i })).toBeDisabled();
   });
