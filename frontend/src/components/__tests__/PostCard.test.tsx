@@ -1099,7 +1099,13 @@ describe('PostCard', () => {
       expect(submitButton).toBeDisabled();
       expect(cancelButton).toBeDisabled();
 
+      // On success the handler closes the comment form, so wait for it to
+      // unmount before the test ends. Otherwise those updates land after
+      // teardown and React warns about an update outside act().
       resolveSubmit();
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText(/write a comment\.\.\./i)).not.toBeInTheDocument();
+      });
     });
 
     it('disables character selector while submitting', async () => {
@@ -1132,7 +1138,13 @@ describe('PostCard', () => {
       // Check selector is disabled during submission
       expect(selector).toBeDisabled();
 
+      // On success the handler closes the comment form, so wait for it to
+      // unmount before the test ends. Otherwise those updates land after
+      // teardown and React warns about an update outside act().
       resolveSubmit();
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText(/write a comment\.\.\./i)).not.toBeInTheDocument();
+      });
     });
   });
 

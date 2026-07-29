@@ -562,12 +562,20 @@ describe('GameResultsManager', () => {
     it('shows loading text while saving changes', async () => {
       const user = userEvent.setup();
 
+      // Hold the save open until the test releases it, rather than racing a
+      // timer. This keeps the pending state observable for as long as we need
+      // and lets the click be fully awaited, so no update escapes act(...).
+      let releaseSave!: () => void;
+      const savePending = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+
       server.use(
         http.get('/api/v1/games/:gameId/results', () => {
           return HttpResponse.json([mockUnpublishedResult]);
         }),
         http.put('/api/v1/games/:gameId/results/:resultId', async () => {
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await savePending;
           return HttpResponse.json(mockUnpublishedResult);
         })
       );
@@ -584,22 +592,35 @@ describe('GameResultsManager', () => {
       await user.clear(textarea);
       await user.type(textarea, 'Updated content');
 
-      // Don't await the click: the mutation resolves after 100ms and exits edit
-      // mode, unmounting this indicator. Awaiting can let the save finish first.
-      void user.click(screen.getByRole('button', { name: /save changes/i }));
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
 
       expect(await screen.findByText('Saving...')).toBeInTheDocument();
+
+      // Release the save and let the component exit edit mode before the test
+      // ends, so the resulting updates land inside act(...).
+      releaseSave();
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+      });
     });
 
     it('disables form controls while saving', async () => {
       const user = userEvent.setup();
 
+      // Hold the save open until the test releases it, rather than racing a
+      // timer. This keeps the pending state observable for as long as we need
+      // and lets the click be fully awaited, so no update escapes act(...).
+      let releaseSave!: () => void;
+      const savePending = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+
       server.use(
         http.get('/api/v1/games/:gameId/results', () => {
           return HttpResponse.json([mockUnpublishedResult]);
         }),
         http.put('/api/v1/games/:gameId/results/:resultId', async () => {
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await savePending;
           return HttpResponse.json(mockUnpublishedResult);
         })
       );
@@ -616,14 +637,17 @@ describe('GameResultsManager', () => {
       await user.clear(textarea);
       await user.type(textarea, 'Updated content');
 
-      // Don't await the click: the mutation resolves after 100ms and exits edit
-      // mode, unmounting these buttons. Awaiting can let the save finish first,
-      // making the assertions race against the mutation.
-      void user.click(screen.getByRole('button', { name: /save changes/i }));
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-      // findBy retries until the pending state renders, rather than sampling once.
       expect(await screen.findByRole('button', { name: /saving\.\.\./i })).toBeDisabled();
       expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled();
+
+      // Release the save and let the component exit edit mode before the test
+      // ends, so the resulting updates land inside act(...).
+      releaseSave();
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+      });
     });
   });
 
