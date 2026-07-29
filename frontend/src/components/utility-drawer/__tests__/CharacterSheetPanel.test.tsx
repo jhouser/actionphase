@@ -5,11 +5,22 @@ import { CharacterSheetPanel } from '../panels/CharacterSheetPanel';
 import type { GameUtilityContext, UtilityContext } from '../types';
 import type { Character, ControllableCharacterWithGame } from '../../../types/characters';
 
+/** The signed-in user for these tests; the GM cases treat this id as the GM. */
+const CURRENT_USER_ID = 42;
+
 vi.mock('../../../lib/api', () => ({
   apiClient: {
     characters: {
       getControllableCharactersAcrossGames: vi.fn(),
     },
+    // AuthProvider resolves the current user on mount. The panel needs its id to
+    // tell a GM's own player character from one they merely oversee.
+    auth: {
+      getCurrentUser: vi.fn().mockResolvedValue({
+        data: { id: 42, username: 'gm-under-test', email: 'gm@example.com' },
+      }),
+    },
+    setAuthToken: vi.fn(),
   },
 }));
 
@@ -86,9 +97,21 @@ function mockCharacters(characters: ControllableCharacterWithGame[]) {
   } as never);
 }
 
+/**
+ * Re-arms the current-user stub. `vi.clearAllMocks()` in each beforeEach strips
+ * mock implementations, so without this AuthProvider resolves to no user and the
+ * panel can't tell a GM's own character from one they oversee.
+ */
+function mockCurrentUser() {
+  vi.mocked(apiClient.auth.getCurrentUser).mockResolvedValue({
+    data: { id: CURRENT_USER_ID, username: 'gm-under-test', email: 'gm@example.com' },
+  } as never);
+}
+
 describe('CharacterSheetPanel — outside a game', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCurrentUser();
   });
 
   it('groups the user\'s characters under their game titles', async () => {
@@ -292,6 +315,276 @@ describe('CharacterSheetPanel — outside a game', () => {
     expect(
       screen.queryByText(/don't control a character in any active game/i)
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * A GM off a game page used to see only their NPCs, because the cross-game
+ * endpoint withheld the rest of the cast. The list is a cast reference for the
+ * game they run, so it must hold every character in it — with the same owner
+ * lines, NPC badges and no-auto-open behavior as the in-game list.
+ */
+describe('CharacterSheetPanel — outside a game, as GM', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCurrentUser();
+    localStorage.clear();
+  });
+
+  /** A GM's game: their own NPC plus two players' characters. */
+  const gmCast = [
+    makeCharacter({
+      id: 1,
+      name: 'Tavern Keeper',
+      character_type: 'npc',
+      user_role: 'gm',
+      assigned_username: 'rob',
+    }),
+    makeCharacter({
+      id: 2,
+      name: 'Zara Quill',
+      user_id: 99,
+      username: 'dana',
+      user_role: 'gm',
+    }),
+    makeCharacter({
+      id: 3,
+      name: 'Alden Roe',
+      user_id: 98,
+      username: 'sam',
+      user_role: 'gm',
+    }),
+  ];
+
+  it('offers every character in the game they run, not just their NPCs', async () => {
+    mockCharacters(gmCast);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+
+    expect(await screen.findByTestId('global-character-sheet-picker')).toBeInTheDocument();
+    // The NPC was always here; the players' characters are the regression.
+    expect(screen.getByTestId('character-sheet-open-1')).toBeInTheDocument();
+    expect(screen.getByTestId('character-sheet-open-2')).toBeInTheDocument();
+    expect(screen.getByTestId('character-sheet-open-3')).toBeInTheDocument();
+  });
+
+  it('shows who plays each character', async () => {
+    mockCharacters(gmCast);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+
+    await screen.findByTestId('global-character-sheet-picker');
+    expect(screen.getByTestId('character-sheet-owner-2')).toHaveTextContent('dana');
+    expect(screen.getByTestId('character-sheet-owner-3')).toHaveTextContent('sam');
+    // An NPC credits its assignee, not its creator.
+    expect(screen.getByTestId('character-sheet-owner-1')).toHaveTextContent('rob');
+  });
+
+  it('marks an unassigned NPC rather than leaving the line blank', async () => {
+    mockCharacters([
+      makeCharacter({ id: 8, name: 'Wandering Merchant', character_type: 'npc', user_role: 'gm' }),
+      makeCharacter({ id: 9, name: 'Zara Quill', user_id: 99, username: 'dana', user_role: 'gm' }),
+    ]);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+
+    await screen.findByTestId('global-character-sheet-picker');
+    expect(screen.getByTestId('character-sheet-owner-8')).toHaveTextContent('Unassigned');
+  });
+
+  it('marks which entries are NPCs', async () => {
+    mockCharacters(gmCast);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+
+    await screen.findByTestId('global-character-sheet-picker');
+    expect(screen.getByTestId('character-sheet-npc-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('character-sheet-npc-2')).not.toBeInTheDocument();
+  });
+
+  /**
+   * Auto-open is for "the one character you control". A GM's list is a cast
+   * reference, so a game holding a single character they merely oversee must
+   * still show the list rather than fling that sheet open.
+   */
+  it('never auto-opens a character it only oversees', async () => {
+    const openCharacterSheet = vi.fn();
+    mockCharacters([
+      makeCharacter({ id: 4, name: 'Someone Else', user_id: 99, username: 'dana', user_role: 'gm' }),
+    ]);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx(openCharacterSheet)} />);
+
+    expect(await screen.findByTestId('global-character-sheet-picker')).toBeInTheDocument();
+    expect(openCharacterSheet).not.toHaveBeenCalled();
+  });
+
+  /** A player's own single character still opens straight away. */
+  it('still auto-opens a sole character the user actually plays', async () => {
+    const openCharacterSheet = vi.fn();
+    mockCharacters([makeCharacter({ id: 7, user_role: 'player' })]);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx(openCharacterSheet)} />);
+
+    await waitFor(() => expect(openCharacterSheet).toHaveBeenCalledWith(7, expect.anything()));
+  });
+
+  it('opens an overseen character with GM stat-editing rights', async () => {
+    const openCharacterSheet = vi.fn();
+    mockCharacters(gmCast);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx(openCharacterSheet)} />);
+
+    fireEvent.click(await screen.findByTestId('character-sheet-open-2'));
+    expect(openCharacterSheet).toHaveBeenCalledWith(2, {
+      canEdit: true,
+      canEditStats: true,
+      isAnonymous: false,
+      userRole: 'gm',
+      gameState: 'in_progress',
+      portraitAvatars: false,
+    });
+  });
+
+  /** Widening the GM's list must not widen anyone else's. */
+  it('shows no owner line for a character in someone else\'s game', async () => {
+    mockCharacters([
+      makeCharacter({ id: 1, name: 'Kael Vance', user_role: 'player', username: 'me' }),
+      makeCharacter({ id: 2, name: 'Mira Oduya', game_id: 11, game_title: 'Beta', user_role: 'player' }),
+    ]);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+
+    await screen.findByTestId('global-character-sheet-picker');
+    // A player already knows these are theirs, and in an anonymous game the line
+    // must not become a way to see who else is playing.
+    expect(screen.queryByTestId('character-sheet-owner-1')).not.toBeInTheDocument();
+    // No cast to filter, so no control.
+    expect(screen.queryByTestId('cast-filter')).not.toBeInTheDocument();
+  });
+});
+
+describe('CharacterSheetPanel — the All / Mine filter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCurrentUser();
+    localStorage.clear();
+  });
+
+  /**
+   * currentUser id 42 is the GM here. `mine` keeps their own player character
+   * and every NPC (they can step in for any of them) and drops the two
+   * characters belonging to other players.
+   */
+  const mixedCast = [
+    makeCharacter({ id: 1, name: 'Tavern Keeper', character_type: 'npc', user_role: 'gm' }),
+    makeCharacter({ id: 2, name: 'My Own Hero', user_id: 42, user_role: 'gm' }),
+    makeCharacter({ id: 3, name: 'Zara Quill', user_id: 99, username: 'dana', user_role: 'gm' }),
+    makeCharacter({ id: 4, name: 'Alden Roe', user_id: 98, username: 'sam', user_role: 'gm' }),
+  ];
+
+  it('offers the filter to a GM and defaults to the whole cast', async () => {
+    mockCharacters(mixedCast);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+
+    expect(await screen.findByTestId('cast-filter')).toBeInTheDocument();
+    expect(screen.getByTestId('cast-filter-all')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('character-sheet-open-3')).toBeInTheDocument();
+  });
+
+  it('narrows the list to what the GM plays when switched to Mine', async () => {
+    mockCharacters(mixedCast);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+
+    fireEvent.click(await screen.findByTestId('cast-filter-mine'));
+
+    // Kept: any NPC, plus the GM's own player character.
+    expect(screen.getByTestId('character-sheet-open-1')).toBeInTheDocument();
+    expect(screen.getByTestId('character-sheet-open-2')).toBeInTheDocument();
+    // Dropped: other players' characters.
+    expect(screen.queryByTestId('character-sheet-open-3')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('character-sheet-open-4')).not.toBeInTheDocument();
+  });
+
+  it('keeps the filter on screen after filtering to nothing', async () => {
+    // A GM who runs a game but plays nothing in it: only other players' PCs.
+    mockCharacters([
+      makeCharacter({ id: 3, name: 'Zara Quill', user_id: 99, username: 'dana', user_role: 'gm' }),
+      makeCharacter({ id: 4, name: 'Alden Roe', user_id: 98, username: 'sam', user_role: 'gm' }),
+    ]);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+
+    fireEvent.click(await screen.findByTestId('cast-filter-mine'));
+
+    // Without the control still rendered there is no way back to the cast.
+    expect(screen.getByTestId('cast-filter')).toBeInTheDocument();
+    expect(screen.getByText(/switch to "all"/i)).toBeInTheDocument();
+  });
+
+  it('remembers the choice across remounts', async () => {
+    mockCharacters(mixedCast);
+
+    const { unmount } = renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+    fireEvent.click(await screen.findByTestId('cast-filter-mine'));
+    unmount();
+
+    // Reopening the drawer must not silently revert to the full cast.
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+    expect(await screen.findByTestId('cast-filter-mine')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('character-sheet-open-3')).not.toBeInTheDocument();
+  });
+
+  it('is not offered to a player, who has nothing to filter', async () => {
+    mockCharacters([
+      makeCharacter({ id: 1, name: 'Kael Vance', user_id: 42, user_role: 'player' }),
+      makeCharacter({ id: 2, name: 'Mira Oduya', user_id: 42, game_id: 11, user_role: 'player' }),
+    ]);
+
+    renderWithProviders(<CharacterSheetPanel ctx={makeGlobalCtx()} />);
+
+    await screen.findByTestId('global-character-sheet-picker');
+    expect(screen.queryByTestId('cast-filter')).not.toBeInTheDocument();
+  });
+
+  it('filters the in-game GM list too', () => {
+    renderWithProviders(
+      <CharacterSheetPanel
+        ctx={makeInGameCtx({
+          isGM: true,
+          userRole: 'gm',
+          userCharacters: [],
+          allGameCharacters: [
+            makeGameCharacter({ id: 1, name: 'Tavern Keeper', character_type: 'npc' }),
+            makeGameCharacter({ id: 2, name: 'Zara Quill', username: 'dana' }),
+          ],
+        })}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('cast-filter-mine'));
+
+    expect(screen.getByTestId('character-sheet-open-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('character-sheet-open-2')).not.toBeInTheDocument();
+  });
+
+  it('is not offered to an in-game player', () => {
+    renderWithProviders(
+      <CharacterSheetPanel
+        ctx={makeInGameCtx({
+          isGM: false,
+          userRole: 'player',
+          userCharacters: [
+            makeGameCharacter({ id: 1, name: 'Kael Vance' }),
+            makeGameCharacter({ id: 2, name: 'Second Character' }),
+          ],
+        })}
+      />
+    );
+
+    expect(screen.queryByTestId('cast-filter')).not.toBeInTheDocument();
   });
 });
 
