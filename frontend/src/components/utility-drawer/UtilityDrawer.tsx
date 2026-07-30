@@ -4,6 +4,8 @@ import { Drawer, Toggle } from '../ui';
 import { UTILITY_DRAWER_UTILITIES } from './registry';
 import type { UtilityContext } from './types';
 import { useScreenshotMode } from '../../hooks/useScreenshotMode';
+import { LAYERS } from '../../config/layers';
+import { useBodyScrollLock, useOverlayLockCount } from '../../hooks/useBodyScrollLock';
 
 interface UtilityDrawerProps {
   open: boolean;
@@ -18,6 +20,13 @@ interface UtilityDrawerProps {
  *
  * Built on the shared `ui/Drawer` primitive, so it slides in as a right sidebar
  * on desktop and a bottom sheet on mobile, with dark-mode support for free.
+ *
+ * Opened over another overlay (a thread view) it stacks above it and drops its
+ * own scrim, but it remains a modal dialog: the overlay underneath is inert
+ * while the drawer is open. That's deliberate — the drawer is reference material
+ * you open, read, and close, not a second pane you work in alongside the thread.
+ * Headless UI's Dialog has no non-modal mode, so making it truly non-modal would
+ * mean hand-rolling focus management.
  */
 export function UtilityDrawer({ open, onClose, ctx }: UtilityDrawerProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -46,11 +55,31 @@ export function UtilityDrawer({ open, onClose, ctx }: UtilityDrawerProps) {
     }
   }, [open]);
 
+  // Hold a lock so the page behind stays put, and so an overlay opening over
+  // *us* can tell it is stacking.
+  const hasLock = useBodyScrollLock(open);
+
+  // Whether another overlay is on screen underneath. Our own lock is acquired in
+  // an effect, so it is absent on the frame we open and present afterwards —
+  // subtract it once held, and what remains is somebody else (e.g. a thread
+  // modal). Comparing the raw count against a fixed threshold instead would
+  // paint one un-stacked frame (full scrim, uncapped sheet) before correcting
+  // itself mid-transition.
+  const othersLocked = useOverlayLockCount() - (hasLock ? 1 : 0);
+  const isStacked = open && othersLocked > 0;
+
   return (
     <Drawer
       open={open}
       onClose={onClose}
       title={active ? active.label : 'Utilities'}
+      zIndexClass={LAYERS.drawer}
+      // The thread modal already dims and blurs the page; a second scrim on top
+      // just makes it murky.
+      hideBackdrop={isStacked}
+      // A 80vh sheet over a thread leaves a useless sliver of it on phones.
+      // Cap it so the thread stays visibly present behind the drawer.
+      panelClassName={isStacked ? 'max-h-[60vh] lg:max-h-full' : ''}
     >
       {active ? (
         <div className="flex flex-col h-full">
