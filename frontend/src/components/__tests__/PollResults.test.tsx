@@ -154,4 +154,47 @@ describe('PollResults', () => {
     renderWithProviders(<PollResults results={results} poll={basePoll} />);
     expect(screen.getByText('1 custom response')).toBeInTheDocument();
   });
+
+  describe('anonymous audience votes', () => {
+    it('labels an anonymous voter as Anonymous alongside named voters', () => {
+      const results = makeResults({
+        option_results: [
+          {
+            poll_option_id: 1,
+            option_text: 'Forest',
+            vote_count: 2,
+            voters: [
+              { user_id: 5, character_name: 'Kael' },
+              { user_id: 0, character_name: 'Anonymous', is_anonymous: true },
+            ],
+          },
+        ],
+        total_votes: 2,
+      });
+
+      const { container } = renderWithProviders(
+        <PollResults results={results} poll={basePoll} isGM={true} />
+      );
+
+      // Voter names render as sibling spans joined by ", ", so assert on the list.
+      const voterList = container.querySelector('.ml-4');
+      expect(voterList).toHaveTextContent('Kael');
+      expect(voterList).toHaveTextContent('Anonymous');
+    });
+
+    it('labels an anonymous other response as Anonymous while keeping its text', () => {
+      const results = makeResults({
+        other_responses: [
+          { vote_id: 1, other_text: 'Burn it down', character_name: 'Anonymous', is_anonymous: true },
+        ],
+      });
+
+      renderWithProviders(
+        <PollResults results={results} poll={basePoll} isGM={true} />
+      );
+
+      expect(screen.getByText('Anonymous:')).toBeInTheDocument();
+      expect(screen.getByText('"Burn it down"')).toBeInTheDocument();
+    });
+  });
 });
