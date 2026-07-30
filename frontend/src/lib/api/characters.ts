@@ -2,6 +2,7 @@ import { BaseApiClient } from './client';
 import { logger } from '@/services/LoggingService';
 import type {
   Character,
+  ControllableCharacterWithGame,
   CharacterData,
   CharacterActivityStats,
   CreateCharacterRequest,
@@ -27,6 +28,15 @@ export class CharactersApi extends BaseApiClient {
 
   async getUserControllableCharacters(gameId: number) {
     return this.client.get<Character[]>(`/api/v1/games/${gameId}/characters/controllable`);
+  }
+
+  /**
+   * Every character the current user controls across all their in_progress
+   * games, each carrying its game context and the user's role in that game.
+   * Backs surfaces with no game in scope, such as the global Utility Drawer.
+   */
+  async getControllableCharactersAcrossGames() {
+    return this.client.get<ControllableCharacterWithGame[]>('/api/v1/characters/controllable');
   }
 
   async getCharacter(id: number) {
@@ -121,6 +131,14 @@ export class CharactersApi extends BaseApiClient {
 
   async getCharacterStats(characterId: number) {
     return this.client.get<CharacterActivityStats>(`/api/v1/characters/${characterId}/stats`);
+  }
+
+  // Stats for every character in a game in one request, keyed by character id
+  // (as a string, since it comes back as JSON object keys). Used by roster
+  // views instead of calling getCharacterStats once per character, which was
+  // bursting the backend on large rosters.
+  async getGameCharacterStats(gameId: number) {
+    return this.client.get<Record<string, CharacterActivityStats>>(`/api/v1/games/${gameId}/characters/stats`);
   }
 
   async getCharacterComments(characterId: number, limit: number = 20, offset: number = 0) {

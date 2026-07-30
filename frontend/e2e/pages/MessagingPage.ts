@@ -158,11 +158,13 @@ export class MessagingPage {
    * @param message - Message text
    */
   async sendMessage(message: string) {
-    // On mobile, the reply form is collapsed behind a "Reply" button (sm:hidden).
-    // Wait for either the visible Reply button or visible textarea to appear, then act.
+    // The composer is collapsed behind a "Reply" button at all viewport widths
+    // until the user opens it (see MessageThread). When messaging is allowed the
+    // Reply button is present and the textarea is not yet mounted; open it first.
+    // We still tolerate an already-visible textarea (e.g. reply box left open) so
+    // callers that send several messages in a row don't have to re-open it.
     const replyButton = this.page.getByRole('button', { name: 'Reply' }).locator('visible=true');
     const visibleTextarea = this.page.locator('textarea[placeholder*="Type your message"]').locator('visible=true');
-    // Poll until one of them is visible (Reply button only exists on mobile + common_room phase)
     await expect(replyButton.or(visibleTextarea).first()).toBeVisible({ timeout: 5000 });
     if (await replyButton.count() > 0) {
       await replyButton.first().click();

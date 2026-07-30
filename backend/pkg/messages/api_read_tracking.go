@@ -239,6 +239,43 @@ func (h *Handler) ToggleCommentRead(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// MarkAllCommentsRead marks every comment in a phase as manually read by the current user
+// POST /api/v1/games/:gameId/phases/:phaseId/mark-all-comments-read
+func (h *Handler) MarkAllCommentsRead(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	defer h.App.ObsLogger.LogOperation(ctx, "api_mark_all_comments_read")()
+
+	gameIDStr := chi.URLParam(r, "gameId")
+	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid mark all comments read request")
+		return
+	}
+
+	phaseIDStr := chi.URLParam(r, "phaseId")
+	phaseID, err := strconv.ParseInt(phaseIDStr, 10, 32)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid phase ID")), "Invalid mark all comments read request")
+		return
+	}
+
+	userID, err := h.getUserIDFromToken(r)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrUnauthorized(err.Error()), "Failed to get user from token", "error", err)
+		return
+	}
+
+	messageService := h.MessageService
+	if err := messageService.MarkAllCommentsReadForPhase(ctx, userID, int32(gameID), int32(phaseID)); err != nil {
+		h.App.ObsLogger.Error(ctx, "Failed to mark all comments read for phase", "error", err,
+			"game_id", gameID, "phase_id", phaseID, "user_id", userID)
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to mark all comments read", "error", err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // GetManualReadCommentIDs gets all comment IDs manually marked as read by the current user in a game
 // GET /api/v1/games/:gameId/manual-read-comment-ids
 func (h *Handler) GetManualReadCommentIDs(w http.ResponseWriter, r *http.Request) {

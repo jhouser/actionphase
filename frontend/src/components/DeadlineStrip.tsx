@@ -163,13 +163,14 @@ export function DeadlineStrip({
     <>
       <div className="border-t border-border-primary pt-4 pb-4">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-semibold text-content-primary">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base font-semibold text-content-primary whitespace-nowrap">
               ⚠️ Active Deadlines
             </span>
-            {activeDeadlines.length > 0 && (
-              <span className="text-sm text-content-secondary">
+            {/* Count only shown once it's actually informative (more than fit inline as cards) */}
+            {activeDeadlines.length > 3 && (
+              <span className="text-sm text-content-secondary whitespace-nowrap">
                 ({activeDeadlines.length} active{expiredDeadlines.length > 0 ? `, ${expiredDeadlines.length} expired` : ''})
               </span>
             )}
@@ -181,8 +182,10 @@ export function DeadlineStrip({
               size="sm"
               onClick={() => setShowCreateModal(true)}
               icon={<PlusIcon className="h-4 w-4" />}
+              className="flex-shrink-0 px-2 md:px-3"
+              aria-label="Add Deadline"
             >
-              Add Deadline
+              <span className="hidden md:inline">Add Deadline</span>
             </Button>
           )}
         </div>

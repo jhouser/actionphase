@@ -20,7 +20,7 @@ export class AudiencePage {
    * The "All Private Messages" view is displayed automatically
    */
   async goToAudience(gameId: number) {
-    await this.page.goto(`http://localhost:5173/games/${gameId}`);
+    await this.page.goto(`/games/${gameId}`);
     await this.page.waitForLoadState('networkidle');
 
     // Navigate to Audience tab (handles mobile select and desktop tabs)

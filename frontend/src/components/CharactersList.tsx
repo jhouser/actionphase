@@ -3,8 +3,8 @@ import { useUrlParam } from '../hooks/useUrlParam';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
-import { useCharacterStats } from '../hooks/useCharacterStats';
-import type { Character } from '../types/characters';
+import { useGameCharacterStats } from '../hooks/useCharacterStats';
+import type { Character, CharacterActivityStats as CharacterActivityStatsData } from '../types/characters';
 import { CharacterActivityStats } from './CharacterActivityStats';
 import { useGameContext } from '../contexts/GameContext';
 import { CreateCharacterModal } from './CreateCharacterModal';
@@ -15,6 +15,7 @@ import { Card, Button, Badge, Spinner, type BadgeVariant } from './ui';
 import CharacterAvatar from './CharacterAvatar';
 import { logger } from '@/services/LoggingService';
 import { useCharacterOwnership } from '../hooks/useCharacterOwnership';
+import { useCharacterSheetPermissions } from '../hooks/useCharacterSheetPermissions';
 
 interface CharactersListProps {
   gameId: number;
@@ -46,8 +47,20 @@ export function CharactersList({
   // Use ownership hook to check character ownership (works in anonymous mode)
   const { isUserCharacter: isUserCharacterById } = useCharacterOwnership(gameId);
 
+  // Shared character-sheet permission logic (see useCharacterSheetPermissions).
+  const {
+    isUserCharacter,
+    canView: canViewCharacterSheet,
+    canEdit: canEditCharacterSheet,
+    canEditStats: canEditCharacterStats,
+  } = useCharacterSheetPermissions(gameId, userRole, gameState);
+
   // Read from GameContext — single source of truth for all game characters
   const { allGameCharacters, isLoadingAllCharacters, refetchAllGameCharacters } = useGameContext();
+
+  // Fetch stats for the whole roster in one request rather than letting each
+  // CharacterCard fetch its own (see useGameCharacterStats for why).
+  const { data: statsByCharacterId } = useGameCharacterStats(gameId);
 
   // Refresh characters when visiting the People tab (mount refresh)
   useEffect(() => {
@@ -137,50 +150,6 @@ export function CharactersList({
     return false;
   };
 
-  // Check if character belongs to current user
-  // Wrapper around ownership hook to handle NPCs with GM logic
-  const isUserCharacter = (character: Character) => {
-    // Use ownership hook for all controllable characters (player characters and assigned NPCs)
-    if (isUserCharacterById(character.id)) {
-      return true;
-    }
-    // Special case: GMs own all unassigned NPCs
-    if (character.character_type === 'npc' && !character.assigned_user_id && userRole === 'gm') {
-      return true;
-    }
-    return false;
-  };
-
-  // Check if user can view character sheet
-  const canViewCharacterSheet = (character: Character) => {
-    // GM can view all character sheets
-    if (userRole === 'gm' || userRole === 'audience') return true;
-    // Users can view their own characters
-    if (isUserCharacter(character)) return true;
-    // Anyone can view approved characters (they'll only see public information)
-    if (character.status === 'approved') return true;
-    return false;
-  };
-
-  // Check if user can edit character sheet (bio/notes fields)
-  const canEditCharacterSheet = (character: Character) => {
-    // No editing in completed or cancelled games
-    if (gameState === 'completed' || gameState === 'cancelled') return false;
-    // GM can edit all character sheets
-    if (userRole === 'gm') return true;
-    // Users can edit their own characters (regardless of approval status)
-    if (isUserCharacter(character)) return true;
-    return false;
-  };
-
-  // Check if user can edit character stats (abilities, skills, items, currency)
-  // This is GM-only functionality
-  const canEditCharacterStats = () => {
-    // No editing in completed or cancelled games
-    if (gameState === 'completed' || gameState === 'cancelled') return false;
-    return userRole === 'gm';
-  };
-
   // Check if user can delete characters
   // This is GM-only functionality
   const canDeleteCharacter = () => {
@@ -251,7 +220,6 @@ export function CharactersList({
                           character={character}
                           isOwner={true}
                           userRole={userRole}
-                          gameState={gameState}
                           isAnonymous={isAnonymous}
                           onApprove={handleApproveCharacter}
                           onAssignNPC={setNpcToAssign}
@@ -260,6 +228,7 @@ export function CharactersList({
                           canViewSheet={canViewCharacterSheet(character)}
                           canEditSheet={canEditCharacterSheet(character)}
                           onViewSheet={() => setSelectedCharacterId(character.id)}
+                          stats={statsByCharacterId?.[String(character.id)]}
                         />
                       ))}
                     </div>
@@ -286,6 +255,7 @@ export function CharactersList({
                       canViewSheet={canViewCharacterSheet(character)}
                       canEditSheet={canEditCharacterSheet(character)}
                       onViewSheet={() => setSelectedCharacterId(character.id)}
+                      stats={statsByCharacterId?.[String(character.id)]}
                     />
                   ))}
                 </div>
@@ -304,7 +274,6 @@ export function CharactersList({
                           character={character}
                           isOwner={true}
                           userRole={userRole}
-                          gameState={gameState}
                           isAnonymous={isAnonymous}
                           onApprove={handleApproveCharacter}
                           onAssignNPC={setNpcToAssign}
@@ -313,6 +282,7 @@ export function CharactersList({
                           canViewSheet={canViewCharacterSheet(character)}
                           canEditSheet={canEditCharacterSheet(character)}
                           onViewSheet={() => setSelectedCharacterId(character.id)}
+                          stats={statsByCharacterId?.[String(character.id)]}
                         />
                       ))}
                     </div>
@@ -330,7 +300,6 @@ export function CharactersList({
                           character={character}
                           isOwner={isUserCharacter(character)}
                           userRole={userRole}
-                          gameState={gameState}
                           isAnonymous={isAnonymous}
                           onApprove={handleApproveCharacter}
                           onAssignNPC={setNpcToAssign}
@@ -341,6 +310,7 @@ export function CharactersList({
                           onViewSheet={() => {
                       setSelectedCharacterId(character.id);
                     }}
+                          stats={statsByCharacterId?.[String(character.id)]}
                         />
                       ))}
                     </div>
@@ -358,7 +328,6 @@ export function CharactersList({
                           character={character}
                           isOwner={isUserCharacter(character)}
                           userRole={userRole}
-                          gameState={gameState}
                           isAnonymous={isAnonymous}
                           onApprove={handleApproveCharacter}
                           onAssignNPC={setNpcToAssign}
@@ -369,6 +338,7 @@ export function CharactersList({
                           onViewSheet={() => {
                       setSelectedCharacterId(character.id);
                     }}
+                          stats={statsByCharacterId?.[String(character.id)]}
                         />
                       ))}
                     </div>
@@ -500,7 +470,6 @@ interface CharacterCardProps {
   character: Character;
   isOwner: boolean;
   userRole: string;
-  gameState?: string;
   isAnonymous?: boolean;
   onApprove: (characterId: number, status: 'approved') => void;
   onAssignNPC?: (character: Character) => void;
@@ -509,13 +478,13 @@ interface CharacterCardProps {
   canViewSheet: boolean;
   canEditSheet: boolean;
   onViewSheet: () => void;
+  stats?: CharacterActivityStatsData;
 }
 
 function CharacterCard({
   character,
   isOwner,
   userRole,
-  gameState = 'setup',
   isAnonymous = false,
   onApprove,
   onAssignNPC,
@@ -523,15 +492,19 @@ function CharacterCard({
   getStatusBadgeVariant,
   canViewSheet,
   canEditSheet,
-  onViewSheet
+  onViewSheet,
+  stats
 }: CharacterCardProps) {
   const navigate = useNavigate();
   const { game } = useGameContext();
   const portraitAvatars = game?.portrait_avatars ?? false;
 
-  // Show stats for GMs, audience, owners, or anyone in a completed game
-  const canViewStats = isOwner || userRole === 'gm' || userRole === 'co_gm' || userRole === 'audience' || gameState === 'completed';
-  const { data: statsData } = useCharacterStats(canViewStats ? character.id : undefined);
+  // Public message counts are visible to everyone. The private-message count is
+  // only present in `stats` when the backend authorizes this viewer to see it
+  // (GM/co-GM, audience, the character's owner, or a completed game), and
+  // CharacterActivityStats only renders the private line when that field is set
+  // — so visibility is driven entirely by what the server returned.
+  const statsData = stats;
 
   return (
     <div className="border border-theme-default rounded-lg p-3 md:p-4 surface-base hover:shadow-sm transition-shadow" data-testid="character-card">
@@ -578,7 +551,7 @@ function CharacterCard({
             <div>Player: {character.username}</div>
           )}
           {/* Activity stats (owner, GM, audience, or completed game) */}
-          {canViewStats && statsData && (
+          {statsData && (
             <CharacterActivityStats stats={statsData} />
           )}
         </div>
@@ -676,7 +649,7 @@ function CharacterCard({
                 <div>Player: {character.username}</div>
               )}
               {/* Activity stats (owner, GM, audience, or completed game) */}
-              {canViewStats && statsData && (
+              {statsData && (
                 <CharacterActivityStats stats={statsData} />
               )}
             </div>

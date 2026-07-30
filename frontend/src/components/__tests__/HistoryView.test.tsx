@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
 import { renderWithProviders } from '../../test-utils/render';
 import { HistoryView } from '../HistoryView';
+import { UtilityDrawerHarness } from '../../test-utils/utilityDrawer';
 import type { GamePhase } from '../../types/phases';
 
 describe('HistoryView', () => {
@@ -237,6 +238,192 @@ describe('HistoryView', () => {
       // Should auto-select phase 1 (the phase containing comment 99)
       // and render CommonRoom, showing the "Back to History" button
       expect(await screen.findByText('Back to History')).toBeInTheDocument();
+    });
+
+    /**
+     * Documents the API contract this resolver depends on.
+     *
+     * The resolver can only pick a phase if the comment tells it which one. The
+     * API serialises phase_id with `omitempty`, so a NULL column disappears from
+     * the response entirely rather than arriving as null — and the resolver's
+     * `if (message.phase_id)` guard then returns without selecting anything. The
+     * user lands on the History tab with no phase and no comment loaded, which is
+     * exactly the reported notification bug.
+     *
+     * Replies posted from the Dashboard unread inbox and the New Comments view
+     * used to store phase_id = NULL because neither surface has a phase in scope.
+     * The backend now derives it from the parent message, so this response shape
+     * should no longer occur in practice. This test pins the frontend's half of
+     * that contract: the resolver degrades gracefully (phase list stays visible,
+     * no crash, no bogus phase selected) rather than doing something worse.
+     */
+    it('falls back to the phase list when the comment has no phase_id', async () => {
+      const commentWithoutPhase = {
+        id: 99,
+        game_id: mockGameId,
+        // phase_id intentionally absent — what `omitempty` produces for a NULL.
+        author_id: 1,
+        character_id: 1,
+        content: 'A comment with no phase',
+        message_type: 'comment',
+        parent_id: 42,
+        thread_depth: 5,
+        author_username: 'testuser',
+        character_name: 'TestChar',
+        comment_count: 0,
+        is_edited: false,
+        is_deleted: false,
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+      };
+
+      server.use(
+        http.get('/api/v1/games/:gameId/messages/:messageId', () =>
+          HttpResponse.json(commentWithoutPhase)
+        )
+      );
+
+      renderWithProviders(
+        <HistoryView
+          gameId={mockGameId}
+          currentPhaseId={mockCurrentPhaseId}
+          isGM={false}
+        />,
+        { initialRoute: '/games/1?tab=history&comment=99', gameId: mockGameId }
+      );
+
+      // The phase list remains, and no phase is auto-selected.
+      const phases = await screen.findAllByText('Opening Ceremony');
+      expect(phases.length).toBeGreaterThan(0);
+      expect(screen.queryByText('Back to History')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('character avatars on action phases', () => {
+    /**
+     * Regression guard: HistoryView rendered CharacterAvatar with only
+     * `characterName`, never passing `avatarUrl`. CharacterAvatar falls back to
+     * initials whenever `avatarUrl` is absent, so every submission and result in
+     * the History tab showed a coloured initials bubble even for characters that
+     * had uploaded a portrait — while the same character rendered correctly in
+     * ActionsList and AllActionSubmissionsView, which look the URL up from the
+     * game context by character_id.
+     */
+    const avatarCharacter = {
+      id: 7,
+      game_id: mockGameId,
+      user_id: 1,
+      name: 'Portrait Pat',
+      avatar_url: 'https://cdn.example.com/avatars/pat.jpg',
+      status: 'active',
+      created_at: '2025-01-01T00:00:00Z',
+      updated_at: '2025-01-01T00:00:00Z',
+    };
+
+    const setupAvatarHandlers = () => {
+      server.use(
+        // Populates GameContext.allGameCharacters, the avatar_url source.
+        http.get('/api/v1/games/:gameId/characters', () =>
+          HttpResponse.json([avatarCharacter])
+        ),
+        http.get('/api/v1/games/:gameId/actions/mine', () =>
+          HttpResponse.json([
+            {
+              id: 501,
+              game_id: mockGameId,
+              phase_id: 2,
+              user_id: 1,
+              character_id: avatarCharacter.id,
+              character_name: avatarCharacter.name,
+              content: 'I scale the north wall under cover of dark.',
+              is_draft: false,
+              submitted_at: '2025-01-03T18:00:00Z',
+              created_at: '2025-01-03T18:00:00Z',
+              updated_at: '2025-01-03T18:00:00Z',
+            },
+          ])
+        )
+      );
+    };
+
+    it('shows the uploaded portrait for an action submission', async () => {
+      setupAvatarHandlers();
+
+      renderWithProviders(
+        <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />,
+        // Phase 2 is the action phase; submissions is the default sub-tab.
+        { initialRoute: '/games/1?tab=history&phase=2&subTab=submissions', gameId: mockGameId }
+      );
+
+      // The submission renders, proving we are on the right phase and tab.
+      expect(
+        await screen.findByText('I scale the north wall under cover of dark.')
+      ).toBeInTheDocument();
+
+      // The avatar must be the real image, not the initials fallback ("PP").
+      const avatar = await screen.findByRole('img', { name: avatarCharacter.name });
+      expect(avatar).toHaveAttribute('src', avatarCharacter.avatar_url);
+      expect(screen.queryByText('PP')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Utility Drawer context on historical phases', () => {
+    /**
+     * Regression guard: HistoryView used to render CommonRoom without the
+     * `currentPhase` prop, passing only `phaseId`. The Mark All Read utility
+     * gates on `!!ctx.currentPhase` (it needs the phase object, not just an id,
+     * to scope the bulk mark-read), so it silently vanished from the drawer on
+     * the History tab while working fine on the live phase. The failure mode is
+     * invisible — a missing list item, no error — so it needs an explicit test.
+     */
+    it('offers Mark All Read in the drawer for a historical common_room phase', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+
+      renderWithProviders(
+        <>
+          <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />
+          {/* The drawer is mounted at the app root now, and opened from the
+              global nav, so both come from the harness alongside the view
+              that contributes its game context. */}
+          <UtilityDrawerHarness />
+        </>,
+        { initialRoute: '/games/1?tab=history&phase=1', gameId: mockGameId }
+      );
+
+      // Phase 1 (a past common_room phase) is selected via the URL param.
+      expect(await screen.findByText('Back to History')).toBeInTheDocument();
+
+      await user.click(await screen.findByTestId('utility-drawer-toggle'));
+
+      // The utility must be listed, not filtered out by its isAvailable gate.
+      expect(await screen.findByTestId('utility-list')).toBeInTheDocument();
+      expect(screen.getByTestId('utility-mark-all-read')).toBeInTheDocument();
+    });
+
+    it('enables the mark-all-read action for a historical phase', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+
+      renderWithProviders(
+        <>
+          <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />
+          {/* The drawer is mounted at the app root now, and opened from the
+              global nav, so both come from the harness alongside the view
+              that contributes its game context. */}
+          <UtilityDrawerHarness />
+        </>,
+        { initialRoute: '/games/1?tab=history&phase=1', gameId: mockGameId }
+      );
+
+      expect(await screen.findByText('Back to History')).toBeInTheDocument();
+      await user.click(await screen.findByTestId('utility-drawer-toggle'));
+      await user.click(await screen.findByTestId('utility-mark-all-read'));
+
+      // Without a resolved phase the panel renders its button disabled, so an
+      // enabled button proves the phase object actually reached the panel.
+      const markAllButton = await screen.findByRole('button', {
+        name: /mark all comments as read/i,
+      });
+      expect(markAllButton).toBeEnabled();
     });
   });
 });

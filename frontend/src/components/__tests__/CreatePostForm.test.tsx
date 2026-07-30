@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test-utils/render';
 import { CreatePostForm } from '../CreatePostForm';
@@ -358,9 +358,10 @@ describe('CreatePostForm', () => {
 
       const form = screen.getByRole('textbox').closest('form')!;
 
-      // Manually trigger submit (bypassing disabled button)
-      const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-      form.dispatchEvent(submitEvent);
+      // Manually trigger submit (bypassing disabled button). fireEvent wraps the
+      // dispatch in act(), which a raw form.dispatchEvent does not — that leaves
+      // the resulting state update outside act and triggers a React warning.
+      fireEvent.submit(form);
 
       await waitFor(() => {
         expect(screen.queryByText(/please enter a message/i)).toBeInTheDocument();

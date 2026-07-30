@@ -82,6 +82,28 @@
 }
 
 /* ===================================================================
+   FONT SIZE PREFERENCE - Applied via FontSizeApplier.tsx
+   =================================================================== */
+
+/* Scales Tailwind's text-size utilities (text-xs...text-6xl) by the user's
+   font size preference, without touching root font-size — so only text
+   scales, not rem-based spacing/sizing (padding, gaps, card widths, etc.).
+   --font-scale is set at runtime by FontSizeApplier; 1 = default (medium). */
+:root {
+  --font-scale: 1;
+  --text-xs: calc(0.75rem * var(--font-scale));
+  --text-sm: calc(0.875rem * var(--font-scale));
+  --text-base: calc(1rem * var(--font-scale));
+  --text-lg: calc(1.125rem * var(--font-scale));
+  --text-xl: calc(1.25rem * var(--font-scale));
+  --text-2xl: calc(1.5rem * var(--font-scale));
+  --text-3xl: calc(1.875rem * var(--font-scale));
+  --text-4xl: calc(2.25rem * var(--font-scale));
+  --text-5xl: calc(3rem * var(--font-scale));
+  --text-6xl: calc(3.75rem * var(--font-scale));
+}
+
+/* ===================================================================
    THEME VARIABLES - Applied via themes.ts
    =================================================================== */
 
@@ -407,6 +429,13 @@
   .bg-avatar-8 {
     background-color: rgb(var(--color-avatar-8));
   }
+
+  /* Thread accent rails - per-depth left borders reusing avatar hues.
+     avatar-* tokens are defined per-theme, so these read well in every theme. */
+  .border-l-avatar-6 { border-left-color: rgb(var(--color-avatar-6)); } /* blue */
+  .border-l-avatar-4 { border-left-color: rgb(var(--color-avatar-4)); } /* green */
+  .border-l-avatar-7 { border-left-color: rgb(var(--color-avatar-7)); } /* violet */
+  .border-l-avatar-2 { border-left-color: rgb(var(--color-avatar-2)); } /* orange */
 }
 
 /* ===================================================================
@@ -416,6 +445,7 @@
 /* Markdown prose styles - using semantic tokens for theme compatibility */
 .prose {
   color: rgb(var(--color-content-primary));
+  font-size: calc(1rem * var(--font-scale));
 }
 
 .prose :where(p):not(:where([class~="not-prose"] *)) {
@@ -649,7 +679,7 @@
 }
 
 .prose-sm {
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--font-scale));
   line-height: 1.7142857;
 }
 
@@ -697,14 +727,11 @@
 
 /* Mobile: Slightly larger base font for better readability on small screens */
 @media (max-width: 640px) {
-  /* Increase base font size on mobile for comfortable reading */
+  /* Increase base font size on mobile for comfortable reading.
+     Applies to both posts and threaded comments so replies aren't
+     harder to read than the post they're replying to. */
   .prose {
-    font-size: 1.0625rem; /* 17px - optimal for mobile reading */
-  }
-
-  /* Smaller font for comments on mobile to save space */
-  [data-testid="threaded-comment"] .prose {
-    font-size: 0.875rem; /* 14px - more compact for threaded comments */
+    font-size: calc(1.0625rem * var(--font-scale)); /* 17px - optimal for mobile reading */
   }
 
   /* Ensure adequate touch targets (minimum 44x44px for accessibility) */

@@ -1068,6 +1068,126 @@ func TestMessageService_GetManualReadCommentIDsForGame(t *testing.T) {
 	})
 }
 
+func TestMessageService_MarkAllCommentsReadForPhase(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	app := core.NewTestApp(testDB.Pool)
+
+	service := &MessageService{DB: testDB.Pool, Logger: app.ObsLogger}
+	characterService := &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
+	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	player := testDB.CreateTestUser(t, "bulk_player", "bulk_player@example.com")
+	game := testDB.CreateTestGame(t, int32(player.ID), "Bulk Read Test Game")
+	_, err := gameService.AddGameParticipant(context.Background(), game.ID, int32(player.ID), "player")
+	require.NoError(t, err)
+
+	char, err := characterService.CreateCharacter(context.Background(), db.CreateCharacterRequest{
+		GameID:        game.ID,
+		UserID:        int32Ptr(int32(player.ID)),
+		Name:          "Bulk Char",
+		CharacterType: "player_character",
+	})
+	require.NoError(t, err)
+
+	phase1 := testDB.CreateTestPhase(t, game.ID, "action", "Phase 1")
+	phase2 := testDB.CreateTestPhase(t, game.ID, "action", "Phase 2")
+
+	post1, err := service.CreatePost(context.Background(), core.CreatePostRequest{
+		GameID: game.ID, PhaseID: &phase1.ID, AuthorID: int32(player.ID), CharacterID: char.ID,
+		Content: "Post in phase 1", Visibility: string(models.MessageVisibilityGame),
+	})
+	require.NoError(t, err)
+
+	post2, err := service.CreatePost(context.Background(), core.CreatePostRequest{
+		GameID: game.ID, PhaseID: &phase2.ID, AuthorID: int32(player.ID), CharacterID: char.ID,
+		Content: "Post in phase 2", Visibility: string(models.MessageVisibilityGame),
+	})
+	require.NoError(t, err)
+
+	// Two comments in phase 1, one in phase 2
+	comment1, err := service.CreateComment(context.Background(), core.CreateCommentRequest{
+		GameID: game.ID, PhaseID: &phase1.ID, ParentID: post1.ID, RootPostID: post1.ID,
+		AuthorID: int32(player.ID), CharacterID: char.ID,
+		Content: "Comment 1 in phase 1", Visibility: string(models.MessageVisibilityGame),
+	})
+	require.NoError(t, err)
+
+	comment2, err := service.CreateComment(context.Background(), core.CreateCommentRequest{
+		GameID: game.ID, PhaseID: &phase1.ID, ParentID: post1.ID, RootPostID: post1.ID,
+		AuthorID: int32(player.ID), CharacterID: char.ID,
+		Content: "Comment 2 in phase 1", Visibility: string(models.MessageVisibilityGame),
+	})
+	require.NoError(t, err)
+
+	// A reply to comment1 - nested two levels deep under post1. Its parent_id
+	// is comment1.ID, not post1.ID, so grouping it under the right post
+	// requires resolving the full parent chain back to the root post.
+	nestedReply, err := service.CreateComment(context.Background(), core.CreateCommentRequest{
+		GameID: game.ID, PhaseID: &phase1.ID, ParentID: comment1.ID, RootPostID: post1.ID,
+		AuthorID: int32(player.ID), CharacterID: char.ID,
+		Content: "Nested reply to comment 1", Visibility: string(models.MessageVisibilityGame),
+	})
+	require.NoError(t, err)
+
+	commentOtherPhase, err := service.CreateComment(context.Background(), core.CreateCommentRequest{
+		GameID: game.ID, PhaseID: &phase2.ID, ParentID: post2.ID, RootPostID: post2.ID,
+		AuthorID: int32(player.ID), CharacterID: char.ID,
+		Content: "Comment in phase 2", Visibility: string(models.MessageVisibilityGame),
+	})
+	require.NoError(t, err)
+
+	// Use a second user - CreateComment auto-marks the author as read, which
+	// would make this test trivially pass for `player`.
+	reader := testDB.CreateTestUser(t, "bulk_reader", "bulk_reader@example.com")
+	_, err = gameService.AddGameParticipant(context.Background(), game.ID, int32(reader.ID), "player")
+	require.NoError(t, err)
+
+	t.Run("marks only comments in the given phase as read", func(t *testing.T) {
+		err := service.MarkAllCommentsReadForPhase(context.Background(), int32(reader.ID), game.ID, phase1.ID)
+		require.NoError(t, err)
+
+		reads, err := service.GetManualReadCommentIDsForGame(context.Background(), int32(reader.ID), game.ID)
+		require.NoError(t, err)
+
+		readIDs := []int32{}
+		for _, r := range reads {
+			readIDs = append(readIDs, r.ReadCommentIDs...)
+		}
+		assert.Contains(t, readIDs, comment1.ID)
+		assert.Contains(t, readIDs, comment2.ID)
+		assert.Contains(t, readIDs, nestedReply.ID)
+		assert.NotContains(t, readIDs, commentOtherPhase.ID, "comment in a different phase should not be marked read")
+
+		// The nested reply must be grouped under the root post (post1), not
+		// its immediate parent comment, or the frontend's per-post lookup
+		// (which keys off the real post ID) will never find it.
+		var post1Entry *core.ManualCommentReads
+		for _, r := range reads {
+			if r.PostID == post1.ID {
+				post1Entry = r
+			}
+		}
+		require.NotNil(t, post1Entry, "nested reply should be grouped under the root post")
+		assert.Contains(t, post1Entry.ReadCommentIDs, nestedReply.ID)
+	})
+
+	t.Run("is idempotent when called again", func(t *testing.T) {
+		err := service.MarkAllCommentsReadForPhase(context.Background(), int32(reader.ID), game.ID, phase1.ID)
+		require.NoError(t, err)
+
+		reads, err := service.GetManualReadCommentIDsForGame(context.Background(), int32(reader.ID), game.ID)
+		require.NoError(t, err)
+
+		readIDs := []int32{}
+		for _, r := range reads {
+			readIDs = append(readIDs, r.ReadCommentIDs...)
+		}
+		assert.Len(t, readIDs, 3, "should not duplicate entries on repeat calls")
+	})
+}
+
 func TestCreateComment_AutoMarksAuthorAsRead(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()

@@ -11,7 +11,7 @@ import { DiscordNotificationsSection } from '../components/DiscordNotificationsS
 import { Radio } from '@/components/ui';
 import { useUserPreferences, useUpdateUserPreferences } from '../hooks/useUserPreferences';
 import { useQueryClient } from '@tanstack/react-query';
-import type { CommentReadMode } from '../lib/api/auth';
+import type { CommentReadMode, FontSize } from '../lib/api/auth';
 
 const VALID_TABS = ['profile', 'appearance', 'security', 'account', 'reading', 'notifications'] as const;
 type SettingsTab = typeof VALID_TABS[number];
@@ -48,6 +48,15 @@ export function SettingsPage() {
     updatePreferences.mutate({
       theme: preferences?.theme ?? 'auto',
       comment_read_mode: mode,
+      font_size: preferences?.font_size ?? 'medium',
+    });
+  };
+
+  const handleFontSizeChange = (size: FontSize) => {
+    updatePreferences.mutate({
+      theme: preferences?.theme ?? 'auto',
+      comment_read_mode: preferences?.comment_read_mode ?? 'manual',
+      font_size: size,
     });
   };
 
@@ -254,9 +263,55 @@ export function SettingsPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-content-secondary mb-2">
+                  Text Size
+                </label>
+                <div className="space-y-2">
+                  <div
+                    className="flex items-center p-3 border border-theme-default rounded-lg cursor-pointer hover:bg-surface-raised"
+                    data-testid="font-size-small"
+                  >
+                    <Radio
+                      name="font_size"
+                      value="small"
+                      label="Small"
+                      checked={(preferences?.font_size ?? 'medium') === 'small'}
+                      onChange={() => handleFontSizeChange('small')}
+                    />
+                  </div>
+
+                  <div
+                    className="flex items-center p-3 border border-theme-default rounded-lg cursor-pointer hover:bg-surface-raised"
+                    data-testid="font-size-medium"
+                  >
+                    <Radio
+                      name="font_size"
+                      value="medium"
+                      label="Medium"
+                      checked={(preferences?.font_size ?? 'medium') === 'medium'}
+                      onChange={() => handleFontSizeChange('medium')}
+                    />
+                  </div>
+
+                  <div
+                    className="flex items-center p-3 border border-theme-default rounded-lg cursor-pointer hover:bg-surface-raised"
+                    data-testid="font-size-large"
+                  >
+                    <Radio
+                      name="font_size"
+                      value="large"
+                      label="Large"
+                      checked={(preferences?.font_size ?? 'medium') === 'large'}
+                      onChange={() => handleFontSizeChange('large')}
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="pt-4 border-t border-theme-default">
                 <p className="text-sm text-content-secondary">
-                  Your theme preference is saved and will be applied across all your devices when you
+                  Your theme and text size preferences are saved and will be applied across all your devices when you
                   log in.
                 </p>
               </div>

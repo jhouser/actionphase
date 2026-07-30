@@ -134,6 +134,14 @@ export class ConversationPage {
    * Send a message in the current conversation
    */
   async sendMessage(content: string, characterName?: string): Promise<void> {
+    // The composer is collapsed behind a "Reply" button (all widths) until opened.
+    // Open it first so the character select and textarea are mounted.
+    const replyButton = this.page.getByRole('button', { name: 'Reply' }).locator('visible=true');
+    if (await replyButton.count() > 0) {
+      await replyButton.first().click();
+      await this.messageInput.waitFor({ state: 'visible', timeout: 5000 });
+    }
+
     // Select character if specified and dropdown exists
     if (characterName) {
       // Filter to visible element (viewport-agnostic for dual-DOM pattern)

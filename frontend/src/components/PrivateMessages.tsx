@@ -132,7 +132,7 @@ function PrivateMessagesInner({ gameId, characters, isAnonymous, allowGroupConve
         <div className="h-full flex flex-col surface-base">
           {/* Thread - centered with max-width for better readability on desktop */}
           <div className="flex-1 overflow-hidden">
-            <div className="h-full max-w-5xl mx-auto">
+            <div className="h-full max-w-7xl mx-auto">
               <MessageThread
                 gameId={gameId}
                 conversationId={selectedConversationId}

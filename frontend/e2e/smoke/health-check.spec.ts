@@ -10,7 +10,9 @@ import { tagTest, tags } from '../fixtures/test-tags';
  */
 test.describe('Smoke: Application Health', () => {
   test(tagTest([tags.SMOKE], 'API health endpoint responds'), async ({ request }) => {
-    const response = await request.get('http://localhost:3000/health');
+    // Relative path resolves against baseURL and is proxied to the backend,
+    // so this works whether the app runs on the host or in the container stack.
+    const response = await request.get('/health');
     expect(response.status()).toBe(200);
   });
 

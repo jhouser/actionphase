@@ -67,21 +67,6 @@ export function GameHeader({
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 min-w-0 flex-1">
           <div className="flex items-center gap-2 w-full md:w-auto">
             <h1 className="text-2xl font-bold text-content-primary break-words md:truncate flex-1 md:flex-none">{game.title}</h1>
-            {/* Mobile-only collapse toggle button */}
-            <button
-              onClick={toggleCollapse}
-              className="md:hidden flex-shrink-0 p-1 text-content-secondary hover:text-content-primary transition-colors"
-              aria-label={isCollapsed ? 'Expand game details' : 'Collapse game details'}
-            >
-              <svg
-                className={`w-5 h-5 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
           </div>
           {/* Badge - hidden when collapsed on mobile, always visible on desktop */}
           <div className={`self-start ${isCollapsed ? 'hidden md:block' : ''}`}>
@@ -96,12 +81,29 @@ export function GameHeader({
             {pinnedAction}
           </div>
         )}
-        {/* Action menu - hidden when collapsed on mobile (GM/editor actions) */}
-        {actionMenu && (
-          <div className={`flex-shrink-0 ${isCollapsed ? 'hidden md:block' : ''}`}>
-            {actionMenu}
-          </div>
-        )}
+        {/* Action menu + mobile collapse toggle, aligned on the same row */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {actionMenu && (
+            <div className={isCollapsed ? 'hidden md:block' : ''}>
+              {actionMenu}
+            </div>
+          )}
+          {/* Mobile-only collapse toggle button */}
+          <button
+            onClick={toggleCollapse}
+            className="md:hidden flex-shrink-0 p-2 text-content-secondary hover:text-content-primary transition-colors"
+            aria-label={isCollapsed ? 'Expand game details' : 'Collapse game details'}
+          >
+            <svg
+              className={`w-5 h-5 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Metadata - Mobile: Stacked rows for better readability, Desktop: Single line */}

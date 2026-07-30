@@ -10,6 +10,7 @@ import CharacterAvatar from './CharacterAvatar';
 import { useGameContext } from '../contexts/GameContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAdminMode } from '../hooks/useAdminMode';
+import { useScreenshotMode } from '../hooks/useScreenshotMode';
 import { useUpdateComment, useDeleteComment } from '../hooks/useCommentMutations';
 import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../contexts/ToastContext';
@@ -43,6 +44,7 @@ export function CommentWithParentCard({
   const { allGameCharacters, game, isGM, userCharacters } = useGameContext();
   const { currentUser } = useAuth();
   const { adminModeEnabled } = useAdminMode();
+  const { screenshotModeEnabled } = useScreenshotMode();
   const { showError } = useToast();
   const updateCommentMutation = useUpdateComment();
   const deleteCommentMutation = useDeleteComment();
@@ -63,8 +65,11 @@ export function CommentWithParentCard({
 
   const portraitAvatars = game?.portrait_avatars ?? false;
   const isAuthor = currentUser?.id === comment.author_id;
-  const canDelete = (isAuthor || isGM || adminModeEnabled) && !comment.is_deleted && !!comment.post_id;
-  const canEdit = isAuthor && !comment.is_deleted && !!comment.post_id;
+  // Screenshot Mode hides Edit/Delete too: they only render for the author (or
+  // the GM/admin), so a visible control gives away who's behind the character
+  // just as plainly as the username would.
+  const canDelete = (isAuthor || isGM || adminModeEnabled) && !comment.is_deleted && !!comment.post_id && !screenshotModeEnabled;
+  const canEdit = isAuthor && !comment.is_deleted && !!comment.post_id && !screenshotModeEnabled;
   const canReply = !comment.is_deleted && userCharacters.length > 0 && !!comment.post_id;
 
   const handleCopyLink = async () => {
@@ -177,8 +182,13 @@ export function CommentWithParentCard({
   const isEdited = comment.edit_count > 0;
   const showReadButton = commentReadMode === 'manual' && !comment.is_deleted && onToggleRead;
 
+  // Only manual reads drive the faded appearance. In auto mode a comment can be
+  // in the manual-read set (e.g. the backend auto-marks your own reply as read),
+  // but manual reads must not fade it — matching ThreadedComment's behavior.
+  const isFadedAsRead = commentReadMode === 'manual' && isRead;
+
   return (
-    <Card className={`hover:shadow-md transition-shadow${isRead ? ' opacity-50' : ''}`}>
+    <Card className={`hover:shadow-md transition-shadow${isFadedAsRead ? ' opacity-50' : ''}`}>
       <CardBody>
         {/* Parent context preview */}
         <ParentCommentPreview
@@ -186,7 +196,7 @@ export function CommentWithParentCard({
           createdAt={comment.parent_created_at}
           isDeleted={comment.parent_is_deleted}
           messageType={comment.parent_message_type}
-          authorUsername={comment.parent_author_username}
+          authorUsername={screenshotModeEnabled ? null : comment.parent_author_username}
           characterId={parentCharacterId}
           characterName={comment.parent_character_name}
           characterAvatarUrl={comment.parent_character_avatar_url}
@@ -199,7 +209,7 @@ export function CommentWithParentCard({
           <div className="flex items-start gap-3 mb-2">
             <CharacterAvatar
               avatarUrl={comment.character_avatar_url}
-              characterName={comment.character_name || comment.author_username}
+              characterName={comment.character_name || (screenshotModeEnabled ? '' : comment.author_username)}
               size="sm"
               shape={portraitAvatars ? 'portrait' : 'circle'}
             />
@@ -208,9 +218,11 @@ export function CommentWithParentCard({
                 <Link to={`/characters/${comment.character_id}`} className="font-medium text-text-heading hover:underline">
                   {comment.character_name || 'Unknown'}
                 </Link>
-                <span className="text-sm text-content-tertiary">
-                  @{comment.author_username}
-                </span>
+                {!screenshotModeEnabled && (
+                  <span className="text-sm text-content-tertiary">
+                    @{comment.author_username}
+                  </span>
+                )}
                 <span className="text-sm text-content-tertiary">{timeAgo}</span>
                 {isEdited && (
                   <Badge variant="secondary" size="sm">
@@ -362,11 +374,14 @@ export function CommentWithParentCard({
                   onNavigateToComment();
                 }}
                 className="flex items-center gap-1 px-2 py-1 text-xs text-interactive-primary hover:text-accent-secondary font-medium"
+                title="View this comment in its thread"
+                aria-label="View this comment in its thread"
               >
-                <span className="hidden md:inline">View in thread →</span>
-                <svg className="w-4 h-4 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
+                <span className="md:hidden">Thread</span>
+                <span className="hidden md:inline">View in thread →</span>
               </a>
             )}
           </div>

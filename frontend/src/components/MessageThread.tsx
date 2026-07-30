@@ -215,7 +215,6 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
     try {
       setSending(true);
       setNewMessage('');
-      setReplyOpen(false);
 
       // Use context's sendMessage (it handles loadMessages and markAsRead)
       // Scroll position will be restored by useLayoutEffect after messages re-render
@@ -223,6 +222,11 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
         character_id: selectedCharacterId,
         content: newMessage.trim(),
       });
+
+      // Collapse the composer only after a successful send, so the "Sending…"
+      // state stays visible while the request is in flight and the composer
+      // (with the user's draft) survives if the send fails.
+      setReplyOpen(false);
     } catch (_err) {
       // Error already handled by context
       logger.error('Failed to send message', { error: _err, gameId, conversationId });
@@ -334,7 +338,7 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
       )}
 
       {/* Messages */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-content-secondary">
@@ -457,9 +461,13 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
           editor is resized taller than the available space, guaranteeing the
           Send button stays reachable instead of being pushed off screen. */}
       <div className="surface-base border-t border-theme-default flex-shrink min-h-0 overflow-y-auto">
-        {/* Mobile: "Reply" button shown when reply box is collapsed */}
-        {isMessagingAllowed && !replyOpen && (
-          <div className="sm:hidden p-2 flex justify-end">
+        {/* Collapsed state: "Reply" button reclaims the composer strip until the
+            user chooses to write. Applies at all widths so the reading area gets
+            the full panel while idle. Only shown when the user can actually send
+            (messaging allowed + has a participating character) — otherwise the
+            informational states below render instead. */}
+        {isMessagingAllowed && participantCharacters.length > 0 && !replyOpen && (
+          <div className="p-2 flex justify-end">
             <Button
               variant="primary"
               size="sm"
@@ -470,17 +478,30 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
           </div>
         )}
 
-        <div className={`p-4 ${!replyOpen ? 'hidden sm:block' : ''}`}>
-        {/* Phase restriction alert */}
+        {/* Phase restriction alert — always visible (read-only users get no
+            Reply button, so this must not be gated behind replyOpen). */}
         {!isMessagingAllowed && (
-          <Alert variant="info" className="mb-4">
-            New messages can only be sent during Common Room or Interlude phases. You can read message history at any time.
-          </Alert>
+          <div className="p-4">
+            <Alert variant="info">
+              New messages can only be sent during Common Room or Interlude phases. You can read message history at any time.
+            </Alert>
+          </div>
         )}
 
+        {/* No-character info — always visible when messaging is allowed but the
+            user has no character to send as. */}
+        {isMessagingAllowed && participantCharacters.length === 0 && (
+          <p className="p-4 text-sm text-content-secondary">
+            {characters.length === 0
+              ? "You need a character to send messages."
+              : "You don't have any characters participating in this conversation."}
+          </p>
+        )}
+
+        {/* Composer — only mounted once the user opens the reply box. */}
+        {isMessagingAllowed && participantCharacters.length > 0 && replyOpen && (
+        <div className="p-4">
         <form onSubmit={handleSendMessage}>
-          {participantCharacters.length > 0 ? (
-            <>
               {participantCharacters.length > 1 && (
                 <div className="mb-3">
                   <Select
@@ -525,23 +546,16 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
                   type="button"
                   onClick={() => setReplyOpen(false)}
                   aria-label="Close reply"
-                  className="sm:hidden ml-auto p-1.5 rounded text-content-tertiary hover:text-content-primary hover:bg-interactive-primary-subtle"
+                  className="ml-auto p-1.5 rounded text-content-tertiary hover:text-content-primary hover:bg-interactive-primary-subtle"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-            </>
-          ) : (
-            <p className="text-sm text-content-secondary">
-              {characters.length === 0
-                ? "You need a character to send messages."
-                : "You don't have any characters participating in this conversation."}
-            </p>
-          )}
         </form>
         </div>
+        )}
       </div>
 
       {/* Delete Confirmation Modal */}

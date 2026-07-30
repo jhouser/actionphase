@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { useRecentComments } from '../hooks/useRecentComments';
 import { CommentWithParentCard } from './CommentWithParentCard';
-import { Spinner, Alert, Button } from './ui';
+import { Spinner, Alert, Button, Toggle } from './ui';
 import { useManualReadCommentIDs, useToggleCommentRead } from '../hooks/useReadTracking';
 import { useInfiniteScrollSentinel } from '../hooks/useInfiniteScrollSentinel';
 import { useCommentReadMode } from '../hooks/useUserPreferences';
+import { useUnreadOnlyFilter } from '../hooks/useUnreadOnlyFilter';
 
 interface NewCommentsViewProps {
   gameId: number;
@@ -18,6 +19,16 @@ interface NewCommentsViewProps {
  */
 export function NewCommentsView({ gameId }: NewCommentsViewProps) {
   const navigate = useNavigate();
+
+  const commentReadMode = useCommentReadMode();
+  const isManualMode = commentReadMode === 'manual';
+
+  // Unread-only filtering is a manual-read-mode concept: it hides comments the
+  // user explicitly marked as read. The filter is only offered (and only
+  // applied) in manual mode. The choice persists per game across refreshes.
+  const [unreadOnly, setUnreadOnly] = useUnreadOnlyFilter(gameId);
+  const showUnreadOnly = isManualMode && unreadOnly;
+
   const {
     data,
     isLoading,
@@ -27,9 +38,7 @@ export function NewCommentsView({ gameId }: NewCommentsViewProps) {
     hasNextPage,
     isFetchingNextPage,
     refetch,
-  } = useRecentComments(gameId);
-
-  const commentReadMode = useCommentReadMode();
+  } = useRecentComments(gameId, showUnreadOnly);
   const { data: manualReads = [], refetch: refetchManualReads } = useManualReadCommentIDs(gameId);
   const toggleReadMutation = useToggleCommentRead();
 
@@ -86,18 +95,7 @@ export function NewCommentsView({ gameId }: NewCommentsViewProps) {
 
   // Flatten all pages of comments into a single array
   const allComments = data?.pages.flatMap((page) => page.comments) ?? [];
-
-  // Empty state
-  if (allComments.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-content-secondary">No comments yet</p>
-        <p className="text-sm text-text-secondary mt-2">
-          Be the first to start a conversation in the Common Room!
-        </p>
-      </div>
-    );
-  }
+  const isEmpty = allComments.length === 0;
 
   // Navigate to the comment's parent message in the Common Room
   const handleNavigateToParent = (comment: typeof allComments[0]) => {
@@ -125,20 +123,57 @@ export function NewCommentsView({ gameId }: NewCommentsViewProps) {
 
   return (
     <div className="space-y-4">
-      {/* Header with refresh button */}
-      <div className="flex justify-between items-center">
+      {/* Header with unread filter + refresh button */}
+      <div className="flex justify-between items-center gap-3 flex-wrap">
         <h3 className="text-lg font-semibold text-content-primary">Recent Comments</h3>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={isRefreshing || isLoading}
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-        </Button>
+        <div className="flex items-center gap-3">
+          {isManualMode && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className="text-sm text-content-secondary select-none">Unread only</span>
+              <Toggle
+                size="sm"
+                checked={unreadOnly}
+                onChange={setUnreadOnly}
+                aria-label="Unread only"
+                data-testid="unread-only-toggle"
+              />
+            </label>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isRefreshing || isLoading}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+          </Button>
+        </div>
       </div>
+
+      {/* Empty state — distinguish "nothing here at all" from "everything is read".
+          The header above stays mounted so the user can keep the filter on and
+          refresh to poll for newly-arrived unread comments. */}
+      {isEmpty && (
+        <div className="text-center py-12">
+          {showUnreadOnly ? (
+            <>
+              <p className="text-content-secondary">No unread comments</p>
+              <p className="text-sm text-text-secondary mt-2">
+                You've read everything here. Turn off "Unread only" to see all comments.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-content-secondary">No comments yet</p>
+              <p className="text-sm text-text-secondary mt-2">
+                Be the first to start a conversation in the Common Room!
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Comments list */}
       {allComments.map((comment) => (
@@ -155,12 +190,14 @@ export function NewCommentsView({ gameId }: NewCommentsViewProps) {
       ))}
 
       {/* Infinite scroll sentinel */}
-      <div ref={sentinelRef} className="h-20 flex items-center justify-center">
-        {isFetchingNextPage && <Spinner size="md" />}
-        {!hasNextPage && allComments.length > 0 && (
-          <p className="text-sm text-content-tertiary">No more comments to load</p>
-        )}
-      </div>
+      {!isEmpty && (
+        <div ref={sentinelRef} className="h-20 flex items-center justify-center">
+          {isFetchingNextPage && <Spinner size="md" />}
+          {!hasNextPage && (
+            <p className="text-sm text-content-tertiary">No more comments to load</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

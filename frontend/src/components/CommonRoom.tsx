@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../lib/api';
@@ -13,11 +13,14 @@ import { ThreadViewModal } from './ThreadViewModal';
 import { NewCommentsView } from './NewCommentsView';
 import { MarkdownPreview } from './MarkdownPreview';
 import { RecentResultsSection } from './RecentResultsSection';
+import type { GameUtilityContext } from './utility-drawer/types';
+import { useProvideGameUtilityContext } from '../contexts/UtilityDrawerContext';
 import { usePreviousPhaseResults } from '../hooks/usePreviousPhaseResults';
 import { usePollsByPhase, useDraftPost } from '../hooks';
 import { useToggleCommentRead, usePostManualReadCommentIDs } from '../hooks/useReadTracking';
 import { useCommentReadMode } from '../hooks/useUserPreferences';
 import { logger } from '@/services/LoggingService';
+import { parentContextForViewport } from '@/config/comments';
 
 // Lazy load PollsTab component
 const PollsTab = lazy(() => import('./PollsTab').then(m => ({ default: m.PollsTab })));
@@ -70,7 +73,8 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
   const allowReadTracking = !isGameCompleted;
 
   // Read character data and game settings from GameContext — single source of truth
-  const { userCharacters, allGameCharacters } = useGameContext();
+  const { userCharacters, allGameCharacters, userRole, game } = useGameContext();
+  const gameState = game?.state ?? '';
 
   // URL search params for deep linking to comments and sub-tab navigation
   const [searchParams, setSearchParams] = useSearchParams();
@@ -91,6 +95,49 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
   // Initialize activeTab from URL parameter, default to 'posts'
   const [activeTab, setActiveTab] = useState<'posts' | 'newComments' | 'polls'>(viewParam || 'posts');
   const navigate = useNavigate();
+
+  const isAnonymous = game?.is_anonymous ?? false;
+  const portraitAvatars = game?.portrait_avatars ?? false;
+
+  // The drawer itself lives at the app root, opened from the global nav, so
+  // it's reachable from every page; the game page contributes the game-scoped
+  // half of its context on every tab. This room publishes over the top of that
+  // for as long as it's mounted, because it knows something the page doesn't:
+  // which phase is being viewed. In History that's a past phase, not the game's
+  // current one, and phase-scoped utilities (Mark All Read) must act on the
+  // phase on screen. Memoized because useProvideGameUtilityContext republishes
+  // whenever the object identity changes.
+  const gameUtilityContext = useMemo<GameUtilityContext>(
+    () => ({
+      gameId,
+      currentPhase,
+      isGM,
+      isAudience,
+      isGameCompleted,
+      userRole,
+      gameState,
+      isAnonymous,
+      portraitAvatars,
+      userCharacters,
+      allGameCharacters,
+      commentReadMode,
+    }),
+    [
+      gameId,
+      currentPhase,
+      isGM,
+      isAudience,
+      isGameCompleted,
+      userRole,
+      gameState,
+      isAnonymous,
+      portraitAvatars,
+      userCharacters,
+      allGameCharacters,
+      commentReadMode,
+    ]
+  );
+  useProvideGameUtilityContext('common-room', gameUtilityContext);
 
   // Ref to track scroll attempts (prevents duplicate attempts for same comment)
   const scrollAttemptedRef = useRef<string | null>(null);
@@ -180,54 +227,53 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
           const fetchAndShowComment = async () => {
             setFetchingComment(true);
             try {
-              // First, fetch the comment to check its phase_id
-              const commentResponse = await apiClient.messages.getMessage(gameId, parseInt(commentIdParam));
-              const commentMeta = commentResponse.data;
+              // Fetch the target comment plus a bounded slice of its ancestor
+              // chain and the true root post ID, in a single request. chain is
+              // ordered parent-to-child (ancestor → target).
+              //
+              // The parent count depends on the viewport: the modal renders the
+              // chain nested from depth 0, so requesting more parents than the
+              // deepest visible level pushes the target behind a "Continue this
+              // thread" button. Mobile's shallower max depth means fewer parents.
+              const isMobile = typeof window !== 'undefined'
+                && typeof window.matchMedia === 'function'
+                && window.matchMedia('(max-width: 767px)').matches;
+              const contextResponse = await apiClient.messages.getMessageThreadContext(
+                gameId,
+                parseInt(commentIdParam),
+                parentContextForViewport(isMobile)
+              );
+              const { chain, root_post_id, has_full_thread } = contextResponse.data;
+
+              if (chain.length === 0) {
+                throw new Error('No messages fetched');
+              }
+
+              // The target comment is the last one in the chain.
+              const targetComment = chain[chain.length - 1];
 
               // If the comment belongs to a different phase, redirect to History.
               // Only redirect when phaseId is known (defined) — if CommonRoom has no phase
               // context, we can't know whether the comment is "elsewhere", so fall through
               // to the thread modal as before.
-              if (phaseId !== undefined && commentMeta.phase_id && commentMeta.phase_id !== phaseId) {
+              if (phaseId !== undefined && targetComment.phase_id && targetComment.phase_id !== phaseId) {
                 logger.debug('Comment is in a different phase, redirecting to History', {
                   commentId: commentIdParam,
-                  commentPhaseId: commentMeta.phase_id,
+                  commentPhaseId: targetComment.phase_id,
                   currentPhaseId: phaseId,
                 });
-                navigate(`/games/${gameId}?tab=history&phase=${commentMeta.phase_id}&comment=${commentIdParam}`, { replace: true });
+                navigate(`/games/${gameId}?tab=history&phase=${targetComment.phase_id}&comment=${commentIdParam}`, { replace: true });
                 return;
               }
 
-              // Comment is in the current phase but deeply nested — open in ThreadViewModal
-              const { fetchCommentWithParents, findRootPostId } = await import('../utils/threadUtils');
-              const { messages, hasFullThread } = await fetchCommentWithParents(
-                gameId,
-                parseInt(commentIdParam),
-                3 // Fetch up to 3 parent levels for context
-              );
-
-              if (messages.length === 0) {
-                throw new Error('No messages fetched');
-              }
-
-              // The target comment is the last one in the array
-              const targetComment = messages[messages.length - 1];
-
-              // Derive the root post ID from the parent chain.
-              // When hasFullThread=true, messages[0] is the root (no parent_id).
-              // When hasFullThread=false (deep chain truncated at maxDepth), walk further up.
-              const rootMessage = messages[0];
-              const resolvedPostId = (hasFullThread && rootMessage.message_type === 'post')
-                ? rootMessage.id
-                : await findRootPostId(gameId, rootMessage);
-
-              // Store the comment and its context for the modal
+              // Store the comment and its context for the modal. root_post_id is the
+              // true top-level post even if the chain was trimmed above the target.
               setThreadModalComment(targetComment);
               setThreadModalContext({
-                parentChain: messages,
-                hasFullThread,
+                parentChain: chain,
+                hasFullThread: has_full_thread,
                 targetCommentId: parseInt(commentIdParam),
-                postId: resolvedPostId,
+                postId: root_post_id,
               });
 
               // Clear the comment parameter from URL
@@ -377,10 +423,16 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
 
   return (
     <div className="max-w-full" data-testid="common-room-container">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-content-primary mb-2">
+      {/* Sticky header bar — keeps the phase title visible while scrolling a
+          long thread. Pins under the global nav (h-16), which is where the
+          Utilities button now lives. */}
+      <div className="sticky top-16 z-30 -mx-4 mb-4 px-4 py-3 surface-base border-b-2 border-theme-strong shadow-sm">
+        <h2 className="text-xl md:text-2xl font-bold text-content-primary truncate">
           Common Room{phaseTitle && ` - ${phaseTitle}`}
         </h2>
+      </div>
+
+      <div className="mb-6">
         <p className="text-content-secondary">
           {isCurrentPhase
             ? isGM
@@ -557,6 +609,9 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
           allowReadTracking={allowReadTracking}
         />
       )}
+
+      {/* The Utility Drawer and the character-sheet modal it launches are
+          rendered globally by GlobalUtilityDrawer, so they outlive this room. */}
     </div>
   );
 }

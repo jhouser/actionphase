@@ -54,7 +54,12 @@ func (h *Handler) LeaveGame(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// Delete the application if it's pending (allows them to reapply if they want)
+		// Delete the application if it's pending (allows them to reapply if they want).
+		// Approved audience applications no longer reach here: ApproveGameApplication
+		// deletes the audience application when it creates the participant, so a member
+		// who leaves has only a participant row (removed above), not a lingering
+		// application. Any pre-existing stale 'approved' rows from before that fix are
+		// self-healed on the user's next apply/withdraw.
 		if application.Status.String == core.ApplicationStatusPending {
 			err = applicationService.DeleteGameApplication(ctx, application.ID, userID)
 			if err != nil {

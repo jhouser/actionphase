@@ -229,6 +229,7 @@ func (h *Handler) Start() {
 			// Create character requires email verification
 			r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/{gameId}/characters", characterHandler.CreateCharacter)
 			r.Get("/{gameId}/characters", characterHandler.GetGameCharacters)
+			r.Get("/{gameId}/characters/stats", characterHandler.GetGameCharacterStats)
 			r.Get("/{gameId}/characters/controllable", characterHandler.GetUserControllableCharacters)
 			r.Get("/{gameId}/characters/inactive", characterHandler.ListInactiveCharacters) // GM views inactive characters
 
@@ -281,6 +282,7 @@ func (h *Handler) Start() {
 			r.Patch("/{gameId}/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)             // Edit comment
 			r.Delete("/{gameId}/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)            // Delete comment
 			r.Get("/{gameId}/messages/{messageId}", messageHandler.GetMessage)                                 // For deep linking to nested comments
+			r.Get("/{gameId}/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)     // Target + full ancestor chain in one request
 			r.Get("/{gameId}/comments/recent", messageHandler.ListRecentCommentsWithParents)                   // New Comments view
 
 			// Read tracking for common room
@@ -292,6 +294,7 @@ func (h *Handler) Start() {
 			// Manual read tracking (per-comment)
 			r.Post("/{gameId}/posts/{postId}/comments/{commentId}/toggle-read", messageHandler.ToggleCommentRead)
 			r.Get("/{gameId}/manual-read-comment-ids", messageHandler.GetManualReadCommentIDs)
+			r.Post("/{gameId}/phases/{phaseId}/mark-all-comments-read", messageHandler.MarkAllCommentsRead)
 
 			// Private messages (conversations)
 			conversationHandler := &conversations.Handler{
@@ -378,6 +381,10 @@ func (h *Handler) Start() {
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
+
+			// Cross-game character list for the current user. Static segment, so
+			// chi matches it ahead of the /{id} route below.
+			r.Get("/controllable", characterHandler.GetUserControllableCharactersAcrossGames)
 
 			// Character management
 			r.Get("/{id}", characterHandler.GetCharacter)

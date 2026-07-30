@@ -10,6 +10,7 @@ import {
   CheckCircle,
   Bell,
 } from 'lucide-react';
+import { INBOX_HANDLED_TYPES } from '../utils/activityDigest';
 
 interface NotificationDigestProps {
   notificationsByType: Record<string, number>;
@@ -93,6 +94,7 @@ export function NotificationDigest({ notificationsByType, gameId }: Notification
 
   for (const [type, count] of Object.entries(notificationsByType)) {
     if (count === 0) continue;
+    if (INBOX_HANDLED_TYPES.has(type)) continue;
     if (GM_TYPES.has(type)) {
       otherCount += count;
     } else if (NOTIFICATION_CONFIG[type]) {

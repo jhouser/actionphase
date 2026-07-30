@@ -19,6 +19,7 @@ import { COMMENT_MAX_DEPTH } from '@/config/comments';
 import { usePostCollapseState } from '../hooks/usePostCollapseState';
 import { useInfiniteScrollSentinel } from '../hooks/useInfiniteScrollSentinel';
 import { useOptionalGameContext } from '../contexts/GameContext';
+import { useScreenshotMode } from '../hooks/useScreenshotMode';
 
 interface PostCardProps {
   post: Message;
@@ -110,6 +111,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
   const [threadModalComment, setThreadModalComment] = useState<Message | null>(null);
   const gameContext = useOptionalGameContext();
   const portraitAvatars = gameContext?.game?.portrait_avatars ?? false;
+  const { screenshotModeEnabled } = useScreenshotMode();
 
   // Pagination state. `offset` lives in a ref, not state: nothing renders it,
   // and reading it through the ref means loadComments/loadMoreComments always
@@ -467,12 +469,12 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
                   <div>
                     <Link to={`/characters/${post.character_id}`} className="font-bold text-xl text-content-primary hover:underline">{post.character_name}</Link>
                     <p className="text-sm text-content-secondary">
-                      {post.author_username ? `Posted by @${post.author_username} · ` : 'Posted '}{formatDate(post.created_at)}
+                      {post.author_username && !screenshotModeEnabled ? `Posted by @${post.author_username} · ` : 'Posted '}{formatDate(post.created_at)}
                       {post.is_edited && <span className="ml-1 text-content-tertiary">(edited)</span>}
-                      {isAuthor && (
+                      {isAuthor && !screenshotModeEnabled && (
                         <span className="ml-2 text-xs bg-interactive-primary-subtle text-interactive-primary px-2 py-0.5 rounded">You</span>
                       )}
-                      {isAuthor && !readOnly && !isEditing && (
+                      {isAuthor && !readOnly && !isEditing && !screenshotModeEnabled && (
                         <button
                           onClick={handleEdit}
                           className="ml-2 text-xs text-interactive-primary hover:text-interactive-primary-hover underline"
@@ -536,12 +538,12 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
                     <div className="flex-1">
                       <Link to={`/characters/${post.character_id}`} className="font-bold text-xl text-content-primary hover:underline">{post.character_name}</Link>
                       <p className="text-sm text-content-secondary">
-                        {post.author_username ? `Posted by @${post.author_username} · ` : 'Posted '}{formatDate(post.created_at)}
+                        {post.author_username && !screenshotModeEnabled ? `Posted by @${post.author_username} · ` : 'Posted '}{formatDate(post.created_at)}
                         {post.is_edited && <span className="ml-1 text-content-tertiary">(edited)</span>}
-                        {isAuthor && (
+                        {isAuthor && !screenshotModeEnabled && (
                           <span className="ml-2 text-xs bg-interactive-primary-subtle text-interactive-primary px-2 py-0.5 rounded">You</span>
                         )}
-                        {isAuthor && !readOnly && !isEditing && (
+                        {isAuthor && !readOnly && !isEditing && !screenshotModeEnabled && (
                           <button
                             onClick={handleEdit}
                             className="ml-2 text-xs text-interactive-primary hover:text-interactive-primary-hover underline"

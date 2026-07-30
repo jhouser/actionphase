@@ -80,14 +80,28 @@ export function GameActions({
   const hasDeleteAction = isGM && game.state === 'cancelled' && onDeleteGame;
   const hasMenuItems = hasEditAction || hasStateActions || hasDeleteAction;
 
+  // A stale application is a leftover 'approved' record with no active membership behind it —
+  // e.g. (for accounts affected before the backend fix that now deletes an audience application
+  // on approval) an approved audience row left behind after the member left. It represents no
+  // real relationship, so treat it as if there's no application: don't let it block re-applying,
+  // and let it be withdrawn/cleared.
+  //
+  // A 'rejected' application is NOT stale — it's a terminal GM decision. It must keep blocking
+  // re-applying (otherwise a rejected user could re-apply repeatedly) and must not be withdrawable
+  // (a user cannot un-reject themselves). The backend enforces both; we mirror it here so the UI
+  // never offers an action that would just fail.
+  const isStaleApplication = !!userApplication && !isInGame && userApplication.status === 'approved';
+  const hasBlockingApplication = !!userApplication && !isStaleApplication;
+
   // Player action buttons (always visible when applicable)
-  const showApplyButton = !isGM && !isCheckingAuth && !isInGame && game.state === 'recruitment' && !userApplication;
-  const showWithdrawButton = !isGM && userApplication && userApplication.status === 'pending' && game.state === 'recruitment';
+  const showApplyButton = !isGM && !isCheckingAuth && !isInGame && game.state === 'recruitment' && !hasBlockingApplication;
+  const showWithdrawButton = !isGM && userApplication &&
+    ((userApplication.status === 'pending' && game.state === 'recruitment') || isStaleApplication);
 
   // Audience can join during active game phases, but not after completion (completed games are open to all)
   const showJoinAsAudienceButton = !isGM && !isCheckingAuth && !isInGame &&
     (game.state === 'character_creation' || game.state === 'in_progress') &&
-    !userApplication;
+    !hasBlockingApplication;
 
   const showPlayerActions = slot === 'all' || slot === 'player-actions';
   const showMenuActions = slot === 'all' || slot === 'menu-actions';

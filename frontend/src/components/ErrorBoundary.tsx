@@ -5,6 +5,7 @@ import { ErrorType, ErrorSeverity } from '../types/errors';
 import { createAppError, logError, getErrorMessage, getRecoveryActions } from '../lib/errors';
 import { Button } from './ui';
 import { pushError } from '../lib/faro';
+import { isChunkLoadError } from '../lib/chunkLoadError';
 
 interface Props {
   children: React.ReactNode;
@@ -252,15 +253,6 @@ export function withErrorBoundary<P extends object>(
 
   WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`;
   return WrappedComponent;
-}
-
-function isChunkLoadError(error: Error): boolean {
-  return (
-    error.name === 'ChunkLoadError' ||
-    error.message.includes('Failed to fetch dynamically imported module') ||
-    error.message.includes('dynamically imported module') ||
-    error.message.includes('Importing a module script failed')
-  );
 }
 
 function generateErrorId(): string {

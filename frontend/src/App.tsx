@@ -1,18 +1,23 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { createBrowserRouter, RouterProvider, Navigate, useParams, Outlet } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, useParams, useRouteError, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { isChunkLoadError } from './lib/chunkLoadError';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PublicArchiveRoute } from './components/PublicArchiveRoute';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminModeProvider } from './contexts/AdminModeContext';
+import { ScreenshotModeProvider } from './contexts/ScreenshotModeContext';
 import { GameProvider } from './contexts/GameContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { UtilityDrawerProvider } from './contexts/UtilityDrawerContext';
+import { FontSizeApplier } from './components/FontSizeApplier';
 import { logger } from '@/services/LoggingService';
 
 // Lazy load Layout and all page components for better code splitting
 const Layout = lazy(() => import('./components/Layout').then(m => ({ default: m.Layout })));
+const GlobalUtilityDrawer = lazy(() => import('./components/utility-drawer/GlobalUtilityDrawer').then(m => ({ default: m.GlobalUtilityDrawer })));
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })));
@@ -38,6 +43,24 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// React Router's data router routes a render/loader error to the nearest
+// `errorElement` instead of walking up the React component tree, so a lazy
+// route chunk failing to load here never reaches ErrorBoundary's
+// componentDidCatch (and its chunk-load auto-reload) even though
+// ErrorBoundary wraps the whole router. This is the router-level counterpart:
+// same chunk-load detection, reload on match, otherwise re-throw so it still
+// surfaces through the normal error boundary / logging path.
+function RouteErrorElement() {
+  const error = useRouteError();
+
+  if (error instanceof Error && isChunkLoadError(error)) {
+    window.location.reload();
+    return null;
+  }
+
+  throw error;
+}
 
 // Loading fallback component
 function PageLoader() {
@@ -88,32 +111,51 @@ function GamePageSkeleton() {
   );
 }
 
-// Root layout: wraps every route with the shared Layout + Suspense
+// Root layout: wraps every route with the shared Layout + Suspense.
+//
+// UtilityDrawerProvider sits above Layout so the nav's Utilities button and the
+// drawer/character-sheet modal it controls are available on every page. Game
+// pages contribute their game context to it from further down the tree.
 function RootLayout() {
+  const { isAuthenticated } = useAuth();
   return (
-    <Layout>
-      <Suspense fallback={<PageLoader />}>
-        <Outlet />
-      </Suspense>
-    </Layout>
+    <UtilityDrawerProvider>
+      <Layout>
+        {isAuthenticated && <FontSizeApplier />}
+        <Suspense fallback={<PageLoader />}>
+          <Outlet />
+        </Suspense>
+      </Layout>
+      {/* No fallback: the drawer renders nothing until opened, so there is
+          nothing to show while its chunk loads. */}
+      {isAuthenticated && (
+        <Suspense fallback={null}>
+          <GlobalUtilityDrawer />
+        </Suspense>
+      )}
+    </UtilityDrawerProvider>
   );
 }
 
+// These render the public page immediately instead of blocking on the /auth/me
+// check (isCheckingAuth) first. Blocking added ~2.3s to FCP on /login alone,
+// since /auth/me always fires here and always 401s for the logged-out users
+// who make up the vast majority of visits to these routes. An already-
+// authenticated user hitting one of these URLs sees a brief flash of the
+// public page before this redirects them once the check resolves — an
+// acceptable tradeoff for a rare case, versus a slow first paint for everyone.
 function AuthGatedLogin() {
-  const { isAuthenticated, isCheckingAuth } = useAuth();
-  if (isCheckingAuth) return null;
+  const { isAuthenticated } = useAuth();
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />;
 }
 
 function AuthGatedForgotPassword() {
-  const { isAuthenticated, isCheckingAuth } = useAuth();
-  if (isCheckingAuth) return null;
+  const { isAuthenticated } = useAuth();
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : <ForgotPasswordPage />;
 }
 
 function AuthGatedResetPassword() {
-  const { isAuthenticated, isCheckingAuth } = useAuth();
-  if (isCheckingAuth) return null;
+  const { isAuthenticated } = useAuth();
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : <ResetPasswordPage />;
 }
 
@@ -139,9 +181,14 @@ function GameDetailsPageWrapper() {
 }
 
 const router = createBrowserRouter([
-  { path: '/', element: <Suspense fallback={<PageLoader />}><HomePage /></Suspense> },
+  {
+    path: '/',
+    element: <Suspense fallback={<PageLoader />}><HomePage /></Suspense>,
+    errorElement: <RouteErrorElement />,
+  },
   {
     element: <RootLayout />,
+    errorElement: <RouteErrorElement />,
     children: [
       { path: '/community-guidelines', element: <CommunityGuidelinesPage /> },
       { path: '/login', element: <AuthGatedLogin /> },
@@ -217,9 +264,11 @@ function App() {
         <ToastProvider>
           <AuthProvider>
             <AdminModeProvider>
-              <ThemeProvider>
-                <RouterProvider router={router} />
-              </ThemeProvider>
+              <ScreenshotModeProvider>
+                <ThemeProvider>
+                  <RouterProvider router={router} />
+                </ThemeProvider>
+              </ScreenshotModeProvider>
             </AdminModeProvider>
           </AuthProvider>
         </ToastProvider>

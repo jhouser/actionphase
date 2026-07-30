@@ -366,6 +366,75 @@ func TestDashboardService_GetUserDashboard_RecentMessages(t *testing.T) {
 	core.AssertTrue(t, len(recentMsg.Content) <= 103, "Content should be truncated (100 chars + '...')")
 }
 
+// TestDashboardService_GetUserDashboard_ExcludesDraftPosts verifies that GM draft
+// posts (is_draft = true, not yet published to the phase) do not appear in the
+// dashboard's recent activity feed.
+func TestDashboardService_GetUserDashboard_ExcludesDraftPosts(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "messages", "characters", "game_phases", "game_participants", "games", "users")
+
+	factory := core.NewTestDataFactory(testDB, t)
+	service := &DashboardService{DB: testDB.Pool}
+
+	gm := factory.NewUser().Create()
+	player := factory.NewUser().Create()
+
+	game := factory.NewGame().WithGM(gm.ID).WithState("in_progress").Create()
+	factory.NewGameParticipant().
+		ForGame(game.ID).
+		WithUser(player.ID).
+		WithRole("player").
+		Create()
+
+	phase := factory.NewPhase().InGame(game).CommonRoom().Active().Create()
+
+	character := factory.NewCharacter().
+		InGame(game).
+		OwnedBy(player).
+		WithName("Test Character").
+		Create()
+
+	// A published post should show up on the dashboard.
+	publishedPost := factory.NewPost().
+		InGame(game).
+		InPhase(phase).
+		ByAuthor(gm).
+		ByCharacter(character).
+		WithContent("Published post visible on dashboard").
+		Create()
+
+	// A GM draft post (not yet published) should NOT show up on the dashboard.
+	queries := db.New(testDB.Pool)
+	_, err := queries.CreateDraftPost(context.Background(), db.CreateDraftPostParams{
+		GameID:                game.ID,
+		PhaseID:               pgtype.Int4{Int32: phase.ID, Valid: true},
+		AuthorID:              gm.ID,
+		CharacterID:           character.ID,
+		Content:               "Draft post that should not appear on dashboard",
+		Visibility:            db.MessageVisibilityGame,
+		MentionedCharacterIds: []int32{},
+	})
+	core.AssertNoError(t, err, "Failed to create draft post")
+
+	dashboard, err := service.GetUserDashboard(context.Background(), player.ID)
+	core.AssertNoError(t, err, "Failed to get dashboard")
+
+	core.AssertTrue(t, len(dashboard.RecentMessages) > 0, "Should have recent messages")
+	for _, msg := range dashboard.RecentMessages {
+		core.AssertNotEqual(t, "Draft post that should not appear on dashboard", msg.Content,
+			"Draft post should not appear in recent activity")
+	}
+
+	found := false
+	for _, msg := range dashboard.RecentMessages {
+		if msg.MessageID == publishedPost.ID {
+			found = true
+		}
+	}
+	core.AssertTrue(t, found, "Published post should appear in recent activity")
+}
+
 func TestDashboardService_GetUserDashboard_UpcomingDeadlines(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()

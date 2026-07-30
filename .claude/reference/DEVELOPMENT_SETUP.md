@@ -1,6 +1,8 @@
 # ActionPhase Development Setup Guide
 
-This guide will help you set up a complete ActionPhase development environment with Docker database integration and proper environment variable management.
+Local development is **fully containerized**. All application toolchains — Go,
+Node, `migrate`, `sqlc`, `psql` — run *inside* containers. You do **not** install
+them on your host.
 
 ## Quick Start (5 minutes)
 
@@ -9,77 +11,113 @@ This guide will help you set up a complete ActionPhase development environment w
 git clone <repository-url>
 cd actionphase
 
-# 2. Complete development setup (includes database)
+# 2. First-time setup: creates .env, builds images, starts the stack
 just dev-setup
 
-# 3. Run migrations
-just migrate
-
-# 4. Start development server
-just dev
+# 3. That's it. Migrations auto-run on backend startup.
+#    Load test data if you want it:
+just test-data reload
 ```
 
-Your backend will be running at `http://localhost:3000` 🚀
+- Frontend (Vite + HMR): `http://localhost:5173`
+- Backend (API, Air hot-reload): `http://localhost:3000`
+- Postgres: `localhost:5432`
+- Delve debugger: `localhost:2345`
+
+Run `just dev-help` any time for the workflow cheatsheet.
 
 ## Prerequisites
 
-Before you begin, ensure you have the following installed:
+The **only** host requirements are:
 
-### Required Tools
-
-- **Docker & Docker Compose** - For PostgreSQL database
+- **Docker & Docker Compose** — runs the entire stack
   ```bash
-  # macOS (with Homebrew)
-  brew install docker docker-compose
+  # macOS: install Docker Desktop (includes compose)
+  brew install --cask docker
 
   # Ubuntu/Debian
-  sudo apt install docker.io docker-compose
-
-  # Windows: Download Docker Desktop from docker.com
+  sudo apt install docker.io docker-compose-plugin
   ```
 
-- **Go 1.21+** - For backend development
+- **Just** — task runner
   ```bash
-  # macOS (with Homebrew)
-  brew install go
-
-  # Ubuntu/Debian
-  sudo apt install golang-go
-
-  # Windows: Download from golang.org
+  brew install just   # macOS
+  # Other platforms: https://github.com/casey/just#installation
   ```
 
-- **PostgreSQL Client Tools** - For database management
-  ```bash
-  # macOS (with Homebrew)
-  brew install postgresql
+There is **nothing else to install** — no Go, Node, `migrate`, `sqlc`, or
+`psql` on the host. Those live in the container images (`backend/Dockerfile.dev`,
+`frontend/Dockerfile.dev`). `.tool-versions` is kept only as documentation of
+the versions the images pin.
 
-  # Ubuntu/Debian
-  sudo apt install postgresql-client
+## Containerized Workflow
 
-  # Windows: Include with PostgreSQL installation
-  ```
+The dev stack is defined in `docker-compose.dev.yml` (separate from the
+production `docker-compose.yml`):
 
-- **Just** - Task runner (like Make but better)
-  ```bash
-  # macOS (with Homebrew)
-  brew install just
+| Service | What it runs | Notes |
+|---------|-------------|-------|
+| `db` | Postgres 17 | data in the `pgdata` volume |
+| `backend` | Air live-reload under Delve | rebuilds Go on save (~1–2s) |
+| `frontend` | Vite dev server | HMR over the bind mount |
+| `playwright` | E2E runner (profile `e2e`) | only starts for `just e2e*` |
 
-  # Other platforms: See https://github.com/casey/just#installation
-  ```
+### Everyday commands
 
-- **golang-migrate** - Database migrations
-  ```bash
-  # macOS (with Homebrew)
-  brew install golang-migrate
+```bash
+just up              # start the stack (add `build` to rebuild images)
+just down            # stop it (data preserved in volumes)
+just ps              # container status
+just status          # health + migrations + git overview
+just dev-logs [svc]  # tail logs (backend|frontend|db)
+just dev-restart svc # restart one service (config changes / wedged container)
+just sh [svc]        # shell into a container for one-off commands
+just rebuild [svc]   # rebuild image(s) after Dockerfile/dependency changes
+```
 
-  # Other platforms: See https://github.com/golang-migrate/migrate#installation
-  ```
+Code changes hot-reload automatically — edit a `.go` or frontend file on the
+host and the running container picks it up. No manual restart for code changes.
 
-### Optional (but recommended)
+### Running tests, migrations, codegen
 
-- **Node.js & npm** - For frontend development
-- **Git** - Version control
+These all exec inside the containers (the stack must be up — `just up`):
+
+```bash
+just test            # full backend suite (integration + mocks)
+just test-mocks      # fast, DB-less unit tests
+just test-frontend   # frontend component tests
+just migrate         # apply migrations (also auto-runs on backend boot)
+just sqlgen          # regenerate Go from SQL (sqlc)
+just lint            # go fmt + vet
+just lint-frontend   # eslint
+```
+
+## Debugging the Backend (Delve)
+
+The backend runs under a headless [Delve](https://github.com/go-delve/delve)
+server on port **2345** (`--continue`, so the app runs without waiting for an
+attach; `--accept-multiclient`, so you can detach/reattach across Air rebuilds).
+
+### VS Code
+
+A ready config ships in `.vscode/launch.json`:
+
+1. `just up`
+2. Run the **"Attach to backend (Docker/Delve)"** launch configuration.
+3. Set breakpoints. If an Air rebuild detaches the session, re-run the config.
+
+### GoLand / IntelliJ
+
+Create a **Go Remote** run configuration:
+
+- Host: `localhost`
+- Port: `2345`
+
+Then **Run → Debug** it after `just up`. Under *Path Mappings*, map your local
+`backend/` directory to `/app` in the container so breakpoints resolve.
+
+> Note: builds use `-gcflags "all=-N -l"` (optimizations/inlining disabled) so
+> breakpoints and variable inspection map cleanly to source.
 
 ## Environment Setup
 
@@ -145,108 +183,60 @@ PORT=3000
 
 ActionPhase uses PostgreSQL in Docker for local development, making setup consistent across all platforms.
 
-#### 1. Start Database
+The `db` service starts with `just up`; the `actionphase` database is created
+automatically by the container. The test database and migrations are handled by
+the commands below (`psql`/`migrate` run inside the backend container).
 
 ```bash
-# Start PostgreSQL container
-just db_up
-
-# Container will be available at localhost:5432
-# Default credentials: postgres/example (defined in docker-compose.yml)
-```
-
-#### 2. Create Databases
-
-```bash
-# Create both main and test databases
-just db_create
-
-# Or create them manually:
-createdb -h localhost -U postgres actionphase
-createdb -h localhost -U postgres actionphase_test
-# Password: example
-```
-
-#### 3. Apply Migrations
-
-```bash
-# Apply to main database
-just migrate
-
-# Apply to test database
-just migrate_test
-```
-
-#### 4. Verify Setup
-
-```bash
-# Check migration status
-just migrate_status
-
-# Should show all migrations applied
+just db create      # create actionphase_test (actionphase is auto-created)
+just migrate        # apply migrations (also auto-runs on backend startup)
+just migration status   # show current migration version
 ```
 
 ### Database Commands Reference
 
 | Command | Purpose |
 |---------|---------|
-| `just db_up` | Start PostgreSQL Docker container |
-| `just db_down` | Stop PostgreSQL Docker container |
-| `just db_reset` | Restart PostgreSQL (keeps data) |
-| `just db_create` | Create actionphase and actionphase_test databases |
-| `just db_setup` | Complete database setup (start + create databases) |
-| `just migrate` | Apply migrations to main database |
-| `just migrate_test` | Apply migrations to test database |
-| `just migrate_status` | Check migration status |
-| `just rollback` | Rollback last migration |
+| `just db up` | Start the Postgres container |
+| `just db down` | Stop the Postgres container |
+| `just db reset` | Wipe the data volume and recreate the DB |
+| `just db create` | Create the `actionphase_test` database |
+| `just db setup` | Start + create databases |
+| `just migrate` | Apply migrations to the dev database |
+| `just migrate_test` | Apply migrations to the test database |
+| `just migration status` | Show migration version |
+| `just migration rollback` | Roll back the last migration |
+| `just reset_test_db` | Drop + recreate + re-migrate the test DB (when it gets dirty) |
 
 ## Development Workflow
 
 ### Starting Development
 
-#### Option 1: Full Automated Setup (recommended for new developers)
 ```bash
-# This does everything: database, env setup, dependencies
+# First time: create .env, build images, start the stack
 just dev-setup
 
-# Then run migrations
-just migrate
+# Subsequently: just bring the stack up
+just up
 
-# Start development server
-just dev
+# Load test data (optional)
+just test-data reload
 ```
 
-#### Option 2: Manual Setup (if you prefer step-by-step)
-```bash
-# 1. Start database
-just db_up
-
-# 2. Create databases (if not exists)
-just db_create
-
-# 3. Apply migrations
-just migrate
-
-# 4. Start backend server
-just dev
-```
-
-#### Option 3: Quick Restart (after initial setup)
-```bash
-# Just start everything (assumes database is already set up)
-just dev
-```
+Everything runs in containers from here — see the **Containerized Workflow** and
+**Everyday commands** sections above.
 
 ### Development Commands
 
 | Command | Purpose |
 |---------|---------|
-| `just dev-setup` | Complete setup for new developers |
-| `just dev` | Start backend development server |
-| `just dev-full` | Start backend + frontend together |
-| `just build` | Build Go project |
-| `just run` | Run backend without auto-restart |
-| `just tidy` | Clean up Go dependencies |
+| `just dev-setup` | First-time setup (.env + build + start) |
+| `just up` | Start the containerized stack |
+| `just down` | Stop the stack |
+| `just status` | Health + migrations + git overview |
+| `just build` | Compile-check the backend (in container) |
+| `just tidy` | `go mod tidy` (in container) |
+| `just sh backend` | Shell into the backend container |
 
 ## Testing
 

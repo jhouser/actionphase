@@ -293,7 +293,7 @@ export function GameTabContent({
   // Private Messages Tab (In Progress & Completed)
   if (activeTab === 'messages' && (game.state === 'in_progress' || game.state === 'completed')) {
     return (
-      <div className="h-[600px] md:h-[900px]">
+      <div className="h-[600px] md:h-[85vh] md:min-h-[900px]">
         <PrivateMessages
           gameId={gameId}
           characters={userCharacters}

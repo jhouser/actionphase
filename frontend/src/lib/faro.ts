@@ -10,6 +10,7 @@ import { DocumentLoadInstrumentation } from '@opentelemetry/instrumentation-docu
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import { enrichHttpSpan } from './tracing/httpRouteEnrichment';
 import { initLongAnimationFrames } from './tracing/longAnimationFrames';
+import { shouldDropWebVital } from './tracing/webVitalsSanity';
 
 let faroInstance: Faro | null = null;
 
@@ -28,6 +29,11 @@ export function initFaro(): void {
       version: '1.0.0',
       environment: import.meta.env.VITE_ENVIRONMENT ?? 'development',
     },
+    // Drops web-vitals samples from stalled/backgrounded navigations (seen on
+    // iOS Safari: the timing clock freezes mid-request, then resumes and
+    // reports a false multi-second ttfb/fcp/lcp) before they poison Grafana's
+    // per-page aggregates. See webVitalsSanity.ts for the policy rationale.
+    beforeSend: (item) => (shouldDropWebVital(item) ? null : item),
     instrumentations: [
       // getWebInstrumentations includes UserActionInstrumentation, which is opt-in
       // per element: a user action is only tracked when the clicked/keyed element (or

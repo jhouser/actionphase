@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
@@ -345,7 +345,9 @@ describe('ThreadedComment', () => {
       const commentContainer1 = container1.querySelector('.border-l-2');
       const commentContainer2 = container2.querySelector('.border-l-2');
 
-      // Should have different border color classes
+      // Each depth gets a distinct avatar-hue rail so nesting levels are visually distinct
+      expect(commentContainer1?.className).toContain('border-l-avatar-6');
+      expect(commentContainer2?.className).toContain('border-l-avatar-4');
       expect(commentContainer1?.className).not.toBe(commentContainer2?.className);
     });
   });
@@ -1826,7 +1828,11 @@ describe('ThreadedComment', () => {
         />
       );
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Allow the lazy-load path to run inside act(), so any state update it
+      // makes is wrapped; a bare sleep leaves it outside act and warns.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
 
       expect(screen.queryByText('[Comment deleted]')).not.toBeInTheDocument();
     });
@@ -2136,7 +2142,12 @@ describe('ThreadedComment', () => {
         />
       );
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Allow real time to pass so a stray fetch would have fired. The sleep runs
+      // inside act() so component state settling meanwhile doesn't trigger a
+      // React act warning; waitFor on the negative assertion would be vacuous.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
 
       expect(loadCount).toBe(0);
     });

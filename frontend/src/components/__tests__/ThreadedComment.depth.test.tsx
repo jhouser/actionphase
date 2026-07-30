@@ -6,6 +6,7 @@ import { ThreadedComment } from '../ThreadedComment';
 import type { Message } from '../../types/messages';
 import { ToastProvider } from '../../contexts/ToastContext'
 import { AdminModeProvider } from '../../contexts/AdminModeContext';
+import { ScreenshotModeProvider } from '../../contexts/ScreenshotModeContext';
 import { AuthProvider } from '../../contexts/AuthContext'
 
 // Mock fetch globally
@@ -47,6 +48,7 @@ describe('ThreadedComment - Depth Limiting', () => {
         <ToastProvider>
           <AuthProvider>
             <AdminModeProvider>
+          <ScreenshotModeProvider>
               <ThreadedComment
                 comment={mockComment}
                 gameId={1}
@@ -56,7 +58,8 @@ describe('ThreadedComment - Depth Limiting', () => {
                 depth={0}
                 maxDepth={5}
               />
-            </AdminModeProvider>
+            </ScreenshotModeProvider>
+          </AdminModeProvider>
           </AuthProvider>
         </ToastProvider>
         </MemoryRouter>
@@ -73,6 +76,7 @@ describe('ThreadedComment - Depth Limiting', () => {
         <ToastProvider>
         <AuthProvider>
         <AdminModeProvider>
+          <ScreenshotModeProvider>
             <ThreadedComment
               comment={mockComment}
               gameId={1}
@@ -82,7 +86,8 @@ describe('ThreadedComment - Depth Limiting', () => {
               depth={5}
               maxDepth={5}
             />
-        </AdminModeProvider>
+        </ScreenshotModeProvider>
+          </AdminModeProvider>
         </AuthProvider>
         </ToastProvider>
         </MemoryRouter>
@@ -104,6 +109,7 @@ describe('ThreadedComment - Depth Limiting', () => {
         <ToastProvider>
         <AuthProvider>
         <AdminModeProvider>
+          <ScreenshotModeProvider>
             <ThreadedComment
               comment={commentWithReplies}
               gameId={1}
@@ -113,7 +119,8 @@ describe('ThreadedComment - Depth Limiting', () => {
               depth={4}
               maxDepth={5}
             />
-        </AdminModeProvider>
+        </ScreenshotModeProvider>
+          </AdminModeProvider>
         </AuthProvider>
         </ToastProvider>
         </MemoryRouter>
@@ -137,6 +144,7 @@ describe('ThreadedComment - Depth Limiting', () => {
         <ToastProvider>
         <AuthProvider>
         <AdminModeProvider>
+          <ScreenshotModeProvider>
             <ThreadedComment
               comment={commentWithoutReplies}
               gameId={1}
@@ -146,7 +154,8 @@ describe('ThreadedComment - Depth Limiting', () => {
               depth={5}
               maxDepth={5}
             />
-        </AdminModeProvider>
+        </ScreenshotModeProvider>
+          </AdminModeProvider>
         </AuthProvider>
         </ToastProvider>
         </MemoryRouter>
@@ -171,6 +180,7 @@ describe('ThreadedComment - Depth Limiting', () => {
         <ToastProvider>
         <AuthProvider>
         <AdminModeProvider>
+          <ScreenshotModeProvider>
             <ThreadedComment
               comment={commentWithReplies}
               gameId={42}
@@ -181,7 +191,8 @@ describe('ThreadedComment - Depth Limiting', () => {
               depth={4}
               maxDepth={5}
             />
-        </AdminModeProvider>
+        </ScreenshotModeProvider>
+          </AdminModeProvider>
         </AuthProvider>
         </ToastProvider>
         </MemoryRouter>
@@ -206,6 +217,7 @@ describe('ThreadedComment - Depth Limiting', () => {
         <ToastProvider>
         <AuthProvider>
         <AdminModeProvider>
+          <ScreenshotModeProvider>
             <ThreadedComment
               comment={commentWithReplies}
               gameId={1}
@@ -215,7 +227,8 @@ describe('ThreadedComment - Depth Limiting', () => {
               depth={5}
               maxDepth={5}
             />
-        </AdminModeProvider>
+        </ScreenshotModeProvider>
+          </AdminModeProvider>
         </AuthProvider>
         </ToastProvider>
         </MemoryRouter>
@@ -234,6 +247,7 @@ describe('ThreadedComment - Depth Limiting', () => {
         <ToastProvider>
         <AuthProvider>
         <AdminModeProvider>
+          <ScreenshotModeProvider>
             <ThreadedComment
               comment={mockComment}
               gameId={1}
@@ -243,7 +257,8 @@ describe('ThreadedComment - Depth Limiting', () => {
               depth={4}
               // maxDepth not specified - should default to 5
             />
-        </AdminModeProvider>
+        </ScreenshotModeProvider>
+          </AdminModeProvider>
         </AuthProvider>
         </ToastProvider>
         </MemoryRouter>
@@ -261,6 +276,7 @@ describe('ThreadedComment - Depth Limiting', () => {
         <ToastProvider>
         <AuthProvider>
         <AdminModeProvider>
+          <ScreenshotModeProvider>
             <ThreadedComment
               comment={mockComment}
               gameId={1}
@@ -270,7 +286,8 @@ describe('ThreadedComment - Depth Limiting', () => {
               depth={3}
               maxDepth={3}
             />
-        </AdminModeProvider>
+        </ScreenshotModeProvider>
+          </AdminModeProvider>
         </AuthProvider>
         </ToastProvider>
         </MemoryRouter>
@@ -293,6 +310,7 @@ describe('ThreadedComment - Depth Limiting', () => {
         <ToastProvider>
         <AuthProvider>
         <AdminModeProvider>
+          <ScreenshotModeProvider>
             <ThreadedComment
               comment={commentWithManyReplies}
               gameId={1}
@@ -302,7 +320,8 @@ describe('ThreadedComment - Depth Limiting', () => {
               depth={4}
               maxDepth={5}
             />
-        </AdminModeProvider>
+        </ScreenshotModeProvider>
+          </AdminModeProvider>
         </AuthProvider>
         </ToastProvider>
         </MemoryRouter>
@@ -324,6 +343,7 @@ describe('ThreadedComment - Depth Limiting', () => {
         <ToastProvider>
         <AuthProvider>
         <AdminModeProvider>
+          <ScreenshotModeProvider>
             <ThreadedComment
               comment={commentWithOneReply}
               gameId={1}
@@ -333,7 +353,8 @@ describe('ThreadedComment - Depth Limiting', () => {
               depth={4}
               maxDepth={5}
             />
-        </AdminModeProvider>
+        </ScreenshotModeProvider>
+          </AdminModeProvider>
         </AuthProvider>
         </ToastProvider>
         </MemoryRouter>

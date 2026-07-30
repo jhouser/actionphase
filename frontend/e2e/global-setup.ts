@@ -13,6 +13,16 @@ const __dirname = path.dirname(__filename);
  * It resets and reapplies all test fixtures.
  */
 async function globalSetup() {
+  // In the containerized stack the fixtures are loaded by `just load-e2e`
+  // (which runs psql inside the backend container) *before* Playwright starts,
+  // and the Playwright container has neither psql nor the fixture scripts.
+  // E2E_SKIP_FIXTURE_SETUP=true tells us to skip the in-process loading.
+  if (process.env.E2E_SKIP_FIXTURE_SETUP === 'true') {
+    // eslint-disable-next-line no-console
+    console.log('\n⏭️  Skipping in-process fixture setup (loaded externally via just load-e2e)\n');
+    return;
+  }
+
   // eslint-disable-next-line no-console
   console.log('\n🧹 Resetting E2E test fixtures...');
 

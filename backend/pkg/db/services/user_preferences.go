@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -30,15 +31,64 @@ func NewUserPreferencesService(db *pgxpool.Pool) *UserPreferencesService {
 // PreferencesData is an alias kept for callers that used the old db-package type.
 type PreferencesData = core.PreferencesData
 
+// enumPreference describes a string preference field restricted to a fixed
+// set of allowed values, with a default applied when unset.
+type enumPreference struct {
+	name    string
+	allowed []string
+	def     string
+}
+
+func (p enumPreference) applyDefault(value string) string {
+	if value == "" {
+		return p.def
+	}
+	return value
+}
+
+func (p enumPreference) validate(value string) error {
+	for _, allowed := range p.allowed {
+		if value == allowed {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid %s value: must be one of %s", p.name, strings.Join(quoteAll(p.allowed), ", "))
+}
+
+func quoteAll(values []string) []string {
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		quoted[i] = "'" + v + "'"
+	}
+	return quoted
+}
+
+var (
+	themePreference = enumPreference{
+		name:    "theme",
+		allowed: []string{"light", "dark", "highContrast", "highContrastDark", "colorblind", "auto"},
+		def:     "auto",
+	}
+
+	commentReadModePreference = enumPreference{name: "comment_read_mode", allowed: []string{"auto", "manual"}, def: "manual"}
+
+	fontSizePreference = enumPreference{name: "font_size", allowed: []string{"small", "medium", "large"}, def: "medium"}
+)
+
+func applyPreferenceDefaults(data *PreferencesData) {
+	data.Theme = themePreference.applyDefault(data.Theme)
+	data.CommentReadMode = commentReadModePreference.applyDefault(data.CommentReadMode)
+	data.FontSize = fontSizePreference.applyDefault(data.FontSize)
+}
+
 // GetUserPreferences gets user preferences, returning defaults if not found
 func (s *UserPreferencesService) GetUserPreferences(ctx context.Context, userID int32) (*PreferencesData, error) {
 	prefs, err := s.Queries.GetUserPreferences(ctx, userID)
 	if err != nil {
 		// Return default preferences if not found
-		return &PreferencesData{
-			Theme:           "auto",
-			CommentReadMode: "manual",
-		}, nil
+		data := &PreferencesData{}
+		applyPreferenceDefaults(data)
+		return data, nil
 	}
 
 	// Parse JSONB into PreferencesData
@@ -48,36 +98,35 @@ func (s *UserPreferencesService) GetUserPreferences(ctx context.Context, userID 
 	}
 
 	// Apply defaults for any missing fields
-	if data.Theme == "" {
-		data.Theme = "auto"
-	}
-	if data.CommentReadMode == "" {
-		data.CommentReadMode = "manual"
-	}
+	applyPreferenceDefaults(&data)
 
 	return &data, nil
 }
 
-// UpdateUserPreferences updates or creates user preferences
+// UpdateUserPreferences merges the given fields onto the user's existing
+// stored preferences and updates or creates the record. Fields left at their
+// zero value in prefs (e.g. an unset DiscordNotifications map) do not
+// overwrite previously saved values for those fields.
 func (s *UserPreferencesService) UpdateUserPreferences(ctx context.Context, userID int32, prefs PreferencesData) (*PreferencesData, error) {
+	existing, err := s.GetUserPreferences(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load existing preferences: %w", err)
+	}
+	if prefs.DiscordNotifications == nil {
+		prefs.DiscordNotifications = existing.DiscordNotifications
+	}
+
 	// Apply defaults before validation so callers only need to specify fields they care about
-	if prefs.Theme == "" {
-		prefs.Theme = "auto"
-	}
-	if prefs.CommentReadMode == "" {
-		prefs.CommentReadMode = "manual"
-	}
+	applyPreferenceDefaults(&prefs)
 
-	// Validate theme value
-	validThemes := map[string]bool{"light": true, "dark": true, "auto": true}
-	if !validThemes[prefs.Theme] {
-		return nil, fmt.Errorf("invalid theme value: must be 'light', 'dark', or 'auto'")
+	if err := themePreference.validate(prefs.Theme); err != nil {
+		return nil, err
 	}
-
-	// Validate comment_read_mode value
-	validReadModes := map[string]bool{"auto": true, "manual": true}
-	if !validReadModes[prefs.CommentReadMode] {
-		return nil, fmt.Errorf("invalid comment_read_mode value: must be 'auto' or 'manual'")
+	if err := commentReadModePreference.validate(prefs.CommentReadMode); err != nil {
+		return nil, err
+	}
+	if err := fontSizePreference.validate(prefs.FontSize); err != nil {
+		return nil, err
 	}
 
 	// Validate discord_notifications keys (if provided)

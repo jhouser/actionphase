@@ -693,7 +693,7 @@ func (s *NotificationService) NotifyHandoutPublished(ctx context.Context, gameID
 		Title:       fmt.Sprintf("New Handout: %s", handoutTitle),
 		RelatedType: stringPtr("handout"),
 		RelatedID:   &handoutID,
-		LinkURL:     stringPtr(fmt.Sprintf("/games/%d?tab=handouts", gameID)),
+		LinkURL:     stringPtr(fmt.Sprintf("/games/%d?tab=handouts&handout=%d", gameID, handoutID)),
 	})
 }
 

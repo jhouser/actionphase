@@ -169,7 +169,8 @@ test.describe('@mobile Unsaved Changes Warning', () => {
       const conversationTitle = `Unsaved Warning Test ${Date.now()}`;
       await messaging.createConversation(conversationTitle, ['E2E Test Char 2']);
 
-      // On mobile the reply form is collapsed — click Reply to expand it
+      // The reply form is collapsed behind a "Reply" button at all widths —
+      // click it to expand the composer and reveal the textarea.
       const replyButton = page.getByRole('button', { name: 'Reply' }).locator('visible=true').first();
       if (await replyButton.isVisible({ timeout: 1000 }).catch(() => false)) {
         await replyButton.click();

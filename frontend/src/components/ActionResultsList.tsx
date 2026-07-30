@@ -66,7 +66,7 @@ export const ActionResultsList: React.FC<ActionResultsListProps> = ({ gameId }) 
               )}
             </div>
             <div>
-              <MarkdownPreview content={isCollapsible && !isExpanded ? previewContent : result.content} />
+              <MarkdownPreview content={isCollapsible && !isExpanded ? previewContent : result.content} fullWidth />
             </div>
             {isCollapsible && (
               <button

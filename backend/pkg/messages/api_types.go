@@ -110,6 +110,19 @@ func (rd *MessageResponse) Render(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
+// MessageThreadContextResponse is the payload for deep-linking to a nested comment:
+// the target plus a bounded slice of its ancestors, and the true root post ID.
+type MessageThreadContextResponse struct {
+	// Chain is the target comment plus up to max_parents nearest ancestors,
+	// ordered parent-to-child (nearest included ancestor → target).
+	Chain []*MessageResponse `json:"chain"`
+	// RootPostID is the top-level post at the head of the full thread, even when
+	// Chain is trimmed and does not itself reach the root.
+	RootPostID int32 `json:"root_post_id"`
+	// HasFullThread is true when Chain reaches the root post (nothing trimmed above).
+	HasFullThread bool `json:"has_full_thread"`
+}
+
 // getUserIDFromToken extracts the authenticated user ID from the request JWT.
 func (h *Handler) getUserIDFromToken(r *http.Request) (int32, error) {
 	userID, errResp := core.GetUserIDFromJWT(r.Context(), h.UserService)

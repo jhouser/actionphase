@@ -34,7 +34,7 @@ BEGIN
   -- ============================================
   -- GAME #1: Active Common Room Phase
   -- ============================================
-  INSERT INTO games (title, description, genre, gm_user_id, max_players, state, is_public, created_at, updated_at)
+  INSERT INTO games (title, description, genre, gm_user_id, max_players, state, is_public, is_anonymous, created_at, updated_at)
   VALUES (
     'Shadows Over Innsmouth',
     'A Lovecraftian horror investigation in a cursed fishing town.',
@@ -42,6 +42,7 @@ BEGIN
     gm_id,
     4,
     'in_progress',
+    true,
     true,
     NOW() - INTERVAL '7 days',
     NOW()

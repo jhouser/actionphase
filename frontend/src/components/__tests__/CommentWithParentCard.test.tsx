@@ -7,6 +7,11 @@ import { renderWithProviders } from '../../test-utils/render';
 import { useGameContext } from '../../contexts/GameContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiClient } from '../../lib/api';
+import * as useScreenshotModeHook from '../../hooks/useScreenshotMode';
+
+vi.mock('../../hooks/useScreenshotMode', () => ({
+  useScreenshotMode: vi.fn(),
+}));
 
 vi.mock('../MarkdownPreview', () => ({
   MarkdownPreview: ({ content }: { content: string }) => <div>{content}</div>,
@@ -69,6 +74,10 @@ describe('CommentWithParentCard', () => {
   beforeEach(() => {
     vi.mocked(useGameContext).mockReturnValue(mockGameContext as never);
     vi.mocked(useAuth).mockReturnValue({ currentUser: null } as never);
+    vi.mocked(useScreenshotModeHook.useScreenshotMode).mockReturnValue({
+      screenshotModeEnabled: false,
+      toggleScreenshotMode: vi.fn(),
+    });
   });
 
   const mockComment: CommentWithParent = {
@@ -242,6 +251,31 @@ describe('CommentWithParentCard', () => {
 
     const card = container.querySelector('.hover\\:shadow-md');
     expect(card).toBeInTheDocument();
+  });
+
+  describe('Read fading', () => {
+    it('fades a read comment in manual mode', () => {
+      const { container } = renderWithProviders(
+        <CommentWithParentCard comment={mockComment} gameId={1} commentReadMode="manual" isRead />,
+        { gameId: 1 }
+      );
+
+      const card = container.querySelector('.hover\\:shadow-md');
+      expect(card).toHaveClass('opacity-50');
+    });
+
+    it('does not fade a read comment in auto mode', () => {
+      // In auto mode a comment can be in the manual-read set (e.g. the backend
+      // auto-marks your own reply as read), but manual reads must not drive the
+      // faded appearance — only auto-mode unread highlighting applies.
+      const { container } = renderWithProviders(
+        <CommentWithParentCard comment={mockComment} gameId={1} commentReadMode="auto" isRead />,
+        { gameId: 1 }
+      );
+
+      const card = container.querySelector('.hover\\:shadow-md');
+      expect(card).not.toHaveClass('opacity-50');
+    });
   });
 
   it('renders "View in thread" as proper anchor tag with href', () => {
@@ -442,6 +476,64 @@ describe('CommentWithParentCard', () => {
       renderWithProviders(<CommentWithParentCard comment={mockComment} gameId={1} />, { gameId: 1 });
 
       expect(screen.getByRole('button', { name: /copy link to this comment/i })).toBeInTheDocument();
+    });
+  });
+
+  describe('Screenshot Mode', () => {
+    // ParentCommentPreview only falls back to showing @authorUsername when the
+    // parent has no character name, so clear it to exercise that render path.
+    const commentWithUsernameOnlyParent: CommentWithParent = {
+      ...mockComment,
+      parent_character_name: null,
+    };
+
+    it('shows the comment author and parent author usernames when disabled', () => {
+      renderWithProviders(<CommentWithParentCard comment={commentWithUsernameOnlyParent} gameId={1} />, { gameId: 1 });
+
+      expect(screen.getByText(/testuser/i)).toBeInTheDocument();
+      expect(screen.getByText(/parentuser/i)).toBeInTheDocument();
+    });
+
+    it('hides the comment author and parent author usernames when enabled', () => {
+      vi.mocked(useScreenshotModeHook.useScreenshotMode).mockReturnValue({
+        screenshotModeEnabled: true,
+        toggleScreenshotMode: vi.fn(),
+      });
+
+      renderWithProviders(<CommentWithParentCard comment={commentWithUsernameOnlyParent} gameId={1} />, { gameId: 1 });
+
+      expect(screen.queryByText(/testuser/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/parentuser/i)).not.toBeInTheDocument();
+      // Character name remains visible — only the real username is hidden.
+      expect(screen.getByText('Test Character')).toBeInTheDocument();
+    });
+
+    const commentWithPostId: CommentWithParent = { ...mockComment, post_id: 42 };
+
+    it('shows the Edit and Delete buttons for the comment author when disabled', () => {
+      vi.mocked(useAuth).mockReturnValue({ currentUser: { id: mockComment.author_id } } as never);
+
+      renderWithProviders(<CommentWithParentCard comment={commentWithPostId} gameId={1} />, { gameId: 1 });
+
+      expect(screen.getByRole('button', { name: /edit this comment/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /delete this comment/i })).toBeInTheDocument();
+    });
+
+    // Edit/Delete only render for the author, so leaving them visible identifies
+    // which character the screenshotter plays just as plainly as the username.
+    it('hides the Edit and Delete buttons when enabled', () => {
+      vi.mocked(useAuth).mockReturnValue({ currentUser: { id: mockComment.author_id } } as never);
+      vi.mocked(useScreenshotModeHook.useScreenshotMode).mockReturnValue({
+        screenshotModeEnabled: true,
+        toggleScreenshotMode: vi.fn(),
+      });
+
+      renderWithProviders(<CommentWithParentCard comment={commentWithPostId} gameId={1} />, { gameId: 1 });
+
+      expect(screen.queryByRole('button', { name: /edit this comment/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /delete this comment/i })).not.toBeInTheDocument();
+      // The comment itself still renders — only the authorship tells are hidden.
+      expect(screen.getByText('This is a test comment')).toBeInTheDocument();
     });
   });
 });

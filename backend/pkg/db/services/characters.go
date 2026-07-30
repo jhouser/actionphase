@@ -222,6 +222,14 @@ func (cs *CharacterService) GetUserControllableCharacters(ctx context.Context, g
 	})
 }
 
+// GetUserControllableCharactersAcrossGames returns every character the user can
+// control in games that are currently in_progress, along with the game context
+// (title, state, flags, and the user's role) each character's sheet needs.
+func (cs *CharacterService) GetUserControllableCharactersAcrossGames(ctx context.Context, userID int32) ([]models.GetUserControllableCharactersAcrossGamesRow, error) {
+	queries := models.New(cs.DB)
+	return queries.GetUserControllableCharactersAcrossGames(ctx, userID)
+}
+
 func (cs *CharacterService) ApproveCharacter(ctx context.Context, characterID int32) (*models.Character, error) {
 	defer cs.Logger.LogOperation(ctx, "approve_character", "character_id", characterID)()
 
@@ -610,6 +618,28 @@ func (cs *CharacterService) GetCharacterActivityStats(ctx context.Context, chara
 		PublicMessages:  row.PublicMessages,
 		PrivateMessages: &row.PrivateMessages,
 	}, nil
+}
+
+// GetCharacterActivityStatsByGame returns activity stats for every character in a
+// game, keyed by character ID, in a single query. Characters with no messages of
+// either kind are still present in the result with zero counts.
+func (cs *CharacterService) GetCharacterActivityStatsByGame(ctx context.Context, gameID int32) (map[int32]*core.CharacterActivityStats, error) {
+	queries := models.New(cs.DB)
+	rows, err := queries.GetCharacterActivityStatsByGame(ctx, gameID)
+	if err != nil {
+		cs.Logger.LogError(ctx, err, "Failed to get character activity stats by game", "game_id", gameID)
+		return nil, err
+	}
+
+	statsByCharacterID := make(map[int32]*core.CharacterActivityStats, len(rows))
+	for _, row := range rows {
+		row := row
+		statsByCharacterID[row.CharacterID] = &core.CharacterActivityStats{
+			PublicMessages:  row.PublicMessages,
+			PrivateMessages: &row.PrivateMessages,
+		}
+	}
+	return statsByCharacterID, nil
 }
 
 // AssignNPCToAudience assigns an NPC character to an audience member

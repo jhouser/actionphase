@@ -10,6 +10,7 @@ import { CommentEditor } from './CommentEditor';
 import CharacterAvatar from './CharacterAvatar';
 import { Button, Select } from './ui';
 import { useAdminMode } from '../hooks/useAdminMode';
+import { useScreenshotMode } from '../hooks/useScreenshotMode';
 import { useUpdateComment, useDeleteComment } from '../hooks/useCommentMutations';
 import { useGamePermissions } from '../hooks/useGamePermissions';
 import { useOptionalGameContext } from '../contexts/GameContext';
@@ -105,6 +106,7 @@ export const ThreadedComment = memo(function ThreadedComment({
   const gameContext = useOptionalGameContext();
   const portraitAvatars = gameContext?.game?.portrait_avatars ?? false;
   const { adminModeEnabled } = useAdminMode();
+  const { screenshotModeEnabled } = useScreenshotMode();
   const { isGM } = useGamePermissions(gameId);
   const updateCommentMutation = useUpdateComment();
   const deleteCommentMutation = useDeleteComment();
@@ -433,8 +435,15 @@ export const ThreadedComment = memo(function ThreadedComment({
     });
   };
 
-  // Use consistent semantic color for thread borders (maintains visual hierarchy through indentation)
-  const borderColor = depth > 0 ? 'border-l-interactive-primary' : '';
+  // Per-depth left-rail accent so each nesting level is visually distinct in every
+  // theme. Reuses avatar hues (theme-defined). depth 0 has no rail.
+  const threadAccents = [
+    'border-l-avatar-6', // depth 1 - blue
+    'border-l-avatar-4', // depth 2 - green
+    'border-l-avatar-7', // depth 3 - violet
+    'border-l-avatar-2', // depth 4 - orange
+  ];
+  const borderColor = depth > 0 ? threadAccents[(depth - 1) % threadAccents.length] : '';
 
   // Alternating background colors for better visual separation between comment levels
   const backgroundColors = [
@@ -463,7 +472,7 @@ export const ThreadedComment = memo(function ThreadedComment({
     <div
       id={`comment-${comment.id}${variant ? `-${variant}` : ''}`}
       data-testid="threaded-comment"
-      className={`${getIndentPadding()} ${depth > 0 ? 'border-l-2 ' + borderColor : ''} ${bgColor} ${depth > 0 ? 'py-3 my-2' : 'py-2'} border-b border-theme-subtle`}
+      className={`${getIndentPadding()} ${depth > 0 ? 'border-l-2 ' + borderColor : 'border-t border-theme-strong'} ${bgColor} ${depth > 0 ? 'py-3 my-2' : 'py-2'} border-b border-theme-subtle`}
     >
       {/* Comment Header and Content */}
       <div className={`${portraitAvatars ? 'overflow-hidden' : ''}${isUnread ? ' border border-semantic-warning rounded-lg p-3' : ''}${isManuallyRead ? ' opacity-50' : ''}`}>
@@ -491,14 +500,14 @@ export const ThreadedComment = memo(function ThreadedComment({
             <div className="hidden md:block">
               <Link to={`/characters/${comment.character_id}`} className="font-semibold text-sm text-content-primary hover:underline" data-testid="comment-author">{comment.character_name}</Link>
               <span className="text-xs text-content-secondary ml-2">
-                {comment.author_username ? <><Link to={`/users/${comment.author_username}`} className="hover:underline">@{comment.author_username}</Link>{' · '}</> : ''}{formatDate(comment.created_at)}
+                {comment.author_username && !screenshotModeEnabled ? <><Link to={`/users/${comment.author_username}`} className="hover:underline">@{comment.author_username}</Link>{' · '}</> : ''}{formatDate(comment.created_at)}
                 {comment.is_edited && !comment.is_deleted && (
                   <span className="ml-1 text-content-tertiary" title={comment.edited_at ? `Last edited ${formatDate(comment.edited_at)}` : undefined}>
                     (edited{comment.edit_count && comment.edit_count > 1 ? ` ${comment.edit_count}x` : ''})
                   </span>
                 )}
               </span>
-              {isAuthor && (
+              {isAuthor && !screenshotModeEnabled && (
                 <span className="ml-2 text-xs bg-interactive-primary-subtle text-interactive-primary px-1.5 py-0.5 rounded">You</span>
               )}
               {isUnread && (
@@ -509,7 +518,7 @@ export const ThreadedComment = memo(function ThreadedComment({
             <div className="md:hidden">
               <div className="flex items-center gap-1 flex-wrap text-xs">
                 <Link to={`/characters/${comment.character_id}`} className="font-semibold text-content-primary hover:underline" data-testid="comment-author">{comment.character_name}</Link>
-                {isAuthor && (
+                {isAuthor && !screenshotModeEnabled && (
                   <span className="bg-interactive-primary-subtle text-content-primary px-1 py-0.5 rounded">You</span>
                 )}
                 {isUnread && (
@@ -517,7 +526,7 @@ export const ThreadedComment = memo(function ThreadedComment({
                 )}
               </div>
               <div className="text-xs text-content-secondary">
-                {comment.author_username && <><Link to={`/users/${comment.author_username}`} className="hover:underline">@{comment.author_username}</Link>{' · '}</>}
+                {comment.author_username && !screenshotModeEnabled && <><Link to={`/users/${comment.author_username}`} className="hover:underline">@{comment.author_username}</Link>{' · '}</>}
                 <span className="text-content-tertiary">{formatDate(comment.created_at)}</span>
                 {comment.is_edited && !comment.is_deleted && (
                   <span className="ml-1 text-content-tertiary" title={comment.edited_at ? `Last edited ${formatDate(comment.edited_at)}` : undefined}>
@@ -589,6 +598,7 @@ export const ThreadedComment = memo(function ThreadedComment({
             <MarkdownPreview
               content={comment.content}
               mentionedCharacters={mentionedCharacters}
+              fullWidth
             />
           </div>
         )}
@@ -685,7 +695,10 @@ export const ThreadedComment = memo(function ThreadedComment({
             </Button>
           )}
 
-          {isAuthor && !isEditing && !comment.is_deleted && !readOnly && (
+          {/* Screenshot Mode hides Edit/Delete too: they only render for the
+              author (or the GM/admin), so a visible control gives away who's
+              behind the character just as plainly as the username would. */}
+          {isAuthor && !isEditing && !comment.is_deleted && !readOnly && !screenshotModeEnabled && (
             <Button
               variant="ghost"
               onClick={handleEdit}
@@ -700,7 +713,7 @@ export const ThreadedComment = memo(function ThreadedComment({
             </Button>
           )}
 
-          {(isAuthor || isGM || adminModeEnabled) && !isEditing && !comment.is_deleted && !readOnly && (
+          {(isAuthor || isGM || adminModeEnabled) && !isEditing && !comment.is_deleted && !readOnly && !screenshotModeEnabled && (
             <Button
               variant="ghost"
               onClick={handleDeleteClick}

@@ -4,6 +4,11 @@ import legacy from '@vitejs/plugin-legacy'
 import faroUploader from '@grafana/faro-rollup-plugin'
 import { fileURLToPath, URL } from 'node:url'
 
+// Backend origin the dev-server proxy forwards /api, /ping, /docs to.
+// Host dev: defaults to localhost:3000. Containerized dev: docker-compose.dev.yml
+// sets VITE_PROXY_TARGET=http://backend:3000 to reach the backend service.
+const proxyTarget = process.env.VITE_PROXY_TARGET ?? 'http://localhost:3000'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -32,24 +37,41 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Allow the compose service hostname so the Playwright container (and any
+    // other in-network client) can reach the dev server. Vite 7 rejects
+    // unknown Host headers with 403 by default.
+    allowedHosts: ['localhost', 'frontend'],
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
       },
       '/ping': {
-        target: 'http://localhost:3000',
+        target: proxyTarget,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/health': {
+        target: proxyTarget,
+        changeOrigin: true,
+        secure: false,
+      },
+      // Uploaded avatars/banners are served by the backend at /uploads/*. In dev
+      // the backend hands out relative /uploads URLs (see docker-compose.dev.yml),
+      // so the browser requests them from the Vite origin and we proxy them here.
+      '/uploads': {
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
       },
       '/docs': {
-        target: 'http://localhost:3000',
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
       },
       '/api/v1/docs': {
-        target: 'http://localhost:3000',
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
       },
@@ -80,12 +102,7 @@ export default defineConfig({
       destructuring: true,
     },
   },
-  test: {
-    environment: 'jsdom',
-    server: {
-      deps: {
-        inline: ['react-datepicker'],
-      },
-    },
-  },
+  // Test config lives in vitest.config.ts, which takes precedence over this
+  // file when vitest resolves its config. A `test` block here would be silently
+  // ignored — put test settings in vitest.config.ts instead.
 })

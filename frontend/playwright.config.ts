@@ -5,6 +5,15 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * See https://playwright.dev/docs/test-configuration.
  */
+
+// App origin the tests drive. Host runs default to localhost:5173; the
+// containerized Playwright service sets E2E_BASE_URL=http://frontend:5173.
+const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5173';
+
+// When the app is already running (containerized stack, or CI), skip Playwright's
+// managed webServer. E2E_NO_WEBSERVER=true is set by the Playwright container.
+const manageWebServer = process.env.E2E_NO_WEBSERVER !== 'true';
+
 export default defineConfig({
   testDir: './e2e',
 
@@ -33,7 +42,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:5173',
+    baseURL,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -74,11 +83,14 @@ export default defineConfig({
     // },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-  },
+  /* Run your local dev server before starting the tests — unless the app is
+     already up (containerized stack / CI), in which case we just target it. */
+  webServer: manageWebServer
+    ? {
+        command: 'npm run dev',
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120000,
+      }
+    : undefined,
 });

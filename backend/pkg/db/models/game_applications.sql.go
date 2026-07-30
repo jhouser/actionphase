@@ -178,6 +178,32 @@ func (q *Queries) DeleteRejectedApplications(ctx context.Context, gameID int32) 
 	return err
 }
 
+const deleteStaleApprovedApplicationForUser = `-- name: DeleteStaleApprovedApplicationForUser :exec
+DELETE FROM game_applications ga
+WHERE ga.game_id = $1 AND ga.user_id = $2 AND ga.status = 'approved' AND ga.role = 'audience'
+  AND NOT EXISTS (
+    SELECT 1 FROM game_participants gp
+    WHERE gp.game_id = ga.game_id AND gp.user_id = ga.user_id AND gp.status = 'active'
+  )
+`
+
+type DeleteStaleApprovedApplicationForUserParams struct {
+	GameID int32 `json:"game_id"`
+	UserID int32 `json:"user_id"`
+}
+
+// Deletes a leftover 'approved' audience application for a user who is no longer an
+// active participant in the game (e.g. they left or were removed after approval).
+// Scoped to role = 'audience' because audience approval creates a game_participants row
+// immediately (see ApproveGameApplication), unlike player applications, whose approved
+// application row is intentionally kept until recruitment closes. Without this, the
+// UNIQUE(game_id, user_id) constraint permanently blocks an audience member from
+// re-applying after leaving.
+func (q *Queries) DeleteStaleApprovedApplicationForUser(ctx context.Context, arg DeleteStaleApprovedApplicationForUserParams) error {
+	_, err := q.db.Exec(ctx, deleteStaleApprovedApplicationForUser, arg.GameID, arg.UserID)
+	return err
+}
+
 const getApprovedApplicationsForGame = `-- name: GetApprovedApplicationsForGame :many
 SELECT
     ga.id, ga.game_id, ga.user_id, ga.role, ga.message, ga.status, ga.reviewed_by_user_id, ga.reviewed_at, ga.applied_at, ga.is_published,

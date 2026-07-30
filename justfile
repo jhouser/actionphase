@@ -1,13 +1,11 @@
 # ActionPhase Development Commands
-# Consolidated from 93 → 25 commands for better discoverability
 #
 # Quick Reference:
 #   just help          - Show this help
-#   just dev           - Start development environment
+#   just up            - Start the containerized dev stack
 #   just test          - Run backend tests
 #   just test-fe       - Run frontend tests
 #   just e2e           - Run E2E tests
-#   just build         - Build backend
 #
 # For detailed help on any command with subcommands, run:
 #   just <command> help
@@ -30,40 +28,124 @@ claude:
     CLAUDE_CONFIG_DIR="$HOME/.claude-personal" ~/.local/bin/claude
 
 # ═══════════════════════════════════════════════════════════════════════════
+# CONTAINERIZED DEV (docker-compose.dev.yml)
+# ═══════════════════════════════════════════════════════════════════════════
+# Fully containerized local dev: db + backend (Air hot-reload + Delve) + frontend
+# (Vite HMR). No host Go/Node needed. See "just dev-help" for the full workflow.
+
+# Compose invocation for the dev stack — reused by every dev recipe below.
+DEV_COMPOSE := "docker compose -f docker-compose.dev.yml"
+
+# Start the full dev stack (db + backend + frontend). Add 'build' to force a rebuild.
+up build="":
+  #!/usr/bin/env bash
+  if [ "{{build}}" = "build" ]; then
+    {{DEV_COMPOSE}} up -d --build
+  else
+    {{DEV_COMPOSE}} up -d
+  fi
+  echo ""
+  echo "🚀 Dev stack up:"
+  echo "   Frontend (Vite):  http://localhost:5173"
+  echo "   Backend  (API):   http://localhost:3000"
+  echo "   Delve debugger:   localhost:2345  (attach from IDE)"
+  echo "   Postgres:         localhost:5432"
+  echo ""
+  echo "   Logs:    just dev-logs [backend|frontend|db]"
+  echo "   Shell:   just sh backend   (run go/npm commands in-container)"
+
+# Stop the dev stack (containers removed, volumes/data preserved).
+down:
+  {{DEV_COMPOSE}} down
+
+# Rebuild images from scratch (after Dockerfile.dev / dependency changes).
+rebuild service="":
+  {{DEV_COMPOSE}} build --no-cache {{service}}
+  @echo "✅ Rebuilt. Run 'just up' to (re)start."
+
+# Tail logs for a dev service (backend, frontend, db). Omit for all services.
+dev-logs service="":
+  {{DEV_COMPOSE}} logs -f {{service}}
+
+# Restart dev service(s) for config changes or a wedged container (code hot-reloads).
+# Pass a service name (backend|frontend|db) or 'all' to restart the whole stack.
+restart service="backend":
+  #!/usr/bin/env bash
+  if [ "{{service}}" = "all" ]; then
+    {{DEV_COMPOSE}} restart
+    echo "✅ Restarted all services"
+  else
+    {{DEV_COMPOSE}} restart {{service}}
+    echo "✅ Restarted {{service}}"
+  fi
+
+# Open a shell in a running dev container (backend, frontend, db).
+# Full-purity escape hatch: run one-off go/npm/psql commands in-container.
+sh service="backend":
+  {{DEV_COMPOSE}} exec {{service}} sh
+
+# Show status of the dev stack containers.
+ps:
+  {{DEV_COMPOSE}} ps
+
+# Print the containerized-dev workflow cheatsheet.
+dev-help:
+  #!/usr/bin/env bash
+  cat <<'EOF'
+  Containerized dev workflow (no host Go/Node required)
+  ─────────────────────────────────────────────────────
+    just up [build]     Start db + backend + frontend (build to rebuild images)
+    just down           Stop the stack (data preserved in volumes)
+    just ps             Container status
+    just dev-logs [svc] Tail logs (backend|frontend|db; blank = all)
+    just restart [svc]  Restart a service (backend|frontend|db|all)
+    just rebuild [svc]  Rebuild image(s) from scratch after Dockerfile changes
+    just sh [svc]       Shell into a container (backend|frontend|db)
+
+  URLs
+    Frontend  http://localhost:5173   (Vite HMR; proxies /api -> backend)
+    Backend   http://localhost:3000   (Air rebuilds on save)
+    Delve     localhost:2345          (attach IDE debugger — see docs)
+    Postgres  localhost:5432
+
+  Hot reload is automatic: edit a .go or frontend file on the host and the
+  running container picks it up. No manual restart needed for code changes.
+  EOF
+
+# ═══════════════════════════════════════════════════════════════════════════
 # DATABASE COMMANDS
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Database operations: up, down, reset, create, setup
+# Database operations on the dev stack: up, down, reset, create, setup
 db action="help":
   #!/usr/bin/env bash
+  DC='docker compose -f docker-compose.dev.yml'
   case "{{action}}" in
     up)
-      docker-compose up -d db
+      $DC up -d db
       ;;
     down)
-      docker-compose down db
+      $DC stop db
       ;;
     reset)
-      docker-compose down db
-      docker-compose up -d db
-      echo "Database reset complete"
+      # Wipe the dev db volume and recreate from scratch.
+      $DC rm -sf db
+      docker volume rm actionphase-dev_pgdata 2>/dev/null || true
+      $DC up -d db
+      echo "✅ Database reset (fresh volume). Run 'just migrate' to apply schema."
       ;;
     create)
-      echo "Creating ActionPhase databases..."
-      echo "Waiting for PostgreSQL to be ready..."
-      sleep 3
-      createdb -h localhost -U postgres -W actionphase 2>/dev/null || echo "Database 'actionphase' already exists or creation failed"
-      createdb -h localhost -U postgres -W actionphase_test 2>/dev/null || echo "Database 'actionphase_test' already exists or creation failed"
-      echo "Databases created successfully"
-      echo "Note: You may be prompted for password 'example' (from docker-compose.yml)"
+      # The 'actionphase' db is created by the container (POSTGRES_DB). This
+      # just adds the test database. Runs psql inside the backend container.
+      echo "Creating actionphase_test database (actionphase is auto-created)..."
+      {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -c "CREATE DATABASE actionphase_test;"' 2>/dev/null \
+        || echo "  (actionphase_test already exists)"
+      echo "✅ Databases ready"
       ;;
     setup)
       just db up
       just db create
-      echo "Database setup complete!"
-      echo "Next steps:"
-      echo "  1. Run migrations: just migrate"
-      echo "  2. Start the backend: just dev"
+      echo "Database setup complete! Migrations auto-run on backend startup."
       ;;
     help|*)
       echo "Usage: just db [action]"
@@ -71,8 +153,8 @@ db action="help":
       echo "Actions:"
       echo "  up        Start database container"
       echo "  down      Stop database container"
-      echo "  reset     Reset database (down + up)"
-      echo "  create    Create dev and test databases"
+      echo "  reset     Reset database (wipe volume + recreate)"
+      echo "  create    Create the test database (dev db is auto-created)"
       echo "  setup     Full database setup (up + create)"
       ;;
   esac
@@ -81,12 +163,25 @@ db action="help":
 # MIGRATION COMMANDS
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Migration operations: create, status, rollback, test
+# All migration/db tooling runs inside the backend container (has migrate, psql,
+# sqlc, and the source mounted). Inside the compose network the db is at db:5432.
+BE := "docker compose -f docker-compose.dev.yml exec -T backend"
+FE := "docker compose -f docker-compose.dev.yml exec -T frontend"
+DEV_DB_URL := "postgres://postgres:example@db:5432/actionphase?sslmode=disable"
+TEST_DB_URL := "postgres://postgres:example@db:5432/actionphase_test?sslmode=disable"
+# Env overrides for the test process. The backend container sets
+# ENVIRONMENT=development (via .env), which flips on dev-mode bypasses in the
+# app (e.g. registration rate limiting / uniqueness checks are skipped). Tests
+# assert the production code paths, so force ENVIRONMENT=test when running them.
+# TEST_DATABASE_URL points at the base test DB; TEST_TEMPLATE_DB tells the Go
+# harness which migrated template to clone a private per-package database from.
+# When TEST_TEMPLATE_DB is set, NewTestDatabase provisions an isolated DB per test
+# binary, so packages can run concurrently (no -p=1 needed).
+TEST_ENV := "ENVIRONMENT=test TEST_DATABASE_URL=\"" + TEST_DB_URL + "\" TEST_TEMPLATE_DB=" + TEST_TEMPLATE_DB + " SKIP_DB_TESTS=false"
+
+# Migration operations: create, status, rollback, test (runs in backend container)
 migration action="" name="":
   #!/usr/bin/env bash
-  DB_URL="postgres://postgres:example@localhost:5432/actionphase?sslmode=disable"
-  TEST_DB_URL="postgres://postgres:example@localhost:5432/actionphase_test?sslmode=disable"
-
   case "{{action}}" in
     create)
       if [ -z "{{name}}" ]; then
@@ -94,16 +189,16 @@ migration action="" name="":
         echo "Usage: just migration create <name>"
         exit 1
       fi
-      migrate create -ext sql -dir backend/pkg/db/migrations {{name}}
+      {{BE}} migrate create -ext sql -dir pkg/db/migrations {{name}}
       ;;
     status)
-      migrate -source file://backend/pkg/db/migrations -database "$DB_URL" version
+      {{BE}} migrate -source file://pkg/db/migrations -database "{{DEV_DB_URL}}" version
       ;;
     rollback)
-      migrate -source file://backend/pkg/db/migrations -database "$DB_URL" down
+      {{BE}} migrate -source file://pkg/db/migrations -database "{{DEV_DB_URL}}" down
       ;;
     test)
-      migrate -source file://backend/pkg/db/migrations -database "$TEST_DB_URL" up
+      {{BE}} migrate -source file://pkg/db/migrations -database "{{TEST_DB_URL}}" up
       ;;
     help|*)
       echo "Usage: just migration [action]"
@@ -116,34 +211,58 @@ migration action="" name="":
       ;;
   esac
 
-# Apply migrations to development database
+# Apply migrations to development database (in backend container)
 migrate:
-  migrate -source file://backend/pkg/db/migrations -database "postgres://postgres:example@localhost:5432/actionphase?sslmode=disable" up
+  {{BE}} migrate -source file://pkg/db/migrations -database "{{DEV_DB_URL}}" up
 
-# Apply migrations to test database
-migrate_test:
-  migrate -source file://backend/pkg/db/migrations -database "postgres://postgres:example@localhost:5432/actionphase_test?sslmode=disable" up
-
-# Drop and recreate test database, then apply all migrations from scratch
-# Use this when the test DB gets into a dirty/broken migration state
-reset_test_db:
+# Drop and recreate the test database from scratch, then apply all migrations.
+# Use when the test DB gets into a dirty/broken migration state.
+reset-test-db:
   #!/usr/bin/env bash
   echo "Dropping test database..."
-  PGPASSWORD=example psql -h localhost -p 5432 -U postgres -d postgres -c "DROP DATABASE IF EXISTS actionphase_test;"
+  {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -c "DROP DATABASE IF EXISTS actionphase_test;"'
   echo "Creating test database..."
-  PGPASSWORD=example psql -h localhost -p 5432 -U postgres -d postgres -c "CREATE DATABASE actionphase_test;"
+  {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -c "CREATE DATABASE actionphase_test;"'
   echo "Applying migrations..."
-  just migrate_test
+  just migration test
   echo "✅ Test database reset complete"
+
+# Name of the migrated template DB that per-package test databases are cloned from.
+TEST_TEMPLATE_DB := "actionphase_test_template"
+TEST_TEMPLATE_URL := "postgres://postgres:example@db:5432/" + TEST_TEMPLATE_DB + "?sslmode=disable"
+
+# Rebuild the migrated test template DB and sweep leftover per-package clones.
+# Each test binary (package) clones this template into its own database at runtime
+# (see NewTestDatabase), so packages never share rows/sequences and can run in
+# parallel. Run before a test suite; cheap because migrations are fast.
+_prepare-test-template:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  # Drop any leftover per-package clones from previous (possibly interrupted) runs,
+  # then rebuild the template so it always matches current migrations. The sweep uses
+  # psql's \gexec to run one DROP per clone server-side (DROP DATABASE can't run inside
+  # a DO/function body), so it is robust to how many clones exist with no shell loop.
+  {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -q -v ON_ERROR_STOP=1 <<'"'"'SQL'"'"'
+  SELECT format('"'"'DROP DATABASE IF EXISTS %I WITH (FORCE)'"'"', datname)
+  FROM pg_database WHERE datname LIKE '"'"'actionphase_test_p%'"'"'
+  \gexec
+  DROP DATABASE IF EXISTS {{TEST_TEMPLATE_DB}} WITH (FORCE);
+  CREATE DATABASE {{TEST_TEMPLATE_DB}};
+  SQL'
+  {{BE}} migrate -source file://pkg/db/migrations -database "{{TEST_TEMPLATE_URL}}" up
+  echo "✅ Test template ready ({{TEST_TEMPLATE_DB}})"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TEST DATA COMMANDS
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Fixture scripts run inside the backend container (source is mounted there,
+# and psql reaches the db service at host 'db'). DB_HOST=db is passed to each.
+
 # Apply test data fixtures to development database
 test-fixtures:
   @echo "Applying test data fixtures..."
-  @./backend/pkg/db/test_fixtures/apply_all.sh
+  {{BE}} env DB_HOST=db bash pkg/db/test_fixtures/apply_all.sh
   @echo "✅ Test data loaded successfully!"
 
 # Reset and reload test data
@@ -152,14 +271,14 @@ test-data action="reload":
   case "{{action}}" in
     reset)
       echo "Resetting test data..."
-      PGPASSWORD=example psql -h localhost -p 5432 -U postgres -d actionphase -f backend/pkg/db/test_fixtures/00_reset.sql
+      {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d actionphase -f pkg/db/test_fixtures/00_reset.sql'
       echo "✅ Test data reset complete"
       ;;
     reload)
       echo "Resetting test data..."
-      PGPASSWORD=example psql -h localhost -p 5432 -U postgres -d actionphase -f backend/pkg/db/test_fixtures/00_reset.sql
+      {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d actionphase -f pkg/db/test_fixtures/00_reset.sql'
       echo "Applying test data fixtures..."
-      ./backend/pkg/db/test_fixtures/apply_all.sh
+      {{BE}} env DB_HOST=db bash pkg/db/test_fixtures/apply_all.sh
       echo "🎉 Test data reloaded!"
       echo ""
       echo "Test Accounts Available:"
@@ -178,41 +297,30 @@ test-data action="reload":
 
 # Load only common base data (users and config)
 load-common:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  echo "🧹 Loading common base data..."
-  DB_NAME=actionphase ./backend/pkg/db/test_fixtures/apply_common.sh
-  echo "✅ Common data loaded (users only, no games)"
+  @echo "🧹 Loading common base data..."
+  {{BE}} env DB_HOST=db DB_NAME=actionphase bash pkg/db/test_fixtures/apply_common.sh
+  @echo "✅ Common data loaded (users only, no games)"
 
 # Load demo data for staging/showcase
 load-demo:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  echo "🎭 Loading demo showcase data..."
-  DB_NAME=actionphase ./backend/pkg/db/test_fixtures/apply_demo.sh
-  echo "✅ Demo data loaded (rich, human-friendly content)"
+  @echo "🎭 Loading demo showcase data..."
+  {{BE}} env DB_HOST=db DB_NAME=actionphase bash pkg/db/test_fixtures/apply_demo.sh
+  @echo "✅ Demo data loaded (rich, human-friendly content)"
 
 # Load E2E test fixtures (worker-specific for parallel execution)
 load-e2e:
   #!/usr/bin/env bash
   set -euo pipefail
   echo "🤖 Loading E2E test fixtures for parallel execution (6 workers)..."
-
-  # Apply common fixtures first
   echo "📦 Applying common fixtures..."
-  bash ./backend/pkg/db/test_fixtures/apply_common.sh
-
-  # Apply E2E worker users (workers 1-5; worker 0 is in common/01_users.sql)
+  {{BE}} env DB_HOST=db DB_NAME=actionphase bash pkg/db/test_fixtures/apply_common.sh
   echo "👥 Creating E2E parallel worker users..."
-  DB_NAME=actionphase ./backend/pkg/db/test_fixtures/apply_e2e_users.sh
-
-  # Apply worker-specific fixtures for all 6 workers
+  {{BE}} env DB_HOST=db DB_NAME=actionphase bash pkg/db/test_fixtures/apply_e2e_users.sh
   echo "🔧 Applying worker-specific fixtures..."
   for i in 0 1 2 3 4 5; do
     echo "  Worker $i..."
-    DB_NAME=actionphase ./backend/pkg/db/test_fixtures/apply_e2e_worker.sh $i > /dev/null 2>&1
+    {{BE}} env DB_HOST=db DB_NAME=actionphase bash pkg/db/test_fixtures/apply_e2e_worker.sh $i > /dev/null 2>&1
   done
-
   echo "✅ E2E fixtures loaded for 6 parallel workers (isolated test games)"
 
 # Load all data (dev only) - same as test-fixtures but with new structure
@@ -229,29 +337,29 @@ load-all:
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Generate SQL code using sqlc
+# Generate SQL code using sqlc (in backend container)
 sqlgen:
-  cd backend/pkg/db && sqlc generate
+  {{BE}} sh -c 'cd pkg/db && sqlc generate'
 
 # ═══════════════════════════════════════════════════════════════════════════
-# GO BACKEND COMMANDS
+# GO BACKEND COMMANDS  (all run inside the backend container)
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Go module maintenance
 tidy:
-  cd backend && go mod tidy
+  {{BE}} go mod tidy
 
 # Format Go code
 fmt:
-  cd backend && go fmt ./...
+  {{BE}} go fmt ./...
 
 # Run Go vet
 vet:
   #!/usr/bin/env bash
-  cd backend
   # Exclude pkg/docs/dist (embedded frontend assets)
-  packages=$(go list ./... | grep -v '/pkg/docs/dist')
+  packages=$({{BE}} go list ./... | grep -v '/pkg/docs/dist' | tr '\n' ' ')
   if [ -n "$packages" ]; then
-    go vet $packages
+    {{BE}} go vet $packages
   else
     echo "No packages to vet"
   fi
@@ -263,16 +371,19 @@ lint: fmt vet
 # Find unreachable/dead code in backend (excludes test helpers and mocks)
 dead-code:
   #!/usr/bin/env bash
-  output=$(cd backend && deadcode ./... 2>&1 | grep -v \
+  output=$({{BE}} deadcode ./... 2>&1 | grep -v \
     "pkg/core/test_\|pkg/core/mocks\|pkg/core/repository_mocks\|pkg/db/services/test_suite\|pkg/http/test_helpers\|pkg/core/test_best_practices" || true)
   if [ -n "$output" ]; then echo "$output"; exit 1; fi
 
+# TypeScript type-check (in frontend container)
 type-check:
- cd frontend && npx tsc --noEmit
+  {{FE}} npx tsc --noEmit
 
+# Dead-export detection (in frontend container)
 knip:
-    cd frontend && npx knip
+  {{FE}} npx knip
 
+# Run all code-quality checks (tidy + lint + dead-code + frontend lint + type-check + knip)
 verify:
   @echo "Verifying code quality..."
   @just tidy
@@ -284,118 +395,19 @@ verify:
   @echo "✅ Code quality verified"
 
 # ═══════════════════════════════════════════════════════════════════════════
-# BUILD COMMANDS
-# ═══════════════════════════════════════════════════════════════════════════
-
-# Build backend
-build:
-  cd backend && go build ./...
-
-# Build with options: backend, frontend, all, binary, ci
-build-all target="backend" *flags="":
-  #!/usr/bin/env bash
-  case "{{target}}" in
-    backend)
-      cd backend && go build ./...
-      ;;
-    frontend)
-      cd frontend && npm run build
-      ;;
-    binary)
-      echo "Building backend binary..."
-      cd backend && go build -o /tmp/actionphase-backend main.go
-      echo "✅ Binary built: /tmp/actionphase-backend"
-      ;;
-    all)
-      echo "Building backend..."
-      cd backend && go build ./...
-      echo "Building frontend..."
-      cd frontend && npm run build
-      echo "✅ All builds complete"
-      ;;
-    ci)
-      echo "Running CI builds..."
-      cd backend && go build ./...
-      cd frontend && npm run build
-      echo "✅ CI build complete"
-      ;;
-    *)
-      echo "Usage: just build-all [target]"
-      echo ""
-      echo "Targets:"
-      echo "  backend     Build backend (default)"
-      echo "  frontend    Build frontend"
-      echo "  binary      Build backend binary to /tmp"
-      echo "  all         Build backend + frontend"
-      echo "  ci          CI build (backend + frontend)"
-      ;;
-  esac
-
-# ═══════════════════════════════════════════════════════════════════════════
 # DEVELOPMENT WORKFLOW
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Complete development environment setup
-dev-setup: tidy
-  @just db setup
-  @echo "Setting up development environment..."
-  @echo "Creating .env file if it doesn't exist..."
-  @if [ ! -f .env ]; then cp .env.example .env; echo "✓ Created .env from .env.example"; fi
-  @echo ""
-  @echo "🎉 Development environment setup complete!"
-  @echo ""
-  @echo "Next steps:"
-  @echo "  1. Review and customize .env file if needed"
-  @echo "  2. Run migrations: just migrate"
-  @echo "  3. Start development: just dev"
-
-# Start development environment (backend only)
-dev:
-  @echo "Starting ActionPhase development environment..."
-  @echo "📋 Checking environment..."
-  @if [ ! -f .env ]; then echo "❌ .env file not found. Run 'just dev-setup' first."; exit 1; fi
-  @echo "✓ .env file found"
-  @echo "✓ Starting database..."
-  @just db up
-  @sleep 2
-  @echo "✓ Database running"
-  @echo ""
-  @echo "🚀 Starting backend server..."
-  @echo "   Backend: http://localhost:3000"
-  @echo "   Database: localhost:5432"
-  @echo ""
-  @echo "Press Ctrl+C to stop"
-  cd backend && go run main.go
-
-# Start services: backend, frontend, or all
-start service="backend":
+# Complete first-time dev setup: create .env, then build images + start the container stack.
+dev-setup:
   #!/usr/bin/env bash
-  case "{{service}}" in
-    backend)
-      cd backend && go run main.go
-      ;;
-    frontend)
-      cd frontend && npm run dev
-      ;;
-    all)
-      echo "Starting full development environment..."
-      echo "Backend: http://localhost:3000"
-      echo "Frontend: http://localhost:5173"
-      echo "Press Ctrl+C to stop all services"
-      trap 'kill 0' SIGINT; \
-      (cd backend && go run main.go) & \
-      (cd frontend && npm run dev) & \
-      wait
-      ;;
-    *)
-      echo "Usage: just start [service]"
-      echo ""
-      echo "Services:"
-      echo "  backend     Start backend only (default)"
-      echo "  frontend    Start frontend only"
-      echo "  all         Start both backend and frontend"
-      ;;
-  esac
+  echo "Setting up containerized development environment..."
+  if [ ! -f .env ]; then cp .env.example .env; echo "✓ Created .env from .env.example"; fi
+  echo "Building images and starting the stack..."
+  just up build
+  echo ""
+  echo "🎉 Dev environment ready. Migrations auto-run on backend startup."
+  echo "   Load test data with: just test-data reload"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # BACKEND TESTING
@@ -405,60 +417,62 @@ start service="backend":
 _clean_test_db:
   #!/usr/bin/env bash
   echo "🧹 Cleaning actionphase_test database for integration tests..."
-  PGPASSWORD=example psql -h localhost -p 5432 -U postgres -d actionphase_test -q -c "
+  {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d actionphase_test -q -c "
   DO \$\$
   DECLARE
       r RECORD;
   BEGIN
-      FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-          EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' RESTART IDENTITY CASCADE';
+      FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = '"'"'public'"'"') LOOP
+          EXECUTE '"'"'TRUNCATE TABLE '"'"' || quote_ident(r.tablename) || '"'"' RESTART IDENTITY CASCADE'"'"';
       END LOOP;
   END \$\$;
-  " 2>&1 | grep -v "NOTICE" || true
+  "' 2>&1 | grep -v "NOTICE" || true
   echo "✅ Test database cleaned"
 
 # Run all backend tests (default: everything with database)
+# Each package clones its own DB from the migrated template, so packages run in
+# parallel safely (no -p=1). Set TEST_P (e.g. TEST_P=1) to override concurrency.
 test:
   @echo "🧪 Running all backend tests (integration + mocks)..."
-  @just _clean_test_db
-  cd backend && TEST_DATABASE_URL="postgres://postgres:example@localhost:5432/actionphase_test?sslmode=disable" SKIP_DB_TESTS=false go test -p=1 ./...
+  @just _prepare-test-template
+  {{BE}} env {{TEST_ENV}} go test ./...
 
 # Run fast mock tests only (no database required)
 test-mocks:
   @echo "⚡ Running mock tests only (fast, parallel)..."
-  cd backend && SKIP_DB_TESTS=true go test ./...
+  {{BE}} env ENVIRONMENT=test SKIP_DB_TESTS=true go test ./...
 
 # Run database service integration tests only
 test-integration:
   @echo "🗄️  Running database integration tests..."
-  @just _clean_test_db
-  cd backend && TEST_DATABASE_URL="postgres://postgres:example@localhost:5432/actionphase_test?sslmode=disable" SKIP_DB_TESTS=false go test -p=1 ./pkg/db/services/...
+  @just _prepare-test-template
+  {{BE}} env {{TEST_ENV}} go test ./pkg/db/services/...
 
 # Run tests with coverage report
 test-coverage:
   @echo "📊 Running all tests with coverage..."
-  @just _clean_test_db
-  cd backend && TEST_DATABASE_URL="postgres://postgres:example@localhost:5432/actionphase_test?sslmode=disable" SKIP_DB_TESTS=false go test -p=1 -coverprofile=coverage.out ./...
+  @just _prepare-test-template
+  {{BE}} env {{TEST_ENV}} go test -coverprofile=coverage.out ./...
   @echo ""
   @echo "Coverage report generated: backend/coverage.out"
-  @cd backend && go tool cover -func=coverage.out | tail -1
+  @{{BE}} go tool cover -func=coverage.out | tail -1
 
 # Run tests with race detector
 test-race:
   @echo "🔍 Running tests with race detector..."
-  @just _clean_test_db
-  cd backend && TEST_DATABASE_URL="postgres://postgres:example@localhost:5432/actionphase_test?sslmode=disable" SKIP_DB_TESTS=false go test -p=1 -race ./...
+  @just _prepare-test-template
+  {{BE}} env {{TEST_ENV}} CGO_ENABLED=1 go test -race ./...
 
 # Clean test cache
 test-clean:
-  cd backend && go clean -testcache
+  {{BE}} go clean -testcache
   @echo "✅ Test cache cleaned"
 
 # Run specific test by name
 test-run pattern:
   @echo "🎯 Running tests matching: {{pattern}}"
-  @just _clean_test_db
-  cd backend && TEST_DATABASE_URL="postgres://postgres:example@localhost:5432/actionphase_test?sslmode=disable" SKIP_DB_TESTS=false go test -p=1 -v -run {{pattern}} ./...
+  @just _prepare-test-template
+  {{BE}} env {{TEST_ENV}} go test -v -run {{pattern}} ./...
 
 # ═══════════════════════════════════════════════════════════════════════════
 # FRONTEND TESTING
@@ -474,6 +488,8 @@ test-run pattern:
 # package-lock.json, so it can never touch your local node_modules (a Linux
 # `npm ci`/`install` against a mounted tree would clobber your macOS native
 # bindings, e.g. @oxc-parser/binding-darwin-arm64, and break `just knip`).
+#
+# Regenerate frontend/package-lock.json in a Linux container (run after dep changes).
 relock-frontend:
   #!/usr/bin/env bash
   set -euo pipefail
@@ -486,51 +502,62 @@ relock-frontend:
   cp "$workdir/package-lock.json" frontend/package-lock.json
   echo "✅ Lockfile regenerated. Review the diff and commit frontend/package-lock.json"
 
-# Run frontend tests (default: run once)
-test-frontend:
-  cd frontend && npm test
-
-# Frontend testing with options
+# Frontend testing with options (runs in frontend container)
+# Interactive modes (watch/ui) use a TTY-attached exec.
 test-fe mode="run" file="":
   #!/usr/bin/env bash
-  cd frontend
-
+  FE='docker compose -f docker-compose.dev.yml exec -T frontend'
+  FE_IT='docker compose -f docker-compose.dev.yml exec frontend'
+  # `npm test` is bare `vitest`, which watches unless told otherwise. The
+  # non-interactive modes pass `--run` explicitly rather than relying on the
+  # absence of a TTY to imply it.
   case "{{mode}}" in
-    run)
-      npm test
-      ;;
-    watch)
-      npm run test:watch
-      ;;
-    coverage)
-      npm run test:coverage
-      ;;
-    ui)
-      npm run test:ui
-      ;;
-    file)
-      if [ -z "{{file}}" ]; then
+    run|file)
+      # A path narrows the run to matching files; without one the whole suite
+      # runs. `file` is kept as an alias so `just test-fe file <path>` still
+      # works, but it's the same thing as passing a path to `run`.
+      if [ "{{mode}}" = "file" ] && [ -z "{{file}}" ]; then
         echo "❌ File path required for file mode"
         echo "Usage: just test-fe file path/to/test.tsx"
         exit 1
       fi
-      npm test -- {{file}}
+      $FE npx vitest run {{file}}
+      ;;
+    watch)
+      $FE_IT npm run test:watch -- {{file}}
+      ;;
+    coverage)
+      $FE npx vitest run --coverage {{file}}
+      ;;
+    ui)
+      $FE_IT npm run test:ui -- {{file}}
       ;;
     *)
       echo "Usage: just test-fe [mode] [file]"
       echo ""
       echo "Modes:"
-      echo "  run         Run tests once (default)"
-      echo "  watch       Run tests in watch mode"
-      echo "  coverage    Run tests with coverage report"
-      echo "  ui          Run tests with interactive UI"
-      echo "  file <path> Run specific test file"
+      echo "  run [path]      Run tests once (default), optionally filtered to path"
+      echo "  watch [path]    Run tests in watch mode"
+      echo "  coverage [path] Run tests with coverage report"
+      echo "  ui [path]       Run tests with interactive UI"
+      echo "  file <path>     Run specific test file (alias for: run <path>)"
+      echo ""
+      echo "Examples:"
+      echo "  just test-fe"
+      echo "  just test-fe run src/components/Foo.test.tsx"
+      echo "  just test-fe watch src/hooks"
       ;;
   esac
 
 # ═══════════════════════════════════════════════════════════════════════════
 # E2E TESTING
 # ═══════════════════════════════════════════════════════════════════════════
+
+# E2E runs in the Playwright container (profile "e2e"), driving the running
+# frontend/backend services. Fixtures are loaded first via `just load-e2e`
+# (backend container), then Playwright runs with in-process setup skipped.
+# --rm cleans up the one-shot container; the stack must be up (just up).
+PW := "docker compose -f docker-compose.dev.yml --profile e2e run --rm playwright"
 
 # Run E2E tests on both desktop and mobile (sequential to avoid fixture conflicts)
 e2e:
@@ -542,41 +569,29 @@ e2e-mobile:
   @echo "🔄 Applying E2E test fixtures..."
   @just load-e2e
   @echo ""
-  cd frontend && npx playwright test --project=mobile-chrome
+  {{PW}} npx playwright test --project=mobile-chrome
 
 # Run E2E tests on desktop only (Chrome)
 e2e-desktop:
   @echo "🔄 Applying E2E test fixtures..."
   @just load-e2e
   @echo ""
-  cd frontend && npx playwright test --project=chromium
+  {{PW}} npx playwright test --project=chromium
 
-# E2E testing with options
+# E2E testing with options (runs in Playwright container)
+# Note: headed/ui/debug need a display and are host-only — see 'just dev-help'.
 e2e-test mode="headless" file="":
   #!/usr/bin/env bash
-
-  # Apply fixtures first
+  PW='docker compose -f docker-compose.dev.yml --profile e2e run --rm playwright'
   echo "🔄 Applying E2E test fixtures..."
   just load-e2e
   echo ""
-
-  cd frontend
-
   case "{{mode}}" in
     headless)
-      npm run test:e2e
-      ;;
-    headed)
-      npm run test:e2e:headed
-      ;;
-    ui)
-      npm run test:e2e:ui
-      ;;
-    debug)
-      npm run test:e2e:debug
+      $PW npx playwright test
       ;;
     report)
-      npm run test:e2e:report
+      $PW npx playwright show-report --host 0.0.0.0
       ;;
     file)
       if [ -z "{{file}}" ]; then
@@ -584,107 +599,33 @@ e2e-test mode="headless" file="":
         echo "Usage: just e2e-test file path/to/test.spec.ts"
         exit 1
       fi
-      npx playwright test {{file}}
+      $PW npx playwright test {{file}}
+      ;;
+    headed|ui|debug)
+      echo "❌ '{{mode}}' needs a display and can't run headless in the container."
+      echo "   For visual/interactive E2E, run Playwright on the host against the"
+      echo "   containerized app: cd frontend && E2E_NO_WEBSERVER=true npx playwright test --{{mode}}"
+      exit 1
       ;;
     *)
       echo "Usage: just e2e-test [mode] [file]"
       echo ""
       echo "Modes:"
       echo "  headless    Run headless (default)"
-      echo "  headed      Run with browser visible"
-      echo "  ui          Run with interactive UI"
-      echo "  debug       Run in debug mode"
-      echo "  report      Show test report"
+      echo "  report      Show HTML test report"
       echo "  file <path> Run specific test file"
+      echo "  headed/ui/debug  (host-only — needs a display)"
       ;;
   esac
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PROCESS MANAGEMENT
+# PRODUCTION LOGGING  (run on the prod server; reads /opt/actionphase/logs)
 # ═══════════════════════════════════════════════════════════════════════════
+# For containerized DEV logs use `just dev-logs [svc]` instead.
 
-# Kill processes: backend, frontend, all, or port
-kill target="all" port="3000":
-  #!/usr/bin/env bash
-  case "{{target}}" in
-    backend)
-      echo "Stopping backend..."
-      pkill -f "go run main.go" || pkill -f "actionphase-backend" || echo "Backend not running"
-      ;;
-    frontend)
-      echo "Stopping frontend..."
-      pkill -f "vite" || pkill -f "npm run dev" || echo "Frontend not running"
-      ;;
-    all)
-      echo "Stopping all services..."
-      pkill -f "go run main.go" || pkill -f "actionphase-backend" || true
-      pkill -f "vite" || pkill -f "npm run dev" || true
-      echo "✅ All services stopped"
-      ;;
-    port)
-      echo "Killing process on port {{port}}..."
-      lsof -ti:{{port}} | xargs kill -9 2>/dev/null || echo "No process on port {{port}}"
-      ;;
-    *)
-      echo "Usage: just kill [target] [port]"
-      echo ""
-      echo "Targets:"
-      echo "  backend     Kill backend process"
-      echo "  frontend    Kill frontend process"
-      echo "  all         Kill all processes (default)"
-      echo "  port <num>  Kill process on specific port"
-      ;;
-  esac
-
-# Restart services: backend, frontend, or all
-restart target="backend":
-  #!/usr/bin/env bash
-  case "{{target}}" in
-    backend)
-      echo "🔄 Restarting backend..."
-      just kill backend
-      sleep 1
-      echo "Building..."
-      cd backend && go build -o /tmp/actionphase-backend main.go
-      echo "Starting backend..."
-      /tmp/actionphase-backend &
-      echo "✅ Backend restarted (PID: $!)"
-      echo "Logs: just logs backend --follow"
-      ;;
-    frontend)
-      echo "🔄 Restarting frontend..."
-      just kill frontend
-      sleep 1
-      echo "Starting frontend..."
-      cd frontend && npm run dev > /tmp/frontend.log 2>&1 &
-      echo "✅ Frontend restarted (PID: $!)"
-      echo "Logs: just logs frontend --follow"
-      ;;
-    all)
-      echo "🔄 Restarting all services..."
-      just restart backend
-      echo ""
-      just restart frontend
-      echo ""
-      echo "✅ All services restarted!"
-      ;;
-    *)
-      echo "Usage: just restart [target]"
-      echo ""
-      echo "Targets:"
-      echo "  backend     Restart backend (default)"
-      echo "  frontend    Restart frontend"
-      echo "  all         Restart all services"
-      ;;
-  esac
-
-# ═══════════════════════════════════════════════════════════════════════════
-# LOGGING
-# ═══════════════════════════════════════════════════════════════════════════
-
-# View logs: just logs [target] [lines] [follow]
+# View production logs: just prod-logs [target] [lines] [follow]
 # Targets: backend (default), frontend, nginx, postgres, all
-logs target="backend" lines="50" follow="false":
+prod-logs target="backend" lines="50" follow="false":
   #!/usr/bin/env bash
   LOG_DIR=/opt/actionphase/logs
   case "{{target}}" in
@@ -732,15 +673,15 @@ logs target="backend" lines="50" follow="false":
       tail -n {{lines}} "$LOG_DIR/frontend/access.log" 2>/dev/null
       ;;
     *)
-      echo "Usage: just logs [target] [lines] [follow]"
+      echo "Usage: just prod-logs [target] [lines] [follow]"
       echo "Targets: backend (default), frontend, nginx, postgres, all"
       ;;
   esac
 
-# Search backend logs: just log-grep [pattern] [level] [lines]
+# Search production backend logs: just prod-log-grep [pattern] [level] [lines]
 # level: all (default), error, warn, info, debug
-# Examples: just log-grep "user_id" | just log-grep "" error | just log-grep "correlation_id" all 500
-log-grep pattern="" level="all" lines="200":
+# Examples: just prod-log-grep "user_id" | just prod-log-grep "" error | just prod-log-grep "correlation_id" all 500
+prod-log-grep pattern="" level="all" lines="200":
   #!/usr/bin/env bash
   LOG_FILE=/opt/actionphase/logs/backend/app.log
   if [ ! -f "$LOG_FILE" ]; then echo "Backend log not found: $LOG_FILE"; exit 1; fi
@@ -758,38 +699,23 @@ log-grep pattern="" level="all" lines="200":
 # STATUS & HEALTH
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Complete system status check
+# Complete system status check (containerized dev stack)
 status:
   @echo "═══════════════════════════════════════════════════════════"
   @echo "            ActionPhase System Status"
   @echo "═══════════════════════════════════════════════════════════"
   @echo ""
-  @echo "=== Services ==="
-  @echo -n "Backend:  "
-  @if pgrep -f "go run main.go" > /dev/null || pgrep -f "actionphase-backend" > /dev/null; then \
-    echo "✅ Running"; \
-  else \
-    echo "❌ Not running"; \
-  fi
-  @echo -n "Frontend: "
-  @if pgrep -f "vite" > /dev/null; then \
-    echo "✅ Running"; \
-  else \
-    echo "❌ Not running"; \
-  fi
+  @echo "=== Containers ==="
+  @docker compose -f docker-compose.dev.yml ps
   @echo ""
-  @echo "=== Database ==="
-  @if docker ps | grep -q actionphase-db; then \
-    echo "✅ Database container is running"; \
-  else \
-    echo "❌ Database container is not running"; \
-  fi
-  @echo ""
-  @just migration status 2>/dev/null || echo "❌ Database connection failed"
+  @echo "=== Migrations ==="
+  @just migration status 2>/dev/null || echo "❌ Database connection failed (is the stack up? just up)"
   @echo ""
   @echo "=== API Health ==="
-  @echo -n "Health endpoint: "
+  @printf "Health endpoint: "
   @curl -sf http://localhost:3000/health > /dev/null 2>&1 && echo "✅ Healthy" || echo "❌ Down"
+  @printf "Frontend (Vite): "
+  @curl -sf http://localhost:5173/ > /dev/null 2>&1 && echo "✅ Serving" || echo "❌ Down"
   @echo ""
   @echo "=== Git Status ==="
   @git status --short | head -10
@@ -800,12 +726,12 @@ status:
 # CLEANUP
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Clean build artifacts and caches
+# Clean build artifacts and caches (in containers)
 clean:
   @echo "Cleaning build artifacts..."
-  @cd backend && go clean -testcache
-  @cd backend && go clean
-  @cd frontend && rm -rf node_modules/.cache dist 2>/dev/null || true
+  @{{BE}} go clean -testcache
+  @{{BE}} go clean
+  @{{FE}} sh -c 'rm -rf node_modules/.cache dist 2>/dev/null || true'
   @echo "✅ Cleanup complete"
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -814,52 +740,48 @@ clean:
 
 # Run CI test suite
 ci-test: lint
-  @just test-backend --race
-  @just test-frontend
+  @just test-race
+  @just test-fe
   @echo "✅ CI test suite complete"
 
 # Run full test suite (backend + frontend)
 test-all:
-  @just test-backend --all
-  @just test-frontend
+  @just test
+  @just test-fe
   @echo "✅ All tests complete"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # FRONTEND PACKAGE MANAGEMENT
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Install frontend dependencies
-install-frontend:
-  cd frontend && npm install
+# Frontend deps live in the image (installed at build time). To change deps:
+# edit package.json, then `just relock-frontend` and `just rebuild frontend`.
 
-# Lint frontend code
+# Lint frontend code (in frontend container)
 lint-frontend:
-  cd frontend && npm run lint
-
-# Preview frontend build
-preview-frontend:
-  cd frontend && npm run preview
+  {{FE}} npm run lint
 
 # ═══════════════════════════════════════════════════════════════════════════
-# DOCUMENTATION
+# DOCUMENTATION  (VitePress; runs in an ephemeral node container)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Start documentation development server
+# Ephemeral node container for the separate docs-site npm project.
+DOCS_RUN := "docker run --rm -v " + justfile_directory() + "/docs-site:/docs -w /docs node:24"
+
+# Start documentation development server (http://localhost:5174)
 docs-dev:
-  cd docs-site && npm run docs:dev
+  docker run --rm -it -p 5174:5174 -v "{{justfile_directory()}}/docs-site":/docs -w /docs node:24 \
+    sh -c 'npm install && npm run docs:dev -- --host --port 5174'
 
 # Build documentation site
 docs-build:
-  cd docs-site && npm install && npm run docs:build
+  {{DOCS_RUN}} sh -c 'npm install && npm run docs:build'
   @echo "✅ Documentation built to docs-site/.vitepress/dist"
 
-# Preview built documentation
+# Preview built documentation (http://localhost:5175)
 docs-preview:
-  cd docs-site && npm run docs:preview
-
-# Install documentation dependencies
-docs-install:
-  cd docs-site && npm install
+  docker run --rm -it -p 5175:5175 -v "{{justfile_directory()}}/docs-site":/docs -w /docs node:24 \
+    sh -c 'npm run docs:preview -- --host --port 5175'
 
 # Build and embed documentation in backend
 docs-embed: docs-build
@@ -867,16 +789,8 @@ docs-embed: docs-build
   rm -rf backend/pkg/docs/dist
   cp -r docs-site/.vitepress/dist backend/pkg/docs/dist
   @echo "✅ Documentation embedded at backend/pkg/docs/dist"
-  @echo "🔧 Rebuild backend to include updated docs: just build or go run backend/main.go"
+  @echo "🔧 Restart the backend to include updated docs: just restart backend"
 
-# Validate API documentation completeness
+# Validate API documentation completeness (in backend container)
 api-docs-validate:
-  #!/usr/bin/env bash
-  cd backend
-  go run scripts/validate-api-docs.go
-
-# Generate skeleton documentation for undocumented routes
-api-docs-generate:
-  #!/usr/bin/env bash
-  cd backend
-  go run scripts/generate-doc-skeleton.go
+  {{BE}} go run scripts/validate-api-docs.go

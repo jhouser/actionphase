@@ -1,4 +1,3 @@
-import { execSync } from 'child_process';
 import { test, expect } from '@playwright/test';
 import { loginAs } from '../fixtures/auth-helpers';
 import { assertUrl } from '../utils/assertions';
@@ -13,34 +12,17 @@ import { DEFAULT_TIMEOUT } from '../config/test-timeouts';
  * - Change Email (with verification)
  *
  * NOTE: The username-change test intercepts the API call at the network layer
- * so it does not mutate the shared test user's username in the DB. The backend
+ * so it never mutates the shared test user's username in the DB. The backend
  * handler tests own the DB-mutation assertion; this test owns the UI flow
- * (form renders, submits, toast appears, display updates).
- * This is necessary because username changes have a 30-day cooldown, making
- * DB mutation in a shared fixture user non-restorable within test runs.
- *
- * An afterEach resets the username via psql as a safety net in case the
- * intercept fails and the real API mutates the DB.
+ * (form renders, submits, toast appears, display updates). Because username
+ * changes have a 30-day cooldown, a real mutation would be non-restorable
+ * within a run — so the intercept (not any DB reset) is what keeps the fixture
+ * user clean. The remaining tests only trigger validation / wrong-password
+ * paths or the email form, none of which mutate the username. No DB teardown
+ * is needed, so this suite does not touch the database directly.
  */
 
-function resetWorkerUsername() {
-  const workerIndex = process.env.TEST_PARALLEL_INDEX
-    ? parseInt(process.env.TEST_PARALLEL_INDEX, 10)
-    : 0;
-  const suffix = workerIndex === 0 ? '' : `_${workerIndex}`;
-  const username = `TestPlayer1${suffix}`;
-  const email = `test_player1${suffix}@example.com`;
-  execSync(
-    `psql postgres://postgres:example@localhost:5432/actionphase -c "UPDATE users SET username = '${username}' WHERE email = '${email}'"`,
-    { stdio: 'ignore' }
-  );
-}
-
 test.describe('Account Security Management', () => {
-  test.afterEach(() => {
-    resetWorkerUsername();
-  });
-
   test('should successfully change username', async ({ page }) => {
     await loginAs(page, 'PLAYER_1');
     await assertUrl(page, '/dashboard');

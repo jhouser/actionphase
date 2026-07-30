@@ -24,21 +24,11 @@ export function usePhaseManagement(gameId: number) {
   // Ensure phases is always an array
   const phases = phasesData || [];
 
-  // Query for current active phase
-  const { data: currentPhaseData } = useQuery({
-    queryKey: ['currentPhase', gameId],
-    queryFn: () => apiClient.phases.getCurrentPhase(gameId).then(res => res.data),
-    enabled: !!gameId,
-    refetchOnMount: 'always',
-    staleTime: 0
-  });
-
   // Mutation for creating a new phase
   const createPhaseMutation = useMutation({
     mutationFn: (data: CreatePhaseRequest) => apiClient.phases.createPhase(gameId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gamePhases', gameId] });
-      queryClient.invalidateQueries({ queryKey: ['currentPhase', gameId] });
     }
   });
 
@@ -47,10 +37,14 @@ export function usePhaseManagement(gameId: number) {
     mutationFn: (phaseId: number) => apiClient.phases.activatePhase(phaseId),
     onSuccess: async () => {
       // Force immediate refetch instead of just invalidation
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ['gamePhases', gameId] }),
-        queryClient.refetchQueries({ queryKey: ['currentPhase', gameId] })
-      ]);
+      await queryClient.refetchQueries({ queryKey: ['gamePhases', gameId] });
+      // Activation is the one mutation that changes which phase is active, so
+      // give the GM instant feedback on the separate ['currentPhase'] query
+      // (GameDetailsPage) rather than waiting on its poll. Other mutations
+      // don't change the active phase, so they rely on the poll — keeping the
+      // request volume down was the point of dropping the per-mutation
+      // currentPhase invalidations.
+      queryClient.invalidateQueries({ queryKey: ['currentPhase', gameId] });
     },
     onError: (error) => {
       logger.error('Failed to activate phase', { error, gameId });
@@ -64,7 +58,6 @@ export function usePhaseManagement(gameId: number) {
       apiClient.phases.updatePhaseDeadline(phaseId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gamePhases', gameId] });
-      queryClient.invalidateQueries({ queryKey: ['currentPhase', gameId] });
     }
   });
 
@@ -74,7 +67,6 @@ export function usePhaseManagement(gameId: number) {
       apiClient.phases.updatePhase(phaseId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gamePhases', gameId] });
-      queryClient.invalidateQueries({ queryKey: ['currentPhase', gameId] });
     }
   });
 
@@ -83,7 +75,6 @@ export function usePhaseManagement(gameId: number) {
     mutationFn: (phaseId: number) => apiClient.phases.deletePhase(phaseId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gamePhases', gameId] });
-      queryClient.invalidateQueries({ queryKey: ['currentPhase', gameId] });
     },
     onError: (error) => {
       logger.error('Failed to delete phase', { error, gameId });
@@ -92,7 +83,10 @@ export function usePhaseManagement(gameId: number) {
     }
   });
 
-  const currentPhase = currentPhaseData?.phase || phases.find(p => p.is_active);
+  // getGamePhases already returns every phase including the active one, so
+  // this is derived rather than fetched separately — see the removed
+  // getCurrentPhase query this replaced.
+  const currentPhase = phases.find(p => p.is_active);
 
   return {
     phases,

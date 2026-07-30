@@ -34,7 +34,7 @@ test.describe('@mobile Deep Linking in Common Room', () => {
     await loginAs(page, 'GM');
 
     const gameId = await getFixtureGameId(page, 'DEEP_LINKING_TEST');
-    await page.goto(`http://localhost:5173/games/${gameId}?tab=common-room`);
+    await page.goto(`/games/${gameId}?tab=common-room`);
     await page.waitForLoadState('networkidle');
 
     await page.locator('h2').filter({ hasText: /Common Room/ }).waitFor({ timeout: 10000 });
@@ -63,7 +63,7 @@ test.describe('@mobile Deep Linking in Common Room', () => {
     const gameId = await getFixtureGameId(page, 'DEEP_LINKING_TEST');
 
     // Navigate once to establish auth context, then fetch IDs via API
-    await page.goto(`http://localhost:5173/games/${gameId}?tab=common-room`);
+    await page.goto(`/games/${gameId}?tab=common-room`);
     await page.waitForLoadState('networkidle');
 
     const { shallowCommentId, deepCommentId } = await getDeepLinkingCommentIds(page, gameId);
@@ -75,7 +75,7 @@ test.describe('@mobile Deep Linking in Common Room', () => {
     const commentIds = isMobile ? [shallowCommentId] : [shallowCommentId, deepCommentId];
 
     for (const commentId of commentIds) {
-      await page.goto(`http://localhost:5173/games/${gameId}?tab=common-room&comment=${commentId}`);
+      await page.goto(`/games/${gameId}?tab=common-room&comment=${commentId}`);
       await page.waitForLoadState('networkidle');
 
       // URL param removed indicates deep-link logic completed
@@ -96,20 +96,20 @@ test.describe('@mobile Deep Linking in Common Room', () => {
     const gameId = await getFixtureGameId(page, 'DEEP_LINKING_TEST');
 
     // Navigate once to establish auth context, then fetch IDs via API
-    await page.goto(`http://localhost:5173/games/${gameId}?tab=common-room`);
+    await page.goto(`/games/${gameId}?tab=common-room`);
     await page.waitForLoadState('networkidle');
 
     const { shallowCommentId } = await getDeepLinkingCommentIds(page, gameId);
 
     // Navigate to New Comments tab
-    await page.goto(`http://localhost:5173/games/${gameId}?tab=common-room&view=newComments`);
+    await page.goto(`/games/${gameId}?tab=common-room&view=newComments`);
     await page.waitForLoadState('networkidle');
 
     const newCommentsButton = page.locator('button').filter({ hasText: /^New Comments$/ });
     await expect(newCommentsButton).toHaveClass(/border-accent-primary/);
 
     // Deep link — should switch to Posts tab
-    await page.goto(`http://localhost:5173/games/${gameId}?tab=common-room&comment=${shallowCommentId}`);
+    await page.goto(`/games/${gameId}?tab=common-room&comment=${shallowCommentId}`);
     await page.waitForLoadState('networkidle');
 
     const postsButton = page.locator('button').filter({ hasText: /^Posts$/ });

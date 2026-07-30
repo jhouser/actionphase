@@ -1,0 +1,139 @@
+# Fully containerized local development.
+#
+# Unlike docker-compose.yml (production: baked binaries + nginx), this runs the
+# live dev servers *inside* containers with source bind-mounted:
+#   - backend:  Air live-reload (recompiles Go on save)
+#   - frontend: Vite dev server with HMR
+#   - db:       reuses the same postgres image + pgdata volume as prod
+#
+# Usage: just up / just down / just logs / just sh <svc>
+#   (or: docker compose -f docker-compose.dev.yml up)
+
+name: actionphase-dev
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: actionphase-dev-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: example
+      POSTGRES_DB: actionphase
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/pkg/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d actionphase"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - actionphase-dev
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: actionphase-dev-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "2345:2345"  # Delve headless debugger — attach from IDE
+    # Delve needs these to control the traced process inside the container.
+    security_opt:
+      - "seccomp:unconfined"
+    cap_add:
+      - SYS_PTRACE
+    env_file:
+      - .env
+    environment:
+      # Docker-network overrides (win over .env via compose precedence).
+      DATABASE_URL: "postgres://postgres:example@db:5432/actionphase?sslmode=disable"
+      PORT: 3000
+      HOST: 0.0.0.0
+      RUN_MIGRATIONS: "true"
+      # Serve uploaded avatars/banners via a RELATIVE URL. The .env default is
+      # absolute (http://localhost:3000/uploads), which the browser inside the
+      # Playwright container can't reach (localhost:3000 there is the Playwright
+      # container, not the backend). A relative /uploads resolves against the
+      # page origin — localhost:5173 on the host, frontend:5173 in-container —
+      # and is proxied to the backend by Vite (see vite.config.ts). Dev-only;
+      # production still uses absolute S3 URLs.
+      STORAGE_PUBLIC_URL: "/uploads"
+    volumes:
+      # Live source. Named volumes shadow host dirs we don't want bind-mounted:
+      - ./backend:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      - backend-tmp:/app/tmp
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - actionphase-dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: actionphase-dev-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      # Proxy /api, /ping, /docs to the backend *service* (not localhost, which
+      # inside this container would be the frontend itself).
+      VITE_PROXY_TARGET: "http://backend:3000"
+    volumes:
+      # Live source, but keep the container's Linux node_modules (named volume)
+      # so the host's macOS-native install can't clobber it.
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - actionphase-dev
+
+  # Playwright E2E runner. Profile-gated: does NOT start with `just up` — only
+  # when invoked via `just e2e` (docker compose --profile e2e run playwright ...).
+  # Drives the running frontend/backend services over the compose network.
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.56.1-noble
+    profiles: ["e2e"]
+    working_dir: /app
+    environment:
+      # Target the running frontend service; don't let Playwright spawn its own.
+      E2E_BASE_URL: "http://frontend:5173"
+      E2E_NO_WEBSERVER: "true"
+      # Fixtures are loaded by `just load-e2e` (backend container) before this runs.
+      E2E_SKIP_FIXTURE_SETUP: "true"
+      CI: "true"
+    volumes:
+      # Same source + node_modules layout as the frontend container so specs,
+      # config, and the Linux-native install are all available.
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - actionphase-dev
+
+networks:
+  actionphase-dev:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local
+  go-mod-cache:
+    driver: local
+  go-build-cache:
+    driver: local
+  backend-tmp:
+    driver: local
+  frontend-node-modules:
+    driver: local

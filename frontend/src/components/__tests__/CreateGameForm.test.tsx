@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
@@ -221,18 +221,16 @@ describe('CreateGameForm', () => {
       const onSuccess = vi.fn();
       renderWithProviders(<CreateGameForm onSuccess={onSuccess} />);
 
-      // Fill all fields
-      await user.type(screen.getByLabelText(/game title/i), 'Epic Adventure');
-      await user.type(screen.getByLabelText(/description/i), 'An amazing journey');
-      await user.type(screen.getByLabelText(/genre/i), 'Fantasy');
-
-      const maxPlayersInput = screen.getByLabelText(/maximum players/i);
-      await user.clear(maxPlayersInput);
-      await user.type(maxPlayersInput, '10');
-
-      await user.type(screen.getByLabelText(/recruitment deadline/i), '2025-12-31T23:59');
-      await user.type(screen.getByLabelText(/start date/i), '2026-01-01T00:00');
-      await user.type(screen.getByLabelText(/end date/i), '2026-06-30T23:59');
+      // Fill all fields. fireEvent.change commits the whole value in one update
+      // instead of one re-render per keystroke across seven fields, which is what
+      // pushed this test past the timeout under parallel load.
+      fireEvent.change(screen.getByLabelText(/game title/i), { target: { value: 'Epic Adventure' } });
+      fireEvent.change(screen.getByLabelText(/description/i), { target: { value: 'An amazing journey' } });
+      fireEvent.change(screen.getByLabelText(/genre/i), { target: { value: 'Fantasy' } });
+      fireEvent.change(screen.getByLabelText(/maximum players/i), { target: { value: '10' } });
+      fireEvent.change(screen.getByLabelText(/recruitment deadline/i), { target: { value: '2025-12-31T23:59' } });
+      fireEvent.change(screen.getByLabelText(/start date/i), { target: { value: '2026-01-01T00:00' } });
+      fireEvent.change(screen.getByLabelText(/end date/i), { target: { value: '2026-06-30T23:59' } });
 
       // Submit
       await user.click(screen.getByRole('button', { name: /create game/i }));
@@ -256,8 +254,20 @@ describe('CreateGameForm', () => {
 
       renderWithProviders(<CreateGameForm onSuccess={onSuccess} />);
 
-      await user.type(screen.getByLabelText(/game title/i), '  Spaced Title  ');
-      await user.type(screen.getByLabelText(/description/i), '  Spaced Description  ');
+      const titleInput = screen.getByLabelText(/game title/i);
+      const descriptionInput = screen.getByLabelText(/description/i);
+
+      await user.click(titleInput);
+      await user.paste('  Spaced Title  ');
+      await user.click(descriptionInput);
+      await user.paste('  Spaced Description  ');
+
+      // Guard against submitting a partially-committed controlled input.
+      await waitFor(() => {
+        expect(titleInput).toHaveValue('  Spaced Title  ');
+        expect(descriptionInput).toHaveValue('  Spaced Description  ');
+      });
+
       await user.click(screen.getByRole('button', { name: /create game/i }));
 
       await waitFor(() => {

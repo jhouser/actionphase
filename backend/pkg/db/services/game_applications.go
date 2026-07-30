@@ -66,6 +66,16 @@ func (gas *GameApplicationService) CreateGameApplication(ctx context.Context, re
 		return nil, fmt.Errorf("failed to clear stale rejected application: %w", err)
 	}
 
+	// Delete any stale approved application — this happens when a user's application was
+	// approved (making them a participant), and they later left/were removed from the game.
+	// Without this, the unique constraint on (game_id, user_id) permanently blocks re-applying.
+	if err := queries.DeleteStaleApprovedApplicationForUser(ctx, models.DeleteStaleApprovedApplicationForUserParams{
+		GameID: req.GameID,
+		UserID: req.UserID,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to clear stale approved application: %w", err)
+	}
+
 	// Create the application
 	var messageText pgtype.Text
 	if req.Message != "" {
@@ -189,7 +199,16 @@ func (gas *GameApplicationService) ApproveGameApplication(ctx context.Context, a
 
 	// For audience applications, create participant immediately
 	// Audience members can apply at any time (not just during recruitment),
-	// so they should become participants as soon as approved
+	// so they should become participants as soon as approved.
+	//
+	// Once the participant exists, the application record has served its purpose and
+	// is deleted: approved audience members should exist ONLY as participants, never
+	// as a lingering 'approved' application. This matches the two other approval paths
+	// (auto-accept in games.ApplyToGame, and recruitment-close in
+	// ConvertApprovedApplicationsToParticipants), both of which already delete the
+	// audience application after creating the participant. Leaving it behind is what
+	// caused stale 'approved' rows that blocked re-applying, broke withdrawal, and
+	// showed contradictory UI after a member left.
 	if application.Role == core.RoleAudience {
 		_, err = queries.AddGameParticipant(ctx, models.AddGameParticipantParams{
 			GameID: application.GameID,
@@ -198,6 +217,13 @@ func (gas *GameApplicationService) ApproveGameApplication(ctx context.Context, a
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create participant from audience application: %w", err)
+		}
+
+		if err = queries.DeleteGameApplication(ctx, models.DeleteGameApplicationParams{
+			ID:     applicationID,
+			UserID: application.UserID,
+		}); err != nil {
+			return fmt.Errorf("failed to delete audience application after creating participant: %w", err)
 		}
 	}
 
@@ -253,6 +279,23 @@ func (gas *GameApplicationService) DeleteGameApplication(ctx context.Context, ap
 	})
 	if err != nil {
 		return fmt.Errorf("failed to delete game application: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteStaleApprovedApplicationForUser removes a leftover 'approved' application for a
+// user who is no longer an active participant in the game. It is a no-op if the user is
+// still an active participant, so it never removes a live application.
+func (gas *GameApplicationService) DeleteStaleApprovedApplicationForUser(ctx context.Context, gameID, userID int32) error {
+	queries := models.New(gas.DB)
+
+	err := queries.DeleteStaleApprovedApplicationForUser(ctx, models.DeleteStaleApprovedApplicationForUserParams{
+		GameID: gameID,
+		UserID: userID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete stale approved application: %w", err)
 	}
 
 	return nil

@@ -1,0 +1,28 @@
+# Development image: live-reloads the Go backend with Air.
+# Unlike the production Dockerfile, this does NOT bake a binary — source is
+# bind-mounted at runtime and Air recompiles on change inside the container.
+FROM golang:1.26-alpine
+
+# git: go module fetches. curl: healthcheck. gcc/musl-dev: cgo. netcat: wait-for-db.
+# postgresql-client: psql for fixtures/reset. make: some go tools.
+# python3: E2E worker fixture scripts use it for game-ID offset arithmetic.
+RUN apk add --no-cache git curl gcc musl-dev netcat-openbsd postgresql-client make bash python3
+
+# Dev/build tooling, all pinned for reproducibility:
+#   air   — Go live reload
+#   dlv   — Delve remote debugger
+#   migrate — DB migrations CLI (postgres driver; version matches go.mod)
+#   sqlc  — SQL -> Go codegen
+RUN go install github.com/air-verse/air@v1.61.7 \
+ && go install github.com/go-delve/delve/cmd/dlv@v1.27.0 \
+ && go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.0 \
+ && go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 \
+ && go install golang.org/x/tools/cmd/deadcode@latest
+
+WORKDIR /app
+
+# 3000: app.  2345: Delve headless debug server (attach from IDE).
+# Air config + entrypoint live in the repo; source is bind-mounted over /app at runtime.
+EXPOSE 3000 2345
+
+CMD ["sh", "scripts/dev-entrypoint.sh"]

@@ -28,6 +28,15 @@ interface HistoryViewProps {
 export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience = false, isGameCompleted = false }: HistoryViewProps) {
   const gameContext = useOptionalGameContext();
   const portraitAvatars = gameContext?.game?.portrait_avatars ?? false;
+  const allGameCharacters = gameContext?.allGameCharacters;
+
+  // Submissions and results carry only character_id/character_name, so the
+  // avatar URL is looked up from the game's character list — same as
+  // ActionsList and AllActionSubmissionsView.
+  const getAvatarUrl = (characterId?: number | null) =>
+    characterId
+      ? (allGameCharacters?.find(c => c.id === characterId)?.avatar_url ?? null)
+      : null;
   const [selectedPhaseId, setSelectedPhaseId] = useUrlParam<number | null>(
     'phase',
     null,
@@ -191,8 +200,13 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
             phaseId={selectedPhaseId}
             phaseTitle={selectedPhase.title || getActionPhaseLabel(selectedPhase)}
             phaseDescription={selectedPhase.description}
+            // The phase being viewed, not necessarily the game's active phase.
+            // Utility Drawer panels (e.g. Mark All Read) need the phase object,
+            // not just its id, to scope their actions.
+            currentPhase={selectedPhase}
             isCurrentPhase={false} // Always read-only in history view
             isGM={isGM}
+            isAudience={isAudience}
             isGameCompleted={isGameCompleted}
           />
         ) : (
@@ -260,6 +274,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                             <div className="flex items-start gap-3 mb-3">
                               <CharacterAvatar
                                 characterName={submission.character_name || 'Unknown'}
+                                avatarUrl={getAvatarUrl(submission.character_id)}
                                 size="md"
                                 shape={portraitAvatars ? 'portrait' : 'circle'}
                               />
@@ -347,6 +362,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                             <div className="flex items-start gap-3 mb-3">
                               <CharacterAvatar
                                 characterName={result.character_name || 'Unknown'}
+                                avatarUrl={getAvatarUrl(result.character_id)}
                                 size="md"
                                 shape={portraitAvatars ? 'portrait' : 'circle'}
                               />

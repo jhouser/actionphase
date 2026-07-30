@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { themes, type ThemeName } from '../lib/theme/themes';
+import { useAuth } from './AuthContext';
+import { useUserPreferences, useUpdateUserPreferences } from '../hooks/useUserPreferences';
 
 /**
  * Theme mode can be a specific theme name or 'system' to auto-detect
@@ -44,11 +46,37 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
  * }
  */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // Get saved theme from localStorage, default to 'system'
-  const [theme, setTheme] = useState<ThemeMode>(() => {
+  // Get saved theme from localStorage, default to 'system'. This applies
+  // instantly (including pre-auth), then gets overridden below by the
+  // server-stored preference once it's fetched, so theme stays in sync
+  // across devices for a signed-in user.
+  const [theme, setThemeState] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('app-theme') as ThemeMode;
     return saved || 'system';
   });
+
+  const { isAuthenticated } = useAuth();
+  const { data: serverPreferences } = useUserPreferences({ enabled: isAuthenticated });
+  const updatePreferences = useUpdateUserPreferences();
+
+  // Sync from the server preference once it's loaded for a signed-in user.
+  // The server stores 'system' as 'auto'.
+  useEffect(() => {
+    if (isAuthenticated && serverPreferences?.theme) {
+      setThemeState(serverPreferences.theme === 'auto' ? 'system' : (serverPreferences.theme as ThemeMode));
+    }
+  }, [isAuthenticated, serverPreferences?.theme]);
+
+  const setTheme = (newTheme: ThemeMode) => {
+    setThemeState(newTheme);
+    if (isAuthenticated) {
+      updatePreferences.mutate({
+        theme: newTheme === 'system' ? 'auto' : newTheme,
+        comment_read_mode: serverPreferences?.comment_read_mode ?? 'manual',
+        font_size: serverPreferences?.font_size ?? 'medium',
+      });
+    }
+  };
 
   // Track system theme preference
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>('light');

@@ -10,6 +10,7 @@ import (
 type PreferencesData struct {
 	Theme                string          `json:"theme"`                           // "light" | "dark" | "auto"
 	CommentReadMode      string          `json:"comment_read_mode"`               // "auto" | "manual"
+	FontSize             string          `json:"font_size"`                       // "small" | "medium" | "large"
 	DiscordNotifications map[string]bool `json:"discord_notifications,omitempty"` // per-type Discord DM toggles
 }
 

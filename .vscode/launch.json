@@ -11,6 +11,22 @@
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}"
+        },
+        {
+            // Attach to the Delve server running in the backend dev container.
+            // Start the stack first (`just up`), then run this config. Set
+            // breakpoints normally — Air rebuilds restart Delve, so if a rebuild
+            // detaches the session, just re-run this config.
+            "name": "Attach to backend (Docker/Delve)",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "host": "127.0.0.1",
+            "port": 2345,
+            // Map the container's /app to the local backend source so breakpoints
+            // resolve to the right files.
+            "remotePath": "/app",
+            "cwd": "${workspaceFolder}/backend"
         }
     ]
 }

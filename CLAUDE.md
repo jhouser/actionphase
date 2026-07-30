@@ -162,30 +162,50 @@ lsof -ti:3000 | xargs kill
 
 ## Quick Start Commands
 
+> **Local dev is fully containerized.** The only host requirements are `just`,
+> `docker`, and `docker-compose` — no host Go/Node/psql/migrate. All app commands
+> exec inside the containers defined in `docker-compose.dev.yml`. Run
+> `just dev-help` for the cheatsheet, and see
+> `.claude/reference/DEVELOPMENT_SETUP.md` for full details (incl. Delve debugging).
+
 ### Environment Setup
 ```bash
-# Complete setup (database + environment + dependencies)
+# First-time setup: create .env, build images, start the stack
 just dev-setup
 
-# Apply database migrations
-just migrate
+# Subsequently, just bring the stack up (migrations auto-run on backend boot)
+just up
 
-# Start development server
-just dev
+# Load test data (optional)
+just test-data reload
 ```
+
+Stack URLs: frontend `http://localhost:5173`, backend `http://localhost:3000`,
+Postgres `localhost:5432`, Delve debugger `localhost:2345`.
 
 ### Development Workflow
 
-**Backend Development**:
+**Lifecycle** (containerized stack):
 ```bash
-just dev                      # Start backend with .env loading
+just up                       # Start db + backend + frontend
+just down                     # Stop the stack (data preserved)
+just ps                       # Container status
+just dev-logs backend         # Tail a service's logs
+just sh backend               # Shell into a container for one-off commands
+```
+
+Code hot-reloads automatically: edit a `.go` file (Air rebuilds ~1–2s) or a
+frontend file (Vite HMR) on the host and the running container picks it up.
+
+**Backend Development** (all run in the backend container):
+```bash
 just sqlgen                   # Generate Go code from SQL queries
 just test                     # Run all tests
 just test-mocks               # Fast unit tests (~300ms)
 just ci-test                  # Full CI test suite (lint + test + race)
 ```
 
-**API Testing with curl**:
+**API Testing with curl** (backend is published on localhost:3000):
 ```bash
 # ALWAYS use this pattern for authenticated API requests:
 curl -s -H "Authorization: Bearer $(cat /tmp/api-token.txt)" "http://localhost:3000/api/v1/endpoint"
@@ -198,9 +218,10 @@ curl -s -H "Authorization: Bearer $(cat /tmp/api-token.txt)" "http://localhost:3
 
 **Frontend Development**:
 ```bash
-just run-frontend             # Start development server
-just test-frontend            # Run frontend tests
+# The frontend container serves Vite with HMR (started by `just up`).
+just test-frontend            # Run frontend tests (in container)
 just test-fe watch            # Watch mode for development
+just lint-frontend            # eslint (in container)
 ```
 
 **Database Management**:
@@ -210,8 +231,10 @@ just migrate                  # Apply migrations to actionphase database
 just migrate_test             # Apply migrations to test database
 
 # ⚠️ CRITICAL: Always use 'actionphase' database name
-# Correct:   postgres://postgres:example@localhost:5432/actionphase
-# WRONG:     postgres://postgres:example@localhost:5432/database
+# Inside the compose network the host is `db`, not localhost:
+#   Correct:   postgres://postgres:example@db:5432/actionphase
+#   From host: postgres://postgres:example@localhost:5432/actionphase
+#   WRONG:     .../database
 ```
 
 **For complete command reference, see justfile or run `just --list`**

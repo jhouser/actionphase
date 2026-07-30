@@ -21,14 +21,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setupTestDB creates a test database connection
+// setupTestDB creates a test database connection.
+//
+// Delegates to core.NewTestDatabase so this honors TEST_DATABASE_URL (works
+// inside the containerized dev stack where the DB host is `db`, not localhost)
+// and respects SKIP_DB_TESTS=true — these are DB tests and must be skipped in
+// mock mode, not attempt (and fail) a connection.
 func setupTestDB(t *testing.T) *pgxpool.Pool {
 	ctx := context.Background()
 
-	// Use test database connection string
-	connString := "postgres://postgres:example@localhost:5432/actionphase_test"
-	pool, err := pgxpool.New(ctx, connString)
-	require.NoError(t, err, "Failed to connect to test database")
+	testDB := core.NewTestDatabase(t) // t.Skip()s the test when SKIP_DB_TESTS=true
+	pool := testDB.Pool
 
 	// Clean up tables for test isolation (in correct order due to foreign keys)
 	tables := []string{
@@ -40,8 +43,7 @@ func setupTestDB(t *testing.T) *pgxpool.Pool {
 	}
 
 	for _, table := range tables {
-		_, err = pool.Exec(ctx, fmt.Sprintf("DELETE FROM %s", table))
-		if err != nil {
+		if _, err := pool.Exec(ctx, fmt.Sprintf("DELETE FROM %s", table)); err != nil {
 			// Some tables might not exist in all test scenarios, log but continue
 			t.Logf("Warning: Failed to clean up %s table: %v", table, err)
 		}

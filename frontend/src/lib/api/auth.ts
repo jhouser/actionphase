@@ -9,8 +9,9 @@ import type {
   User
 } from '../../types/auth';
 
-type Theme = 'light' | 'dark' | 'auto';
+type Theme = 'light' | 'dark' | 'highContrast' | 'highContrastDark' | 'colorblind' | 'auto';
 export type CommentReadMode = 'auto' | 'manual';
+export type FontSize = 'small' | 'medium' | 'large';
 
 export type NotificationTypePref =
   | 'private_message'
@@ -29,6 +30,7 @@ export type NotificationTypePref =
 export interface UserPreferences {
   theme: Theme;
   comment_read_mode: CommentReadMode;
+  font_size: FontSize;
   discord_notifications?: Partial<Record<NotificationTypePref, boolean>>;
 }
 

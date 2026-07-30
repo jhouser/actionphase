@@ -101,6 +101,7 @@ WHERE ((gp.user_id = $1 AND gp.status = 'active' AND gp.role != 'audience') OR g
   AND m.created_at > NOW() - INTERVAL '7 days'
   AND m.author_id != $1
   AND m.is_deleted = false
+  AND m.is_draft = false
 ORDER BY m.created_at DESC
 LIMIT $2;
 

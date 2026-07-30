@@ -294,6 +294,27 @@ func (s *MessageService) DeleteManualCommentReadsForGame(ctx context.Context, ga
 	return nil
 }
 
+// MarkAllCommentsReadForPhase marks every comment in a phase as manually read by a user.
+// Idempotent - comments already marked read are left untouched.
+//
+// Parameters:
+//   - ctx: Request context
+//   - userID: The user marking content as read
+//   - gameID: The game the phase belongs to
+//   - phaseID: The phase whose comments should be marked read
+func (s *MessageService) MarkAllCommentsReadForPhase(ctx context.Context, userID, gameID, phaseID int32) error {
+	queries := models.New(s.DB)
+	err := queries.MarkAllCommentsReadForPhase(ctx, models.MarkAllCommentsReadForPhaseParams{
+		UserID:  userID,
+		GameID:  gameID,
+		PhaseID: pgtype.Int4{Int32: phaseID, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to mark all comments read for phase: %w", err)
+	}
+	return nil
+}
+
 // Helper function to convert DB read marker to core model
 func readMarkerToCore(dbMarker *models.UserCommonRoomRead) *core.ReadMarker {
 	marker := &core.ReadMarker{

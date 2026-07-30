@@ -1,0 +1,33 @@
+# Air config for containerized dev — live reload of the Go backend.
+# See https://github.com/air-verse/air
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Build into tmp/ (git-ignored). Full package build so all of ./pkg is compiled.
+  # -gcflags "all=-N -l" disables optimizations/inlining so Delve breakpoints and
+  # variable inspection map cleanly to source.
+  cmd = "go build -gcflags \"all=-N -l\" -o ./tmp/main ."
+  bin = "./tmp/main"
+  # Run the freshly-built binary under a headless Delve server instead of directly.
+  #   --continue           app runs immediately; no need to attach before it starts
+  #   --accept-multiclient IDE can detach/reattach across Air rebuilds
+  #   exec ./tmp/main      debug the already-built binary (fast; no recompile in dlv)
+  # On each rebuild Air restarts this, which restarts Delve on :2345; the IDE reconnects.
+  full_bin = "dlv exec ./tmp/main --headless --listen=:2345 --api-version=2 --accept-multiclient --continue --check-go-version=false --log"
+  # Watch these extensions for changes.
+  include_ext = ["go", "sql"]
+  # Don't watch generated/vendored/output dirs or tests.
+  exclude_dir = ["tmp", "uploads", "test-results", "scripts", "pkg/db/test_fixtures"]
+  exclude_regex = ["_test\\.go$"]
+  # Give the compiler a moment to see all writes from an editor save.
+  delay = 500
+  stop_on_error = true
+  send_interrupt = true
+  kill_delay = "2s"
+
+[log]
+  time = true
+
+[misc]
+  clean_on_exit = true

@@ -68,6 +68,12 @@ func (h *Handler) ApplyToGame(w http.ResponseWriter, r *http.Request) {
 			h.renderError(ctx, w, r, core.ErrBadRequest(err), "Bad apply to game request", "error", err)
 			return
 		}
+		if fmt.Sprintf("%v", err) == "user's previous application was rejected" {
+			// A rejection is terminal — the user cannot re-apply. This is a client-side
+			// condition (400), not a server error.
+			h.renderError(ctx, w, r, core.ErrBadRequest(err), "Bad apply to game request", "error", err)
+			return
+		}
 
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to apply to game", "error", err)
 		return
@@ -79,22 +85,15 @@ func (h *Handler) ApplyToGame(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		// Auto-accept audience applications if setting is enabled
 		if data.Role == core.RoleAudience && game.AutoAcceptAudience {
-			// Auto-approve the application (creates participant immediately)
+			// Auto-approve the application. ApproveGameApplication creates the participant
+			// and deletes the audience application record, so an approved audience member
+			// exists only as a participant; no stale 'approved' application is left behind.
 			approveErr := applicationService.ApproveGameApplication(ctx, application.ID, game.GmUserID)
 			if approveErr != nil {
 				h.App.ObsLogger.LogError(ctx, approveErr, "Failed to auto-approve audience application",
 					"application_id", application.ID, "user_id", userID, "game_id", gameID)
 				// Don't fail the request - application still created as pending
 			} else {
-				// Delete the application record since user is now a participant
-				// This prevents confusion - approved audience members should only exist as participants
-				deleteErr := applicationService.DeleteGameApplication(ctx, application.ID, userID)
-				if deleteErr != nil {
-					h.App.ObsLogger.LogError(ctx, deleteErr, "Failed to delete application after auto-accept",
-						"application_id", application.ID, "user_id", userID, "game_id", gameID)
-					// Don't fail - participant is created, we can clean up application later
-				}
-
 				// Send approval notification to the applicant
 				notificationService := h.NotificationService
 				title := fmt.Sprintf("Joined %s", game.Title)
@@ -325,9 +324,40 @@ func (h *Handler) ReviewGameApplication(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Return updated application
+	// Notify an approved audience applicant immediately. Audience approval makes them a
+	// participant right away and deletes their application, so — unlike player applicants,
+	// who are notified in bulk when the GM closes recruitment — there is no later step that
+	// would notify them. Best-effort: don't fail the request if the notification errors.
+	if data.Action == "approve" && application.Role == core.RoleAudience {
+		if notifErr := h.NotificationService.NotifyApplicationApproved(ctx, application.UserID, int32(gameID), game.Title); notifErr != nil {
+			h.App.ObsLogger.Warn(ctx, "Failed to send audience approval notification", "error", notifErr, "game_id", gameID, "user_id", application.UserID)
+		}
+	}
+
+	// Return updated application.
+	// Approving an audience application deletes it (the user is now a participant, not an
+	// applicant — see ApproveGameApplication), so the re-fetch can legitimately 404. In that
+	// case synthesize the response from the application we already loaded above rather than
+	// erroring: the approval itself succeeded.
 	updatedApplication, err := applicationService.GetGameApplication(ctx, int32(applicationID))
 	if err != nil {
+		if data.Action == "approve" && application.Role == core.RoleAudience {
+			reviewerID := authUser.ID
+			response := &GameApplicationResponse{
+				ID:               application.ID,
+				GameID:           application.GameID,
+				UserID:           application.UserID,
+				Role:             application.Role,
+				Status:           core.ApplicationStatusApproved,
+				AppliedAt:        application.AppliedAt.Time,
+				ReviewedByUserID: &reviewerID,
+			}
+			if application.Message.Valid {
+				response.Message = application.Message.String
+			}
+			render.Render(w, r, response)
+			return
+		}
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get updated application", "error", err, "application_id", applicationID)
 		return
 	}
@@ -386,10 +416,16 @@ func (h *Handler) GetMyGameApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine what status to show to the applicant
-	// If status hasn't been published, show "pending" regardless of actual status
+	// Determine what status to show to the applicant.
+	// Player applications are decided in bulk when the GM closes recruitment
+	// (see PublishApplicationStatuses), so their real status is hidden as "pending"
+	// until that publish step runs. Audience applications are decided individually and
+	// immediately and never go through that publish step, so IsPublished is never set
+	// for them. A surviving audience application is therefore a rejection (approvals
+	// delete the row — see ApproveGameApplication), and the applicant should see
+	// "rejected" right away rather than a permanent, misleading "pending".
 	displayStatus := application.Status.String
-	if !application.IsPublished {
+	if application.Role != core.RoleAudience && !application.IsPublished {
 		displayStatus = core.ApplicationStatusPending
 	}
 
@@ -506,17 +542,28 @@ func (h *Handler) WithdrawGameApplication(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Only allow withdrawal of pending applications
-	if application.Status.String != core.ApplicationStatusPending {
+	if application.Status.String == core.ApplicationStatusPending {
+		// Delete the application instead of marking as withdrawn
+		// This allows users to reapply if they change their mind
+		err = applicationService.DeleteGameApplication(ctx, application.ID, userID)
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete application", "error", err, "application_id", application.ID)
+			return
+		}
+	} else if application.Status.String == core.ApplicationStatusApproved && application.Role == core.RoleAudience {
+		// Audience applications (unlike player applications) create a game_participants row
+		// immediately on approval. If that participant later left/was removed, the 'approved'
+		// application row becomes stale — it no longer represents any live membership, so allow
+		// withdrawal to clear it rather than forcing a 400 the user has no way to resolve.
+		// DeleteStaleApprovedApplicationForUser only removes it if the user is NOT currently
+		// an active participant, so a genuinely active audience membership is never touched.
+		err = applicationService.DeleteStaleApprovedApplicationForUser(ctx, int32(gameID), userID)
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete stale application", "error", err, "application_id", application.ID)
+			return
+		}
+	} else {
 		h.renderError(ctx, w, r, core.ErrBadRequest(fmt.Errorf("can only withdraw pending applications")), "Bad withdraw game application request")
-		return
-	}
-
-	// Delete the application instead of marking as withdrawn
-	// This allows users to reapply if they change their mind
-	err = applicationService.DeleteGameApplication(ctx, application.ID, userID)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete application", "error", err, "application_id", application.ID)
 		return
 	}
 

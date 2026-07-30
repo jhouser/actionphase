@@ -1,0 +1,18 @@
+# Development image: runs the Vite dev server with HMR.
+# Unlike the production Dockerfile (build -> static dist -> nginx), source is
+# bind-mounted at runtime and Vite serves + hot-reloads it live.
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Install deps in the image so a fresh container is runnable before the source
+# bind-mount lands. node_modules is a named volume at runtime (see compose), so
+# this baked copy is the fallback/seed, and stays Linux-native regardless of host.
+COPY package*.json ./
+RUN npm ci
+
+# 5173: Vite dev server.
+EXPOSE 5173
+
+# --host binds 0.0.0.0 so the port is reachable from outside the container.
+CMD ["npm", "run", "dev", "--", "--host"]

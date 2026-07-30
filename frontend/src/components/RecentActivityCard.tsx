@@ -1,12 +1,19 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { DashboardMessage } from '../types/dashboard';
-import { MessageSquare, Clock } from 'lucide-react';
+import { MessageSquare, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatRelativeTime } from '../lib/utils/dates';
 
 const stripMarkdown = (text: string) => text.replace(/(\*\*|__|[*_`#>])/g, '').trim();
 
 interface RecentActivityCardProps {
   messages: DashboardMessage[];
+  /**
+   * Renders the card collapsed behind its header. Used on the single-game
+   * dashboard, where this is ambient context competing with the Inbox for the
+   * fold; the multi-game sidebar leaves it expanded.
+   */
+  defaultCollapsed?: boolean;
 }
 
 /**
@@ -33,17 +40,45 @@ function getMessageLink(message: DashboardMessage): string {
 /**
  * RecentActivityCard - Display recent messages from games
  */
-export function RecentActivityCard({ messages }: RecentActivityCardProps) {
+export function RecentActivityCard({ messages, defaultCollapsed = false }: RecentActivityCardProps) {
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+
   if (messages.length === 0) {
     return null;
   }
 
+  const header = (
+    <>
+      <MessageSquare className="w-5 h-5 text-content-tertiary mr-2 flex-shrink-0" />
+      <h2 className="text-lg font-bold text-content-primary">Recent Activity</h2>
+    </>
+  );
+
   return (
     <div className="surface-base rounded-lg shadow-lg p-4 sm:p-8">
-      <div className="flex items-center mb-4">
-        <MessageSquare className="w-5 h-5 text-content-tertiary mr-2" />
-        <h2 className="text-lg font-bold text-content-primary">Recent Activity</h2>
-      </div>
+      {defaultCollapsed ? (
+        <button
+          type="button"
+          onClick={() => setIsCollapsed((prev) => !prev)}
+          aria-expanded={!isCollapsed}
+          className={`w-full flex items-center justify-between rounded ${isCollapsed ? '' : 'mb-4'}`}
+        >
+          <span className="flex items-center">
+            {header}
+            <span className="ml-2 text-sm font-normal text-content-tertiary">
+              {messages.length}
+            </span>
+          </span>
+          {isCollapsed ? (
+            <ChevronDown className="w-5 h-5 text-content-tertiary flex-shrink-0" />
+          ) : (
+            <ChevronUp className="w-5 h-5 text-content-tertiary flex-shrink-0" />
+          )}
+        </button>
+      ) : (
+        <div className="flex items-center mb-4">{header}</div>
+      )}
+      {!isCollapsed && (
       <div className="space-y-4">
         {messages.map((message) => {
           const isPrivate = message.message_type === 'private_message';
@@ -83,6 +118,7 @@ export function RecentActivityCard({ messages }: RecentActivityCardProps) {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

@@ -110,6 +110,9 @@ describe('MessageThread draft clearing on conversation change', () => {
 
     const { rerender } = render(<MessageThread {...defaultProps} conversationId={1} />);
 
+    // Composer is collapsed by default; open it via the Reply button.
+    await user.click(screen.getByRole('button', { name: 'Reply' }));
+
     const textarea = screen.getByPlaceholderText('Type your message...');
     await user.type(textarea, 'drafted text for wrong recipient');
     expect(textarea).toHaveValue('drafted text for wrong recipient');
@@ -124,14 +127,18 @@ describe('MessageThread draft clearing on conversation change', () => {
 });
 
 describe('MessageThread observability', () => {
-  it('names the private-message send button for Faro user-action attribution', () => {
+  it('names the private-message send button for Faro user-action attribution', async () => {
     // Participants must be present for the send form (and its button) to render.
     baseConversationContext.conversation = {
       conversation: { id: 1, game_id: 1, title: 'Test Chat', conversation_type: 'direct', created_by_user_id: 1, created_at: '2026-01-01', updated_at: '2026-01-01' },
       participants: [{ id: 1, conversation_id: 1, character_id: 10, character_name: 'TestChar', user_id: 1, username: 'testuser', joined_at: '2026-01-01' }],
     };
 
+    const user = userEvent.setup();
     render(<MessageThread {...defaultProps} />);
+
+    // Composer is collapsed by default; open it via the Reply button.
+    await user.click(screen.getByRole('button', { name: 'Reply' }));
 
     expect(
       screen.getByRole('button', { name: 'Send' })

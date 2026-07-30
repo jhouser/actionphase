@@ -101,6 +101,17 @@ describe('MessageThread', () => {
     );
   });
 
+  // The composer is collapsed behind a "Reply" button until the user opens it
+  // (see MessageThread). Tests that interact with the textarea/character
+  // select/Send button must open it first. Only valid when messaging is allowed
+  // (common_room/interlude) — in other phases there is no Reply button and no
+  // composer, just the phase-restriction alert.
+  const openComposer = async (user: ReturnType<typeof userEvent.setup>) => {
+    const replyButton = await screen.findByRole('button', { name: /^reply$/i });
+    await user.click(replyButton);
+    await screen.findByPlaceholderText(/type your message/i);
+  };
+
   describe('Loading State', () => {
     it('shows loading indicator initially', () => {
       renderWithProviders(
@@ -295,46 +306,50 @@ describe('MessageThread', () => {
 
   describe('Message Input', () => {
     it('shows message input when user has participating characters', async () => {
+      const user = userEvent.setup();
       renderWithProviders(
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/type your message/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
+
+      expect(screen.getByPlaceholderText(/type your message/i)).toBeInTheDocument();
     });
 
     it('shows character selector when user has multiple participants', async () => {
+      const user = userEvent.setup();
       renderWithProviders(
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByText(/send as hero character/i)).toBeInTheDocument();
-        expect(screen.getByText(/send as companion character/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
+
+      expect(screen.getByText(/send as hero character/i)).toBeInTheDocument();
+      expect(screen.getByText(/send as companion character/i)).toBeInTheDocument();
     });
 
     it('hides character selector when user has only one participant', async () => {
+      const user = userEvent.setup();
       const singleCharacter = [mockCharacters[0]];
 
       renderWithProviders(
         <MessageThread gameId={1} conversationId={1} characters={singleCharacter} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.queryByText(/send as/i)).not.toBeInTheDocument();
-      });
+      await openComposer(user);
+
+      expect(screen.queryByText(/send as/i)).not.toBeInTheDocument();
     });
 
     it('shows help text about keyboard shortcut', async () => {
+      const user = userEvent.setup();
       renderWithProviders(
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByText(/press ctrl\/cmd \+ enter to send/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
+
+      expect(screen.getByText(/press ctrl\/cmd \+ enter to send/i)).toBeInTheDocument();
     });
 
     it('shows message when user has no characters', async () => {
@@ -376,9 +391,7 @@ describe('MessageThread', () => {
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/type your message/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
       await user.type(textarea, 'Test message');
@@ -403,9 +416,7 @@ describe('MessageThread', () => {
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/type your message/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
       await user.type(textarea, 'New test message');
@@ -432,17 +443,17 @@ describe('MessageThread', () => {
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/type your message/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
       await user.type(textarea, 'Message to clear');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
-      await waitFor(() => {
-        expect(textarea).toHaveValue('');
-      });
+      // After sending, the composer collapses back to the Reply button; the
+      // draft is discarded (reopening yields an empty textarea).
+      await screen.findByRole('button', { name: /^reply$/i });
+      await openComposer(user);
+      expect(screen.getByPlaceholderText(/type your message/i)).toHaveValue('');
     });
 
     it('shows sending state while message is being sent', async () => {
@@ -459,14 +470,15 @@ describe('MessageThread', () => {
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/type your message/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
 
       await user.type(screen.getByPlaceholderText(/type your message/i), 'Test');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
-      expect(screen.getByText(/sending\.\.\./i)).toBeInTheDocument();
+      // The button shows "Sending..." while the POST is in flight (mock delays
+      // 100ms). Poll for it rather than asserting synchronously, since the click
+      // await may already have advanced past the initial render.
+      await screen.findByText(/sending\.\.\./i);
 
       await waitFor(() => {
         expect(screen.queryByText(/sending\.\.\./i)).not.toBeInTheDocument();
@@ -474,14 +486,15 @@ describe('MessageThread', () => {
     });
 
     it('disables send button when message is empty', async () => {
+      const user = userEvent.setup();
       renderWithProviders(
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        const sendButton = screen.getByRole('button', { name: /^send$/i });
-        expect(sendButton).toBeDisabled();
-      });
+      await openComposer(user);
+
+      const sendButton = screen.getByRole('button', { name: /^send$/i });
+      expect(sendButton).toBeDisabled();
     });
 
     it('disables send button when message is only whitespace', async () => {
@@ -491,9 +504,7 @@ describe('MessageThread', () => {
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/type your message/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
       await user.type(textarea, '   '); // Only spaces
@@ -517,9 +528,7 @@ describe('MessageThread', () => {
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/type your message/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
 
       await user.type(screen.getByPlaceholderText(/type your message/i), '  Trimmed message  ');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
@@ -544,9 +553,7 @@ describe('MessageThread', () => {
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/type your message/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
 
       await user.type(screen.getByPlaceholderText(/type your message/i), 'Test');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
@@ -571,9 +578,7 @@ describe('MessageThread', () => {
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByText(/send as hero character/i)).toBeInTheDocument();
-      });
+      await openComposer(user);
 
       // Select second character
       const select = screen.getByRole('combobox');
@@ -611,14 +616,15 @@ describe('MessageThread', () => {
 
   describe('Character Selection Logic', () => {
     it('auto-selects first participating character', async () => {
+      const user = userEvent.setup();
       renderWithProviders(
         <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        const select = screen.getByRole('combobox') as HTMLSelectElement;
-        expect(select.value).toBe('1'); // First character
-      });
+      await openComposer(user);
+
+      const select = screen.getByRole('combobox') as HTMLSelectElement;
+      expect(select.value).toBe('1'); // First character
     });
 
     it('filters characters to only show conversation participants', async () => {
@@ -635,15 +641,16 @@ describe('MessageThread', () => {
         },
       ];
 
+      const user = userEvent.setup();
       renderWithProviders(
         <MessageThread gameId={1} conversationId={1} characters={mixedCharacters} currentPhaseType="common_room" />
       );
 
-      await waitFor(() => {
-        expect(screen.getByText(/send as hero character/i)).toBeInTheDocument();
-        expect(screen.getByText(/send as companion character/i)).toBeInTheDocument();
-        expect(screen.queryByText(/non-participant/i)).not.toBeInTheDocument();
-      });
+      await openComposer(user);
+
+      expect(screen.getByText(/send as hero character/i)).toBeInTheDocument();
+      expect(screen.getByText(/send as companion character/i)).toBeInTheDocument();
+      expect(screen.queryByText(/non-participant/i)).not.toBeInTheDocument();
     });
   });
 
@@ -1137,18 +1144,19 @@ describe('MessageThread', () => {
         />
       );
 
+      // In a non-messaging phase the composer is not rendered at all — only the
+      // restriction alert. There is no Reply button, textarea, or Send button.
       await waitFor(() => {
         expect(screen.getByText(/new messages can only be sent during common room or interlude phases/i)).toBeInTheDocument();
       });
 
-      const sendButton = screen.getByRole('button', { name: /send/i });
-      expect(sendButton).toBeDisabled();
-
-      const textarea = screen.getByPlaceholderText(/messaging is only available during common room or interlude phases/i);
-      expect(textarea).toBeDisabled();
+      expect(screen.queryByRole('button', { name: /^reply$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^send$/i })).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText(/type your message/i)).not.toBeInTheDocument();
     });
 
     it('enables messaging during common_room phase', async () => {
+      const user = userEvent.setup();
       renderWithProviders(
         <MessageThread
           gameId={1}
@@ -1161,6 +1169,8 @@ describe('MessageThread', () => {
       await waitFor(() => {
         expect(screen.queryByText(/new messages can only be sent during common room or interlude phases/i)).not.toBeInTheDocument();
       });
+
+      await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
       expect(textarea).not.toBeDisabled();
@@ -1180,8 +1190,9 @@ describe('MessageThread', () => {
         expect(screen.getByText(/new messages can only be sent during common room or interlude phases/i)).toBeInTheDocument();
       });
 
-      const textarea = screen.getByPlaceholderText(/messaging is only available during common room or interlude phases/i);
-      expect(textarea).toBeDisabled();
+      // No composer is rendered in a non-messaging phase.
+      expect(screen.queryByRole('button', { name: /^reply$/i })).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText(/type your message/i)).not.toBeInTheDocument();
     });
 
     it('disables messaging when phase type is undefined', async () => {
@@ -1198,42 +1209,19 @@ describe('MessageThread', () => {
         expect(screen.getByText(/new messages can only be sent during common room or interlude phases/i)).toBeInTheDocument();
       });
 
-      const sendButton = screen.getByRole('button', { name: /send/i });
-      expect(sendButton).toBeDisabled();
+      // No composer is rendered when the phase is unknown/non-messaging.
+      expect(screen.queryByRole('button', { name: /^reply$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^send$/i })).not.toBeInTheDocument();
     });
 
-    it('disables character selector during non-common-room phase', async () => {
-      renderWithProviders(
-        <MessageThread
-          gameId={1}
-          conversationId={1}
-          characters={mockCharacters}
-          currentPhaseType="action"
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByRole('combobox')).toBeDisabled();
-      });
-    });
-
-    it('shows tooltip on disabled send button during non-common-room phase', async () => {
-      renderWithProviders(
-        <MessageThread
-          gameId={1}
-          conversationId={1}
-          characters={mockCharacters}
-          currentPhaseType="action"
-        />
-      );
-
-      await waitFor(() => {
-        const sendButton = screen.getByRole('button', { name: /send/i });
-        expect(sendButton).toHaveAttribute('title', 'Messages can only be sent during Common Room or Interlude phases');
-      });
-    });
+    // Note: in non-messaging phases the composer (character selector, Send
+    // button, textarea) is no longer rendered at all — only the restriction
+    // alert — so the former "disabled selector" and "tooltip on disabled Send"
+    // tests describe UI that no longer exists. The blocked-phase behavior is
+    // covered by the "disables messaging during <phase>" tests above.
 
     it('does not show tooltip on enabled send button during common_room phase', async () => {
+      const user = userEvent.setup();
       renderWithProviders(
         <MessageThread
           gameId={1}
@@ -1243,13 +1231,14 @@ describe('MessageThread', () => {
         />
       );
 
-      await waitFor(() => {
-        const sendButton = screen.getByRole('button', { name: /send/i });
-        expect(sendButton).not.toHaveAttribute('title');
-      });
+      await openComposer(user);
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      expect(sendButton).not.toHaveAttribute('title');
     });
 
     it('enables messaging during interlude phase', async () => {
+      const user = userEvent.setup();
       renderWithProviders(
         <MessageThread
           gameId={1}
@@ -1262,6 +1251,8 @@ describe('MessageThread', () => {
       await waitFor(() => {
         expect(screen.queryByText(/new messages can only be sent during common room or interlude phases/i)).not.toBeInTheDocument();
       });
+
+      await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
       expect(textarea).not.toBeDisabled();

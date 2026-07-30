@@ -490,6 +490,33 @@ const gameData = generateTestGame();
 // Create via API, then test with it
 ```
 
+### 9. Never Touch the Database Directly From a Spec
+
+Specs run **inside the Playwright container**, which has no `psql`, no DB driver,
+and no network route to the database host. Shelling out to the DB (`execSync`,
+`child_process`, raw `psql`) will crash there — and even on a host it is a
+fragile antipattern (raw SQL, string-interpolated values, ordering hazards).
+
+```typescript
+// ❌ Avoid: reaching into the DB from a test to set up or reset state
+execSync(`psql postgres://.../actionphase -c "UPDATE users SET ..."`);
+
+// ✅ Good: keep state out of the DB in the first place — intercept the write
+await page.route('**/api/v1/me/change-username', route =>
+  route.fulfill({ status: 200, body: JSON.stringify({ message: 'ok' }) })
+);
+// The API never fires, so the shared fixture user is never mutated and there
+// is nothing to reset. The backend handler tests own DB-mutation assertions.
+```
+
+- **Fixture / DB setup belongs in `global-setup.ts`**, which is guarded by
+  `E2E_SKIP_FIXTURE_SETUP` and defers to `just load-e2e` (that runs `psql`
+  inside the *backend* container) in the containerized stack.
+- **Per-test isolation** should use network interception (`page.route`) or
+  test-specific data created via the API — not DB writes.
+- If a test seems to *need* a DB reset, that usually means it is mutating shared
+  state it shouldn't (see #8). Fix the mutation, not the cleanup.
+
 ---
 
 ## Troubleshooting

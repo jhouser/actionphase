@@ -42,6 +42,13 @@ vi.mock('../hooks/useAdminMode', () => ({
   }),
 }));
 
+vi.mock('../hooks/useScreenshotMode', () => ({
+  useScreenshotMode: () => ({
+    screenshotModeEnabled: false,
+    toggleScreenshotMode: vi.fn(),
+  }),
+}));
+
 vi.mock('../hooks/useGamePermissions', () => ({
   useGamePermissions: () => ({
     isGM: false,
