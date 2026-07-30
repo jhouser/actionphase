@@ -18,16 +18,12 @@ export default defineConfig({
       NODE_ENV: 'test',
     },
 
-    // Pool configuration to prevent IPC channel crashes
+    // Pool configuration to prevent IPC channel crashes.
+    // Vitest 4 flattened poolOptions into top-level options; minThreads,
+    // singleThread and useAtomics no longer exist. maxWorkers replaces
+    // maxThreads and limits concurrency to prevent resource exhaustion.
     pool: 'threads',
-    poolOptions: {
-      threads: {
-        singleThread: false,
-        minThreads: 2,
-        maxThreads: 4,  // Limit concurrent workers to prevent resource exhaustion
-        useAtomics: true,
-      },
-    },
+    maxWorkers: 4,
 
     // Timeout configuration for better cleanup
     testTimeout: 15000,  // Increased from default 5000ms

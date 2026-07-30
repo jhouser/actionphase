@@ -22,6 +22,8 @@ export interface GameUtilityContext {
   gameState: string;
   /** Whether the game is in anonymous mode. */
   isAnonymous: boolean;
+  /** Whether the game displays character avatars as portraits rather than circles. */
+  portraitAvatars: boolean;
   /** Characters the current user controls in this game (may be empty for GM/audience). */
   userCharacters: Character[];
   /** All characters in the game (for reference/lookup within panels). */
@@ -41,6 +43,12 @@ export interface OpenCharacterSheetOptions {
   isAnonymous: boolean;
   userRole: string;
   gameState: string;
+  /**
+   * Whether that game shows avatars as portraits. Required rather than optional
+   * so a new call site can't silently fall through to circles — the sheet has no
+   * GameContext to recover this from when opened outside a game.
+   */
+  portraitAvatars: boolean;
 }
 
 /**

@@ -28,9 +28,12 @@ export interface Character {
  *
  * `is_active` is omitted rather than optional: the endpoint filters to active
  * characters, so the field is absent from the payload and callers must not
- * branch on it. It's the only required `Character` field the endpoint drops —
- * everything else it leaves out (username, ownership and assignment fields) is
- * already optional there.
+ * branch on it. It's the only required `Character` field the endpoint drops.
+ *
+ * `username` and `assigned_username` come back for the GM's cast entries (a
+ * GM/co-GM receives every character in games they run, not just the ones they
+ * personally control), and stay optional because the rest of the payload — a
+ * player's own characters — has no one else to credit.
  */
 export interface ControllableCharacterWithGame extends Omit<Character, 'is_active'> {
   game_title: string;

@@ -538,6 +538,52 @@ describe('GameResultsManager', () => {
       expect(saveButton).toBeDisabled();
     });
 
+    it('offers a markdown preview of the draft being edited', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers([mockUnpublishedResult]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: /edit/i }));
+
+      // Replace the draft with markdown, then switch to the Preview tab.
+      const textarea = screen.getByRole('textbox');
+      await user.clear(textarea);
+      await user.type(textarea, '**Bolded result**');
+
+      await user.click(screen.getByRole('button', { name: /preview/i }));
+
+      // The markdown must be rendered, not shown as raw asterisks.
+      const rendered = await screen.findByText('Bolded result');
+      expect(rendered.tagName).toBe('STRONG');
+      expect(screen.queryByText('**Bolded result**')).not.toBeInTheDocument();
+    });
+
+    it('keeps edited content when toggling between Write and Preview', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers([mockUnpublishedResult]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: /edit/i }));
+
+      await user.clear(screen.getByRole('textbox'));
+      await user.type(screen.getByRole('textbox'), 'Draft in progress');
+
+      await user.click(screen.getByRole('button', { name: /preview/i }));
+      await user.click(screen.getByRole('button', { name: /write/i }));
+
+      expect(screen.getByRole('textbox')).toHaveValue('Draft in progress');
+    });
+
     it('can edit only one result at a time', async () => {
       const user = userEvent.setup();
       setupDefaultHandlers([mockUnpublishedResult, mockUnpublishedResult2]);
@@ -562,12 +608,20 @@ describe('GameResultsManager', () => {
     it('shows loading text while saving changes', async () => {
       const user = userEvent.setup();
 
+      // Hold the save open until the test releases it, rather than racing a
+      // timer. This keeps the pending state observable for as long as we need
+      // and lets the click be fully awaited, so no update escapes act(...).
+      let releaseSave!: () => void;
+      const savePending = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+
       server.use(
         http.get('/api/v1/games/:gameId/results', () => {
           return HttpResponse.json([mockUnpublishedResult]);
         }),
         http.put('/api/v1/games/:gameId/results/:resultId', async () => {
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await savePending;
           return HttpResponse.json(mockUnpublishedResult);
         })
       );
@@ -586,18 +640,33 @@ describe('GameResultsManager', () => {
 
       await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-      expect(screen.getByText('Saving...')).toBeInTheDocument();
+      expect(await screen.findByText('Saving...')).toBeInTheDocument();
+
+      // Release the save and let the component exit edit mode before the test
+      // ends, so the resulting updates land inside act(...).
+      releaseSave();
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+      });
     });
 
     it('disables form controls while saving', async () => {
       const user = userEvent.setup();
 
+      // Hold the save open until the test releases it, rather than racing a
+      // timer. This keeps the pending state observable for as long as we need
+      // and lets the click be fully awaited, so no update escapes act(...).
+      let releaseSave!: () => void;
+      const savePending = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+
       server.use(
         http.get('/api/v1/games/:gameId/results', () => {
           return HttpResponse.json([mockUnpublishedResult]);
         }),
         http.put('/api/v1/games/:gameId/results/:resultId', async () => {
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await savePending;
           return HttpResponse.json(mockUnpublishedResult);
         })
       );
@@ -616,8 +685,15 @@ describe('GameResultsManager', () => {
 
       await user.click(screen.getByRole('button', { name: /save changes/i }));
 
+      expect(await screen.findByRole('button', { name: /saving\.\.\./i })).toBeDisabled();
       expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled();
-      expect(screen.getByRole('button', { name: /saving\.\.\./i })).toBeDisabled();
+
+      // Release the save and let the component exit edit mode before the test
+      // ends, so the resulting updates land inside act(...).
+      releaseSave();
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+      });
     });
   });
 

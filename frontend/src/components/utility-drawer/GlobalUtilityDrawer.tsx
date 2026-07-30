@@ -39,6 +39,7 @@ export function GlobalUtilityDrawer() {
               isAnonymous={openSheet.options.isAnonymous}
               userRole={openSheet.options.userRole}
               gameState={openSheet.options.gameState}
+              portraitAvatars={openSheet.options.portraitAvatars}
             />
           </Suspense>
         </Modal>

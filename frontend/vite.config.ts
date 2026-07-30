@@ -102,12 +102,7 @@ export default defineConfig({
       destructuring: true,
     },
   },
-  test: {
-    environment: 'jsdom',
-    server: {
-      deps: {
-        inline: ['react-datepicker'],
-      },
-    },
-  },
+  // Test config lives in vitest.config.ts, which takes precedence over this
+  // file when vitest resolves its config. A `test` block here would be silently
+  // ignored — put test settings in vitest.config.ts instead.
 })
