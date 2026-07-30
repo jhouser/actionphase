@@ -24,11 +24,17 @@ interface CharacterSheetProps {
   isAnonymous?: boolean; // Whether the game is in anonymous mode
   userRole?: string; // User's role in the game ('gm', 'player', 'audience')
   gameState?: string; // Current game state (e.g. 'completed')
+  /**
+   * Whether to show the avatar as a portrait rather than a circle. Normally
+   * read from GameContext; pass it explicitly when rendering outside a
+   * GameProvider (the global Utility Drawer), where there is none to read.
+   */
+  portraitAvatars?: boolean;
 }
 
-export function CharacterSheet({ characterId, canEdit = false, canEditStats = false, onClose, isAnonymous = false, userRole, gameState }: CharacterSheetProps) {
+export function CharacterSheet({ characterId, canEdit = false, canEditStats = false, onClose, isAnonymous = false, userRole, gameState, portraitAvatars }: CharacterSheetProps) {
   const gameContext = useOptionalGameContext();
-  const portraitMode = gameContext?.game?.portrait_avatars ?? false;
+  const portraitMode = portraitAvatars ?? gameContext?.game?.portrait_avatars ?? false;
 
   const [activeModule, setActiveModule] = useState('bio');
   const [editingField, setEditingField] = useState<string | null>(null);

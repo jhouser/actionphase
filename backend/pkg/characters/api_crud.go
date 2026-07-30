@@ -493,6 +493,15 @@ func (h *Handler) GetUserControllableCharactersAcrossGames(w http.ResponseWriter
 		if char.GameState.Valid {
 			charData["game_state"] = char.GameState.String
 		}
+		// Who plays each character, for the GM's cast list. Named `username` to
+		// match the per-game character payload the drawer's in-game list reads,
+		// so one row renderer serves both.
+		if char.OwnerUsername.Valid {
+			charData["username"] = char.OwnerUsername.String
+		}
+		if char.AssignedUsername.Valid {
+			charData["assigned_username"] = char.AssignedUsername.String
+		}
 
 		response = append(response, charData)
 	}

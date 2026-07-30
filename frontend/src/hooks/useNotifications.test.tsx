@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, beforeAll, afterEach, afterAll, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
@@ -456,8 +456,15 @@ describe('useNotifications hooks', () => {
         wrapper: makeWrapper('/games/1?tab=messages'),
       });
 
-      // Give hooks time to settle — no call expected
-      await new Promise(r => setTimeout(r, 50));
+      // This hook returns early with no observable effect when ?notif is absent,
+      // so there's no positive signal to wait on — allow real time to pass and
+      // confirm no request was made. The sleep runs inside act() so provider
+      // state settling meanwhile doesn't trigger a React act warning. A bare
+      // `await waitFor(() => expect(markCalled).toBe(false))` would be vacuous:
+      // it passes on the first poll, before any request could land.
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
       expect(markCalled).toBe(false);
     });
 
@@ -474,7 +481,11 @@ describe('useNotifications hooks', () => {
         wrapper: makeWrapper('/games/1?notif=abc'),
       });
 
-      await new Promise(r => setTimeout(r, 50));
+      // Allow real time to pass inside act() — see note above for why waitFor
+      // on the negative assertion alone would be vacuous here.
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
       expect(markCalled).toBe(false);
     });
   });

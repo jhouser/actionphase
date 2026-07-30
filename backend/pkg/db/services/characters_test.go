@@ -901,6 +901,71 @@ func TestCharacterService_GetUserControllableCharactersAcrossGames(t *testing.T)
 		}
 	})
 
+	// The drawer's cross-game list is the GM's cast reference for the game they're
+	// running, exactly as the in-game list is. Limiting them to NPCs left a GM off
+	// a game page seeing only a fraction of their game.
+	t.Run("GM gets every character in their game, not just NPCs", func(t *testing.T) {
+		gmRows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(gm.ID))
+		core.AssertNoError(t, err, "Failed to get GM's cross-game characters")
+
+		seen := make(map[int32]bool, len(gmRows))
+		for _, row := range gmRows {
+			seen[row.ID] = true
+		}
+
+		// Player characters owned by someone else, in games this GM runs.
+		core.AssertEqual(t, true, seen[charA.ID], "GM should see a player's character in game A")
+		core.AssertEqual(t, true, seen[charB.ID], "GM should see a player's character in game B")
+	})
+
+	// Who is playing each character is the whole value of the cast list — without
+	// it the GM gets a wall of names. Sourced here because there is no game route
+	// to fetch it from.
+	t.Run("carries owner and assignee usernames for the GM's cast", func(t *testing.T) {
+		assignedNPC, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+			GameID:        gameB.ID,
+			UserID:        nil,
+			Name:          "Assigned Herald",
+			CharacterType: "npc",
+		})
+		core.AssertNoError(t, err, "Failed to create NPC for assignment")
+		err = characterService.AssignNPCToUser(ctx, assignedNPC.ID, int32(player.ID), int32(gm.ID))
+		core.AssertNoError(t, err, "Failed to assign NPC")
+
+		gmRows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(gm.ID))
+		core.AssertNoError(t, err, "Failed to get GM's cross-game characters")
+
+		var pc, npc *models.GetUserControllableCharactersAcrossGamesRow
+		for i := range gmRows {
+			switch gmRows[i].ID {
+			case charA.ID:
+				pc = &gmRows[i]
+			case assignedNPC.ID:
+				npc = &gmRows[i]
+			}
+		}
+		require.NotNil(t, pc, "GM should see the player character")
+		require.NotNil(t, npc, "GM should see the assigned NPC")
+
+		core.AssertEqual(t, player.Username, pc.OwnerUsername.String, "Player character should credit its owner")
+		core.AssertEqual(t, player.Username, npc.AssignedUsername.String, "Assigned NPC should credit its assignee")
+	})
+
+	// A player must not gain a window into the rest of the cast just because the
+	// GM's list widened.
+	t.Run("players still see only what they control", func(t *testing.T) {
+		playerRows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(player.ID))
+		core.AssertNoError(t, err, "Failed to get player's cross-game characters")
+
+		for _, row := range playerRows {
+			isOwn := row.UserID.Valid && row.UserID.Int32 == int32(player.ID)
+			isAssigned := row.AssignedUsername.Valid && row.AssignedUsername.String == player.Username
+			if !isOwn && !isAssigned {
+				t.Fatalf("player should not see character %d (%q) they neither own nor are assigned", row.ID, row.Name)
+			}
+		}
+	})
+
 	t.Run("co-GM gets NPCs with the co_gm role", func(t *testing.T) {
 		coGM := testDB.CreateTestUser(t, "xgcogm", "xgcogm@example.com")
 		testDB.AddTestGameParticipant(t, gameB.ID, int32(coGM.ID), "co_gm")

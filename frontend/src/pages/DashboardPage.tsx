@@ -67,10 +67,13 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* Unread inbox: reply to comment/mention/PM notifications inline */}
+        {/* Inbox: repliable notifications inline, plus an FYI digest row */}
         {dashboard.has_games && (
           <div className="mb-8">
-            <UnreadInboxSection />
+            <UnreadInboxSection
+              notificationsByType={dashboard.notifications_by_type}
+              gameId={singleGameId}
+            />
           </div>
         )}
 
@@ -110,23 +113,17 @@ export function DashboardPage() {
               )}
             </div>
 
-            {/* Notification digest + PM preview */}
-            <div className={`grid grid-cols-1 ${hasUnreadConversations ? 'lg:grid-cols-2' : ''} gap-6`}>
-              <NotificationDigest
-                notificationsByType={dashboard.notifications_by_type}
-                gameId={activeGames[0].game_id}
+            {/* PM preview (the notification digest now lives in the Inbox card) */}
+            {hasUnreadConversations && (
+              <PrivateMessagePreview
+                conversations={unreadConversations}
+                gameId={singleGameId!}
               />
-              {hasUnreadConversations && (
-                <PrivateMessagePreview
-                  conversations={unreadConversations}
-                  gameId={singleGameId!}
-                />
-              )}
-            </div>
+            )}
 
-            {/* Recent activity */}
+            {/* Recent activity — ambient context, collapsed so the Inbox owns the fold */}
             {hasMessages && (
-              <RecentActivityCard messages={dashboard.recent_messages} />
+              <RecentActivityCard messages={dashboard.recent_messages} defaultCollapsed />
             )}
 
             {/* Audience Games */}

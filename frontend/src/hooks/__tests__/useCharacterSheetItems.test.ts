@@ -147,12 +147,14 @@ describe('useCharacterSheetItems', () => {
       wrapper: makeWrapper(),
     });
 
-    // Wait for query to settle — only 1 valid item should appear
-    await waitFor(() => expect(apiClient.characters.getCharacterData).toHaveBeenCalledWith(42));
-    // Allow state to settle
-    await new Promise((r) => setTimeout(r, 0));
+    // Wait for query to settle — only 1 valid item should appear. Asserting the
+    // result inside waitFor is a positive condition, so it polls until the state
+    // lands; a bare sleep would let that update escape act() and warn.
+    await waitFor(() => {
+      expect(apiClient.characters.getCharacterData).toHaveBeenCalledWith(42);
+      expect(result.current).toHaveLength(1);
+    });
 
-    expect(result.current).toHaveLength(1);
     expect(result.current[0].name).toBe('Good Ability');
   });
 });

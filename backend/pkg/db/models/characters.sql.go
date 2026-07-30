@@ -829,6 +829,8 @@ SELECT DISTINCT
   g.state AS game_state,
   g.is_anonymous AS game_is_anonymous,
   g.portrait_avatars AS game_portrait_avatars,
+  u.username AS owner_username,
+  au.username AS assigned_username,
   CASE
     WHEN g.gm_user_id = $1 THEN 'gm'
     WHEN gp_role.role IS NOT NULL THEN gp_role.role
@@ -837,6 +839,8 @@ SELECT DISTINCT
 FROM characters c
 LEFT JOIN npc_assignments na ON c.id = na.character_id
 JOIN games g ON c.game_id = g.id
+LEFT JOIN users u ON c.user_id = u.id
+LEFT JOIN users au ON na.assigned_user_id = au.id
 LEFT JOIN game_participants gp ON c.game_id = gp.game_id AND gp.user_id = $1 AND gp.role = 'co_gm'
 LEFT JOIN game_participants gp_role ON c.game_id = gp_role.game_id AND gp_role.user_id = $1
 WHERE g.state = 'in_progress'
@@ -849,8 +853,8 @@ WHERE g.state = 'in_progress'
     -- NPCs assigned to user
     (na.assigned_user_id = $1)
     OR
-    -- If user is GM or co-GM, all NPCs (GMs/co-GMs can control any NPC in their game)
-    ((g.gm_user_id = $1 OR gp.user_id IS NOT NULL) AND c.character_type = 'npc')
+    -- If user is GM or co-GM, the entire cast of their game
+    (g.gm_user_id = $1 OR gp.user_id IS NOT NULL)
   )
   AND (
     -- User's own player characters are always visible regardless of status
@@ -882,21 +886,30 @@ type GetUserControllableCharactersAcrossGamesRow struct {
 	GameState           pgtype.Text        `json:"game_state"`
 	GameIsAnonymous     bool               `json:"game_is_anonymous"`
 	GamePortraitAvatars bool               `json:"game_portrait_avatars"`
+	OwnerUsername       pgtype.Text        `json:"owner_username"`
+	AssignedUsername    pgtype.Text        `json:"assigned_username"`
 	UserRole            string             `json:"user_role"`
 }
 
 // Cross-game variant of GetUserControllableCharacters, for surfaces that need a
 // user's characters without a game in scope (e.g. the global Utility Drawer).
 //
-// Control rules are identical to the per-game query: own player characters,
-// NPCs assigned via npc_assignments, and — for GMs/co-GMs — every NPC in their
-// game. Restricted to in_progress games: this backs "what am I currently
-// playing", and sheets for finished games stay reachable from the game itself.
+// Control rules follow the per-game query: own player characters, NPCs assigned
+// via npc_assignments, and — for GMs/co-GMs — every character in their game.
+// Restricted to in_progress games: this backs "what am I currently playing",
+// and sheets for finished games stay reachable from the game itself.
+//
+// The GM's entry is the whole cast, not just NPCs, matching what the in-game
+// drawer offers them: they run the game, every sheet in it is theirs to
+// reference, and they can already open any of them from the Characters tab.
+// Restricting them to NPCs left a GM with no game in scope seeing a fraction of
+// their own game.
 //
 // Also returns the game context each character's sheet permissions depend on
-// (game title/state/flags and the user's role in that game). Callers outside a
-// game route have no other way to resolve role per character without a fetch
-// per game, and without it the sheet would fall back to read-only.
+// (game title/state/flags and the user's role in that game), plus who plays each
+// character. Callers outside a game route have no other way to resolve role or
+// ownership per character without a fetch per game, and without the role the
+// sheet would fall back to read-only.
 func (q *Queries) GetUserControllableCharactersAcrossGames(ctx context.Context, gmUserID int32) ([]GetUserControllableCharactersAcrossGamesRow, error) {
 	rows, err := q.db.Query(ctx, getUserControllableCharactersAcrossGames, gmUserID)
 	if err != nil {
@@ -920,6 +933,8 @@ func (q *Queries) GetUserControllableCharactersAcrossGames(ctx context.Context, 
 			&i.GameState,
 			&i.GameIsAnonymous,
 			&i.GamePortraitAvatars,
+			&i.OwnerUsername,
+			&i.AssignedUsername,
 			&i.UserRole,
 		); err != nil {
 			return nil, err

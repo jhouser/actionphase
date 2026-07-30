@@ -95,37 +95,7 @@ export function NewCommentsView({ gameId }: NewCommentsViewProps) {
 
   // Flatten all pages of comments into a single array
   const allComments = data?.pages.flatMap((page) => page.comments) ?? [];
-
-  // Empty state — distinguish "nothing here at all" from "everything is read"
-  if (allComments.length === 0) {
-    return (
-      <div className="text-center py-12">
-        {showUnreadOnly ? (
-          <>
-            <p className="text-content-secondary">No unread comments</p>
-            <p className="text-sm text-text-secondary mt-2">
-              You've read everything here. Turn off "Unread only" to see all comments.
-            </p>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-4"
-              onClick={() => setUnreadOnly(false)}
-            >
-              Show all comments
-            </Button>
-          </>
-        ) : (
-          <>
-            <p className="text-content-secondary">No comments yet</p>
-            <p className="text-sm text-text-secondary mt-2">
-              Be the first to start a conversation in the Common Room!
-            </p>
-          </>
-        )}
-      </div>
-    );
-  }
+  const isEmpty = allComments.length === 0;
 
   // Navigate to the comment's parent message in the Common Room
   const handleNavigateToParent = (comment: typeof allComments[0]) => {
@@ -182,6 +152,29 @@ export function NewCommentsView({ gameId }: NewCommentsViewProps) {
         </div>
       </div>
 
+      {/* Empty state — distinguish "nothing here at all" from "everything is read".
+          The header above stays mounted so the user can keep the filter on and
+          refresh to poll for newly-arrived unread comments. */}
+      {isEmpty && (
+        <div className="text-center py-12">
+          {showUnreadOnly ? (
+            <>
+              <p className="text-content-secondary">No unread comments</p>
+              <p className="text-sm text-text-secondary mt-2">
+                You've read everything here. Turn off "Unread only" to see all comments.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-content-secondary">No comments yet</p>
+              <p className="text-sm text-text-secondary mt-2">
+                Be the first to start a conversation in the Common Room!
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Comments list */}
       {allComments.map((comment) => (
         <CommentWithParentCard
@@ -197,12 +190,14 @@ export function NewCommentsView({ gameId }: NewCommentsViewProps) {
       ))}
 
       {/* Infinite scroll sentinel */}
-      <div ref={sentinelRef} className="h-20 flex items-center justify-center">
-        {isFetchingNextPage && <Spinner size="md" />}
-        {!hasNextPage && allComments.length > 0 && (
-          <p className="text-sm text-content-tertiary">No more comments to load</p>
-        )}
-      </div>
+      {!isEmpty && (
+        <div ref={sentinelRef} className="h-20 flex items-center justify-center">
+          {isFetchingNextPage && <Spinner size="md" />}
+          {!hasNextPage && (
+            <p className="text-sm text-content-tertiary">No more comments to load</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
