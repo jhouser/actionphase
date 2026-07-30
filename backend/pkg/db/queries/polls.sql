@@ -12,9 +12,11 @@ INSERT INTO common_room_polls (
     description,
     deadline,
     show_individual_votes,
-    allow_other_option
+    allow_other_option,
+    hide_results_from_players,
+    allow_audience_voting
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: GetPoll :one
@@ -50,6 +52,8 @@ SET question = $2,
     deadline = $4,
     show_individual_votes = $5,
     allow_other_option = $6,
+    hide_results_from_players = $7,
+    allow_audience_voting = $8,
     updated_at = NOW()
 WHERE id = $1 AND is_deleted = FALSE
 RETURNING *;
@@ -146,7 +150,8 @@ SELECT
     pv.other_response,
     pv.created_at,
     u.username,
-    c.name as character_name
+    c.name as character_name,
+    gp.role as voter_role
 FROM poll_votes pv
 JOIN users u ON pv.user_id = u.id
 LEFT JOIN characters c ON c.id = (
@@ -155,6 +160,10 @@ LEFT JOIN characters c ON c.id = (
       AND user_id = pv.user_id
     LIMIT 1
 )
+LEFT JOIN game_participants gp
+    ON gp.game_id = (SELECT game_id FROM common_room_polls WHERE id = pv.poll_id)
+   AND gp.user_id = pv.user_id
+   AND gp.status = 'active'
 WHERE pv.poll_id = $1
 ORDER BY pv.created_at ASC;
 
@@ -166,7 +175,8 @@ SELECT
     pv.other_response,
     pv.created_at,
     u.username,
-    c.name as character_name
+    c.name as character_name,
+    gp.role as voter_role
 FROM poll_votes pv
 JOIN users u ON pv.user_id = u.id
 LEFT JOIN characters c ON c.id = (
@@ -175,6 +185,10 @@ LEFT JOIN characters c ON c.id = (
       AND user_id = pv.user_id
     LIMIT 1
 )
+LEFT JOIN game_participants gp
+    ON gp.game_id = (SELECT game_id FROM common_room_polls WHERE id = pv.poll_id)
+   AND gp.user_id = pv.user_id
+   AND gp.status = 'active'
 WHERE pv.poll_id = $1
   AND pv.other_response IS NOT NULL
 ORDER BY pv.created_at ASC;
