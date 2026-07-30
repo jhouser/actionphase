@@ -690,7 +690,7 @@ describe('NewCommentsView', () => {
       expect(screen.queryByText(/be the first to start a conversation/i)).not.toBeInTheDocument();
     });
 
-    it('lets the user clear the filter from the empty state', async () => {
+    it('keeps the toggle and refresh button usable in the "all read" empty state', async () => {
       const user = userEvent.setup();
       mockReadMode = 'manual';
 
@@ -704,10 +704,70 @@ describe('NewCommentsView', () => {
       render(<NewCommentsView gameId={1} />, { wrapper });
       await user.click(screen.getByLabelText(/unread only/i));
 
-      await user.click(screen.getByRole('button', { name: /show all comments/i }));
+      // Empty state, but the controls stay available: refresh again to poll for
+      // newly-arrived unread comments without leaving the filter.
+      expect(screen.getByText(/no unread comments/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /refresh/i })).toBeEnabled();
+      expect(screen.getByLabelText(/unread only/i)).toBeChecked();
+
+      // The dead-end "escape hatch" button is gone; the toggle is the way back.
+      expect(screen.queryByRole('button', { name: /show all comments/i })).not.toBeInTheDocument();
+    });
+
+    it('lets the user clear the filter from the empty state via the toggle', async () => {
+      const user = userEvent.setup();
+      mockReadMode = 'manual';
+
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockImplementation(
+        (_gameId, unreadOnly) =>
+          loadedComments(
+            unreadOnly ? [] : [{ ...mockComment, id: 1, content: 'Only comment' }]
+          ) as UseInfiniteQueryResult<CommentWithParent[], Error>
+      );
+
+      render(<NewCommentsView gameId={1} />, { wrapper });
+      await user.click(screen.getByLabelText(/unread only/i));
+      expect(screen.getByText(/no unread comments/i)).toBeInTheDocument();
+
+      await user.click(screen.getByLabelText(/unread only/i));
 
       expect(screen.getByTestId('comment-1')).toBeInTheDocument();
       expect(screen.getByLabelText(/unread only/i)).not.toBeChecked();
+    });
+
+    it('refetches from the empty state and shows newly-arrived unread comments', async () => {
+      const user = userEvent.setup();
+      mockReadMode = 'manual';
+
+      let unreadArrived = false;
+      vi.mocked(useRecentCommentsModule.useRecentComments).mockImplementation(
+        (_gameId, unreadOnly) => {
+          const result = loadedComments(
+            unreadOnly
+              ? unreadArrived
+                ? [{ ...mockComment, id: 2, content: 'Fresh unread' }]
+                : []
+              : [{ ...mockComment, id: 1, content: 'Only comment' }]
+          ) as UseInfiniteQueryResult<CommentWithParent[], Error>;
+          return {
+            ...result,
+            refetch: vi.fn(async () => {
+              unreadArrived = true;
+              return result;
+            }),
+          } as UseInfiniteQueryResult<CommentWithParent[], Error>;
+        }
+      );
+
+      const { rerender } = render(<NewCommentsView gameId={1} />, { wrapper });
+      await user.click(screen.getByLabelText(/unread only/i));
+      expect(screen.getByText(/no unread comments/i)).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /refresh/i }));
+      rerender(<NewCommentsView gameId={1} />);
+
+      await waitFor(() => expect(screen.getByTestId('comment-2')).toBeInTheDocument());
+      expect(screen.queryByText(/no unread comments/i)).not.toBeInTheDocument();
     });
 
     it('renders the filtered list the server returns', async () => {

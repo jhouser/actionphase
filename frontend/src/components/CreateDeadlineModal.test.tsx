@@ -230,7 +230,11 @@ describe('CreateDeadlineModal', () => {
 
       const titleInput = screen.getByLabelText(/^title$/i);
       const longTitle = 'a'.repeat(201); // 201 characters
-      await user.type(titleInput, longTitle);
+      // Paste rather than type: user.type fires a full event cycle + re-render
+      // per character, which times out under parallel test load. The length is
+      // what's under test here, not the keystrokes.
+      await user.click(titleInput);
+      await user.paste(longTitle);
 
       const createButton = screen.getByRole('button', { name: /create deadline/i });
       await user.click(createButton);
@@ -294,7 +298,8 @@ describe('CreateDeadlineModal', () => {
       const deadlineInput = screen.getByPlaceholderText(/select deadline date and time/i);
 
       const exactLengthTitle = 'a'.repeat(200); // Exactly 200 characters
-      await user.type(titleInput, exactLengthTitle);
+      await user.click(titleInput);
+      await user.paste(exactLengthTitle);
       await user.type(descriptionInput, 'Test description');
 
       // Use a future date

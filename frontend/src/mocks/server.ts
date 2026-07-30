@@ -197,6 +197,14 @@ const handlers = [
     return HttpResponse.json([]);
   }),
 
+  http.get('/api/v1/games/:gameId/characters/stats', () => {
+    return HttpResponse.json({});
+  }),
+
+  http.get('/api/v1/characters/:characterId/data', () => {
+    return HttpResponse.json([]);
+  }),
+
 ];
 
 // Setup server with handlers
