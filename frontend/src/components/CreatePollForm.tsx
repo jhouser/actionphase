@@ -20,6 +20,8 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
   const [deadline, setDeadline] = useState('');
   const [showIndividualVotes, setShowIndividualVotes] = useState(false);
   const [allowOtherOption, setAllowOtherOption] = useState(false);
+  const [hideResultsFromPlayers, setHideResultsFromPlayers] = useState(false);
+  const [allowAudienceVoting, setAllowAudienceVoting] = useState(false);
   const [options, setOptions] = useState<string[]>(['', '']);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +32,23 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
   const handleRemoveOption = (index: number) => {
     if (options.length > 2) {
       setOptions(options.filter((_, i) => i !== index));
+    }
+  };
+
+  // "Show individual votes" and "Hide results from players" are mutually exclusive:
+  // one reveals per-voter attribution to players, the other withholds results entirely.
+  // Selecting either clears the other so an invalid combination is unreachable.
+  const handleShowIndividualVotesChange = (checked: boolean) => {
+    setShowIndividualVotes(checked);
+    if (checked) {
+      setHideResultsFromPlayers(false);
+    }
+  };
+
+  const handleHideResultsChange = (checked: boolean) => {
+    setHideResultsFromPlayers(checked);
+    if (checked) {
+      setShowIndividualVotes(false);
     }
   };
 
@@ -70,6 +89,8 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
       deadline: deadlineISO,
       show_individual_votes: showIndividualVotes,
       allow_other_option: allowOtherOption,
+      hide_results_from_players: hideResultsFromPlayers,
+      allow_audience_voting: allowAudienceVoting,
       phase_id: currentPhaseId,
       options: filledOptions.map((text, index) => ({ text, display_order: index }))
     };
@@ -151,13 +172,36 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
           </div>
 
           {/* Settings */}
-          <div className="space-y-2 border-t border-border-primary pt-4">
+          <div className="space-y-3 border-t border-border-primary pt-4">
             <Checkbox
+              id="poll-show-individual-votes"
               label="Show individual votes to all players"
+              helperText={
+                hideResultsFromPlayers
+                  ? "Unavailable while results are hidden from players"
+                  : undefined
+              }
+              disabled={hideResultsFromPlayers}
               checked={showIndividualVotes}
-              onChange={(e) => setShowIndividualVotes(e.target.checked)}
+              onChange={(e) => handleShowIndividualVotesChange(e.target.checked)}
             />
             <Checkbox
+              id="poll-hide-results"
+              label="Hide results from players"
+              helperText="Players can vote but never see the results, even after the poll closes. You and the audience still see them."
+              disabled={showIndividualVotes}
+              checked={hideResultsFromPlayers}
+              onChange={(e) => handleHideResultsChange(e.target.checked)}
+            />
+            <Checkbox
+              id="poll-allow-audience-voting"
+              label="Allow audience members to vote"
+              helperText="Audience votes count toward the totals but are always shown as 'Anonymous'."
+              checked={allowAudienceVoting}
+              onChange={(e) => setAllowAudienceVoting(e.target.checked)}
+            />
+            <Checkbox
+              id="poll-allow-other-option"
               label="Allow 'Other' text responses"
               checked={allowOtherOption}
               onChange={(e) => setAllowOtherOption(e.target.checked)}

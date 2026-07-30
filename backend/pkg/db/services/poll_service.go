@@ -73,15 +73,17 @@ func (s *PollService) CreatePollWithOptions(ctx context.Context, req core.Create
 
 	// Create the poll
 	pollParams := db.CreatePollParams{
-		GameID:               req.GameID,
-		PhaseID:              phaseID,
-		CreatedByUserID:      req.CreatedByUserID,
-		CreatedByCharacterID: createdByCharacterID,
-		Question:             req.Question,
-		Description:          description,
-		Deadline:             deadline,
-		ShowIndividualVotes:  showIndividualVotes,
-		AllowOtherOption:     allowOtherOption,
+		GameID:                 req.GameID,
+		PhaseID:                phaseID,
+		CreatedByUserID:        req.CreatedByUserID,
+		CreatedByCharacterID:   createdByCharacterID,
+		Question:               req.Question,
+		Description:            description,
+		Deadline:               deadline,
+		ShowIndividualVotes:    showIndividualVotes,
+		AllowOtherOption:       allowOtherOption,
+		HideResultsFromPlayers: req.HideResultsFromPlayers,
+		AllowAudienceVoting:    req.AllowAudienceVoting,
 	}
 
 	poll, err := queries.CreatePoll(ctx, pollParams)
@@ -130,6 +132,13 @@ func (s *PollService) CreatePollWithOptions(ctx context.Context, req core.Create
 		Poll:    poll,
 		Options: options,
 	}, nil
+}
+
+// isAudienceRole reports whether a poll voter participated as audience. Audience
+// votes are always reported anonymously, so identity must be stripped before
+// results leave the service.
+func isAudienceRole(role pgtype.Text) bool {
+	return role.Valid && role.String == "audience"
 }
 
 // GetPoll retrieves a specific poll by ID
@@ -390,13 +399,20 @@ func (s *PollService) GetPollResults(ctx context.Context, pollID int32, canSeeIn
 				// Find the option result and add voter info
 				for i := range optionResults {
 					if optionResults[i].Option.ID == vote.SelectedOptionID.Int32 {
-						voterInfo := core.VoterInfo{
-							UserID:   vote.UserID,
-							Username: vote.Username,
-						}
-						if vote.CharacterName.Valid {
-							charName := vote.CharacterName.String
-							voterInfo.CharacterName = &charName
+						var voterInfo core.VoterInfo
+						if isAudienceRole(vote.VoterRole) {
+							// Audience votes are anonymous to everyone, including the
+							// GM: withhold identity here so it never leaves the service.
+							voterInfo = core.VoterInfo{IsAnonymous: true}
+						} else {
+							voterInfo = core.VoterInfo{
+								UserID:   vote.UserID,
+								Username: vote.Username,
+							}
+							if vote.CharacterName.Valid {
+								charName := vote.CharacterName.String
+								voterInfo.CharacterName = &charName
+							}
 						}
 						optionResults[i].Voters = append(optionResults[i].Voters, voterInfo)
 						break
@@ -415,6 +431,16 @@ func (s *PollService) GetPollResults(ctx context.Context, pollID int32, canSeeIn
 		}
 
 		for _, other := range others {
+			if isAudienceRole(other.VoterRole) {
+				// Audience responses keep their text but shed all attribution.
+				otherResponses = append(otherResponses, core.OtherResponse{
+					VoteID:      other.ID,
+					OtherText:   other.OtherResponse.String,
+					IsAnonymous: true,
+				})
+				continue
+			}
+
 			otherResp := core.OtherResponse{
 				VoteID:    other.ID,
 				OtherText: other.OtherResponse.String,
@@ -457,12 +483,14 @@ func (s *PollService) UpdatePoll(ctx context.Context, pollID int32, req core.Upd
 	allowOtherOption := pgtype.Bool{Bool: req.AllowOtherOption, Valid: true}
 
 	params := db.UpdatePollParams{
-		ID:                  pollID,
-		Question:            req.Question,
-		Description:         description,
-		Deadline:            deadline,
-		ShowIndividualVotes: showIndividualVotes,
-		AllowOtherOption:    allowOtherOption,
+		ID:                     pollID,
+		Question:               req.Question,
+		Description:            description,
+		Deadline:               deadline,
+		ShowIndividualVotes:    showIndividualVotes,
+		AllowOtherOption:       allowOtherOption,
+		HideResultsFromPlayers: req.HideResultsFromPlayers,
+		AllowAudienceVoting:    req.AllowAudienceVoting,
 	}
 
 	poll, err := queries.UpdatePoll(ctx, params)
