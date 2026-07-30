@@ -1498,7 +1498,13 @@ type CreatePollRequest struct {
 	Deadline             time.Time
 	ShowIndividualVotes  bool
 	AllowOtherOption     bool
-	Options              []PollOptionInput // List of poll options
+	// HideResultsFromPlayers hides results from players permanently — even after
+	// the deadline. Mutually exclusive with ShowIndividualVotes.
+	HideResultsFromPlayers bool
+	// AllowAudienceVoting permits audience members to vote; their votes are
+	// attributed anonymously since they may not have characters.
+	AllowAudienceVoting bool
+	Options             []PollOptionInput // List of poll options
 }
 
 // PollOptionInput represents a single poll option during creation.
@@ -1509,11 +1515,13 @@ type PollOptionInput struct {
 
 // UpdatePollRequest represents parameters for updating a poll.
 type UpdatePollRequest struct {
-	Question            string
-	Description         *string
-	Deadline            time.Time
-	ShowIndividualVotes bool
-	AllowOtherOption    bool
+	Question               string
+	Description            *string
+	Deadline               time.Time
+	ShowIndividualVotes    bool
+	AllowOtherOption       bool
+	HideResultsFromPlayers bool
+	AllowAudienceVoting    bool
 }
 
 // SubmitVoteRequest represents parameters for submitting a vote.
@@ -1552,6 +1560,9 @@ type OtherResponse struct {
 	OtherText     string
 	Username      string
 	CharacterName *string
+	// IsAnonymous marks a response cast by an audience member. Audience identity
+	// is never disclosed, so callers must not surface Username or CharacterName.
+	IsAnonymous bool
 }
 
 // VoterInfo represents a user who voted (for individual vote display).
@@ -1559,6 +1570,9 @@ type VoterInfo struct {
 	UserID        int32
 	Username      string
 	CharacterName *string
+	// IsAnonymous marks a vote cast by an audience member. Audience identity is
+	// never disclosed, so callers must not surface Username or CharacterName.
+	IsAnonymous bool
 }
 
 // ==============================================================================

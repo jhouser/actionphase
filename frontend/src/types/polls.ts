@@ -25,6 +25,10 @@ export interface Poll {
   deadline: string; // ISO 8601 timestamp
   show_individual_votes: boolean;
   allow_other_option: boolean;
+  /** When true, players never see results — not even after the deadline. */
+  hide_results_from_players: boolean;
+  /** When true, audience members may vote; their votes are recorded anonymously. */
+  allow_audience_voting: boolean;
   is_deleted: boolean;
   created_at: string;
   updated_at?: string;
@@ -53,6 +57,8 @@ interface VoterInfo {
   user_id: number;
   character_name: string;
   other_response?: string;
+  /** True for audience votes, which are never attributed to a user or character. */
+  is_anonymous?: boolean;
 }
 
 interface OptionResult {
@@ -66,6 +72,8 @@ interface OtherResponse {
   vote_id: number;
   other_text: string;
   character_name: string;
+  /** True for audience responses, which are never attributed. */
+  is_anonymous?: boolean;
 }
 
 export interface PollResults {
@@ -88,6 +96,8 @@ export interface CreatePollRequest {
   deadline: string; // ISO 8601 timestamp
   show_individual_votes: boolean;
   allow_other_option: boolean;
+  hide_results_from_players: boolean;
+  allow_audience_voting: boolean;
   phase_id?: number;
   created_by_character_id?: number;
   options: CreatePollOptionRequest[];
@@ -99,6 +109,8 @@ export interface UpdatePollRequest {
   deadline: string; // ISO 8601 timestamp
   show_individual_votes: boolean;
   allow_other_option: boolean;
+  hide_results_from_players: boolean;
+  allow_audience_voting: boolean;
 }
 
 export interface SubmitVoteRequest {

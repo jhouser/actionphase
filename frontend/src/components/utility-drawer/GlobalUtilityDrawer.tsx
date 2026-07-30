@@ -3,6 +3,7 @@ import { UtilityDrawer } from './UtilityDrawer';
 import { Modal } from '../Modal';
 import { Spinner } from '../ui';
 import { useUtilityDrawer } from '../../contexts/UtilityDrawerContext';
+import { LAYERS } from '../../config/layers';
 
 // The sheet pulls in the whole character-sheet module tree; keep it out of the
 // initial bundle since most page loads never open it.
@@ -23,7 +24,7 @@ export function GlobalUtilityDrawer() {
       <UtilityDrawer open={isOpen} onClose={closeDrawer} ctx={utilityContext} />
 
       {openSheet && (
-        <Modal isOpen onClose={closeSheet} title="">
+        <Modal isOpen onClose={closeSheet} title="" zIndexClass={LAYERS.drawerChild}>
           <Suspense
             fallback={
               <div className="flex justify-center py-12">

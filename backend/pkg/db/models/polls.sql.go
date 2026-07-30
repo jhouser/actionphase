@@ -22,22 +22,26 @@ INSERT INTO common_room_polls (
     description,
     deadline,
     show_individual_votes,
-    allow_other_option
+    allow_other_option,
+    hide_results_from_players,
+    allow_audience_voting
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, is_deleted, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, hide_results_from_players, allow_audience_voting, is_deleted, created_at, updated_at
 `
 
 type CreatePollParams struct {
-	GameID               int32              `json:"game_id"`
-	PhaseID              pgtype.Int4        `json:"phase_id"`
-	CreatedByUserID      int32              `json:"created_by_user_id"`
-	CreatedByCharacterID pgtype.Int4        `json:"created_by_character_id"`
-	Question             string             `json:"question"`
-	Description          pgtype.Text        `json:"description"`
-	Deadline             pgtype.Timestamptz `json:"deadline"`
-	ShowIndividualVotes  pgtype.Bool        `json:"show_individual_votes"`
-	AllowOtherOption     pgtype.Bool        `json:"allow_other_option"`
+	GameID                 int32              `json:"game_id"`
+	PhaseID                pgtype.Int4        `json:"phase_id"`
+	CreatedByUserID        int32              `json:"created_by_user_id"`
+	CreatedByCharacterID   pgtype.Int4        `json:"created_by_character_id"`
+	Question               string             `json:"question"`
+	Description            pgtype.Text        `json:"description"`
+	Deadline               pgtype.Timestamptz `json:"deadline"`
+	ShowIndividualVotes    pgtype.Bool        `json:"show_individual_votes"`
+	AllowOtherOption       pgtype.Bool        `json:"allow_other_option"`
+	HideResultsFromPlayers bool               `json:"hide_results_from_players"`
+	AllowAudienceVoting    bool               `json:"allow_audience_voting"`
 }
 
 // ================================================
@@ -54,6 +58,8 @@ func (q *Queries) CreatePoll(ctx context.Context, arg CreatePollParams) (CommonR
 		arg.Deadline,
 		arg.ShowIndividualVotes,
 		arg.AllowOtherOption,
+		arg.HideResultsFromPlayers,
+		arg.AllowAudienceVoting,
 	)
 	var i CommonRoomPoll
 	err := row.Scan(
@@ -67,6 +73,8 @@ func (q *Queries) CreatePoll(ctx context.Context, arg CreatePollParams) (CommonR
 		&i.Deadline,
 		&i.ShowIndividualVotes,
 		&i.AllowOtherOption,
+		&i.HideResultsFromPlayers,
+		&i.AllowAudienceVoting,
 		&i.IsDeleted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -125,7 +133,7 @@ func (q *Queries) DeleteVote(ctx context.Context, id int32) error {
 
 const getActivePollsForGame = `-- name: GetActivePollsForGame :many
 
-SELECT id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, is_deleted, created_at, updated_at FROM common_room_polls
+SELECT id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, hide_results_from_players, allow_audience_voting, is_deleted, created_at, updated_at FROM common_room_polls
 WHERE game_id = $1
   AND is_deleted = FALSE
   AND deadline > NOW()
@@ -156,6 +164,8 @@ func (q *Queries) GetActivePollsForGame(ctx context.Context, gameID int32) ([]Co
 			&i.Deadline,
 			&i.ShowIndividualVotes,
 			&i.AllowOtherOption,
+			&i.HideResultsFromPlayers,
+			&i.AllowAudienceVoting,
 			&i.IsDeleted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -171,7 +181,7 @@ func (q *Queries) GetActivePollsForGame(ctx context.Context, gameID int32) ([]Co
 }
 
 const getExpiredPolls = `-- name: GetExpiredPolls :many
-SELECT id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, is_deleted, created_at, updated_at FROM common_room_polls
+SELECT id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, hide_results_from_players, allow_audience_voting, is_deleted, created_at, updated_at FROM common_room_polls
 WHERE is_deleted = FALSE
   AND deadline <= NOW()
 ORDER BY deadline DESC
@@ -198,6 +208,8 @@ func (q *Queries) GetExpiredPolls(ctx context.Context) ([]CommonRoomPoll, error)
 			&i.Deadline,
 			&i.ShowIndividualVotes,
 			&i.AllowOtherOption,
+			&i.HideResultsFromPlayers,
+			&i.AllowAudienceVoting,
 			&i.IsDeleted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -238,7 +250,8 @@ SELECT
     pv.other_response,
     pv.created_at,
     u.username,
-    c.name as character_name
+    c.name as character_name,
+    gp.role as voter_role
 FROM poll_votes pv
 JOIN users u ON pv.user_id = u.id
 LEFT JOIN characters c ON c.id = (
@@ -247,6 +260,10 @@ LEFT JOIN characters c ON c.id = (
       AND user_id = pv.user_id
     LIMIT 1
 )
+LEFT JOIN game_participants gp
+    ON gp.game_id = (SELECT game_id FROM common_room_polls WHERE id = pv.poll_id)
+   AND gp.user_id = pv.user_id
+   AND gp.status = 'active'
 WHERE pv.poll_id = $1
   AND pv.other_response IS NOT NULL
 ORDER BY pv.created_at ASC
@@ -259,6 +276,7 @@ type GetOtherResponsesRow struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	Username      string             `json:"username"`
 	CharacterName pgtype.Text        `json:"character_name"`
+	VoterRole     pgtype.Text        `json:"voter_role"`
 }
 
 // Get all "other" text responses
@@ -278,6 +296,7 @@ func (q *Queries) GetOtherResponses(ctx context.Context, pollID int32) ([]GetOth
 			&i.CreatedAt,
 			&i.Username,
 			&i.CharacterName,
+			&i.VoterRole,
 		); err != nil {
 			return nil, err
 		}
@@ -304,7 +323,7 @@ func (q *Queries) GetOtherVoteCount(ctx context.Context, pollID int32) (int64, e
 }
 
 const getPoll = `-- name: GetPoll :one
-SELECT id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, is_deleted, created_at, updated_at FROM common_room_polls
+SELECT id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, hide_results_from_players, allow_audience_voting, is_deleted, created_at, updated_at FROM common_room_polls
 WHERE id = $1 AND is_deleted = FALSE
 `
 
@@ -322,6 +341,8 @@ func (q *Queries) GetPoll(ctx context.Context, id int32) (CommonRoomPoll, error)
 		&i.Deadline,
 		&i.ShowIndividualVotes,
 		&i.AllowOtherOption,
+		&i.HideResultsFromPlayers,
+		&i.AllowAudienceVoting,
 		&i.IsDeleted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -432,7 +453,8 @@ SELECT
     pv.other_response,
     pv.created_at,
     u.username,
-    c.name as character_name
+    c.name as character_name,
+    gp.role as voter_role
 FROM poll_votes pv
 JOIN users u ON pv.user_id = u.id
 LEFT JOIN characters c ON c.id = (
@@ -441,6 +463,10 @@ LEFT JOIN characters c ON c.id = (
       AND user_id = pv.user_id
     LIMIT 1
 )
+LEFT JOIN game_participants gp
+    ON gp.game_id = (SELECT game_id FROM common_room_polls WHERE id = pv.poll_id)
+   AND gp.user_id = pv.user_id
+   AND gp.status = 'active'
 WHERE pv.poll_id = $1
 ORDER BY pv.created_at ASC
 `
@@ -453,6 +479,7 @@ type GetPollVotesWithDetailsRow struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	Username         string             `json:"username"`
 	CharacterName    pgtype.Text        `json:"character_name"`
+	VoterRole        pgtype.Text        `json:"voter_role"`
 }
 
 // Get detailed vote information (for when show_individual_votes = true)
@@ -473,6 +500,7 @@ func (q *Queries) GetPollVotesWithDetails(ctx context.Context, pollID int32) ([]
 			&i.CreatedAt,
 			&i.Username,
 			&i.CharacterName,
+			&i.VoterRole,
 		); err != nil {
 			return nil, err
 		}
@@ -532,7 +560,7 @@ func (q *Queries) HasUserVoted(ctx context.Context, arg HasUserVotedParams) (boo
 }
 
 const listPollsByGame = `-- name: ListPollsByGame :many
-SELECT id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, is_deleted, created_at, updated_at FROM common_room_polls
+SELECT id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, hide_results_from_players, allow_audience_voting, is_deleted, created_at, updated_at FROM common_room_polls
 WHERE game_id = $1
   AND is_deleted = FALSE
   AND (
@@ -567,6 +595,8 @@ func (q *Queries) ListPollsByGame(ctx context.Context, arg ListPollsByGameParams
 			&i.Deadline,
 			&i.ShowIndividualVotes,
 			&i.AllowOtherOption,
+			&i.HideResultsFromPlayers,
+			&i.AllowAudienceVoting,
 			&i.IsDeleted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -582,7 +612,7 @@ func (q *Queries) ListPollsByGame(ctx context.Context, arg ListPollsByGameParams
 }
 
 const listPollsByPhase = `-- name: ListPollsByPhase :many
-SELECT id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, is_deleted, created_at, updated_at FROM common_room_polls
+SELECT id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, hide_results_from_players, allow_audience_voting, is_deleted, created_at, updated_at FROM common_room_polls
 WHERE game_id = $1
   AND phase_id = $2
   AND is_deleted = FALSE
@@ -614,6 +644,8 @@ func (q *Queries) ListPollsByPhase(ctx context.Context, arg ListPollsByPhasePara
 			&i.Deadline,
 			&i.ShowIndividualVotes,
 			&i.AllowOtherOption,
+			&i.HideResultsFromPlayers,
+			&i.AllowAudienceVoting,
 			&i.IsDeleted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -688,18 +720,22 @@ SET question = $2,
     deadline = $4,
     show_individual_votes = $5,
     allow_other_option = $6,
+    hide_results_from_players = $7,
+    allow_audience_voting = $8,
     updated_at = NOW()
 WHERE id = $1 AND is_deleted = FALSE
-RETURNING id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, is_deleted, created_at, updated_at
+RETURNING id, game_id, phase_id, created_by_user_id, created_by_character_id, question, description, deadline, show_individual_votes, allow_other_option, hide_results_from_players, allow_audience_voting, is_deleted, created_at, updated_at
 `
 
 type UpdatePollParams struct {
-	ID                  int32              `json:"id"`
-	Question            string             `json:"question"`
-	Description         pgtype.Text        `json:"description"`
-	Deadline            pgtype.Timestamptz `json:"deadline"`
-	ShowIndividualVotes pgtype.Bool        `json:"show_individual_votes"`
-	AllowOtherOption    pgtype.Bool        `json:"allow_other_option"`
+	ID                     int32              `json:"id"`
+	Question               string             `json:"question"`
+	Description            pgtype.Text        `json:"description"`
+	Deadline               pgtype.Timestamptz `json:"deadline"`
+	ShowIndividualVotes    pgtype.Bool        `json:"show_individual_votes"`
+	AllowOtherOption       pgtype.Bool        `json:"allow_other_option"`
+	HideResultsFromPlayers bool               `json:"hide_results_from_players"`
+	AllowAudienceVoting    bool               `json:"allow_audience_voting"`
 }
 
 func (q *Queries) UpdatePoll(ctx context.Context, arg UpdatePollParams) (CommonRoomPoll, error) {
@@ -710,6 +746,8 @@ func (q *Queries) UpdatePoll(ctx context.Context, arg UpdatePollParams) (CommonR
 		arg.Deadline,
 		arg.ShowIndividualVotes,
 		arg.AllowOtherOption,
+		arg.HideResultsFromPlayers,
+		arg.AllowAudienceVoting,
 	)
 	var i CommonRoomPoll
 	err := row.Scan(
@@ -723,6 +761,8 @@ func (q *Queries) UpdatePoll(ctx context.Context, arg UpdatePollParams) (CommonR
 		&i.Deadline,
 		&i.ShowIndividualVotes,
 		&i.AllowOtherOption,
+		&i.HideResultsFromPlayers,
+		&i.AllowAudienceVoting,
 		&i.IsDeleted,
 		&i.CreatedAt,
 		&i.UpdatedAt,

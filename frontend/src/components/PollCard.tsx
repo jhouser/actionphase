@@ -25,10 +25,16 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
   // Compute is_expired client-side (backend doesn't provide it)
   const isExpired = new Date(poll.deadline) < new Date();
 
+  // Results of a hidden-results poll are withheld from players permanently — the
+  // backend rejects the request, so never ask for them. GM/audience are exempt.
+  const resultsHiddenFromMe =
+    poll.hide_results_from_players && !isGM && !isAudience;
+
   // Calculate initial showResults state with permission check
   // Players can only see results on expired polls
   // GMs and audience can see results anytime (even on active polls)
   const initialShowResults =
+    !resultsHiddenFromMe &&
     (isExpired || poll.user_has_voted) && // User has voted or poll expired
     (isExpired || isGM || isAudience);     // AND user has permission to view
 
@@ -38,14 +44,19 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
   useEffect(() => {
     // Determine if results should be shown based on user permissions
     const shouldShowResults =
+      !resultsHiddenFromMe &&
       (isExpired || poll.user_has_voted) && // User has voted or poll expired
       (isExpired || isGM || isAudience);     // AND user has permission to view
 
     setShowResults(shouldShowResults);
-  }, [isExpired, poll.user_has_voted, isGM, isAudience]);
+  }, [isExpired, poll.user_has_voted, isGM, isAudience, resultsHiddenFromMe]);
 
-  // Fetch full poll details when showing vote form or when player has voted (to get their vote choice)
-  const needFullPoll = showVotingForm || (!isGM && !isAudience && !isExpired && poll.user_has_voted);
+  // Who may cast a vote: players always, audience only when the GM enabled it.
+  // GMs never vote on their own polls.
+  const canVote = !isGM && (!isAudience || poll.allow_audience_voting);
+
+  // Fetch full poll details when showing vote form or when the voter has voted (to get their vote choice)
+  const needFullPoll = showVotingForm || (canVote && !isExpired && poll.user_has_voted);
   const { data: fullPoll, isLoading: pollLoading } = usePoll(needFullPoll ? poll.id : null);
 
   // Fetch results when showing results
@@ -101,7 +112,7 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
               <Badge variant="secondary">Expired</Badge>
             ) : poll.user_has_voted ? (
               <Badge variant="success">Voted</Badge>
-            ) : !isGM && !isAudience ? (
+            ) : canVote ? (
               <Badge variant="warning">Not Voted</Badge>
             ) : null}
           </div>
@@ -116,8 +127,8 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
           </div>
         )}
 
-        {/* Your vote summary: shown to players who have voted on an active poll */}
-        {!isGM && !isAudience && !isExpired && poll.user_has_voted && !showVotingForm && (
+        {/* Your vote summary: shown to anyone who has voted on an active poll */}
+        {canVote && !isExpired && poll.user_has_voted && !showVotingForm && (
           <div className="mb-4 p-3 rounded-lg bg-bg-secondary border border-border-primary text-sm">
             <span className="font-medium text-text-secondary">Your vote: </span>
             {fullPoll?.user_vote_other_response ? (
@@ -144,7 +155,7 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
                 // Only show results if user is allowed to view them
                 // Players can only see results on expired polls
                 // GMs and audience can see results anytime
-                if (isExpired || isGM || isAudience) {
+                if (!resultsHiddenFromMe && (isExpired || isGM || isAudience)) {
                   setShowResults(true);
                 }
               }}
@@ -166,7 +177,7 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
         {/* Action Buttons */}
         {!showVotingForm && !isExpired && (
           <div className="flex gap-2 mt-4">
-            {!poll.user_has_voted && !isGM && !isAudience && (
+            {!poll.user_has_voted && canVote && (
               <Button
                 variant="primary"
                 onClick={() => setShowVotingForm(true)}
@@ -175,7 +186,7 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
               </Button>
             )}
             {/* Show "Change Vote" button if user has already voted */}
-            {poll.user_has_voted && !isGM && !isAudience && (
+            {poll.user_has_voted && canVote && (
               <Button
                 variant="secondary"
                 onClick={() => setShowVotingForm(true)}
@@ -204,7 +215,22 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
           </div>
         )}
 
-        {isExpired && !showResults && (
+        {/* Hidden results: explain the absence rather than leaving a dead card */}
+        {resultsHiddenFromMe && !showVotingForm && (
+          <div
+            className="mt-4 flex items-start gap-2 p-3 rounded-lg bg-bg-secondary border border-border-primary"
+            data-testid="poll-results-hidden-notice"
+          >
+            <span aria-hidden="true">🔒</span>
+            <p className="text-sm text-text-secondary">
+              {isExpired
+                ? 'This poll is closed. The GM has hidden the results.'
+                : 'The GM has hidden the results of this poll.'}
+            </p>
+          </div>
+        )}
+
+        {isExpired && !showResults && !resultsHiddenFromMe && (
           <Button
             variant="secondary"
             onClick={() => setShowResults(true)}
