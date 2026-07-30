@@ -5,6 +5,12 @@ interface ModalProps {
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
+  /**
+   * Stacking tier. Defaults to the modal tier; a modal launched *from* the
+   * utility drawer passes `LAYERS.drawerChild` so it clears the drawer instead
+   * of rendering underneath it.
+   */
+  zIndexClass?: string;
 }
 
 /**
@@ -14,11 +20,11 @@ interface ModalProps {
  * - 70% less code (no more dark: classes)
  * - Automatically adapts to all themes (light, dark, future themes)
  */
-export const Modal = ({ isOpen, onClose, title, children }: ModalProps) => {
+export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50' }: ModalProps) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className={`fixed inset-0 ${zIndexClass} overflow-y-auto`}>
       <div className="flex min-h-screen items-center justify-center p-1 sm:p-4">
         {/* Backdrop */}
         <div
