@@ -1902,8 +1902,11 @@ func TestConversationService_DeleteConversation(t *testing.T) {
 		require.NoError(t, err, "conversation should survive")
 	})
 
-	t.Run("deleting a nonexistent conversation errors", func(t *testing.T) {
+	t.Run("deleting a nonexistent conversation reports not-found, not a DB fault", func(t *testing.T) {
 		err := service.DeleteConversation(ctx, 999999, int32(player1.ID))
-		assert.Error(t, err)
+		// The specific sentinel matters: it is what lets the handler answer 404
+		// instead of 500. A bare "is an error" assertion passed even when the
+		// missing row was indistinguishable from a database failure.
+		require.ErrorIs(t, err, core.ErrConversationNotFound)
 	})
 }

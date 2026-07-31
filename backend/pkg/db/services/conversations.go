@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"actionphase/pkg/observability"
 	"actionphase/pkg/validation"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -661,7 +663,12 @@ func (s *ConversationService) GetConversation(ctx context.Context, conversationI
 func (s *ConversationService) DeleteConversation(ctx context.Context, conversationID int32, userID int32) error {
 	conv, err := s.Queries.GetConversation(ctx, conversationID)
 	if err != nil {
-		return fmt.Errorf("conversation not found")
+		// Distinguish "no such conversation" from a genuine DB failure so the
+		// handler can render 404 vs 500, and wrap so the cause survives logging.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return core.ErrConversationNotFound
+		}
+		return fmt.Errorf("failed to get conversation: %w", err)
 	}
 
 	game, err := s.Queries.GetGame(ctx, conv.GameID)

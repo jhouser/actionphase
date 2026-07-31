@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/jackc/pgx/v5"
 )
 
 // Handler handles HTTP requests for conversations
@@ -264,6 +265,12 @@ func (h *Handler) DeleteConversation(w http.ResponseWriter, r *http.Request) {
 	// to probe for the existence of conversations the user can't see.
 	canAccess, err := conversationService.CanUserAccessConversation(ctx, int32(conversationID), userID, authUser.IsAdmin)
 	if err != nil {
+		// A missing conversation surfaces here as an error rather than
+		// canAccess=false, so translate it instead of reporting a server fault.
+		if errors.Is(err, pgx.ErrNoRows) {
+			h.renderError(ctx, w, r, core.ErrNotFound("conversation not found"), "Delete conversation not found")
+			return
+		}
 		h.App.Logger.Error("Failed to check conversation access", "error", err, "conversation_id", conversationID, "user_id", userID)
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete conversation", "error", err)
 		return
@@ -275,6 +282,9 @@ func (h *Handler) DeleteConversation(w http.ResponseWriter, r *http.Request) {
 
 	if err := conversationService.DeleteConversation(ctx, int32(conversationID), userID); err != nil {
 		switch {
+		case errors.Is(err, core.ErrConversationNotFound):
+			// Deleted between the access check and here.
+			h.renderError(ctx, w, r, core.ErrNotFound("conversation not found"), "Delete conversation not found")
 		case errors.Is(err, core.ErrConversationNotEmpty):
 			h.renderError(ctx, w, r, core.ErrConflict("conversations with messages cannot be deleted"), "Delete conversation conflict")
 		case errors.Is(err, core.ErrConversationDeleteForbidden):

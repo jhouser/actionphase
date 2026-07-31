@@ -3,6 +3,11 @@ package core
 import "errors"
 
 var (
+	// ErrConversationNotFound is returned when no conversation exists with the
+	// requested ID. Distinct from a database failure so handlers can render a
+	// 404 rather than a 500.
+	ErrConversationNotFound = errors.New("conversation not found")
+
 	// ErrConversationNotEmpty is returned when a delete is attempted on a
 	// conversation that has messages in it.
 	ErrConversationNotEmpty = errors.New("conversation has messages and cannot be deleted")

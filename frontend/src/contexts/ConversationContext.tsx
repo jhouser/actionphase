@@ -70,6 +70,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
 
   // Loading states
   const latestMessagesRequestRef = useRef(0);
+  const latestConversationRequestRef = useRef(0);
 
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -116,16 +117,31 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
   }, [showError]);
 
   const loadConversation = useCallback(async (gameId: number, conversationId: number) => {
+    // Same out-of-order protection as loadMessages, and for the same reason:
+    // both fetches are dispatched from one effect on every conversation switch,
+    // so a slow response for A can land after a fast one for B. Guarding only
+    // the messages leaves `conversation` holding A's details alongside B's
+    // messages — a split state that shows A's title over B's thread and lets
+    // consumers derive permissions (e.g. the delete button) from the wrong row.
+    const requestId = ++latestConversationRequestRef.current;
     try {
       setLoadingConversation(true);
       const response = await apiClient.conversations.getConversation(gameId, conversationId);
+
+      if (requestId !== latestConversationRequestRef.current) {
+        logger.debug('Discarded stale conversation response', { gameId, conversationId });
+        return;
+      }
+
       setConversation(response.data);
       logger.debug('Loaded conversation details', { gameId, conversationId });
     } catch (_err) {
       logger.error('Failed to load conversation', { error: _err, gameId, conversationId });
       showError('Failed to load conversation details.');
     } finally {
-      setLoadingConversation(false);
+      if (requestId === latestConversationRequestRef.current) {
+        setLoadingConversation(false);
+      }
     }
   }, [showError]);
 

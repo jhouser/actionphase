@@ -1801,4 +1801,23 @@ func TestConversationAPI_DeleteConversation(t *testing.T) {
 		_, err := conversationService.GetConversation(context.Background(), conv.ID)
 		core.AssertNoError(t, err, "Conversation should still exist")
 	})
+
+	t.Run("returns 404 for a conversation that does not exist", func(t *testing.T) {
+		// A missing row must not read as a server fault: the access check
+		// returns an error (not canAccess=false) for a nonexistent ID, which
+		// previously surfaced as a 500.
+		rec := deleteRequest(999999, player1Token)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("returns 404 when deleting the same conversation twice", func(t *testing.T) {
+		conv := newConversation(t)
+
+		first := deleteRequest(conv.ID, player1Token)
+		assert.Equal(t, http.StatusOK, first.Code)
+
+		second := deleteRequest(conv.ID, player1Token)
+		assert.Equal(t, http.StatusNotFound, second.Code, "second delete should report not-found, not a server error")
+	})
 }
