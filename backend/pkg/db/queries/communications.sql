@@ -82,6 +82,17 @@ RETURNING *;
 -- name: GetConversation :one
 SELECT * FROM conversations WHERE id = $1;
 
+-- name: DeleteEmptyConversation :execrows
+-- Hard-deletes a conversation only if it has never had a message sent in it.
+-- The NOT EXISTS is part of the DELETE so the emptiness check and the delete are
+-- atomic: a message arriving concurrently makes the delete affect zero rows
+-- rather than silently discarding it. Participants and read markers cascade.
+DELETE FROM conversations c
+WHERE c.id = $1
+  AND NOT EXISTS (
+      SELECT 1 FROM private_messages pm WHERE pm.conversation_id = c.id
+  );
+
 -- name: GetUserUnreadConversations :many
 -- Get conversations with unread messages for a user in a game, capped at a limit.
 -- Used by the dashboard PM preview to avoid fetching the full conversation list.

@@ -164,6 +164,26 @@ func (q *Queries) CreateThreadPost(ctx context.Context, arg CreateThreadPostPara
 	return i, err
 }
 
+const deleteEmptyConversation = `-- name: DeleteEmptyConversation :execrows
+DELETE FROM conversations c
+WHERE c.id = $1
+  AND NOT EXISTS (
+      SELECT 1 FROM private_messages pm WHERE pm.conversation_id = c.id
+  )
+`
+
+// Hard-deletes a conversation only if it has never had a message sent in it.
+// The NOT EXISTS is part of the DELETE so the emptiness check and the delete are
+// atomic: a message arriving concurrently makes the delete affect zero rows
+// rather than silently discarding it. Participants and read markers cascade.
+func (q *Queries) DeleteEmptyConversation(ctx context.Context, id int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteEmptyConversation, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteThread = `-- name: DeleteThread :exec
 DELETE FROM threads WHERE id = $1
 `

@@ -33,6 +33,14 @@ export class ConversationsApi extends BaseApiClient {
     return this.client.get<ConversationWithDetails>(`/api/v1/games/${gameId}/conversations/${conversationId}`);
   }
 
+  /**
+   * Deletes a conversation that has no messages in it. Rejected with 409 by the
+   * server if any message exists, or 403 if the caller is not the creator/GM.
+   */
+  async deleteConversation(gameId: number, conversationId: number) {
+    return this.client.delete<{ message: string; id: number }>(`/api/v1/games/${gameId}/conversations/${conversationId}`);
+  }
+
   async getConversationMessages(gameId: number, conversationId: number) {
     return this.client.get<{ messages: PrivateMessage[] }>(`/api/v1/games/${gameId}/conversations/${conversationId}/messages`);
   }
