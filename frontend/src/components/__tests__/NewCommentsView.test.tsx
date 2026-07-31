@@ -57,14 +57,19 @@ vi.mock('../CommentWithParentCard', () => ({
   ),
 }));
 
-// Mock IntersectionObserver
-const mockIntersectionObserver = vi.fn();
-mockIntersectionObserver.mockReturnValue({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
+// Spy on IntersectionObserver construction.
+//
+// This must be installed in beforeEach, not at module scope: setupTests.ts
+// installs a no-op IntersectionObserver in its own beforeEach, which runs after
+// this module is evaluated and would overwrite a module-scope assignment. The
+// return value is re-established here for the same reason clearAllMocks()
+// demands it — the hook calls observer.observe() immediately, so returning
+// undefined would throw inside the effect.
+const mockIntersectionObserver = vi.fn(class {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
 });
-window.IntersectionObserver = mockIntersectionObserver as unknown as typeof IntersectionObserver;
 
 describe('NewCommentsView', () => {
   const mockComment: CommentWithParent = {
@@ -97,6 +102,9 @@ describe('NewCommentsView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Install after the global setup's beforeEach has run, so this spy is the
+    // IntersectionObserver the component actually constructs.
+    global.IntersectionObserver = mockIntersectionObserver as unknown as typeof IntersectionObserver;
     mockReadMode = 'auto';
     // The unread-only filter persists to localStorage; clear it so each test
     // starts from the default rather than inheriting the previous test's toggle.
@@ -259,14 +267,7 @@ describe('NewCommentsView', () => {
     expect(spinners.length).toBeGreaterThan(0);
   });
 
-  it('sets up intersection observer when hasNextPage is true', () => {
-    const mockObserve = vi.fn();
-    mockIntersectionObserver.mockReturnValue({
-      observe: mockObserve,
-      unobserve: vi.fn(),
-      disconnect: vi.fn(),
-    });
-
+  it('sets up intersection observer when hasNextPage is true', async () => {
     vi.mocked(useRecentCommentsModule.useRecentComments).mockReturnValue({
       data: {
         pages: [{ comments: [mockComment], total: 20, limit: 20, offset: 0 }],
@@ -282,20 +283,15 @@ describe('NewCommentsView', () => {
 
     render(<NewCommentsView gameId={1} />, { wrapper });
 
-    // Wait for useEffect to run
-    waitFor(() => {
+    // Must be awaited: an un-awaited waitFor resolves after the test ends, so a
+    // failing assertion surfaces as an unhandled rejection long after teardown
+    // instead of failing this test.
+    await waitFor(() => {
       expect(mockIntersectionObserver).toHaveBeenCalled();
     });
   });
 
   it('does not set up intersection observer when hasNextPage is false', () => {
-    const mockObserve = vi.fn();
-    mockIntersectionObserver.mockReturnValue({
-      observe: mockObserve,
-      unobserve: vi.fn(),
-      disconnect: vi.fn(),
-    });
-
     vi.mocked(useRecentCommentsModule.useRecentComments).mockReturnValue({
       data: {
         pages: [{ comments: [mockComment], total: 1, limit: 20, offset: 0 }],
@@ -311,8 +307,11 @@ describe('NewCommentsView', () => {
 
     render(<NewCommentsView gameId={1} />, { wrapper });
 
-    // Observer should not be set up if there's no next page
-    expect(mockObserve).not.toHaveBeenCalled();
+    // With no next page the hook is disabled, so no observer is constructed at
+    // all. Asserting on construction rather than on a captured observe() spy
+    // keeps this meaningful: the previous spy was never reachable, so the
+    // assertion held even when the observer mock was not installed.
+    expect(mockIntersectionObserver).not.toHaveBeenCalled();
   });
 
   it('handles unknown error gracefully', () => {
