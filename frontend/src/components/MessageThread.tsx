@@ -23,6 +23,7 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
   const { currentUser } = useAuth();
   const gameContext = useOptionalGameContext();
   const portraitAvatars = gameContext?.game?.portrait_avatars ?? false;
+  const isGM = gameContext?.isGM ?? false;
 
   // Get conversation data from context
   const {
@@ -41,6 +42,7 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
     sendMessage,
     deleteMessage,
     editMessage,
+    deleteConversation,
   } = useConversation();
 
   // UI-specific state
@@ -56,6 +58,8 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
   const hasScrolledRef = useRef(false);
   const [deleteMessageId, setDeleteMessageId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteConversation, setConfirmDeleteConversation] = useState(false);
+  const [deletingConversation, setDeletingConversation] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -335,6 +339,30 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
     }
   };
 
+  // A conversation can only be deleted while it is empty, and only by the person
+  // who created it or a GM. This mirrors the server rule; the server re-checks,
+  // so this only governs whether the button is worth showing.
+  const canDeleteConversation =
+    !!conversation?.conversation &&
+    loadedMessagesConversationId === conversationId &&
+    messages.length === 0 &&
+    (isGM || conversation.conversation.created_by_user_id === currentUser?.id);
+
+  const handleDeleteConversation = async () => {
+    try {
+      setDeletingConversation(true);
+      await deleteConversation(gameId, conversationId);
+      setConfirmDeleteConversation(false);
+      onBack?.();
+    } catch (_err) {
+      // Error already surfaced by the context as a toast.
+      logger.error('Failed to delete conversation', { error: _err, gameId, conversationId });
+      setConfirmDeleteConversation(false);
+    } finally {
+      setDeletingConversation(false);
+    }
+  };
+
   const formatTimestamp = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
@@ -412,6 +440,21 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
                 {isRefreshing ? 'Refreshing...' : 'Refresh'}
               </span>
             </Button>
+            {canDeleteConversation && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmDeleteConversation(true)}
+                className="flex items-center gap-2 flex-shrink-0 text-semantic-danger"
+                aria-label="Delete conversation"
+                title="Delete this empty conversation"
+                data-testid="delete-conversation-button"
+                data-faro-user-action-name="delete-conversation"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Delete</span>
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -657,6 +700,35 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
                 variant="danger"
                 onClick={handleDeleteMessage}
                 loading={deleting}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Conversation Confirmation Modal */}
+      {confirmDeleteConversation && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="surface-base border border-theme-default rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-content-primary mb-4">Delete Conversation?</h3>
+            <p className="text-content-secondary mb-6">
+              This will permanently remove this empty conversation for everyone in it. This cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmDeleteConversation(false)}
+                disabled={deletingConversation}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleDeleteConversation}
+                loading={deletingConversation}
+                data-testid="confirm-delete-conversation-button"
               >
                 Delete
               </Button>

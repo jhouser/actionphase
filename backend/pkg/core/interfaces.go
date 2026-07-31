@@ -1760,4 +1760,11 @@ type ConversationServiceInterface interface {
 	CanUserAccessConversation(ctx context.Context, conversationID int32, userID int32, isAdmin bool) (bool, error)
 	GetConversation(ctx context.Context, conversationID int32) (*models.Conversation, error)
 	GetPrivateMessage(ctx context.Context, messageID int32) (*models.PrivateMessage, error)
+
+	// DeleteConversation permanently removes a conversation that has never had a
+	// message sent in it. Only the creator or a GM/co-GM of the game may do so.
+	// Returns ErrConversationNotEmpty if any message exists (including
+	// soft-deleted ones) and ErrConversationDeleteForbidden if the user is not
+	// authorized.
+	DeleteConversation(ctx context.Context, conversationID int32, userID int32) error
 }

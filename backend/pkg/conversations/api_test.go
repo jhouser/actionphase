@@ -1651,3 +1651,154 @@ func TestConversationAPI_GetUserConversations_UnreadOnly(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	})
 }
+
+// TestConversationAPI_DeleteConversation tests DELETE /games/{gameId}/conversations/{conversationId}
+func TestConversationAPI_DeleteConversation(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "conversations", "characters", "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupConversationAPITestRouter(app, testDB)
+
+	player1 := testDB.CreateTestUser(t, "convdel_player1", "convdel_player1@example.com")
+	player2 := testDB.CreateTestUser(t, "convdel_player2", "convdel_player2@example.com")
+	gm := testDB.CreateTestUser(t, "convdel_gm", "convdel_gm@example.com")
+	outsider := testDB.CreateTestUser(t, "convdel_outsider", "convdel_outsider@example.com")
+
+	player1Token, err := core.CreateTestJWTTokenForUser(app, player1)
+	core.AssertNoError(t, err, "Should create player1 token")
+	player2Token, err := core.CreateTestJWTTokenForUser(app, player2)
+	core.AssertNoError(t, err, "Should create player2 token")
+	gmToken, err := core.CreateTestJWTTokenForUser(app, gm)
+	core.AssertNoError(t, err, "Should create gm token")
+	outsiderToken, err := core.CreateTestJWTTokenForUser(app, outsider)
+	core.AssertNoError(t, err, "Should create outsider token")
+
+	game := testDB.CreateTestGame(t, int32(gm.ID), "Conversation Delete API Game")
+
+	conversationService := db.NewConversationService(testDB.Pool)
+	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	characterService := &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	_, err = gameService.AddGameParticipant(context.Background(), game.ID, int32(player1.ID), "player")
+	core.AssertNoError(t, err, "Should add player1")
+	_, err = gameService.AddGameParticipant(context.Background(), game.ID, int32(player2.ID), "player")
+	core.AssertNoError(t, err, "Should add player2")
+
+	playerChar1, err := characterService.CreateCharacter(context.Background(), db.CreateCharacterRequest{
+		GameID:        game.ID,
+		UserID:        int32Ptr(int32(player1.ID)),
+		Name:          "Convdel Character 1",
+		CharacterType: "player_character",
+	})
+	core.AssertNoError(t, err, "Should create player1 character")
+
+	playerChar2, err := characterService.CreateCharacter(context.Background(), db.CreateCharacterRequest{
+		GameID:        game.ID,
+		UserID:        int32Ptr(int32(player2.ID)),
+		Name:          "Convdel Character 2",
+		CharacterType: "player_character",
+	})
+	core.AssertNoError(t, err, "Should create player2 character")
+
+	newConversation := func(t *testing.T) *models.Conversation {
+		t.Helper()
+		conv, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
+			GameID:          game.ID,
+			Title:           "Oops Conversation",
+			CreatedByUserID: int32(player1.ID),
+			ParticipantIDs:  []int32{playerChar1.ID, playerChar2.ID},
+		})
+		core.AssertNoError(t, err, "Should create conversation")
+		return conv
+	}
+
+	deleteRequest := func(conversationID int32, token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/games/%d/conversations/%d", game.ID, conversationID), nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	t.Run("creator deletes an empty conversation", func(t *testing.T) {
+		conv := newConversation(t)
+
+		rec := deleteRequest(conv.ID, player1Token)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, rec.Body.String(), "deleted successfully")
+
+		// A follow-up GET must now fail, proving the row is really gone.
+		getReq := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/conversations/%d", game.ID, conv.ID), nil)
+		getReq.Header.Set("Authorization", "Bearer "+player1Token)
+		getRec := httptest.NewRecorder()
+		router.ServeHTTP(getRec, getReq)
+		assert.NotEqual(t, http.StatusOK, getRec.Code, "deleted conversation should not be retrievable")
+	})
+
+	t.Run("GM deletes an empty conversation created by a player", func(t *testing.T) {
+		conv := newConversation(t)
+
+		rec := deleteRequest(conv.ID, gmToken)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("returns 409 when the conversation has messages", func(t *testing.T) {
+		conv := newConversation(t)
+		_, err := conversationService.SendMessage(context.Background(), db.SendMessageRequest{
+			ConversationID:    conv.ID,
+			SenderUserID:      int32(player1.ID),
+			SenderCharacterID: playerChar1.ID,
+			Content:           "Now it has history",
+		})
+		core.AssertNoError(t, err, "Should send message")
+
+		rec := deleteRequest(conv.ID, player1Token)
+
+		assert.Equal(t, http.StatusConflict, rec.Code)
+		assert.Contains(t, rec.Body.String(), "cannot be deleted")
+
+		// The conversation must survive the rejected delete.
+		surviving, err := conversationService.GetConversation(context.Background(), conv.ID)
+		core.AssertNoError(t, err, "Conversation should still exist")
+		assert.Equal(t, conv.ID, surviving.ID)
+	})
+
+	t.Run("returns 403 for a participant who is not the creator", func(t *testing.T) {
+		conv := newConversation(t)
+
+		rec := deleteRequest(conv.ID, player2Token)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+
+		_, err := conversationService.GetConversation(context.Background(), conv.ID)
+		core.AssertNoError(t, err, "Conversation should still exist")
+	})
+
+	t.Run("returns 403 for a user with no access to the conversation", func(t *testing.T) {
+		conv := newConversation(t)
+
+		rec := deleteRequest(conv.ID, outsiderToken)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+
+		_, err := conversationService.GetConversation(context.Background(), conv.ID)
+		core.AssertNoError(t, err, "Conversation should still exist")
+	})
+
+	t.Run("requires authentication", func(t *testing.T) {
+		conv := newConversation(t)
+
+		req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/games/%d/conversations/%d", game.ID, conv.ID), nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+		_, err := conversationService.GetConversation(context.Background(), conv.ID)
+		core.AssertNoError(t, err, "Conversation should still exist")
+	})
+}

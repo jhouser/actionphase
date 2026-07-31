@@ -652,6 +652,45 @@ func (s *ConversationService) GetConversation(ctx context.Context, conversationI
 	return &conv, nil
 }
 
+// DeleteConversation permanently removes a conversation that has no messages.
+// This exists so a user who creates a conversation by accident can clean it up;
+// once anything has been said the conversation is history and stays put.
+//
+// Only the creator or the game's GM/co-GM may delete. Participants and read
+// markers are removed by ON DELETE CASCADE.
+func (s *ConversationService) DeleteConversation(ctx context.Context, conversationID int32, userID int32) error {
+	conv, err := s.Queries.GetConversation(ctx, conversationID)
+	if err != nil {
+		return fmt.Errorf("conversation not found")
+	}
+
+	game, err := s.Queries.GetGame(ctx, conv.GameID)
+	if err != nil {
+		return fmt.Errorf("failed to get game: %w", err)
+	}
+
+	isCreator := conv.CreatedByUserID == userID
+	isGM := game.GmUserID == userID || core.IsUserCoGM(ctx, s.DB, conv.GameID, userID)
+	if !isCreator && !isGM {
+		return core.ErrConversationDeleteForbidden
+	}
+
+	// The emptiness check lives inside the DELETE so it cannot race with a
+	// message being sent. Affecting zero rows means the conversation was not
+	// empty (it existed a moment ago, per GetConversation above). Soft-deleted
+	// messages still count: a conversation whose only message was deleted has
+	// history and must not be removable.
+	rows, err := s.Queries.DeleteEmptyConversation(ctx, conversationID)
+	if err != nil {
+		return fmt.Errorf("failed to delete conversation: %w", err)
+	}
+	if rows == 0 {
+		return core.ErrConversationNotEmpty
+	}
+
+	return nil
+}
+
 // GetPrivateMessage retrieves a single private message by ID.
 func (s *ConversationService) GetPrivateMessage(ctx context.Context, messageID int32) (*models.PrivateMessage, error) {
 	msg, err := s.Queries.GetPrivateMessage(ctx, messageID)

@@ -1729,3 +1729,181 @@ func TestConversationService_CanUserAccessConversation(t *testing.T) {
 		assert.True(t, canAccess, "user assigned to NPC in the conversation should have access")
 	})
 }
+
+func TestConversationService_DeleteConversation(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+
+	service := NewConversationService(testDB.Pool)
+	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	gm := testDB.CreateTestUser(t, "gm_convdel", "gm_convdel@example.com")
+	player1 := testDB.CreateTestUser(t, "p1_convdel", "p1_convdel@example.com")
+	player2 := testDB.CreateTestUser(t, "p2_convdel", "p2_convdel@example.com")
+	outsider := testDB.CreateTestUser(t, "outsider_convdel", "outsider_convdel@example.com")
+
+	game := testDB.CreateTestGame(t, int32(gm.ID), "Conversation Delete Test Game")
+
+	_, err := gameService.AddGameParticipant(ctx, game.ID, int32(player1.ID), "player")
+	require.NoError(t, err)
+	_, err = gameService.AddGameParticipant(ctx, game.ID, int32(player2.ID), "player")
+	require.NoError(t, err)
+
+	char1, err := charService.CreateCharacter(ctx, CreateCharacterRequest{
+		GameID:        game.ID,
+		UserID:        int32Ptr(int32(player1.ID)),
+		Name:          "Delete Char 1",
+		CharacterType: "player_character",
+	})
+	require.NoError(t, err)
+
+	char2, err := charService.CreateCharacter(ctx, CreateCharacterRequest{
+		GameID:        game.ID,
+		UserID:        int32Ptr(int32(player2.ID)),
+		Name:          "Delete Char 2",
+		CharacterType: "player_character",
+	})
+	require.NoError(t, err)
+
+	// newConversation creates a fresh empty conversation owned by creatorUserID.
+	newConversation := func(t *testing.T, creatorUserID int32) *dbmodels.Conversation {
+		t.Helper()
+		conv, err := service.CreateConversation(ctx, CreateConversationRequest{
+			GameID:          game.ID,
+			Title:           "Accidental Conversation",
+			CreatedByUserID: creatorUserID,
+			ParticipantIDs:  []int32{char1.ID, char2.ID},
+		})
+		require.NoError(t, err)
+		return conv
+	}
+
+	t.Run("creator can delete an empty conversation", func(t *testing.T) {
+		conv := newConversation(t, int32(player1.ID))
+
+		err := service.DeleteConversation(ctx, conv.ID, int32(player1.ID))
+		require.NoError(t, err)
+
+		// The conversation must actually be gone, not just reported as deleted.
+		_, err = service.GetConversation(ctx, conv.ID)
+		assert.Error(t, err, "conversation should no longer exist")
+
+		// It must also disappear from the creator's conversation list.
+		conversations, err := service.GetUserConversations(ctx, game.ID, int32(player1.ID))
+		require.NoError(t, err)
+		for _, c := range conversations {
+			assert.NotEqual(t, conv.ID, c.ID, "deleted conversation should not be listed")
+		}
+	})
+
+	t.Run("deleting cascades participant rows", func(t *testing.T) {
+		conv := newConversation(t, int32(player1.ID))
+
+		participants, err := service.GetConversationParticipants(ctx, conv.ID)
+		require.NoError(t, err)
+		require.NotEmpty(t, participants, "precondition: conversation has participants")
+
+		require.NoError(t, service.DeleteConversation(ctx, conv.ID, int32(player1.ID)))
+
+		participants, err = service.GetConversationParticipants(ctx, conv.ID)
+		require.NoError(t, err)
+		assert.Empty(t, participants, "participant rows should cascade away")
+	})
+
+	t.Run("GM can delete an empty conversation created by a player", func(t *testing.T) {
+		conv := newConversation(t, int32(player1.ID))
+
+		err := service.DeleteConversation(ctx, conv.ID, int32(gm.ID))
+		require.NoError(t, err)
+
+		_, err = service.GetConversation(ctx, conv.ID)
+		assert.Error(t, err, "conversation should no longer exist")
+	})
+
+	t.Run("co-GM can delete an empty conversation", func(t *testing.T) {
+		coGM := testDB.CreateTestUser(t, "cogm_convdel", "cogm_convdel@example.com")
+		_, err := gameService.AddGameParticipant(ctx, game.ID, int32(coGM.ID), "co_gm")
+		require.NoError(t, err)
+
+		conv := newConversation(t, int32(player1.ID))
+
+		err = service.DeleteConversation(ctx, conv.ID, int32(coGM.ID))
+		require.NoError(t, err)
+
+		_, err = service.GetConversation(ctx, conv.ID)
+		assert.Error(t, err, "conversation should no longer exist")
+	})
+
+	t.Run("conversation with a message cannot be deleted", func(t *testing.T) {
+		conv := newConversation(t, int32(player1.ID))
+
+		_, err := service.SendMessage(ctx, SendMessageRequest{
+			ConversationID:    conv.ID,
+			SenderUserID:      int32(player1.ID),
+			SenderCharacterID: char1.ID,
+			Content:           "This conversation is now real",
+		})
+		require.NoError(t, err)
+
+		err = service.DeleteConversation(ctx, conv.ID, int32(player1.ID))
+		require.ErrorIs(t, err, core.ErrConversationNotEmpty)
+
+		// The conversation and its message must survive the rejected delete.
+		surviving, err := service.GetConversation(ctx, conv.ID)
+		require.NoError(t, err)
+		assert.Equal(t, conv.ID, surviving.ID)
+
+		messages, err := service.GetConversationMessages(ctx, conv.ID, int32(player1.ID))
+		require.NoError(t, err)
+		assert.Len(t, messages, 1, "message should be untouched")
+	})
+
+	t.Run("conversation whose only message was deleted still cannot be deleted", func(t *testing.T) {
+		conv := newConversation(t, int32(player1.ID))
+
+		msg, err := service.SendMessage(ctx, SendMessageRequest{
+			ConversationID:    conv.ID,
+			SenderUserID:      int32(player1.ID),
+			SenderCharacterID: char1.ID,
+			Content:           "Sent then retracted",
+		})
+		require.NoError(t, err)
+
+		require.NoError(t, service.DeletePrivateMessage(ctx, msg.ID, int32(player1.ID)))
+
+		// Soft-deleted messages are still history; the conversation is not empty.
+		err = service.DeleteConversation(ctx, conv.ID, int32(player1.ID))
+		require.ErrorIs(t, err, core.ErrConversationNotEmpty)
+
+		_, err = service.GetConversation(ctx, conv.ID)
+		require.NoError(t, err, "conversation should survive")
+	})
+
+	t.Run("non-creator participant cannot delete", func(t *testing.T) {
+		conv := newConversation(t, int32(player1.ID))
+
+		err := service.DeleteConversation(ctx, conv.ID, int32(player2.ID))
+		require.ErrorIs(t, err, core.ErrConversationDeleteForbidden)
+
+		_, err = service.GetConversation(ctx, conv.ID)
+		require.NoError(t, err, "conversation should survive")
+	})
+
+	t.Run("unrelated user cannot delete", func(t *testing.T) {
+		conv := newConversation(t, int32(player1.ID))
+
+		err := service.DeleteConversation(ctx, conv.ID, int32(outsider.ID))
+		require.ErrorIs(t, err, core.ErrConversationDeleteForbidden)
+
+		_, err = service.GetConversation(ctx, conv.ID)
+		require.NoError(t, err, "conversation should survive")
+	})
+
+	t.Run("deleting a nonexistent conversation errors", func(t *testing.T) {
+		err := service.DeleteConversation(ctx, 999999, int32(player1.ID))
+		assert.Error(t, err)
+	})
+}

@@ -38,6 +38,7 @@ interface ConversationContextType {
   deleteMessage: (gameId: number, conversationId: number, messageId: number) => Promise<void>;
   editMessage: (gameId: number, conversationId: number, messageId: number, content: string) => Promise<void>;
   createConversation: (gameId: number, data: CreateConversationRequest) => Promise<number>;
+  deleteConversation: (gameId: number, conversationId: number) => Promise<void>;
 
   // Utility
   resetConversationState: () => void;
@@ -286,6 +287,39 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     }
   }, [loadConversations, showError]);
 
+  const deleteConversation = useCallback(async (gameId: number, conversationId: number) => {
+    try {
+      await apiClient.conversations.deleteConversation(gameId, conversationId);
+      logger.debug('Deleted conversation', { gameId, conversationId });
+
+      // Clear the thread view if the deleted conversation was the open one,
+      // otherwise it would keep rendering a conversation that no longer exists.
+      setSelectedConversationId(prev => {
+        if (prev !== conversationId) return prev;
+        setConversation(null);
+        setMessages([]);
+        setLoadedMessagesConversationId(null);
+        return null;
+      });
+
+      await loadConversations(gameId);
+      showSuccess('Conversation deleted.');
+    } catch (_err) {
+      logger.error('Failed to delete conversation', { error: _err, gameId, conversationId });
+      // A 409 means messages were sent in the meantime — tell the user why
+      // rather than showing a generic failure they can't act on.
+      const status = (_err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        showError('This conversation has messages and can no longer be deleted.');
+      } else if (status === 403) {
+        showError('Only the person who created this conversation, or a GM, can delete it.');
+      } else {
+        showError('Failed to delete conversation. Please try again.');
+      }
+      throw _err;
+    }
+  }, [loadConversations, showError, showSuccess]);
+
   const resetConversationState = useCallback(() => {
     setConversations([]);
     setSelectedConversationId(null);
@@ -320,6 +354,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     deleteMessage,
     editMessage,
     createConversation,
+    deleteConversation,
 
     // Utility
     resetConversationState,
