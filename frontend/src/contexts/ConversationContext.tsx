@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { apiClient } from '../lib/api';
 import { useToast } from './ToastContext';
@@ -13,6 +13,13 @@ interface ConversationContextType {
   selectedConversationInfo: ConversationListItem | undefined;
   conversation: ConversationWithDetails | null;
   messages: PrivateMessage[];
+  /**
+   * The conversation `messages` actually belongs to, or null when nothing is
+   * loaded. Consumers must check this against their own conversationId before
+   * acting on `messages` — during a switch, `messages` still holds the previous
+   * conversation's data until the new fetch resolves.
+   */
+  loadedMessagesConversationId: number | null;
 
   // Loading states
   loadingConversations: boolean;
@@ -31,6 +38,7 @@ interface ConversationContextType {
   deleteMessage: (gameId: number, conversationId: number, messageId: number) => Promise<void>;
   editMessage: (gameId: number, conversationId: number, messageId: number, content: string) => Promise<void>;
   createConversation: (gameId: number, data: CreateConversationRequest) => Promise<number>;
+  deleteConversation: (gameId: number, conversationId: number) => Promise<void>;
 
   // Utility
   resetConversationState: () => void;
@@ -58,8 +66,12 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [conversation, setConversation] = useState<ConversationWithDetails | null>(null);
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
+  const [loadedMessagesConversationId, setLoadedMessagesConversationId] = useState<number | null>(null);
 
   // Loading states
+  const latestMessagesRequestRef = useRef(0);
+  const latestConversationRequestRef = useRef(0);
+
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingConversation, setLoadingConversation] = useState(false);
@@ -77,6 +89,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       // Clear conversation data when deselecting
       setConversation(null);
       setMessages([]);
+      setLoadedMessagesConversationId(null);
     }
   }, []);
 
@@ -104,25 +117,51 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
   }, [showError]);
 
   const loadConversation = useCallback(async (gameId: number, conversationId: number) => {
+    // Same out-of-order protection as loadMessages, and for the same reason:
+    // both fetches are dispatched from one effect on every conversation switch,
+    // so a slow response for A can land after a fast one for B. Guarding only
+    // the messages leaves `conversation` holding A's details alongside B's
+    // messages — a split state that shows A's title over B's thread and lets
+    // consumers derive permissions (e.g. the delete button) from the wrong row.
+    const requestId = ++latestConversationRequestRef.current;
     try {
       setLoadingConversation(true);
       const response = await apiClient.conversations.getConversation(gameId, conversationId);
+
+      if (requestId !== latestConversationRequestRef.current) {
+        logger.debug('Discarded stale conversation response', { gameId, conversationId });
+        return;
+      }
+
       setConversation(response.data);
       logger.debug('Loaded conversation details', { gameId, conversationId });
     } catch (_err) {
       logger.error('Failed to load conversation', { error: _err, gameId, conversationId });
       showError('Failed to load conversation details.');
     } finally {
-      setLoadingConversation(false);
+      if (requestId === latestConversationRequestRef.current) {
+        setLoadingConversation(false);
+      }
     }
   }, [showError]);
 
   const loadMessages = useCallback(async (gameId: number, conversationId: number) => {
+    // Track the most recent request so out-of-order responses can be discarded.
+    // Without this, a slow fetch for conversation A can resolve after a fast
+    // fetch for B and overwrite B's messages with A's.
+    const requestId = ++latestMessagesRequestRef.current;
     try {
       setLoadingMessages(true);
       const response = await apiClient.conversations.getConversationMessages(gameId, conversationId);
       const newMessages = response.data.messages || [];
+
+      if (requestId !== latestMessagesRequestRef.current) {
+        logger.debug('Discarded stale messages response', { gameId, conversationId });
+        return newMessages;
+      }
+
       setMessages(newMessages);
+      setLoadedMessagesConversationId(conversationId);
       logger.debug('Loaded messages', { gameId, conversationId, count: newMessages.length });
       return newMessages;
     } catch (_err) {
@@ -130,7 +169,9 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       showError('Failed to load messages.');
       return null;
     } finally {
-      setLoadingMessages(false);
+      if (requestId === latestMessagesRequestRef.current) {
+        setLoadingMessages(false);
+      }
     }
   }, [showError]);
 
@@ -262,11 +303,45 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     }
   }, [loadConversations, showError]);
 
+  const deleteConversation = useCallback(async (gameId: number, conversationId: number) => {
+    try {
+      await apiClient.conversations.deleteConversation(gameId, conversationId);
+      logger.debug('Deleted conversation', { gameId, conversationId });
+
+      // Clear the thread view if the deleted conversation was the open one,
+      // otherwise it would keep rendering a conversation that no longer exists.
+      setSelectedConversationId(prev => {
+        if (prev !== conversationId) return prev;
+        setConversation(null);
+        setMessages([]);
+        setLoadedMessagesConversationId(null);
+        return null;
+      });
+
+      await loadConversations(gameId);
+      showSuccess('Conversation deleted.');
+    } catch (_err) {
+      logger.error('Failed to delete conversation', { error: _err, gameId, conversationId });
+      // A 409 means messages were sent in the meantime — tell the user why
+      // rather than showing a generic failure they can't act on.
+      const status = (_err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        showError('This conversation has messages and can no longer be deleted.');
+      } else if (status === 403) {
+        showError('Only the person who created this conversation, or a GM, can delete it.');
+      } else {
+        showError('Failed to delete conversation. Please try again.');
+      }
+      throw _err;
+    }
+  }, [loadConversations, showError, showSuccess]);
+
   const resetConversationState = useCallback(() => {
     setConversations([]);
     setSelectedConversationId(null);
     setConversation(null);
     setMessages([]);
+    setLoadedMessagesConversationId(null);
   }, []);
 
   const value: ConversationContextType = {
@@ -276,6 +351,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     selectedConversationInfo,
     conversation,
     messages,
+    loadedMessagesConversationId,
 
     // Loading states
     loadingConversations,
@@ -294,6 +370,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     deleteMessage,
     editMessage,
     createConversation,
+    deleteConversation,
 
     // Utility
     resetConversationState,

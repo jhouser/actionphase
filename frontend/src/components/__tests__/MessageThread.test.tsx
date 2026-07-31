@@ -1258,4 +1258,154 @@ describe('MessageThread', () => {
       expect(textarea).not.toBeDisabled();
     });
   });
+
+  // Deleting a conversation is only offered while it has no messages, so these
+  // tests override the default message fixture with an empty list.
+  describe('Delete Conversation', () => {
+    const emptyConversation = (createdByUserId: number) => ({
+      conversation: {
+        id: 1,
+        game_id: 1,
+        title: 'Accidental Conversation',
+        conversation_type: 'direct',
+        created_by_user_id: createdByUserId,
+        created_at: '2024-01-01T00:00:00Z',
+      },
+      participants: mockConversation.participants,
+    });
+
+    const mockEmptyConversation = (createdByUserId = 100) => {
+      server.use(
+        http.get('/api/v1/games/:gameId/conversations/:conversationId', () => {
+          return HttpResponse.json(emptyConversation(createdByUserId));
+        }),
+        http.get('/api/v1/games/:gameId/conversations/:conversationId/messages', () => {
+          return HttpResponse.json({ messages: [] });
+        })
+      );
+    };
+
+    it('offers deletion when the creator opens their own empty conversation', async () => {
+      mockEmptyConversation(100);
+
+      renderWithProviders(
+        <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
+      );
+
+      expect(await screen.findByTestId('delete-conversation-button')).toBeInTheDocument();
+    });
+
+    it('does not offer deletion once the conversation has messages', async () => {
+      // Same creator as the passing case above, so the ONLY difference from
+      // "offers deletion" is that messages exist (the default handler returns two).
+      server.use(
+        http.get('/api/v1/games/:gameId/conversations/:conversationId', () => {
+          return HttpResponse.json(emptyConversation(100));
+        })
+      );
+
+      renderWithProviders(
+        <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
+      );
+
+      // Wait for the thread to finish loading before asserting an absence.
+      expect(await screen.findByText('Hello! This is the first message.')).toBeInTheDocument();
+      expect(screen.queryByTestId('delete-conversation-button')).not.toBeInTheDocument();
+    });
+
+    it('does not offer deletion to a user who did not create the conversation', async () => {
+      mockEmptyConversation(999); // created by someone else
+
+      renderWithProviders(
+        <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
+      );
+
+      expect(await screen.findByText('Accidental Conversation')).toBeInTheDocument();
+      expect(screen.queryByTestId('delete-conversation-button')).not.toBeInTheDocument();
+    });
+
+    it('confirms before deleting and calls the delete endpoint', async () => {
+      const user = userEvent.setup();
+      mockEmptyConversation(100);
+
+      let deleteCalledWith: string | null = null;
+      server.use(
+        http.delete('/api/v1/games/:gameId/conversations/:conversationId', ({ params }) => {
+          deleteCalledWith = String(params.conversationId);
+          return HttpResponse.json({ message: 'Conversation deleted successfully', id: 1 });
+        })
+      );
+
+      const onBack = vi.fn();
+      renderWithProviders(
+        <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" onBack={onBack} />
+      );
+
+      await user.click(await screen.findByTestId('delete-conversation-button'));
+
+      // The request must not fire until the user confirms.
+      expect(deleteCalledWith).toBeNull();
+      expect(screen.getByText(/delete conversation\?/i)).toBeInTheDocument();
+
+      await user.click(screen.getByTestId('confirm-delete-conversation-button'));
+
+      await waitFor(() => {
+        expect(deleteCalledWith).toBe('1');
+      });
+
+      // On success the thread view closes, since the conversation is gone.
+      await waitFor(() => {
+        expect(onBack).toHaveBeenCalled();
+      });
+    });
+
+    it('does not delete when the user cancels the confirmation', async () => {
+      const user = userEvent.setup();
+      mockEmptyConversation(100);
+
+      let deleteCalled = false;
+      server.use(
+        http.delete('/api/v1/games/:gameId/conversations/:conversationId', () => {
+          deleteCalled = true;
+          return HttpResponse.json({ message: 'Conversation deleted successfully', id: 1 });
+        })
+      );
+
+      renderWithProviders(
+        <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" />
+      );
+
+      await user.click(await screen.findByTestId('delete-conversation-button'));
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByText(/delete conversation\?/i)).not.toBeInTheDocument();
+      });
+      expect(deleteCalled).toBe(false);
+    });
+
+    it('tells the user why deletion failed when the server reports messages exist', async () => {
+      const user = userEvent.setup();
+      mockEmptyConversation(100);
+
+      server.use(
+        http.delete('/api/v1/games/:gameId/conversations/:conversationId', () => {
+          return HttpResponse.json({ error: 'conflict' }, { status: 409 });
+        })
+      );
+
+      const onBack = vi.fn();
+      renderWithProviders(
+        <MessageThread gameId={1} conversationId={1} characters={mockCharacters} currentPhaseType="common_room" onBack={onBack} />
+      );
+
+      await user.click(await screen.findByTestId('delete-conversation-button'));
+      await user.click(screen.getByTestId('confirm-delete-conversation-button'));
+
+      expect(await screen.findByText(/has messages and can no longer be deleted/i)).toBeInTheDocument();
+      // The view must stay put on failure rather than closing as if it worked.
+      expect(onBack).not.toHaveBeenCalled();
+    });
+  });
+
 });
