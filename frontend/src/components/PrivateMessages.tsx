@@ -131,7 +131,11 @@ function PrivateMessagesInner({ gameId, characters, isAnonymous, allowGroupConve
         /* Message Thread (full screen with centered content on desktop) */
         <div className="h-full flex flex-col surface-base">
           {/* Thread - centered with max-width for better readability on desktop */}
-          <div className="flex-1 overflow-hidden">
+          {/* min-h-0 (not overflow-hidden) lets this flex child shrink to its
+              container without establishing a clipping context. overflow-hidden
+              here would become the sticky containing block for the thread
+              header and prevent it from sticking to the viewport. */}
+          <div className="flex-1 min-h-0">
             <div className="h-full max-w-7xl mx-auto">
               <MessageThread
                 gameId={gameId}
