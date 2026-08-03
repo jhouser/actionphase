@@ -23,15 +23,17 @@ const anonymousVoterName = "Anonymous"
 
 // CreatePollRequest is the API request for creating a poll
 type CreatePollRequest struct {
-	Question               string              `json:"question"`
-	Description            *string             `json:"description,omitempty"`
-	Deadline               time.Time           `json:"deadline"`
-	PhaseID                *int32              `json:"phase_id,omitempty"`
-	ShowIndividualVotes    bool                `json:"show_individual_votes"`
-	AllowOtherOption       bool                `json:"allow_other_option"`
-	HideResultsFromPlayers bool                `json:"hide_results_from_players"`
-	AllowAudienceVoting    bool                `json:"allow_audience_voting"`
-	Options                []PollOptionRequest `json:"options"`
+	Question               string    `json:"question"`
+	Description            *string   `json:"description,omitempty"`
+	Deadline               time.Time `json:"deadline"`
+	PhaseID                *int32    `json:"phase_id,omitempty"`
+	ShowIndividualVotes    bool      `json:"show_individual_votes"`
+	AllowOtherOption       bool      `json:"allow_other_option"`
+	HideResultsFromPlayers bool      `json:"hide_results_from_players"`
+	AllowAudienceVoting    bool      `json:"allow_audience_voting"`
+	// ShowRunningTotalsToPlayers lets players see results before the deadline.
+	ShowRunningTotalsToPlayers bool                `json:"show_running_totals_to_players"`
+	Options                    []PollOptionRequest `json:"options"`
 }
 
 // PollOptionRequest represents a poll option in the API request
@@ -54,18 +56,22 @@ func (req *CreatePollRequest) Bind(r *http.Request) error {
 	if req.HideResultsFromPlayers && req.ShowIndividualVotes {
 		return fmt.Errorf("hide_results_from_players cannot be combined with show_individual_votes")
 	}
+	if req.HideResultsFromPlayers && req.ShowRunningTotalsToPlayers {
+		return fmt.Errorf("hide_results_from_players cannot be combined with show_running_totals_to_players")
+	}
 	return nil
 }
 
 // UpdatePollRequest is the API request for updating a poll
 type UpdatePollRequest struct {
-	Question               string    `json:"question"`
-	Description            *string   `json:"description,omitempty"`
-	Deadline               time.Time `json:"deadline"`
-	ShowIndividualVotes    bool      `json:"show_individual_votes"`
-	AllowOtherOption       bool      `json:"allow_other_option"`
-	HideResultsFromPlayers bool      `json:"hide_results_from_players"`
-	AllowAudienceVoting    bool      `json:"allow_audience_voting"`
+	Question                   string    `json:"question"`
+	Description                *string   `json:"description,omitempty"`
+	Deadline                   time.Time `json:"deadline"`
+	ShowIndividualVotes        bool      `json:"show_individual_votes"`
+	AllowOtherOption           bool      `json:"allow_other_option"`
+	HideResultsFromPlayers     bool      `json:"hide_results_from_players"`
+	AllowAudienceVoting        bool      `json:"allow_audience_voting"`
+	ShowRunningTotalsToPlayers bool      `json:"show_running_totals_to_players"`
 }
 
 // Bind validates the UpdatePollRequest
@@ -78,6 +84,9 @@ func (req *UpdatePollRequest) Bind(r *http.Request) error {
 	}
 	if req.HideResultsFromPlayers && req.ShowIndividualVotes {
 		return fmt.Errorf("hide_results_from_players cannot be combined with show_individual_votes")
+	}
+	if req.HideResultsFromPlayers && req.ShowRunningTotalsToPlayers {
+		return fmt.Errorf("hide_results_from_players cannot be combined with show_running_totals_to_players")
 	}
 	return nil
 }
@@ -295,17 +304,18 @@ func (h *Handler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceReq := core.CreatePollRequest{
-		GameID:                 int32(gameID),
-		PhaseID:                data.PhaseID,
-		CreatedByUserID:        userID,
-		Question:               data.Question,
-		Description:            data.Description,
-		Deadline:               data.Deadline,
-		ShowIndividualVotes:    data.ShowIndividualVotes,
-		AllowOtherOption:       data.AllowOtherOption,
-		HideResultsFromPlayers: data.HideResultsFromPlayers,
-		AllowAudienceVoting:    data.AllowAudienceVoting,
-		Options:                options,
+		GameID:                     int32(gameID),
+		PhaseID:                    data.PhaseID,
+		CreatedByUserID:            userID,
+		Question:                   data.Question,
+		Description:                data.Description,
+		Deadline:                   data.Deadline,
+		ShowIndividualVotes:        data.ShowIndividualVotes,
+		AllowOtherOption:           data.AllowOtherOption,
+		HideResultsFromPlayers:     data.HideResultsFromPlayers,
+		AllowAudienceVoting:        data.AllowAudienceVoting,
+		ShowRunningTotalsToPlayers: data.ShowRunningTotalsToPlayers,
+		Options:                    options,
 	}
 
 	// Create poll
@@ -545,8 +555,9 @@ func (h *Handler) GetPollResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Regular players can only see results after poll expires; privileged users can always view
-	if !access.canSeeIndividualVotes && !poll.Deadline.Time.Before(time.Now()) {
+	// Regular players can only see results after the poll expires, unless the GM
+	// opted into running totals; privileged users can always view.
+	if !access.canSeeIndividualVotes && !poll.ShowRunningTotalsToPlayers && !poll.Deadline.Time.Before(time.Now()) {
 		h.renderError(ctx, w, r, core.ErrForbidden("poll results not available until voting closes"), "Cannot view results - poll still active")
 		return
 	}
@@ -781,13 +792,14 @@ func (h *Handler) UpdatePoll(w http.ResponseWriter, r *http.Request) {
 
 	// Update poll
 	serviceReq := core.UpdatePollRequest{
-		Question:               data.Question,
-		Description:            data.Description,
-		Deadline:               data.Deadline,
-		ShowIndividualVotes:    data.ShowIndividualVotes,
-		AllowOtherOption:       data.AllowOtherOption,
-		HideResultsFromPlayers: data.HideResultsFromPlayers,
-		AllowAudienceVoting:    data.AllowAudienceVoting,
+		Question:                   data.Question,
+		Description:                data.Description,
+		Deadline:                   data.Deadline,
+		ShowIndividualVotes:        data.ShowIndividualVotes,
+		AllowOtherOption:           data.AllowOtherOption,
+		HideResultsFromPlayers:     data.HideResultsFromPlayers,
+		AllowAudienceVoting:        data.AllowAudienceVoting,
+		ShowRunningTotalsToPlayers: data.ShowRunningTotalsToPlayers,
 	}
 
 	updatedPoll, err := pollService.UpdatePoll(ctx, int32(pollID), serviceReq)
