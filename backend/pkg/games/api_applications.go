@@ -419,13 +419,9 @@ func (h *Handler) GetPublicGameApplicants(w http.ResponseWriter, r *http.Request
 
 	gameID := ctx.Value("gameID").(int32)
 
-	// Verify game is in recruiting state
-	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game for public applicants", "error", err, "game_id", gameID)
-		return
-	}
+	// The game middleware already loaded the game for this route; reuse it
+	// rather than issuing a second query on this unauthenticated endpoint.
+	game := ctx.Value("game").(*db.Game)
 
 	// Only show applicants when game is recruiting
 	if !game.State.Valid || game.State.String != core.GameStateRecruitment {

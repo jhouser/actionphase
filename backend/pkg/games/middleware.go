@@ -28,10 +28,12 @@ func (h *Handler) GameMiddleware() func(http.Handler) http.Handler {
 
 			gameService := h.GameService
 
-			// Verify user is GM of this game
+			// Verify user is GM of this game. Distinguish a missing game (404)
+			// from a transient database failure (500) so clients and alerting
+			// are not misled by a blanket 404.
 			game, err := gameService.GetGame(ctx, int32(gameID))
 			if err != nil {
-				h.renderError(ctx, w, r, core.ErrNotFound("Failed to get game"), "Failed to get game", "error", err, "game_id", gameID)
+				h.renderError(ctx, w, r, core.HandleDBErrorWithID(err, "game", gameID), "Failed to get game", "error", err, "game_id", gameID)
 				return
 			}
 

@@ -331,7 +331,7 @@ func (h *Handler) UpdateGame(w http.ResponseWriter, r *http.Request) {
 	defer h.App.ObsLogger.LogOperation(ctx, "api_update_game")()
 
 	if !ctx.Value("is_gm").(bool) {
-		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can update this game state"), "Update game state forbidden")
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can update this game"), "Update game forbidden")
 		return
 	}
 
