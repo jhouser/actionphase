@@ -164,8 +164,8 @@ func (h *Handler) Start() {
 		r.Group(func(r chi.Router) {
 			// Use verifier to extract token if present, but don't require authentication
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Get("/", gameHandler.GetFilteredGames)                       // Main game listing endpoint with filters
-			r.Get("/{id}/applicants", gameHandler.GetPublicGameApplicants) // Public list of applicants (username + role only)
+			r.Get("/", gameHandler.GetFilteredGames)                                                              // Main game listing endpoint with filters
+			r.With(gameHandler.GameMiddleware()).Get("/{gameID}/applicants", gameHandler.GetPublicGameApplicants) // Public list of applicants (username + role only)
 		})
 
 		// All routes below require authentication
@@ -178,185 +178,189 @@ func (h *Handler) Start() {
 
 			// Game listing and viewing
 			r.Get("/recruiting", gameHandler.GetRecruitingGames)
-			r.Get("/{id}", gameHandler.GetGame)
-			r.Get("/{id}/details", gameHandler.GetGameWithDetails)
-			r.Get("/{id}/participants", gameHandler.GetGameParticipants)
 
-			// Game management
 			// Create game requires email verification
 			r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/", gameHandler.CreateGame)
-			r.Put("/{id}", gameHandler.UpdateGame)
-			r.Delete("/{id}", gameHandler.DeleteGame)
-			r.Put("/{id}/state", gameHandler.UpdateGameState)
-			r.Post("/{id}/banner", gameHandler.UploadGameBanner)
-			r.Delete("/{id}/banner", gameHandler.DeleteGameBanner)
+			r.Route("/{gameID}", func(r chi.Router) {
+				r.Use(gameHandler.GameMiddleware())
 
-			// Participant management
-			r.Delete("/{id}/leave", gameHandler.LeaveGame)
-			r.Delete("/{id}/participants/{userId}", gameHandler.RemovePlayer)           // GM removes player
-			r.Post("/{id}/participants/direct-add", gameHandler.AddParticipantDirectly) // GM adds player or audience member directly
+				r.Get("/", gameHandler.GetGame)
+				r.Get("/details", gameHandler.GetGameWithDetails)
+				r.Get("/participants", gameHandler.GetGameParticipants)
 
-			// Co-GM management
-			r.Post("/{id}/participants/{userId}/promote-to-co-gm", gameHandler.PromoteToCoGM)         // GM promotes audience to co-GM
-			r.Post("/{id}/participants/{userId}/demote-from-co-gm", gameHandler.DemoteFromCoGM)       // GM demotes co-GM to audience
-			r.Post("/{id}/participants/{userId}/to-audience", gameHandler.TransitionPlayerToAudience) // GM moves player to audience (permadeath)
+				// Game management
+				r.Put("/", gameHandler.UpdateGame)
+				r.Delete("/", gameHandler.DeleteGame)
+				r.Put("/state", gameHandler.UpdateGameState)
+				r.Post("/banner", gameHandler.UploadGameBanner)
+				r.Delete("/banner", gameHandler.DeleteGameBanner)
 
-			// Game application management
-			// Apply to game requires email verification
-			r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/{id}/apply", gameHandler.ApplyToGame)
-			r.Get("/{id}/applications", gameHandler.GetGameApplications)
-			r.Get("/{id}/application/mine", gameHandler.GetMyGameApplication)
-			r.Put("/{id}/applications/{applicationId}/review", gameHandler.ReviewGameApplication)
-			r.Delete("/{id}/application", gameHandler.WithdrawGameApplication)
+				// Participant management
+				r.Delete("/leave", gameHandler.LeaveGame)
+				r.Delete("/participants/{userId}", gameHandler.RemovePlayer)           // GM removes player
+				r.Post("/participants/direct-add", gameHandler.AddParticipantDirectly) // GM adds player or audience member directly
 
-			// Audience participation
-			r.Get("/{id}/audience", gameHandler.ListAudienceMembers)
-			r.Get("/{id}/characters/audience-npcs", gameHandler.ListAudienceNPCs)
-			r.Put("/{id}/settings/auto-accept-audience", gameHandler.UpdateAutoAcceptAudience)
-			r.Get("/{id}/private-messages/all", gameHandler.ListAllPrivateConversations)
-			r.Get("/{id}/private-messages/participants", gameHandler.GetConversationParticipants)
-			r.Get("/{id}/private-messages/conversations/{conversationId}", gameHandler.GetAudienceConversationMessages)
-			r.Get("/{id}/action-submissions/all", gameHandler.ListAllActionSubmissions)
+				// Co-GM management
+				r.Post("/participants/{userId}/promote-to-co-gm", gameHandler.PromoteToCoGM)         // GM promotes audience to co-GM
+				r.Post("/participants/{userId}/demote-from-co-gm", gameHandler.DemoteFromCoGM)       // GM demotes co-GM to audience
+				r.Post("/participants/{userId}/to-audience", gameHandler.TransitionPlayerToAudience) // GM moves player to audience (permadeath)
 
-			// Character management within games
-			characterHandler := characters.Handler{
-				App:                 h.App,
-				UserService:         &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				CharacterService:    &db.CharacterService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
-			}
-			// Create character requires email verification
-			r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/{gameId}/characters", characterHandler.CreateCharacter)
-			r.Get("/{gameId}/characters", characterHandler.GetGameCharacters)
-			r.Get("/{gameId}/characters/stats", characterHandler.GetGameCharacterStats)
-			r.Get("/{gameId}/characters/controllable", characterHandler.GetUserControllableCharacters)
-			r.Get("/{gameId}/characters/inactive", characterHandler.ListInactiveCharacters) // GM views inactive characters
+				// Game application management
+				// Apply to game requires email verification
+				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/apply", gameHandler.ApplyToGame)
+				r.Get("/applications", gameHandler.GetGameApplications)
+				r.Get("/application/mine", gameHandler.GetMyGameApplication)
+				r.Put("/applications/{applicationId}/review", gameHandler.ReviewGameApplication)
+				r.Delete("/application", gameHandler.WithdrawGameApplication)
 
-			// Phase management within games
-			phaseHandler := phases.Handler{
-				App:                     h.App,
-				PhaseService:            &dbphases.PhaseService{DB: h.App.Pool},
-				ActionSubmissionService: &dbactions.ActionSubmissionService{DB: h.App.Pool, Logger: h.App.ObsLogger, NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger)},
-				GameService:             &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				NotificationService:     db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
-			}
-			r.Post("/{gameId}/phases", phaseHandler.CreatePhase)
-			r.Get("/{gameId}/current-phase", phaseHandler.GetCurrentPhase)
-			r.Get("/{gameId}/phases", phaseHandler.GetGamePhases)
-			r.Post("/{gameId}/actions", phaseHandler.SubmitAction)
-			r.Get("/{gameId}/actions", phaseHandler.GetGameActions)
-			r.Get("/{gameId}/actions/mine", phaseHandler.GetUserActions)
+				// Audience participation
+				r.Get("/audience", gameHandler.ListAudienceMembers)
+				r.Get("/characters/audience-npcs", gameHandler.ListAudienceNPCs)
+				r.Put("/settings/auto-accept-audience", gameHandler.UpdateAutoAcceptAudience)
+				r.Get("/private-messages/all", gameHandler.ListAllPrivateConversations)
+				r.Get("/private-messages/participants", gameHandler.GetConversationParticipants)
+				r.Get("/private-messages/conversations/{conversationId}", gameHandler.GetAudienceConversationMessages)
+				r.Get("/action-submissions/all", gameHandler.ListAllActionSubmissions)
 
-			// Action results management
-			r.Post("/{gameId}/results", phaseHandler.CreateActionResult)
-			r.Get("/{gameId}/results", phaseHandler.GetGameActionResults)
-			r.Get("/{gameId}/results/mine", phaseHandler.GetUserActionResults)
-			r.Put("/{gameId}/results/{resultId}", phaseHandler.UpdateActionResult)
-			r.Delete("/{gameId}/results/{resultId}", phaseHandler.DeleteActionResult)
-			r.Post("/{gameId}/results/{resultId}/publish", phaseHandler.PublishActionResult)
-			r.Post("/{gameId}/phases/{phaseId}/results/publish", phaseHandler.PublishAllPhaseResults)
-			r.Get("/{gameId}/phases/{phaseId}/results/unpublished-count", phaseHandler.GetUnpublishedResultsCount)
+				// Character management within games
+				characterHandler := characters.Handler{
+					App:                 h.App,
+					UserService:         &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					CharacterService:    &db.CharacterService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
+				}
+				// Create character requires email verification
+				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/characters", characterHandler.CreateCharacter)
+				r.Get("/characters", characterHandler.GetGameCharacters)
+				r.Get("/characters/stats", characterHandler.GetGameCharacterStats)
+				r.Get("/characters/controllable", characterHandler.GetUserControllableCharacters)
+				r.Get("/characters/inactive", characterHandler.ListInactiveCharacters) // GM views inactive characters
 
-			// Draft character updates for action results
-			r.Post("/{gameId}/results/{resultId}/character-updates", phaseHandler.CreateDraftCharacterUpdate)
-			r.Get("/{gameId}/results/{resultId}/character-updates", phaseHandler.GetDraftCharacterUpdates)
-			r.Get("/{gameId}/results/{resultId}/character-updates/count", phaseHandler.GetDraftUpdateCount)
-			r.Put("/{gameId}/results/{resultId}/character-updates/{draftId}", phaseHandler.UpdateDraftCharacterUpdate)
-			r.Delete("/{gameId}/results/{resultId}/character-updates/{draftId}", phaseHandler.DeleteDraftCharacterUpdate)
+				// Phase management within games
+				phaseHandler := phases.Handler{
+					App:                     h.App,
+					PhaseService:            &dbphases.PhaseService{DB: h.App.Pool},
+					ActionSubmissionService: &dbactions.ActionSubmissionService{DB: h.App.Pool, Logger: h.App.ObsLogger, NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger)},
+					GameService:             &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					NotificationService:     db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
+				}
+				r.Post("/phases", phaseHandler.CreatePhase)
+				r.Get("/current-phase", phaseHandler.GetCurrentPhase)
+				r.Get("/phases", phaseHandler.GetGamePhases)
+				r.Post("/actions", phaseHandler.SubmitAction)
+				r.Get("/actions", phaseHandler.GetGameActions)
+				r.Get("/actions/mine", phaseHandler.GetUserActions)
 
-			// Common Room messages (posts and comments)
-			messageHandler := messages.Handler{
-				App:            h.App,
-				UserService:    &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				MessageService: &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
-			}
-			// Create post requires email verification
-			r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/{gameId}/posts", messageHandler.CreatePost)
-			r.Get("/{gameId}/posts", messageHandler.GetGamePosts)
-			r.Patch("/{gameId}/posts/{postId}", messageHandler.UpdatePost) // Edit post
-			// Create comment requires email verification
-			r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/{gameId}/posts/{postId}/comments", messageHandler.CreateComment)
-			r.Get("/{gameId}/posts/{postId}/comments", messageHandler.GetPostComments)
-			r.Get("/{gameId}/posts/{postId}/comments-with-threads", messageHandler.GetPostCommentsWithThreads) // NEW: Paginated with nested replies
-			r.Patch("/{gameId}/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)             // Edit comment
-			r.Delete("/{gameId}/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)            // Delete comment
-			r.Get("/{gameId}/messages/{messageId}", messageHandler.GetMessage)                                 // For deep linking to nested comments
-			r.Get("/{gameId}/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)     // Target + full ancestor chain in one request
-			r.Get("/{gameId}/comments/recent", messageHandler.ListRecentCommentsWithParents)                   // New Comments view
+				// Action results management
+				r.Post("/results", phaseHandler.CreateActionResult)
+				r.Get("/results", phaseHandler.GetGameActionResults)
+				r.Get("/results/mine", phaseHandler.GetUserActionResults)
+				r.Put("/results/{resultId}", phaseHandler.UpdateActionResult)
+				r.Delete("/results/{resultId}", phaseHandler.DeleteActionResult)
+				r.Post("/results/{resultId}/publish", phaseHandler.PublishActionResult)
+				r.Post("/phases/{phaseId}/results/publish", phaseHandler.PublishAllPhaseResults)
+				r.Get("/phases/{phaseId}/results/unpublished-count", phaseHandler.GetUnpublishedResultsCount)
 
-			// Read tracking for common room
-			r.Post("/{gameId}/posts/{postId}/mark-read", messageHandler.MarkPostRead)
-			r.Get("/{gameId}/read-markers", messageHandler.GetGameReadMarkers)
-			r.Get("/{gameId}/posts-unread-info", messageHandler.GetPostsUnreadInfo)
-			r.Get("/{gameId}/unread-comment-ids", messageHandler.GetUnreadCommentIDs)
+				// Draft character updates for action results
+				r.Post("/results/{resultId}/character-updates", phaseHandler.CreateDraftCharacterUpdate)
+				r.Get("/results/{resultId}/character-updates", phaseHandler.GetDraftCharacterUpdates)
+				r.Get("/results/{resultId}/character-updates/count", phaseHandler.GetDraftUpdateCount)
+				r.Put("/results/{resultId}/character-updates/{draftId}", phaseHandler.UpdateDraftCharacterUpdate)
+				r.Delete("/results/{resultId}/character-updates/{draftId}", phaseHandler.DeleteDraftCharacterUpdate)
 
-			// Manual read tracking (per-comment)
-			r.Post("/{gameId}/posts/{postId}/comments/{commentId}/toggle-read", messageHandler.ToggleCommentRead)
-			r.Get("/{gameId}/manual-read-comment-ids", messageHandler.GetManualReadCommentIDs)
-			r.Post("/{gameId}/phases/{phaseId}/mark-all-comments-read", messageHandler.MarkAllCommentsRead)
+				// Common Room messages (posts and comments)
+				messageHandler := messages.Handler{
+					App:            h.App,
+					UserService:    &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					MessageService: &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
+				}
+				// Create post requires email verification
+				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/posts", messageHandler.CreatePost)
+				r.Get("/posts", messageHandler.GetGamePosts)
+				r.Patch("/posts/{postId}", messageHandler.UpdatePost) // Edit post
+				// Create comment requires email verification
+				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/posts/{postId}/comments", messageHandler.CreateComment)
+				r.Get("/posts/{postId}/comments", messageHandler.GetPostComments)
+				r.Get("/posts/{postId}/comments-with-threads", messageHandler.GetPostCommentsWithThreads) // NEW: Paginated with nested replies
+				r.Patch("/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)             // Edit comment
+				r.Delete("/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)            // Delete comment
+				r.Get("/messages/{messageId}", messageHandler.GetMessage)                                 // For deep linking to nested comments
+				r.Get("/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)     // Target + full ancestor chain in one request
+				r.Get("/comments/recent", messageHandler.ListRecentCommentsWithParents)                   // New Comments view
 
-			// Private messages (conversations)
-			conversationHandler := &conversations.Handler{
-				App:                 h.App,
-				GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				CharacterService:    &db.CharacterService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				ConversationService: db.NewConversationService(h.App.Pool),
-				PhaseService:        &dbphases.PhaseService{DB: h.App.Pool},
-			}
-			conversationHandler.RegisterRoutes(r)
+				// Read tracking for common room
+				r.Post("/posts/{postId}/mark-read", messageHandler.MarkPostRead)
+				r.Get("/read-markers", messageHandler.GetGameReadMarkers)
+				r.Get("/posts-unread-info", messageHandler.GetPostsUnreadInfo)
+				r.Get("/unread-comment-ids", messageHandler.GetUnreadCommentIDs)
 
-			// Handouts
-			handoutHandler := &handouts.Handler{
-				App:                 h.App,
-				UserService:         &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				HandoutService:      db.NewHandoutService(h.App.Pool),
-				NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
-			}
-			r.Post("/{gameId}/handouts", handoutHandler.CreateHandout)
-			r.Get("/{gameId}/handouts", handoutHandler.ListHandouts)
-			r.Get("/{gameId}/handouts/{handoutId}", handoutHandler.GetHandout)
-			r.Put("/{gameId}/handouts/{handoutId}", handoutHandler.UpdateHandout)
-			r.Delete("/{gameId}/handouts/{handoutId}", handoutHandler.DeleteHandout)
-			r.Post("/{gameId}/handouts/{handoutId}/publish", handoutHandler.PublishHandout)
-			r.Post("/{gameId}/handouts/{handoutId}/unpublish", handoutHandler.UnpublishHandout)
+				// Manual read tracking (per-comment)
+				r.Post("/posts/{postId}/comments/{commentId}/toggle-read", messageHandler.ToggleCommentRead)
+				r.Get("/manual-read-comment-ids", messageHandler.GetManualReadCommentIDs)
+				r.Post("/phases/{phaseId}/mark-all-comments-read", messageHandler.MarkAllCommentsRead)
 
-			// Handout comments
-			r.Post("/{gameId}/handouts/{handoutId}/comments", handoutHandler.CreateHandoutComment)
-			r.Get("/{gameId}/handouts/{handoutId}/comments", handoutHandler.ListHandoutComments)
-			r.Patch("/{gameId}/handouts/{handoutId}/comments/{commentId}", handoutHandler.UpdateHandoutComment)
-			r.Delete("/{gameId}/handouts/{handoutId}/comments/{commentId}", handoutHandler.DeleteHandoutComment)
+				// Private messages (conversations)
+				conversationHandler := &conversations.Handler{
+					App:                 h.App,
+					GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					CharacterService:    &db.CharacterService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					ConversationService: db.NewConversationService(h.App.Pool),
+					PhaseService:        &dbphases.PhaseService{DB: h.App.Pool},
+				}
+				conversationHandler.RegisterRoutes(r)
 
-			// Deadlines
-			deadlineHandler := &deadlines.Handler{
-				App:             h.App,
-				UserService:     &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				GameService:     &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				DeadlineService: &db.DeadlineService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-			}
-			r.Post("/{gameId}/deadlines", deadlineHandler.CreateDeadline)
-			r.Get("/{gameId}/deadlines", deadlineHandler.GetGameDeadlines)
+				// Handouts
+				handoutHandler := &handouts.Handler{
+					App:                 h.App,
+					UserService:         &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					HandoutService:      db.NewHandoutService(h.App.Pool),
+					NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
+				}
+				r.Post("/handouts", handoutHandler.CreateHandout)
+				r.Get("/handouts", handoutHandler.ListHandouts)
+				r.Get("/handouts/{handoutId}", handoutHandler.GetHandout)
+				r.Put("/handouts/{handoutId}", handoutHandler.UpdateHandout)
+				r.Delete("/handouts/{handoutId}", handoutHandler.DeleteHandout)
+				r.Post("/handouts/{handoutId}/publish", handoutHandler.PublishHandout)
+				r.Post("/handouts/{handoutId}/unpublish", handoutHandler.UnpublishHandout)
 
-			// Polls
-			pollHandler := &polls.Handler{
-				App:                 h.App,
-				UserService:         &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				PollService:         &db.PollService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				CharacterService:    &db.CharacterService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-				NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
-			}
-			r.Post("/{gameId}/polls", pollHandler.CreatePoll)
-			r.Get("/{gameId}/polls", pollHandler.ListGamePolls)
-			r.Get("/{gameId}/phases/{phaseId}/polls", pollHandler.ListPollsByPhase)
+				// Handout comments
+				r.Post("/handouts/{handoutId}/comments", handoutHandler.CreateHandoutComment)
+				r.Get("/handouts/{handoutId}/comments", handoutHandler.ListHandoutComments)
+				r.Patch("/handouts/{handoutId}/comments/{commentId}", handoutHandler.UpdateHandoutComment)
+				r.Delete("/handouts/{handoutId}/comments/{commentId}", handoutHandler.DeleteHandoutComment)
 
-			// Logs
-			r.Get("/{gameId}/logs", gameHandler.GetGameLogs)
+				// Deadlines
+				deadlineHandler := &deadlines.Handler{
+					App:             h.App,
+					UserService:     &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					GameService:     &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					DeadlineService: &db.DeadlineService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+				}
+				r.Post("/deadlines", deadlineHandler.CreateDeadline)
+				r.Get("/deadlines", deadlineHandler.GetGameDeadlines)
 
-			// Loot tables
-			r.Get("/{gameId}/loot-tables", gameHandler.GetGameLootTables)
-			r.Get("/{gameId}/loot-tables/{tableId}/contents", gameHandler.GetGameLootTableContents)
+				// Polls
+				pollHandler := &polls.Handler{
+					App:                 h.App,
+					UserService:         &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					PollService:         &db.PollService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					CharacterService:    &db.CharacterService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
+				}
+				r.Post("/polls", pollHandler.CreatePoll)
+				r.Get("/polls", pollHandler.ListGamePolls)
+				r.Get("/phases/{phaseId}/polls", pollHandler.ListPollsByPhase)
+
+				// Logs
+				r.Get("/logs", gameHandler.GetGameLogs)
+
+				r.Get("/loot-tables", gameHandler.GetGameLootTables)
+				r.Get("/loot-tables/{tableId}/contents", gameHandler.GetGameLootTableContents)
+			})
 		})
 	})
 	apiV1Router.Mount("/games", gamesRouter)

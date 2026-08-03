@@ -263,12 +263,7 @@ func (h *Handler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 	defer h.App.ObsLogger.LogOperation(ctx, "CreatePoll")()
 
 	// Extract game ID from URL
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid game ID", "error", err)
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Parse request body
 	data := &CreatePollRequest{}
@@ -378,12 +373,7 @@ func (h *Handler) ListGamePolls(w http.ResponseWriter, r *http.Request) {
 	defer h.App.ObsLogger.LogOperation(ctx, "ListGamePolls")()
 
 	// Extract game ID from URL
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid game ID", "error", err)
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Authenticate user
 	userID, errResp := core.GetUserIDFromJWT(ctx, h.UserService)
@@ -860,12 +850,7 @@ func (h *Handler) ListPollsByPhase(w http.ResponseWriter, r *http.Request) {
 	defer h.App.ObsLogger.LogOperation(ctx, "api_list_polls_by_phase")()
 
 	// Extract game ID from URL
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid game ID", "error", err)
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Extract phase ID from URL
 	phaseIDStr := chi.URLParam(r, "phaseId")

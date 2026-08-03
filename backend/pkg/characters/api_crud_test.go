@@ -4,6 +4,9 @@ import (
 	"actionphase/pkg/core"
 	dbmodels "actionphase/pkg/db/models"
 	db "actionphase/pkg/db/services"
+	dbactions "actionphase/pkg/db/services/actions"
+	dbmessages "actionphase/pkg/db/services/messages"
+	"actionphase/pkg/games"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -24,11 +27,23 @@ func setupCharacterTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux
 
 	router := chi.NewRouter()
 
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
+
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Route("/games/{gameId}", func(r chi.Router) {
+		r.Route("/games/{gameID}", func(r chi.Router) {
 			r.Use(jwtauth.Verifier(tokenAuth))
 			r.Use(jwtauth.Authenticator(tokenAuth))
 			r.Use(core.RequireAuthenticationMiddleware(userService))
+			r.Use(gameHandler.GameMiddleware())
 
 			handler := &Handler{
 				App:                 app,
@@ -753,7 +768,7 @@ func TestCharacterAPI_ValidationErrors(t *testing.T) {
 				Name:          "Test Character",
 				CharacterType: "player_character",
 			},
-			expectedStatus: 500,
+			expectedStatus: 404,
 			expectedError:  "",
 			description:    "Should handle negative game ID (game not found)",
 		},

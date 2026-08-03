@@ -75,13 +75,6 @@ func (h *Handler) PublishAllPhaseResults(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_publish_all_phase_results")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid publish all phase results request")
-		return
-	}
-
 	phaseIDStr := chi.URLParam(r, "phaseId")
 	phaseID, err := strconv.ParseInt(phaseIDStr, 10, 32)
 	if err != nil {
@@ -96,15 +89,8 @@ func (h *Handler) PublishAllPhaseResults(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Get game and check GM permissions (considers admin mode)
-	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game", "error", err)
-		return
-	}
-
-	if !core.IsUserGameMaster(r, authUser.ID, authUser.IsAdmin, *game, h.App.Pool) {
+	// Check GM permissions (considers admin mode)
+	if !ctx.Value("is_gm").(bool) {
 		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can publish action results"), "Publish all phase results forbidden")
 		return
 	}
@@ -128,13 +114,6 @@ func (h *Handler) GetUnpublishedResultsCount(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_unpublished_results_count")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get unpublished results count request")
-		return
-	}
-
 	phaseIDStr := chi.URLParam(r, "phaseId")
 	phaseID, err := strconv.ParseInt(phaseIDStr, 10, 32)
 	if err != nil {
@@ -149,15 +128,8 @@ func (h *Handler) GetUnpublishedResultsCount(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Get game and check GM permissions (considers admin mode)
-	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game", "error", err)
-		return
-	}
-
-	if !core.IsUserGameMaster(r, authUser.ID, authUser.IsAdmin, *game, h.App.Pool) {
+	// Check GM permissions (considers admin mode)
+	if !ctx.Value("is_gm").(bool) {
 		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can view result counts"), "Get unpublished results count forbidden")
 		return
 	}

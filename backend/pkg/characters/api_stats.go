@@ -2,6 +2,7 @@ package characters
 
 import (
 	"actionphase/pkg/core"
+	db "actionphase/pkg/db/models"
 	models "actionphase/pkg/db/models"
 	"fmt"
 	"net/http"
@@ -117,19 +118,8 @@ func (h *Handler) GetGameCharacterStats(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game_character_stats")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get game character stats request")
-		return
-	}
-
-	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrNotFound("game not found"), "Failed to get game for stats", "error", err, "game_id", gameID)
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
+	game := ctx.Value("game").(*db.Game)
 
 	characterService := h.CharacterService
 	characters, err := characterService.GetCharactersByGame(ctx, int32(gameID))

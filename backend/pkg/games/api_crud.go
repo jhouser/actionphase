@@ -2,13 +2,12 @@ package games
 
 import (
 	"actionphase/pkg/core"
+	db "actionphase/pkg/db/models"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 )
 
@@ -142,19 +141,7 @@ func (h *Handler) GetGame(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid game ID parameter", "game_id_str", gameIDStr)
-		return
-	}
-
-	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.HandleDBErrorWithID(err, "game", gameID), "Failed to get game", "error", err, "game_id", gameID)
-		return
-	}
+	game := ctx.Value("game").(*db.Game)
 
 	// Convert to response format (same as CreateGame)
 	response := &GameResponse{
@@ -217,16 +204,16 @@ func (h *Handler) UpdateGameState(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_update_game_state")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid update game state request")
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can update this game state"), "Update game state forbidden")
 		return
 	}
 
+	game := ctx.Value("game").(*db.Game)
+
 	data := &UpdateGameStateRequest{}
 	if err := render.Bind(r, data); err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid update game state request", "error", err, "game_id", gameID)
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid update game state request", "error", err, "game_id", game.ID)
 		return
 	}
 
@@ -239,85 +226,72 @@ func (h *Handler) UpdateGameState(w http.ResponseWriter, r *http.Request) {
 
 	gameService := h.GameService
 
-	// Verify user is GM of this game
-	game, err := gameService.GetGame(ctx, int32(gameID))
+	updatedGame, err := gameService.UpdateGameState(ctx, game.ID, data.State)
 	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game for permission check", "error", err, "game_id", gameID)
-		return
-	}
-
-	// Check GM permissions (considers admin mode)
-	if !core.IsUserGameMaster(r, user.ID, user.IsAdmin, *game, h.App.Pool) {
-		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can update this game state"), "Update game state forbidden")
-		return
-	}
-
-	updatedGame, err := gameService.UpdateGameState(ctx, int32(gameID), data.State)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to update game state", "error", err, "game_id", gameID)
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to update game state", "error", err, "game_id", game.ID)
 		return
 	}
 
 	// If transitioning out of recruitment, convert approved applications to participants
 	if game.State.String == core.GameStateRecruitment && data.State != core.GameStateRecruitment {
-		h.App.ObsLogger.Info(ctx, "Transitioning out of recruitment, converting approved applications", "game_id", gameID)
+		h.App.ObsLogger.Info(ctx, "Transitioning out of recruitment, converting approved applications", "game_id", game.ID)
 
 		applicationService := h.GameApplicationService
 		notificationService := h.NotificationService
 
 		// Get approved applications before conversion (for notifications)
-		approvedApps, err := applicationService.GetApprovedApplicationsForGame(ctx, int32(gameID))
+		approvedApps, err := applicationService.GetApprovedApplicationsForGame(ctx, game.ID)
 		if err != nil {
-			h.App.ObsLogger.Error(ctx, "Failed to get approved applications", "error", err, "game_id", gameID)
+			h.App.ObsLogger.Error(ctx, "Failed to get approved applications", "error", err, "game_id", game.ID)
 		}
 
 		// Auto-reject all pending applications (those not explicitly approved)
-		err = applicationService.BulkRejectApplications(ctx, int32(gameID), user.ID)
+		err = applicationService.BulkRejectApplications(ctx, game.ID, user.ID)
 		if err != nil {
-			h.App.ObsLogger.Error(ctx, "Failed to bulk reject pending applications", "error", err, "game_id", gameID)
+			h.App.ObsLogger.Error(ctx, "Failed to bulk reject pending applications", "error", err, "game_id", game.ID)
 			// Don't fail the state transition, but log the error
 		}
 
 		// Publish application statuses so applicants can see their final status
-		err = applicationService.PublishApplicationStatuses(ctx, int32(gameID))
+		err = applicationService.PublishApplicationStatuses(ctx, game.ID)
 		if err != nil {
-			h.App.ObsLogger.Error(ctx, "Failed to publish application statuses", "error", err, "game_id", gameID)
+			h.App.ObsLogger.Error(ctx, "Failed to publish application statuses", "error", err, "game_id", game.ID)
 			// Don't fail the state transition, but log the error
 		} else {
-			h.App.ObsLogger.Info(ctx, "Successfully published application statuses", "game_id", gameID)
+			h.App.ObsLogger.Info(ctx, "Successfully published application statuses", "game_id", game.ID)
 		}
 
 		// Convert approved applications to participants
-		err = applicationService.ConvertApprovedApplicationsToParticipants(ctx, int32(gameID))
+		err = applicationService.ConvertApprovedApplicationsToParticipants(ctx, game.ID)
 		if err != nil {
-			h.App.ObsLogger.Error(ctx, "Failed to convert approved applications to participants", "error", err, "game_id", gameID)
+			h.App.ObsLogger.Error(ctx, "Failed to convert approved applications to participants", "error", err, "game_id", game.ID)
 			// Don't fail the state transition, but log the error
 		} else {
-			h.App.ObsLogger.Info(ctx, "Successfully converted approved applications to participants", "game_id", gameID)
+			h.App.ObsLogger.Info(ctx, "Successfully converted approved applications to participants", "game_id", game.ID)
 		}
 
 		// Delete all rejected applications now that recruitment is closed
 		// Rejected applicants cannot join the game, so no need to keep the application records
-		err = applicationService.DeleteRejectedApplications(ctx, int32(gameID))
+		err = applicationService.DeleteRejectedApplications(ctx, game.ID)
 		if err != nil {
-			h.App.ObsLogger.Warn(ctx, "Failed to delete rejected applications", "error", err, "game_id", gameID)
+			h.App.ObsLogger.Warn(ctx, "Failed to delete rejected applications", "error", err, "game_id", game.ID)
 			// Don't fail the state transition, but log the warning
 		} else {
-			h.App.ObsLogger.Info(ctx, "Successfully deleted rejected applications", "game_id", gameID)
+			h.App.ObsLogger.Info(ctx, "Successfully deleted rejected applications", "game_id", game.ID)
 		}
 
 		// Send acceptance notifications to approved applicants (regardless of conversion success)
 		// Do this only if we successfully retrieved the approved applications list
 		if approvedApps != nil && len(approvedApps) > 0 {
 			for _, app := range approvedApps {
-				if err := notificationService.NotifyApplicationApproved(ctx, app.UserID, int32(gameID), updatedGame.Title); err != nil {
+				if err := notificationService.NotifyApplicationApproved(ctx, app.UserID, game.ID, updatedGame.Title); err != nil {
 					h.App.ObsLogger.Warn(ctx, "Failed to create acceptance notification",
 						"error", err,
-						"game_id", gameID,
+						"game_id", game.ID,
 						"user_id", app.UserID)
 				} else {
 					h.App.ObsLogger.Info(ctx, "Sent acceptance notification",
-						"game_id", gameID,
+						"game_id", game.ID,
 						"user_id", app.UserID)
 				}
 			}
@@ -331,8 +305,8 @@ func (h *Handler) UpdateGameState(w http.ResponseWriter, r *http.Request) {
 		notifSvc := h.NotificationService
 		go func() {
 			notifCtx := context.Background()
-			if err := notifSvc.NotifyGameStateChanged(notifCtx, int32(gameID), data.State, updatedGame.Title, user.ID); err != nil {
-				h.App.ObsLogger.Warn(notifCtx, "Failed to send game state changed notifications", "error", err, "game_id", gameID)
+			if err := notifSvc.NotifyGameStateChanged(notifCtx, game.ID, data.State, updatedGame.Title, user.ID); err != nil {
+				h.App.ObsLogger.Warn(notifCtx, "Failed to send game state changed notifications", "error", err, "game_id", game.ID)
 			}
 		}()
 	}
@@ -356,44 +330,24 @@ func (h *Handler) UpdateGame(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_update_game")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid game ID in update request", "game_id_str", gameIDStr)
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can update this game"), "Update game forbidden")
 		return
 	}
+
+	game := ctx.Value("game").(*db.Game)
 
 	data := &UpdateGameRequest{}
 	if err := render.Bind(r, data); err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid update game request", "error", err, "game_id", gameID)
-		return
-	}
-
-	// Get authenticated user
-	user := core.GetAuthenticatedUser(ctx)
-	if user == nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "No authenticated user found")
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid update game request", "error", err, "game_id", game.ID)
 		return
 	}
 
 	gameService := h.GameService
 
-	// Verify user is GM of this game
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game for permission check", "error", err, "game_id", gameID)
-		return
-	}
-
-	// Check GM permissions (considers admin mode)
-	if !core.IsUserGameMaster(r, user.ID, user.IsAdmin, *game, h.App.Pool) {
-		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can update this game"), "Update game forbidden")
-		return
-	}
-
 	// Update the game
 	updatedGame, err := gameService.UpdateGame(ctx, core.UpdateGameRequest{
-		ID:                      int32(gameID),
+		ID:                      game.ID,
 		Title:                   data.Title,
 		Description:             data.Description,
 		Genre:                   data.Genre,
@@ -415,7 +369,7 @@ func (h *Handler) UpdateGame(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to update game", "error", err, "game_id", gameID)
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to update game", "error", err, "game_id", game.ID)
 		return
 	}
 
@@ -480,39 +434,21 @@ func (h *Handler) DeleteGame(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_delete_game")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid delete game request")
-		return
-	}
-
-	// Get authenticated user
-	user := core.GetAuthenticatedUser(ctx)
-	if user == nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "No authenticated user found")
-		return
-	}
-
-	gameService := h.GameService
-
-	// Verify user is GM of this game
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game for permission check", "error", err, "game_id", gameID)
-		return
-	}
-
 	// Check GM permissions (considers admin mode)
-	if !core.IsUserGameMaster(r, user.ID, user.IsAdmin, *game, h.App.Pool) {
+	if !ctx.Value("is_gm").(bool) {
 		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can delete this game"), "Delete game forbidden")
 		return
 	}
 
+	game := ctx.Value("game").(*db.Game)
+	// Get authenticated user
+	user := core.GetAuthenticatedUser(ctx)
+
+	gameService := h.GameService
 	// Delete the game (pass userID for authorization in service layer)
-	err = gameService.DeleteGame(ctx, int32(gameID), int32(user.ID))
+	err := gameService.DeleteGame(ctx, int32(game.ID), int32(user.ID))
 	if err != nil {
-		h.App.ObsLogger.Error(ctx, "Failed to delete game", "error", err, "game_id", gameID)
+		h.App.ObsLogger.Error(ctx, "Failed to delete game", "error", err, "game_id", game.ID)
 		// Check for specific errors and return appropriate HTTP status codes
 		errMsg := err.Error()
 		switch {
@@ -537,15 +473,10 @@ func (h *Handler) GetGameWithDetails(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game_with_details")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get game with details request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	gameService := h.GameService
-	game, err := gameService.GetGameWithDetails(ctx, int32(gameID))
+	game, err := gameService.GetGameWithDetails(ctx, gameID)
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game with details", "error", err, "game_id", gameID)
 		return
