@@ -293,12 +293,7 @@ func (h *Handler) GetMessageThreadContext(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_message_thread_context")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get message thread context request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	messageIDStr := chi.URLParam(r, "messageId")
 	messageID, err := strconv.ParseInt(messageIDStr, 10, 32)
