@@ -22,6 +22,7 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
   const [allowOtherOption, setAllowOtherOption] = useState(false);
   const [hideResultsFromPlayers, setHideResultsFromPlayers] = useState(false);
   const [allowAudienceVoting, setAllowAudienceVoting] = useState(false);
+  const [showRunningTotals, setShowRunningTotals] = useState(false);
   const [options, setOptions] = useState<string[]>(['', '']);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,11 +36,21 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
     }
   };
 
-  // "Show individual votes" and "Hide results from players" are mutually exclusive:
-  // one reveals per-voter attribution to players, the other withholds results entirely.
-  // Selecting either clears the other so an invalid combination is unreachable.
+  // "Hide results from players" is mutually exclusive with both disclosure options:
+  // "Show individual votes" reveals per-voter attribution and "Show running totals"
+  // reveals results early, while hiding withholds results entirely. Selecting any of
+  // them clears the conflicting one so an invalid combination is unreachable.
+  const disclosesResultsToPlayers = showIndividualVotes || showRunningTotals;
+
   const handleShowIndividualVotesChange = (checked: boolean) => {
     setShowIndividualVotes(checked);
+    if (checked) {
+      setHideResultsFromPlayers(false);
+    }
+  };
+
+  const handleShowRunningTotalsChange = (checked: boolean) => {
+    setShowRunningTotals(checked);
     if (checked) {
       setHideResultsFromPlayers(false);
     }
@@ -49,6 +60,7 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
     setHideResultsFromPlayers(checked);
     if (checked) {
       setShowIndividualVotes(false);
+      setShowRunningTotals(false);
     }
   };
 
@@ -91,6 +103,7 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
       allow_other_option: allowOtherOption,
       hide_results_from_players: hideResultsFromPlayers,
       allow_audience_voting: allowAudienceVoting,
+      show_running_totals_to_players: showRunningTotals,
       phase_id: currentPhaseId,
       options: filledOptions.map((text, index) => ({ text, display_order: index }))
     };
@@ -186,10 +199,24 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
               onChange={(e) => handleShowIndividualVotesChange(e.target.checked)}
             />
             <Checkbox
+              id="poll-show-running-totals"
+              label="Show running totals to players"
+              helperText={
+                hideResultsFromPlayers
+                  ? "Unavailable while results are hidden from players"
+                  : showIndividualVotes
+                    ? "Players see the live results, including who voted for what."
+                    : "Players see the live vote counts before the poll closes, without seeing who voted for what."
+              }
+              disabled={hideResultsFromPlayers}
+              checked={showRunningTotals}
+              onChange={(e) => handleShowRunningTotalsChange(e.target.checked)}
+            />
+            <Checkbox
               id="poll-hide-results"
               label="Hide results from players"
               helperText="Players can vote but never see the results, even after the poll closes. You and the audience still see them."
-              disabled={showIndividualVotes}
+              disabled={disclosesResultsToPlayers}
               checked={hideResultsFromPlayers}
               onChange={(e) => handleHideResultsChange(e.target.checked)}
             />

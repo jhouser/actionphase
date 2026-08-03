@@ -29,6 +29,11 @@ export interface Poll {
   hide_results_from_players: boolean;
   /** When true, audience members may vote; their votes are recorded anonymously. */
   allow_audience_voting: boolean;
+  /**
+   * When true, players see results while voting is still open. Attribution still
+   * follows show_individual_votes: tallies only unless that flag is also set.
+   */
+  show_running_totals_to_players: boolean;
   is_deleted: boolean;
   created_at: string;
   updated_at?: string;
@@ -98,6 +103,7 @@ export interface CreatePollRequest {
   allow_other_option: boolean;
   hide_results_from_players: boolean;
   allow_audience_voting: boolean;
+  show_running_totals_to_players: boolean;
   phase_id?: number;
   created_by_character_id?: number;
   options: CreatePollOptionRequest[];
@@ -111,6 +117,7 @@ export interface UpdatePollRequest {
   allow_other_option: boolean;
   hide_results_from_players: boolean;
   allow_audience_voting: boolean;
+  show_running_totals_to_players: boolean;
 }
 
 export interface SubmitVoteRequest {

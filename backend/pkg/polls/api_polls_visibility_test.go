@@ -61,6 +61,7 @@ func setupVisibilityRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 			})
 			r.Post("/polls/{pollId}/vote", handler.SubmitVote)
 			r.Get("/polls/{pollId}/results", handler.GetPollResults)
+			r.Put("/polls/{pollId}", handler.UpdatePoll)
 		})
 	})
 
@@ -159,6 +160,26 @@ func voteReq(t *testing.T, router *chi.Mux, pollID int32, optionID int32, token 
 	t.Helper()
 	body, _ := json.Marshal(SubmitVoteRequest{SelectedOptionID: &optionID})
 	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/polls/%d/vote", pollID), bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+// updatePollReq issues a PUT against a poll. The handler replaces every
+// setting, so callers pass a fully-populated request.
+func updatePollReq(t *testing.T, router *chi.Mux, pollID int32, token string, body UpdatePollRequest) *httptest.ResponseRecorder {
+	t.Helper()
+	if body.Question == "" {
+		body.Question = "Visibility question?"
+	}
+	if body.Deadline.IsZero() {
+		body.Deadline = time.Now().Add(24 * time.Hour)
+	}
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/polls/%d", pollID), bytes.NewBuffer(raw))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
@@ -320,6 +341,278 @@ func TestCreatePoll_HiddenResultsWithIndividualVotes_Rejected(t *testing.T) {
 	require.NoError(t, testDB.Pool.QueryRow(context.Background(),
 		"SELECT COUNT(*) FROM common_room_polls WHERE game_id = $1", gameRecord.ID).Scan(&count))
 	assert.Equal(t, 0, count, "rejected poll must not be persisted")
+}
+
+// ============================================================
+// Running totals
+// ============================================================
+
+func TestRunningTotals_Disabled_PlayerDeniedWhilePollOpen(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, visibilityTables...)
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupVisibilityRouter(app, testDB)
+
+	// Control case: without the flag, players still wait for the deadline.
+	f := setupVisibilityFixture(t, testDB, app, "rtoff", core.CreatePollRequest{
+		ShowRunningTotalsToPlayers: false,
+	})
+
+	require.Equal(t, http.StatusOK, voteReq(t, router, f.pollID, f.optionAID, f.playerToken).Code)
+
+	rec := getResultsReq(t, router, f.pollID, f.playerToken)
+	assert.Equal(t, http.StatusForbidden, rec.Code,
+		"without running totals, an open poll's results stay closed to players")
+}
+
+func TestRunningTotals_Enabled_PlayerSeesTotalsWhilePollOpen(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, visibilityTables...)
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupVisibilityRouter(app, testDB)
+
+	f := setupVisibilityFixture(t, testDB, app, "rton", core.CreatePollRequest{
+		ShowRunningTotalsToPlayers: true,
+	})
+
+	require.Equal(t, http.StatusOK, voteReq(t, router, f.pollID, f.optionAID, f.playerToken).Code)
+
+	// Poll is still open — the player should nonetheless see the live tally.
+	rec := getResultsReq(t, router, f.pollID, f.playerToken)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var results PollResultsResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &results))
+	assert.Equal(t, int32(1), results.TotalVotes)
+
+	var votesForA int32
+	for _, opt := range results.OptionResults {
+		if opt.PollOptionID != nil && *opt.PollOptionID == f.optionAID {
+			votesForA = opt.VoteCount
+		}
+	}
+	assert.Equal(t, int32(1), votesForA, "player should see the running tally for option A")
+}
+
+func TestRunningTotals_WithoutIndividualVotes_PlayerSeesNoAttribution(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, visibilityTables...)
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupVisibilityRouter(app, testDB)
+
+	f := setupVisibilityFixture(t, testDB, app, "rtnoattr", core.CreatePollRequest{
+		ShowRunningTotalsToPlayers: true,
+		ShowIndividualVotes:        false,
+	})
+
+	require.Equal(t, http.StatusOK, voteReq(t, router, f.pollID, f.optionAID, f.playerToken).Code)
+
+	rec := getResultsReq(t, router, f.pollID, f.playerToken)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var results PollResultsResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &results))
+
+	assert.False(t, results.ShowIndividualVotes,
+		"running totals alone must not enable vote attribution")
+	for _, opt := range results.OptionResults {
+		assert.Empty(t, opt.Voters, "running totals alone must not disclose who voted")
+	}
+	assert.NotContains(t, rec.Body.String(), "Hero",
+		"character names must not leak when individual votes are off")
+}
+
+func TestRunningTotals_WithIndividualVotes_PlayerSeesWhoVoted(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, visibilityTables...)
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupVisibilityRouter(app, testDB)
+
+	f := setupVisibilityFixture(t, testDB, app, "rtattr", core.CreatePollRequest{
+		ShowRunningTotalsToPlayers: true,
+		ShowIndividualVotes:        true,
+	})
+
+	require.Equal(t, http.StatusOK, voteReq(t, router, f.pollID, f.optionAID, f.playerToken).Code)
+
+	rec := getResultsReq(t, router, f.pollID, f.playerToken)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var results PollResultsResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &results))
+
+	var voterFound *VoterInfo
+	for i := range results.OptionResults {
+		opt := &results.OptionResults[i]
+		if opt.PollOptionID != nil && *opt.PollOptionID == f.optionAID && len(opt.Voters) > 0 {
+			voterFound = &opt.Voters[0]
+		}
+	}
+
+	require.NotNil(t, voterFound,
+		"with individual votes enabled, the player should see who voted for option A")
+	assert.Equal(t, f.playerUserID, voterFound.UserID)
+	assert.Contains(t, voterFound.CharacterName, "Hero")
+}
+
+func TestCreatePoll_RunningTotalsWithHiddenResults_Rejected(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, visibilityTables...)
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupVisibilityRouter(app, testDB)
+
+	gm := testDB.CreateTestUser(t, "rtexcl_gm", "rtexcl_gm@example.com")
+	gameRecord := testDB.CreateTestGame(t, int32(gm.ID), "Running Totals Exclusivity Game")
+	gmToken, err := core.CreateTestJWTTokenForUser(app, gm)
+	require.NoError(t, err)
+
+	body, _ := json.Marshal(CreatePollRequest{
+		Question:                   "Both at once?",
+		Deadline:                   time.Now().Add(24 * time.Hour),
+		HideResultsFromPlayers:     true,
+		ShowRunningTotalsToPlayers: true,
+		Options: []PollOptionRequest{
+			{Text: "A", DisplayOrder: 1},
+			{Text: "B", DisplayOrder: 2},
+		},
+	})
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/games/%d/polls", gameRecord.ID), bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+gmToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code,
+		"hiding results and showing running totals are mutually exclusive")
+
+	var count int
+	require.NoError(t, testDB.Pool.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM common_room_polls WHERE game_id = $1", gameRecord.ID).Scan(&count))
+	assert.Equal(t, 0, count, "rejected poll must not be persisted")
+}
+
+func TestUpdatePoll_EnablingRunningTotals_OpensResultsToPlayer(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, visibilityTables...)
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupVisibilityRouter(app, testDB)
+
+	f := setupVisibilityFixture(t, testDB, app, "rtupon", core.CreatePollRequest{
+		ShowRunningTotalsToPlayers: false,
+	})
+
+	require.Equal(t, http.StatusOK, voteReq(t, router, f.pollID, f.optionAID, f.playerToken).Code)
+	require.Equal(t, http.StatusForbidden, getResultsReq(t, router, f.pollID, f.playerToken).Code,
+		"precondition: results start closed while the poll is open")
+
+	rec := updatePollReq(t, router, f.pollID, f.gmToken, UpdatePollRequest{
+		ShowRunningTotalsToPlayers: true,
+	})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var persisted bool
+	require.NoError(t, testDB.Pool.QueryRow(context.Background(),
+		"SELECT show_running_totals_to_players FROM common_room_polls WHERE id = $1", f.pollID).Scan(&persisted))
+	assert.True(t, persisted, "the update must persist the flag")
+
+	assert.Equal(t, http.StatusOK, getResultsReq(t, router, f.pollID, f.playerToken).Code,
+		"enabling running totals should open the still-active poll's results to the player")
+}
+
+func TestUpdatePoll_DisablingRunningTotals_ReclosesResultsToPlayer(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, visibilityTables...)
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupVisibilityRouter(app, testDB)
+
+	f := setupVisibilityFixture(t, testDB, app, "rtupoff", core.CreatePollRequest{
+		ShowRunningTotalsToPlayers: true,
+	})
+
+	require.Equal(t, http.StatusOK, voteReq(t, router, f.pollID, f.optionAID, f.playerToken).Code)
+	require.Equal(t, http.StatusOK, getResultsReq(t, router, f.pollID, f.playerToken).Code,
+		"precondition: running totals start open to the player")
+
+	// Revoking the setting must take effect immediately, not leave the results
+	// exposed for the rest of the poll's life.
+	rec := updatePollReq(t, router, f.pollID, f.gmToken, UpdatePollRequest{
+		ShowRunningTotalsToPlayers: false,
+	})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var persisted bool
+	require.NoError(t, testDB.Pool.QueryRow(context.Background(),
+		"SELECT show_running_totals_to_players FROM common_room_polls WHERE id = $1", f.pollID).Scan(&persisted))
+	assert.False(t, persisted, "the update must persist the cleared flag")
+
+	assert.Equal(t, http.StatusForbidden, getResultsReq(t, router, f.pollID, f.playerToken).Code,
+		"disabling running totals should re-close the active poll's results")
+}
+
+func TestUpdatePoll_RunningTotalsWithHiddenResults_Rejected(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, visibilityTables...)
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupVisibilityRouter(app, testDB)
+
+	f := setupVisibilityFixture(t, testDB, app, "rtupexcl", core.CreatePollRequest{
+		ShowRunningTotalsToPlayers: true,
+	})
+
+	rec := updatePollReq(t, router, f.pollID, f.gmToken, UpdatePollRequest{
+		HideResultsFromPlayers:     true,
+		ShowRunningTotalsToPlayers: true,
+	})
+	assert.Equal(t, http.StatusBadRequest, rec.Code,
+		"the update path must enforce the same exclusivity as creation")
+
+	// A rejected update must not partially apply.
+	var hidden, running bool
+	require.NoError(t, testDB.Pool.QueryRow(context.Background(),
+		"SELECT hide_results_from_players, show_running_totals_to_players FROM common_room_polls WHERE id = $1",
+		f.pollID).Scan(&hidden, &running))
+	assert.False(t, hidden, "rejected update must not hide results")
+	assert.True(t, running, "rejected update must leave the original setting intact")
+}
+
+func TestUpdatePoll_RunningTotals_PlayerForbidden(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, visibilityTables...)
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupVisibilityRouter(app, testDB)
+
+	f := setupVisibilityFixture(t, testDB, app, "rtupauth", core.CreatePollRequest{
+		ShowRunningTotalsToPlayers: false,
+	})
+
+	// A player must not be able to reveal the running tally to themselves.
+	rec := updatePollReq(t, router, f.pollID, f.playerToken, UpdatePollRequest{
+		ShowRunningTotalsToPlayers: true,
+	})
+	assert.Equal(t, http.StatusForbidden, rec.Code, "only the GM may change poll visibility")
+
+	var persisted bool
+	require.NoError(t, testDB.Pool.QueryRow(context.Background(),
+		"SELECT show_running_totals_to_players FROM common_room_polls WHERE id = $1", f.pollID).Scan(&persisted))
+	assert.False(t, persisted, "a forbidden update must not persist")
 }
 
 // ============================================================
