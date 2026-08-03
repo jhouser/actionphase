@@ -525,10 +525,14 @@ describe('CommonRoom', () => {
     beforeEach(() => {
       // Mock scroll behavior
       Element.prototype.scrollIntoView = vi.fn();
-      // Setup handler for fetching single message (nested comment)
+      // Setup handler for fetching a nested comment's thread context (target + ancestors)
       server.use(
-        http.get('/api/v1/games/:gameId/messages/:messageId', () => {
-          return HttpResponse.json(mockComment);
+        http.get('/api/v1/games/:gameId/messages/:messageId/thread-context', () => {
+          return HttpResponse.json({
+            chain: [mockComment],
+            root_post_id: mockComment.parent_id ?? mockComment.id,
+            has_full_thread: !mockComment.parent_id,
+          });
         })
       );
     });
@@ -683,9 +687,9 @@ describe('CommonRoom', () => {
 
         // Add delay so loading indicator is observable before fetch resolves
         server.use(
-          http.get('/api/v1/games/:gameId/messages/:messageId', async () => {
+          http.get('/api/v1/games/:gameId/messages/:messageId/thread-context', async () => {
             await new Promise(resolve => setTimeout(resolve, 200));
-            return HttpResponse.json(mockComment);
+            return HttpResponse.json({ chain: [mockComment], root_post_id: 1, has_full_thread: false });
           })
         );
 
@@ -714,9 +718,9 @@ describe('CommonRoom', () => {
 
         // Add delay so loading indicator is observable before fetch resolves
         server.use(
-          http.get('/api/v1/games/:gameId/messages/:messageId', async () => {
+          http.get('/api/v1/games/:gameId/messages/:messageId/thread-context', async () => {
             await new Promise(resolve => setTimeout(resolve, 100));
-            return HttpResponse.json(mockComment);
+            return HttpResponse.json({ chain: [mockComment], root_post_id: 1, has_full_thread: false });
           })
         );
 
@@ -750,7 +754,7 @@ describe('CommonRoom', () => {
 
         // Mock API to return error (with delay so loading indicator is observable)
         server.use(
-          http.get('/api/v1/games/:gameId/messages/:messageId', async () => {
+          http.get('/api/v1/games/:gameId/messages/:messageId/thread-context', async () => {
             await new Promise(resolve => setTimeout(resolve, 100));
             return HttpResponse.json({ error: 'Not found' }, { status: 404 });
           })
@@ -873,11 +877,11 @@ describe('CommonRoom', () => {
         const getElementByIdSpy = vi.spyOn(document, 'getElementById');
         getElementByIdSpy.mockReturnValue(null); // All patterns return null
 
-        // Add delay to getMessage mock so we can observe loading state
+        // Add delay to thread-context mock so we can observe loading state
         server.use(
-          http.get('/api/v1/games/:gameId/messages/:messageId', async () => {
+          http.get('/api/v1/games/:gameId/messages/:messageId/thread-context', async () => {
             await new Promise(resolve => setTimeout(resolve, 200));
-            return HttpResponse.json(mockComment);
+            return HttpResponse.json({ chain: [mockComment], root_post_id: 1, has_full_thread: false });
           })
         );
 
@@ -922,8 +926,12 @@ describe('CommonRoom', () => {
         };
 
         server.use(
-          http.get('/api/v1/games/:gameId/messages/:messageId', () => {
-            return HttpResponse.json(commentInOtherPhase);
+          http.get('/api/v1/games/:gameId/messages/:messageId/thread-context', () => {
+            return HttpResponse.json({
+              chain: [commentInOtherPhase],
+              root_post_id: commentInOtherPhase.parent_id ?? commentInOtherPhase.id,
+              has_full_thread: !commentInOtherPhase.parent_id,
+            });
           })
         );
 
@@ -1232,14 +1240,27 @@ describe('CommonRoom', () => {
         http.get('/api/v1/games/:gameId/phases/:phaseId/polls', () =>
           HttpResponse.json([])
         ),
-        // getMessage returns different messages based on ID
-        http.get('/api/v1/games/:gameId/messages/:messageId', ({ params }) => {
+        // thread-context returns the target + up to max_parents nearest ancestors,
+        // ordered parent-to-child, plus the true root post ID. For deepCommentId
+        // (depth 3) with max_parents=3 the whole chain (root → deep) is returned.
+        http.get('/api/v1/games/:gameId/messages/:messageId/thread-context', ({ params, request }) => {
           const id = Number(params.messageId);
-          if (id === deepCommentId) return HttpResponse.json(deepComment);
-          if (id === depth2Id) return HttpResponse.json(depth2Comment);
-          if (id === depth1Id) return HttpResponse.json(depth1Comment);
-          if (id === rootPostId) return HttpResponse.json(rootPost);
-          return HttpResponse.json({}, { status: 404 });
+          const maxParents = Number(new URL(request.url).searchParams.get('max_parents') ?? 3);
+          const fullChain: Record<number, Message[]> = {
+            [deepCommentId]: [rootPost, depth1Comment, depth2Comment, deepComment],
+            [depth2Id]: [rootPost, depth1Comment, depth2Comment],
+            [depth1Id]: [rootPost, depth1Comment],
+            [rootPostId]: [rootPost],
+          };
+          const chainToRoot = fullChain[id];
+          if (!chainToRoot) return HttpResponse.json({}, { status: 404 });
+          // Keep target + up to maxParents nearest ancestors.
+          const chain = chainToRoot.slice(Math.max(0, chainToRoot.length - 1 - maxParents));
+          return HttpResponse.json({
+            chain,
+            root_post_id: rootPostId,
+            has_full_thread: chain[0]?.message_type === 'post',
+          });
         }),
       );
     }

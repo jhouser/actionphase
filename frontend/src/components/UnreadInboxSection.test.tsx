@@ -160,6 +160,58 @@ describe('UnreadInboxSection', () => {
     });
   });
 
+  it('still renders when only FYI notifications remain, showing just the digest row', async () => {
+    server.use(
+      http.get('/api/v1/notifications', () => {
+        return HttpResponse.json({ data: [], pagination: { total: 0, limit: 100, offset: 0 } });
+      })
+    );
+
+    renderWithProviders(
+      <UnreadInboxSection notificationsByType={{ handout_published: 2 }} gameId={12} />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('2 new handouts')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: /2 new handouts/ })).toHaveAttribute(
+      'href',
+      '/games/12?tab=handouts'
+    );
+  });
+
+  it('omits digest chips for types already listed as repliable inbox items', async () => {
+    renderWithProviders(
+      <UnreadInboxSection
+        notificationsByType={{ comment_reply: 1, private_message: 1, handout_published: 1 }}
+        gameId={12}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Jane replied to your comment')).toBeInTheDocument();
+    });
+
+    // The reply and the PM are full rows above; they must not also appear as chips.
+    expect(screen.queryByText('1 reply to your comment')).not.toBeInTheDocument();
+    expect(screen.queryByText('1 private message')).not.toBeInTheDocument();
+    expect(screen.getByText('1 new handout')).toBeInTheDocument();
+  });
+
+  it('counts both tiers in the header badge', async () => {
+    renderWithProviders(
+      <UnreadInboxSection
+        notificationsByType={{ comment_reply: 1, handout_published: 1, phase_created: 2 }}
+        gameId={12}
+      />
+    );
+
+    // 2 repliable items + 3 FYI notifications (comment_reply is not double-counted).
+    await waitFor(() => {
+      expect(screen.getByText('5')).toBeInTheDocument();
+    });
+  });
+
   it('shows the unread count and item titles', async () => {
     renderWithProviders(<UnreadInboxSection />);
 
@@ -178,7 +230,7 @@ describe('UnreadInboxSection', () => {
       expect(screen.getByText('Jane replied to your comment')).toBeInTheDocument();
     });
 
-    const header = screen.getByRole('button', { name: /unread/i });
+    const header = screen.getByRole('button', { name: /inbox/i });
     await user.click(header);
 
     expect(screen.queryByText('Jane replied to your comment')).not.toBeInTheDocument();

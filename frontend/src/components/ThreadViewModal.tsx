@@ -4,7 +4,10 @@ import { ThreadedComment } from './ThreadedComment';
 import type { Message } from '../types/messages';
 import type { Character } from '../types/characters';
 import { Button } from './ui';
+import { UtilitiesButton } from './UtilitiesButton';
 import { THREAD_VIEW_MAX_DEPTH } from '../config/comments';
+import { LAYERS } from '../config/layers';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface ThreadViewModalProps {
   gameId: number;
@@ -85,12 +88,10 @@ export function ThreadViewModal({
   // Determine if we're showing parent chain context or single comment
   const showingContext = parentChain && parentChain.length > 1;
 
-  // Lock background scroll while modal is open
-  useEffect(() => {
-    const original = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = original; };
-  }, []);
+  // Lock background scroll while modal is open. Ref-counted, so the nested
+  // thread views this component renders (and the drawer opening over it) each
+  // hold a lock and the page unlocks only when the last one closes.
+  useBodyScrollLock();
 
   // Auto-scroll to target comment when modal opens
   useEffect(() => {
@@ -124,7 +125,7 @@ export function ThreadViewModal({
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        className={`fixed inset-0 bg-black/60 backdrop-blur-sm ${LAYERS.modal} flex items-center justify-center p-4`}
         onMouseDown={(e) => { backdropMouseDownTarget.current = e.target; }}
         onClick={(e) => {
           if (backdropMouseDownTarget.current === e.currentTarget) handleClose();
@@ -138,6 +139,10 @@ export function ThreadViewModal({
           <div className="sticky top-0 surface-base border-b border-theme-default px-6 py-4 z-10">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-bold text-content-primary">Thread View</h2>
+              <div className="flex items-center gap-3">
+                {/* Reach the dice roller / character sheet without leaving the
+                    thread — the nav's copy is behind this modal's blur. */}
+                <UtilitiesButton />
               <Button
                 variant="ghost"
                 size="sm"
@@ -149,6 +154,7 @@ export function ThreadViewModal({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </Button>
+              </div>
             </div>
 
             {/* Context info */}

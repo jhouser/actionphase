@@ -63,6 +63,10 @@ export type { CheckboxProps } from './Checkbox';
 export { Radio } from './Radio';
 export type { RadioProps } from './Radio';
 
+// Toggle
+export { Toggle } from './Toggle';
+export type { ToggleProps, ToggleSize } from './Toggle';
+
 // Textarea
 export { Textarea } from './Textarea';
 export type { TextareaProps, TextareaSize, TextareaVariant } from './Textarea';

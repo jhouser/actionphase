@@ -182,8 +182,13 @@ export function CommentWithParentCard({
   const isEdited = comment.edit_count > 0;
   const showReadButton = commentReadMode === 'manual' && !comment.is_deleted && onToggleRead;
 
+  // Only manual reads drive the faded appearance. In auto mode a comment can be
+  // in the manual-read set (e.g. the backend auto-marks your own reply as read),
+  // but manual reads must not fade it — matching ThreadedComment's behavior.
+  const isFadedAsRead = commentReadMode === 'manual' && isRead;
+
   return (
-    <Card className={`hover:shadow-md transition-shadow${isRead ? ' opacity-50' : ''}`}>
+    <Card className={`hover:shadow-md transition-shadow${isFadedAsRead ? ' opacity-50' : ''}`}>
       <CardBody>
         {/* Parent context preview */}
         <ParentCommentPreview
@@ -369,11 +374,14 @@ export function CommentWithParentCard({
                   onNavigateToComment();
                 }}
                 className="flex items-center gap-1 px-2 py-1 text-xs text-interactive-primary hover:text-accent-secondary font-medium"
+                title="View this comment in its thread"
+                aria-label="View this comment in its thread"
               >
-                <span className="hidden md:inline">View in thread →</span>
-                <svg className="w-4 h-4 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
+                <span className="md:hidden">Thread</span>
+                <span className="hidden md:inline">View in thread →</span>
               </a>
             )}
           </div>

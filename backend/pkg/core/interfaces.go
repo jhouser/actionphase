@@ -728,8 +728,17 @@ type MessageServiceInterface interface {
 	// for the "New Comments" view. Supports pagination via limit/offset.
 	ListRecentCommentsWithParents(ctx context.Context, gameID int32, limit, offset int32) ([]CommentWithParent, error)
 
+	// ListRecentUnreadCommentsWithParents behaves like ListRecentCommentsWithParents but
+	// omits comments the user has manually marked as read. Backs the "New Comments"
+	// view's unread-only filter in manual read mode.
+	ListRecentUnreadCommentsWithParents(ctx context.Context, gameID, userID int32, limit, offset int32) ([]CommentWithParent, error)
+
 	// GetTotalCommentCount returns the total count of non-deleted comments in a game
 	GetTotalCommentCount(ctx context.Context, gameID int32) (int64, error)
+
+	// GetTotalUnreadCommentCount returns the count of non-deleted comments in a game
+	// that the user has not manually marked as read
+	GetTotalUnreadCommentCount(ctx context.Context, gameID, userID int32) (int64, error)
 
 	// GetPostCommentsWithThreads retrieves paginated top-level comments with all nested replies
 	// Uses a recursive CTE to load entire comment trees in a single query (eliminates N+1 pattern)
@@ -781,6 +790,11 @@ type MessageServiceInterface interface {
 
 	// GetMessage retrieves a specific message (post or comment) by ID with metadata
 	GetMessage(ctx context.Context, messageID int32) (*MessageWithDetails, error)
+
+	// GetMessageWithParentContext retrieves a message plus up to maxParents nearest
+	// ancestors (ordered parent-to-child) and the true root post ID, in a single query.
+	// Used for deep-linking to nested comments without a per-level request waterfall.
+	GetMessageWithParentContext(ctx context.Context, messageID int32, maxParents int32) (*MessageThreadContext, error)
 
 	// CanUserEditPost checks if a user can edit a post (must be author)
 	CanUserEditPost(ctx context.Context, postID int32, userID int32) (bool, error)
@@ -929,6 +943,19 @@ type MessageWithDetails struct {
 	CharacterAvatarUrl *string // Optional - character's avatar URL
 	CommentCount       int64   // For posts
 	ReplyCount         int64   // For comments
+}
+
+// MessageThreadContext is a deep-linked comment plus a bounded slice of its
+// ancestor chain and the true root post ID (for read tracking / replies).
+type MessageThreadContext struct {
+	// Chain is the target comment plus up to MaxParents nearest ancestors,
+	// ordered parent-to-child (nearest included ancestor → target).
+	Chain []MessageWithDetails
+	// RootPostID is the top-level post at the head of the full thread, even when
+	// Chain is trimmed and does not itself reach the root.
+	RootPostID int32
+	// HasFullThread is true when Chain reaches the root post (nothing was trimmed above).
+	HasFullThread bool
 }
 
 // CommentWithDepth represents a comment with its nesting depth for tree building
@@ -1471,7 +1498,13 @@ type CreatePollRequest struct {
 	Deadline             time.Time
 	ShowIndividualVotes  bool
 	AllowOtherOption     bool
-	Options              []PollOptionInput // List of poll options
+	// HideResultsFromPlayers hides results from players permanently — even after
+	// the deadline. Mutually exclusive with ShowIndividualVotes.
+	HideResultsFromPlayers bool
+	// AllowAudienceVoting permits audience members to vote; their votes are
+	// attributed anonymously since they may not have characters.
+	AllowAudienceVoting bool
+	Options             []PollOptionInput // List of poll options
 }
 
 // PollOptionInput represents a single poll option during creation.
@@ -1482,11 +1515,13 @@ type PollOptionInput struct {
 
 // UpdatePollRequest represents parameters for updating a poll.
 type UpdatePollRequest struct {
-	Question            string
-	Description         *string
-	Deadline            time.Time
-	ShowIndividualVotes bool
-	AllowOtherOption    bool
+	Question               string
+	Description            *string
+	Deadline               time.Time
+	ShowIndividualVotes    bool
+	AllowOtherOption       bool
+	HideResultsFromPlayers bool
+	AllowAudienceVoting    bool
 }
 
 // SubmitVoteRequest represents parameters for submitting a vote.
@@ -1525,6 +1560,9 @@ type OtherResponse struct {
 	OtherText     string
 	Username      string
 	CharacterName *string
+	// IsAnonymous marks a response cast by an audience member. Audience identity
+	// is never disclosed, so callers must not surface Username or CharacterName.
+	IsAnonymous bool
 }
 
 // VoterInfo represents a user who voted (for individual vote display).
@@ -1532,6 +1570,9 @@ type VoterInfo struct {
 	UserID        int32
 	Username      string
 	CharacterName *string
+	// IsAnonymous marks a vote cast by an audience member. Audience identity is
+	// never disclosed, so callers must not surface Username or CharacterName.
+	IsAnonymous bool
 }
 
 // ==============================================================================
@@ -1676,6 +1717,11 @@ type CharacterServiceInterface interface {
 	GetPlayerCharacters(ctx context.Context, gameID int32) ([]models.GetPlayerCharactersByGameRow, error)
 	GetNPCs(ctx context.Context, gameID int32) ([]models.GetNPCsByGameRow, error)
 	GetUserControllableCharacters(ctx context.Context, gameID, userID int32) ([]models.GetUserControllableCharactersRow, error)
+	// GetUserControllableCharactersAcrossGames returns the user's controllable
+	// characters in all in_progress games, each carrying the game context its
+	// sheet permissions depend on. Backs surfaces with no game in scope, such as
+	// the global Utility Drawer.
+	GetUserControllableCharactersAcrossGames(ctx context.Context, userID int32) ([]models.GetUserControllableCharactersAcrossGamesRow, error)
 	ApproveCharacter(ctx context.Context, characterID int32) (*models.Character, error)
 	AssignNPCToUser(ctx context.Context, characterID, assignedUserID, assignedByUserID int32) error
 	SetCharacterData(ctx context.Context, req CharacterDataRequest) error
@@ -1714,4 +1760,11 @@ type ConversationServiceInterface interface {
 	CanUserAccessConversation(ctx context.Context, conversationID int32, userID int32, isAdmin bool) (bool, error)
 	GetConversation(ctx context.Context, conversationID int32) (*models.Conversation, error)
 	GetPrivateMessage(ctx context.Context, messageID int32) (*models.PrivateMessage, error)
+
+	// DeleteConversation permanently removes a conversation that has never had a
+	// message sent in it. Only the creator or a GM/co-GM of the game may do so.
+	// Returns ErrConversationNotEmpty if any message exists (including
+	// soft-deleted ones) and ErrConversationDeleteForbidden if the user is not
+	// authorized.
+	DeleteConversation(ctx context.Context, conversationID int32, userID int32) error
 }

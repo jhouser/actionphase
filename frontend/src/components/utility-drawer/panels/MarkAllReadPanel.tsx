@@ -12,13 +12,14 @@ import type { UtilityPanelProps } from '../types';
  * so the error is visible next to the retry button.
  */
 export function MarkAllReadPanel({ ctx }: UtilityPanelProps) {
-  const { gameId, currentPhase, closeDrawer } = ctx;
+  const { game, closeDrawer } = ctx;
+  const currentPhase = game?.currentPhase;
   const { mutate, isPending, isError } = useMarkAllCommentsRead();
 
   const handleMarkAllRead = () => {
-    if (!currentPhase) return;
+    if (!game || !currentPhase) return;
     mutate(
-      { gameId, phaseId: currentPhase.id },
+      { gameId: game.gameId, phaseId: currentPhase.id },
       {
         onSuccess: () => closeDrawer(),
         onError: (err) => logger.error('Failed to mark all comments read', { error: err }),
