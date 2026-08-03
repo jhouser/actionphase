@@ -13,26 +13,26 @@ import (
 
 const addLootTableContent = `-- name: AddLootTableContent :one
 INSERT INTO game_loot_table_contents (
-    loot_table_id, name, description
+    loot_table_id, name, data
 ) VALUES (
     $1, $2, $3
-) RETURNING id, loot_table_id, name, description
+) RETURNING id, loot_table_id, name, data
 `
 
 type AddLootTableContentParams struct {
 	LootTableID int32       `json:"loot_table_id"`
 	Name        string      `json:"name"`
-	Description pgtype.Text `json:"description"`
+	Data        pgtype.Text `json:"data"`
 }
 
 func (q *Queries) AddLootTableContent(ctx context.Context, arg AddLootTableContentParams) (GameLootTableContent, error) {
-	row := q.db.QueryRow(ctx, addLootTableContent, arg.LootTableID, arg.Name, arg.Description)
+	row := q.db.QueryRow(ctx, addLootTableContent, arg.LootTableID, arg.Name, arg.Data)
 	var i GameLootTableContent
 	err := row.Scan(
 		&i.ID,
 		&i.LootTableID,
 		&i.Name,
-		&i.Description,
+		&i.Data,
 	)
 	return i, err
 }
@@ -57,7 +57,7 @@ func (q *Queries) DeleteLootTableContents(ctx context.Context, lootTableID int32
 
 const getLootTableContents = `-- name: GetLootTableContents :many
 SELECT
-    id, loot_table_id, name, description
+    id, loot_table_id, name, data
 FROM game_loot_table_contents
 WHERE loot_table_id = $1
 ORDER BY id ASC
@@ -76,7 +76,7 @@ func (q *Queries) GetLootTableContents(ctx context.Context, lootTableID int32) (
 			&i.ID,
 			&i.LootTableID,
 			&i.Name,
-			&i.Description,
+			&i.Data,
 		); err != nil {
 			return nil, err
 		}

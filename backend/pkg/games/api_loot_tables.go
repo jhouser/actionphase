@@ -44,6 +44,10 @@ func (h *Handler) GetGameLootTables(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lootTables, err := gameService.GetGameLootTables(ctx, int32(gameID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game loot tables", "error", err, "game_id", gameID)
+		return
+	}
 
 	// Convert to response format
 	// Initialize as empty slice to ensure JSON encodes as [] not null
@@ -60,6 +64,13 @@ func (h *Handler) GetGameLootTables(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func (h *Handler) AddGameLootTable(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables_add")()
+
 }
 
 func (h *Handler) GetGameLootTableContents(w http.ResponseWriter, r *http.Request) {
@@ -112,15 +123,19 @@ func (h *Handler) GetGameLootTableContents(w http.ResponseWriter, r *http.Reques
 	}
 
 	lootTables, err := gameService.GetGameLootTableContents(ctx, int32(tableID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get loot table contents", "error", err, "table_id", tableID)
+		return
+	}
 
 	// Convert to response format
 	// Initialize as empty slice to ensure JSON encodes as [] not null
 	response := make([]map[string]interface{}, 0)
 	for _, lootTable := range lootTables {
 		lootTableData := map[string]interface{}{
-			"id":          lootTable.ID,
-			"name":        lootTable.Name,
-			"description": lootTable.Description.String,
+			"id":   lootTable.ID,
+			"name": lootTable.Name,
+			"data": lootTable.Data.String,
 		}
 		response = append(response, lootTableData)
 	}

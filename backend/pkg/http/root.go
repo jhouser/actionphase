@@ -352,6 +352,10 @@ func (h *Handler) Start() {
 
 			// Logs
 			r.Get("/{gameId}/logs", gameHandler.GetGameLogs)
+
+			// Loot tables
+			r.Get("/{gameId}/loot-tables", gameHandler.GetGameLootTables)
+			r.Get("/{gameId}/loot-tables/{tableId}/contents", gameHandler.GetGameLootTableContents)
 		})
 	})
 	apiV1Router.Mount("/games", gamesRouter)

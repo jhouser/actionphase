@@ -296,7 +296,7 @@ type GameLootTableContent struct {
 	ID          int32       `json:"id"`
 	LootTableID int32       `json:"loot_table_id"`
 	Name        string      `json:"name"`
-	Description pgtype.Text `json:"description"`
+	Data        pgtype.Text `json:"data"`
 }
 
 type GameParticipant struct {

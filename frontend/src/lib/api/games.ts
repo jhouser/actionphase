@@ -13,7 +13,9 @@ import type {
   ReviewApplicationRequest,
   GameListingFilters,
   GameListingResponse,
-  GameLog
+  GameLog,
+  LootTable,
+  LootTableContent
 } from '../../types/games';
 import type {
   AudienceConversationListItem,
@@ -231,5 +233,13 @@ export class GamesApi extends BaseApiClient {
 
   async getGameLogs(id: number) {
     return this.client.get<GameLog[]>(`/api/v1/games/${id}/logs`);
+  }
+
+  async getLootTables(gameId: number) {
+    return this.client.get<LootTable[]>(`/api/v1/games/${gameId}/loot-tables`);
+  }
+
+  async getLootTableContents(gameId: number, tableId: number) {
+    return this.client.get<LootTableContent[]>(`/api/v1/games/${gameId}/loot-tables/${tableId}/contents`);
   }
 }

@@ -113,6 +113,18 @@ export interface GameLog {
   created_at: string;
 }
 
+export interface LootTable {
+  id: number;
+  game_id: number;
+  name: string;
+}
+
+export interface LootTableContent {
+  id: number;
+  name: string;
+  data: string;
+}
+
 // Public applicant view (no status, message, email, or review info)
 // Available to anyone when game is in recruitment state
 export interface PublicGameApplicant {
