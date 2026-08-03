@@ -4,6 +4,9 @@ import (
 	"actionphase/pkg/core"
 	db "actionphase/pkg/db/models"
 	dbservices "actionphase/pkg/db/services"
+	dbactions "actionphase/pkg/db/services/actions"
+	dbmessages "actionphase/pkg/db/services/messages"
+	"actionphase/pkg/games"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -731,13 +734,24 @@ func setupListPollsByPhaseTestRouter(app *core.App, testDB *core.TestDatabase) *
 	tokenAuth := jwtauth.New("HS256", []byte(app.Config.JWT.Secret), nil)
 	userService := &dbservices.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &dbservices.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &dbservices.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &dbservices.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &dbservices.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     dbservices.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: dbservices.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 	router := chi.NewRouter()
 
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Route("/games/{gameId}/phases/{phaseId}/polls", func(r chi.Router) {
+		r.Route("/games/{gameID}/phases/{phaseId}/polls", func(r chi.Router) {
 			r.Use(jwtauth.Verifier(tokenAuth))
 			r.Use(jwtauth.Authenticator(tokenAuth))
 			r.Use(core.RequireAuthenticationMiddleware(userService))
+			r.Use(gameHandler.GameMiddleware())
 
 			handler := &Handler{
 				App:                 app,

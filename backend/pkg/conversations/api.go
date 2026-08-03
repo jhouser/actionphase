@@ -2,16 +2,19 @@ package conversations
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 
 	"actionphase/pkg/core"
+	db "actionphase/pkg/db/models"
 	models "actionphase/pkg/db/models"
 	"actionphase/pkg/validation"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/jackc/pgx/v5"
 )
 
 // Handler handles HTTP requests for conversations
@@ -26,10 +29,11 @@ type Handler struct {
 // RegisterRoutes registers all conversation routes
 // Note: This is called from within the games router, so gameId is already in the path context
 func (h *Handler) RegisterRoutes(r chi.Router) {
-	r.Route("/{gameId}/conversations", func(r chi.Router) {
+	r.Route("/conversations", func(r chi.Router) {
 		r.Post("/", h.CreateConversation)                                   // Create new conversation
 		r.Get("/", h.GetUserConversations)                                  // Get user's conversations
 		r.Get("/{conversationId}", h.GetConversation)                       // Get conversation details
+		r.Delete("/{conversationId}", h.DeleteConversation)                 // Delete an empty conversation
 		r.Get("/{conversationId}/messages", h.GetConversationMessages)      // Get messages
 		r.Post("/{conversationId}/messages", h.SendMessage)                 // Send message
 		r.Delete("/{conversationId}/messages/{messageId}", h.DeleteMessage) // Delete message
@@ -62,12 +66,7 @@ func (h *Handler) CreateConversation(w http.ResponseWriter, r *http.Request) {
 
 	userID := int32(authUser.ID)
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid create conversation request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	data := &CreateConversationRequest{}
 	if err := render.Bind(r, data); err != nil {
@@ -85,12 +84,7 @@ func (h *Handler) CreateConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	game, err := h.GameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.App.Logger.Error("Failed to get game for conversation validation", "error", err, "game_id", gameID)
-		h.renderError(ctx, w, r, core.HandleDBErrorWithID(err, "game", gameID), "Error in create conversation")
-		return
-	}
+	game := ctx.Value("game").(*db.Game)
 	if !game.AllowGroupConversations && len(data.CharacterIDs) > 2 {
 		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("group conversations are not allowed in this game")), "Invalid create conversation request")
 		return
@@ -128,12 +122,7 @@ func (h *Handler) GetUserConversations(w http.ResponseWriter, r *http.Request) {
 
 	userID := int32(authUser.ID)
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get user conversations request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	conversationService := h.ConversationService
 
@@ -235,6 +224,73 @@ func (h *Handler) GetConversation(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DeleteConversation deletes a conversation that has no messages in it.
+// Intended for cleaning up conversations created by accident; the service
+// rejects the request if any message exists or the user isn't the creator/GM.
+func (h *Handler) DeleteConversation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	authUser := core.GetAuthenticatedUser(r.Context())
+	if authUser == nil {
+		h.App.Logger.Error("No authenticated user in context")
+		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "Unauthorized")
+		return
+	}
+
+	userID := int32(authUser.ID)
+
+	conversationIDStr := chi.URLParam(r, "conversationId")
+	conversationID, err := strconv.ParseInt(conversationIDStr, 10, 32)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid conversation ID")), "Invalid delete conversation request")
+		return
+	}
+
+	conversationService := h.ConversationService
+
+	// Gate on general conversation access first so this endpoint can't be used
+	// to probe for the existence of conversations the user can't see.
+	canAccess, err := conversationService.CanUserAccessConversation(ctx, int32(conversationID), userID, authUser.IsAdmin)
+	if err != nil {
+		// A missing conversation surfaces here as an error rather than
+		// canAccess=false, so translate it instead of reporting a server fault.
+		if errors.Is(err, pgx.ErrNoRows) {
+			h.renderError(ctx, w, r, core.ErrNotFound("conversation not found"), "Delete conversation not found")
+			return
+		}
+		h.App.Logger.Error("Failed to check conversation access", "error", err, "conversation_id", conversationID, "user_id", userID)
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete conversation", "error", err)
+		return
+	}
+	if !canAccess {
+		h.renderError(ctx, w, r, core.ErrForbidden("you don't have access to this conversation"), "Delete conversation forbidden")
+		return
+	}
+
+	if err := conversationService.DeleteConversation(ctx, int32(conversationID), userID); err != nil {
+		switch {
+		case errors.Is(err, core.ErrConversationNotFound):
+			// Deleted between the access check and here.
+			h.renderError(ctx, w, r, core.ErrNotFound("conversation not found"), "Delete conversation not found")
+		case errors.Is(err, core.ErrConversationNotEmpty):
+			h.renderError(ctx, w, r, core.ErrConflict("conversations with messages cannot be deleted"), "Delete conversation conflict")
+		case errors.Is(err, core.ErrConversationDeleteForbidden):
+			h.renderError(ctx, w, r, core.ErrForbidden("only the creator or a GM can delete this conversation"), "Delete conversation forbidden")
+		default:
+			h.App.Logger.Error("Failed to delete conversation", "error", err, "conversation_id", conversationID, "user_id", userID)
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete conversation", "error", err)
+		}
+		return
+	}
+
+	h.App.Logger.Info("Conversation deleted successfully", "conversation_id", conversationID, "user_id", userID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Conversation deleted successfully",
+		"id":      conversationID,
+	})
+}
+
 // GetConversationMessages gets all messages in a conversation
 func (h *Handler) GetConversationMessages(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -248,12 +304,7 @@ func (h *Handler) GetConversationMessages(w http.ResponseWriter, r *http.Request
 
 	userID := int32(authUser.ID)
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get conversation messages request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	conversationIDStr := chi.URLParam(r, "conversationId")
 	conversationID, err := strconv.ParseInt(conversationIDStr, 10, 32)

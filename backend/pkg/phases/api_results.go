@@ -17,12 +17,7 @@ func (h *Handler) CreateActionResult(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_create_action_result")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid create action result request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	data := &CreateActionResultRequest{}
 	if err := render.Bind(r, data); err != nil {
@@ -107,12 +102,7 @@ func (h *Handler) GetUserActionResults(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_user_action_results")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get user action results request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get authenticated user from context (set by middleware)
 	authUser := core.GetAuthenticatedUser(ctx)
@@ -167,12 +157,7 @@ func (h *Handler) GetGameActionResults(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game_action_results")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get game action results request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get authenticated user from context (set by middleware)
 	authUser := core.GetAuthenticatedUser(ctx)
@@ -263,12 +248,7 @@ func (h *Handler) DeleteActionResult(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_delete_action_result")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid delete action result request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	resultIDStr := chi.URLParam(r, "resultId")
 	resultID, err := strconv.ParseInt(resultIDStr, 10, 32)
@@ -309,12 +289,7 @@ func (h *Handler) UpdateActionResult(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_update_action_result")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid update action result request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	resultIDStr := chi.URLParam(r, "resultId")
 	resultID, err := strconv.ParseInt(resultIDStr, 10, 32)
@@ -384,12 +359,7 @@ func (h *Handler) PublishActionResult(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_publish_action_result")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid publish action result request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	resultIDStr := chi.URLParam(r, "resultId")
 	resultID, err := strconv.ParseInt(resultIDStr, 10, 32)

@@ -22,12 +22,7 @@ func (h *Handler) CreateDeadline(w http.ResponseWriter, r *http.Request) {
 	defer h.App.ObsLogger.LogOperation(ctx, "api_create_deadline")()
 
 	// Get gameID from URL
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid game ID", "error", err)
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Parse request
 	data := &CreateDeadlineRequest{}
@@ -80,18 +75,13 @@ func (h *Handler) GetGameDeadlines(w http.ResponseWriter, r *http.Request) {
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game_deadlines")()
 
 	// Get gameID from URL
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid game ID", "error", err)
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get includeExpired query parameter (defaults to false)
 	includeExpired := r.URL.Query().Get("includeExpired") == "true"
 
 	// Verify the game exists
-	_, err = h.GameService.GetGame(ctx, int32(gameID))
+	_, err := h.GameService.GetGame(ctx, int32(gameID))
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrNotFound("Game not found"), "Failed to get game", "error", err)
 		return

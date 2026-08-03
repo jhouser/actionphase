@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
-import { Trash2, RefreshCw, Pencil } from 'lucide-react';
+import { Trash2, RefreshCw, Pencil, ArrowDownToLine } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useConversation } from '../contexts/ConversationContext';
 import { useOptionalGameContext } from '../contexts/GameContext';
@@ -23,14 +23,17 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
   const { currentUser } = useAuth();
   const gameContext = useOptionalGameContext();
   const portraitAvatars = gameContext?.game?.portrait_avatars ?? false;
+  const isGM = gameContext?.isGM ?? false;
 
   // Get conversation data from context
   const {
     messages,
     conversation,
     selectedConversationInfo,
+    loadedMessagesConversationId,
     loadingMessages,
     loadingConversation,
+    loadingConversations,
     isRefreshing,
     loadConversation,
     loadMessages,
@@ -39,6 +42,7 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
     sendMessage,
     deleteMessage,
     editMessage,
+    deleteConversation,
   } = useConversation();
 
   // UI-specific state
@@ -48,9 +52,14 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const firstUnreadRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const [hasScrolledToUnread, setHasScrolledToUnread] = useState(false);
+  // Latches once the thread has been positioned for the current conversation.
+  // A ref rather than state: flipping state inside the scroll effect would
+  // re-run it and cancel the markAsRead timer it just armed.
+  const hasScrolledRef = useRef(false);
   const [deleteMessageId, setDeleteMessageId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteConversation, setConfirmDeleteConversation] = useState(false);
+  const [deletingConversation, setDeletingConversation] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -71,10 +80,15 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
   }, [conversation, characters]);
 
   // Scroll functions
-  const scrollToBottom = useCallback(() => {
-    logger.debug('scrollToBottom called', { conversationId, refExists: !!messagesEndRef.current });
+  //
+  // Initial positioning uses `behavior: 'auto'` (instant) rather than 'smooth'.
+  // Smooth scrolling animates toward a target that is still moving while
+  // markdown and avatar images below it finish laying out, so it reliably
+  // lands short on slower connections. An instant jump is immune to that
+  // reflow and reads correctly as a starting position.
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     if (typeof messagesEndRef.current?.scrollIntoView === 'function') {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      messagesEndRef.current.scrollIntoView({ behavior });
       logger.debug('Scrolled to bottom', { conversationId });
     } else {
       logger.warn('messagesEndRef not available for scrolling', { conversationId });
@@ -83,7 +97,7 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
 
   const scrollToFirstUnread = useCallback(() => {
     if (typeof firstUnreadRef.current?.scrollIntoView === 'function') {
-      firstUnreadRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      firstUnreadRef.current.scrollIntoView({ behavior: 'auto', block: 'start' });
       logger.debug('Scrolled to first unread message', { conversationId });
     } else {
       // Fallback to bottom if ref not set
@@ -106,39 +120,98 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
     }
   }, [participantCharacters, selectedCharacterId]);
 
-  // Scroll to first unread message or bottom on initial load
-  useEffect(() => {
-    if (messages.length > 0 && !hasScrolledToUnread) {
-      logger.debug('Initial scroll effect triggered', {
-        messagesCount: messages.length,
-        hasConversationInfo: !!selectedConversationInfo,
-        unreadCount: selectedConversationInfo?.unread_count,
-        lastReadAt: selectedConversationInfo?.last_read_at,
-        conversationId,
-      });
-
-      const hasUnreads = selectedConversationInfo && selectedConversationInfo.unread_count > 0 && selectedConversationInfo.last_read_at;
-
-      if (hasUnreads) {
-        logger.debug('Scrolling to first unread message', { conversationId, unreadCount: selectedConversationInfo.unread_count });
-        scrollToFirstUnread();
-      } else {
-        logger.debug('Scrolling to bottom (no unreads or no tracking info)', { conversationId });
-        setTimeout(() => scrollToBottom(), 50);
-      }
-      setHasScrolledToUnread(true);
-
-      // Mark as read AFTER a delay to give user time to see the "New messages" badge
-      const delay = hasUnreads ? 2000 : 0;
-      setTimeout(() => {
-        markAsRead(gameId, conversationId);
-      }, delay);
+  // Find the first unread message based on last_read_at timestamp.
+  // This is the single source of truth for both the "New messages" divider and
+  // the initial scroll target — deriving the scroll branch from unread_count
+  // instead would let the two disagree, scrolling to a divider that never
+  // rendered. Declared before the scroll effect because that effect's
+  // dependency array reads it during render.
+  const firstUnreadIndex = useMemo(() => {
+    if (!selectedConversationInfo || !selectedConversationInfo.last_read_at) {
+      return -1;
     }
-  }, [messages.length, hasScrolledToUnread, selectedConversationInfo, conversationId, gameId, markAsRead, scrollToBottom, scrollToFirstUnread]);
 
-  // Reset scroll state and draft when conversation changes
-  useEffect(() => {
-    setHasScrolledToUnread(false);
+    const lastReadTime = new Date(selectedConversationInfo.last_read_at).getTime();
+    return messages.findIndex(msg => new Date(msg.created_at).getTime() > lastReadTime);
+  }, [selectedConversationInfo, messages]);
+
+  // Scroll to first unread message or bottom on initial load.
+  //
+  // This effect must not run until every input it reads has settled for THIS
+  // conversation. It latches (hasScrolledRef) after a single run, so a
+  // premature run based on stale or half-loaded data permanently scrolls to the
+  // wrong place. The guards below cover each way that used to happen:
+  //
+  //   1. `messages` still belongs to the previously-viewed conversation while
+  //      the new fetch is in flight — loadedMessagesConversationId proves whose
+  //      data we are looking at.
+  //   2. The conversations list (the only source of unread_count/last_read_at)
+  //      is fetched separately from the messages, so it may not have arrived
+  //      yet. Acting early makes every conversation look fully read.
+  // useLayoutEffect: the messages we gated on are already laid out by the time
+  // this runs, so the scroll anchors exist and are positioned. This also
+  // positions the thread before the browser paints, so the user never sees it
+  // at the top and then jump.
+  useLayoutEffect(() => {
+    // The latch is a ref, not state: setting state here would re-run this
+    // effect and its cleanup would cancel the markAsRead timer we just armed.
+    if (hasScrolledRef.current) return;
+
+    // Guard 1: messages must belong to the conversation we are displaying.
+    if (loadedMessagesConversationId !== conversationId) return;
+    if (loadingMessages || loadingConversation) return;
+    if (messages.length === 0) return;
+
+    // Guard 2: unread tracking must have settled. `selectedConversationInfo`
+    // being undefined while the list is still loading is indistinguishable from
+    // "genuinely has no unreads", so wait it out.
+    if (loadingConversations) return;
+
+    const hasUnreads = firstUnreadIndex >= 0;
+
+    logger.debug('Initial scroll effect running', {
+      conversationId,
+      messagesCount: messages.length,
+      firstUnreadIndex,
+      unreadCount: selectedConversationInfo?.unread_count,
+    });
+
+    if (hasUnreads) {
+      scrollToFirstUnread();
+    } else {
+      scrollToBottom();
+    }
+
+    hasScrolledRef.current = true;
+
+    // Mark as read AFTER a delay to give user time to see the "New messages" badge
+    const delay = hasUnreads ? 2000 : 0;
+    const timer = setTimeout(() => {
+      markAsRead(gameId, conversationId);
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [
+    loadedMessagesConversationId,
+    loadingMessages,
+    loadingConversation,
+    loadingConversations,
+    messages.length,
+    firstUnreadIndex,
+    selectedConversationInfo,
+    conversationId,
+    gameId,
+    markAsRead,
+    scrollToBottom,
+    scrollToFirstUnread,
+  ]);
+
+  // Reset scroll state and draft when conversation changes.
+  // useLayoutEffect (not useEffect) so the latch is cleared before the browser
+  // paints the new conversation, rather than depending on this effect being
+  // declared after the scroll effect to get the ordering right.
+  useLayoutEffect(() => {
+    hasScrolledRef.current = false;
     setNewMessage('');
   }, [conversationId]);
 
@@ -157,28 +230,16 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
     }
   }, [isRefreshing, sending, conversationId]);
 
-  // Find the first unread message based on last_read_at timestamp
-  const getFirstUnreadIndex = () => {
-    if (!selectedConversationInfo || !selectedConversationInfo.last_read_at) {
-      logger.debug('No conversation info or last_read_at', { conversationId, hasInfo: !!selectedConversationInfo });
-      return -1;
-    }
-
-    const lastReadTime = new Date(selectedConversationInfo.last_read_at).getTime();
-    const firstUnreadIndex = messages.findIndex(msg => {
-      const msgTime = new Date(msg.created_at).getTime();
-      return msgTime > lastReadTime;
-    });
-
-    logger.debug('getFirstUnreadIndex calculated', {
-      conversationId,
-      lastReadTime: new Date(lastReadTime).toISOString(),
-      firstUnreadIndex,
-      messagesCount: messages.length,
-    });
-
-    return firstUnreadIndex;
-  };
+  // Jump to the newest message on demand.
+  //
+  // Two scroll containers are in play: the thread's own overflow area and the
+  // page itself. scrollIntoView on the end marker settles both, so this works
+  // whether the thread is scrolled internally, the page is scrolled, or both.
+  // Smooth is right here (unlike initial positioning) — the user initiated it
+  // and the movement communicates where they went.
+  const handleJumpToLatest = useCallback(() => {
+    scrollToBottom('smooth');
+  }, [scrollToBottom]);
 
   const handleRefresh = async () => {
     // Store scroll position before refresh (in case there are no new messages)
@@ -189,9 +250,11 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
     const hasNewMessages = await refreshConversation(gameId, conversationId);
 
     if (hasNewMessages) {
-      // New messages: scroll to them
+      // New messages: re-arm the initial-scroll effect so it repositions on
+      // them. refreshConversation has already updated messages/conversations,
+      // so a re-render is pending and the effect will re-evaluate.
       savedScrollPositionRef.current = null;
-      setHasScrolledToUnread(false);  // This will trigger scroll effect
+      hasScrolledRef.current = false;
     } else {
       // No new messages: restore scroll position
       savedScrollPositionRef.current = currentScrollTop;
@@ -276,6 +339,30 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
     }
   };
 
+  // A conversation can only be deleted while it is empty, and only by the person
+  // who created it or a GM. This mirrors the server rule; the server re-checks,
+  // so this only governs whether the button is worth showing.
+  const canDeleteConversation =
+    !!conversation?.conversation &&
+    loadedMessagesConversationId === conversationId &&
+    messages.length === 0 &&
+    (isGM || conversation.conversation.created_by_user_id === currentUser?.id);
+
+  const handleDeleteConversation = async () => {
+    try {
+      setDeletingConversation(true);
+      await deleteConversation(gameId, conversationId);
+      setConfirmDeleteConversation(false);
+      onBack?.();
+    } catch (_err) {
+      // Error already surfaced by the context as a toast.
+      logger.error('Failed to delete conversation', { error: _err, gameId, conversationId });
+      setConfirmDeleteConversation(false);
+    } finally {
+      setDeletingConversation(false);
+    }
+  };
+
   const formatTimestamp = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
@@ -296,9 +383,16 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
 
   return (
     <div className="flex flex-col h-full">
-      {/* Conversation Header */}
+      {/* Conversation Header.
+          Sticky because the whole page scrolls (the thread is not the only
+          scroll container), so on a long conversation the title, Back button
+          and actions would otherwise scroll out of reach.
+          top-16 (64px) parks it directly beneath the app navbar, which is
+          itself sticky at the top of the viewport; top-0 would slide it behind
+          the navbar. z-10 keeps it above message content passing underneath
+          while staying below the navbar's z-50. */}
       {conversation && conversation.conversation && (
-        <div className="surface-base border-b border-theme-default px-3 py-2">
+        <div className="sticky top-16 z-10 surface-base border-b border-theme-default px-3 py-2">
           <div className="flex items-center gap-2">
             {onBack && (
               <button
@@ -323,6 +417,19 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
             <Button
               variant="ghost"
               size="sm"
+              onClick={handleJumpToLatest}
+              disabled={messages.length === 0}
+              className="flex items-center gap-2 flex-shrink-0"
+              aria-label="Jump to latest message"
+              title="Jump to latest message"
+              data-testid="jump-to-latest-button"
+            >
+              <ArrowDownToLine className="w-4 h-4" />
+              <span className="hidden sm:inline">Latest</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleRefresh}
               disabled={isRefreshing || loading}
               className="flex items-center gap-2 flex-shrink-0"
@@ -333,6 +440,21 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
                 {isRefreshing ? 'Refreshing...' : 'Refresh'}
               </span>
             </Button>
+            {canDeleteConversation && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmDeleteConversation(true)}
+                className="flex items-center gap-2 flex-shrink-0 text-semantic-danger"
+                aria-label="Delete conversation"
+                title="Delete this empty conversation"
+                data-testid="delete-conversation-button"
+                data-faro-user-action-name="delete-conversation"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Delete</span>
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -348,7 +470,7 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
           </div>
         ) : (
           messages.map((message, index) => {
-            const isFirstUnread = index === getFirstUnreadIndex();
+            const isFirstUnread = index === firstUnreadIndex;
 
             return (
               <div key={message.id}>
@@ -578,6 +700,35 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
                 variant="danger"
                 onClick={handleDeleteMessage}
                 loading={deleting}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Conversation Confirmation Modal */}
+      {confirmDeleteConversation && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="surface-base border border-theme-default rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-content-primary mb-4">Delete Conversation?</h3>
+            <p className="text-content-secondary mb-6">
+              This will permanently remove this empty conversation for everyone in it. This cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmDeleteConversation(false)}
+                disabled={deletingConversation}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleDeleteConversation}
+                loading={deletingConversation}
+                data-testid="confirm-delete-conversation-button"
               >
                 Delete
               </Button>

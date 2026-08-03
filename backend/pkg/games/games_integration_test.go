@@ -654,43 +654,53 @@ func setupGameTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				// Game listing and viewing
 				r.Get("/", gameHandler.GetFilteredGames) // Main game listing endpoint with filters
 				r.Get("/recruiting", gameHandler.GetRecruitingGames)
-				r.Get("/{id}", gameHandler.GetGame)
-				r.Get("/{id}/details", gameHandler.GetGameWithDetails)
-				r.Get("/{id}/participants", gameHandler.GetGameParticipants)
 
 				// Game management
 				r.Post("/", gameHandler.CreateGame)
-				r.Put("/{id}", gameHandler.UpdateGame)
-				r.Delete("/{id}", gameHandler.DeleteGame)
-				r.Put("/{id}/state", gameHandler.UpdateGameState)
 
-				// Participant management
-				// NOTE: join endpoint removed - use application system instead
-				r.Delete("/{id}/leave", gameHandler.LeaveGame)
-				r.Post("/{id}/participants/direct-add", gameHandler.AddParticipantDirectly)
-				r.Delete("/{id}/participants/{userId}", gameHandler.RemovePlayer)
-				r.Post("/{id}/participants/{userId}/promote-to-co-gm", gameHandler.PromoteToCoGM)
-				r.Post("/{id}/participants/{userId}/demote-from-co-gm", gameHandler.DemoteFromCoGM)
-				r.Post("/{id}/participants/{userId}/to-audience", gameHandler.TransitionPlayerToAudience)
+				//Routes with game ID parameter
+				r.Route("/{gameID}", func(r chi.Router) {
+					r.Use(gameHandler.GameMiddleware())
 
-				// Game application management
-				r.Post("/{id}/apply", gameHandler.ApplyToGame)
-				r.Get("/{id}/applications", gameHandler.GetGameApplications)
-				r.Put("/{id}/applications/{applicationId}/review", gameHandler.ReviewGameApplication)
-				r.Get("/{id}/application", gameHandler.GetMyGameApplication)
-				r.Delete("/{id}/application", gameHandler.WithdrawGameApplication)
+					// Game listing and viewing
+					r.Get("/", gameHandler.GetGame)
+					r.Get("/details", gameHandler.GetGameWithDetails)
+					r.Get("/participants", gameHandler.GetGameParticipants)
 
-				// Audience management
-				r.Get("/{id}/audience", gameHandler.ListAudienceMembers)
-				r.Put("/{id}/settings/auto-accept-audience", gameHandler.UpdateAutoAcceptAudience)
-				r.Get("/{id}/characters/audience-npcs", gameHandler.ListAudienceNPCs)
-				r.Get("/{id}/private-messages/all", gameHandler.ListAllPrivateConversations)
-				r.Get("/{id}/private-messages/participants", gameHandler.GetConversationParticipants)
-				r.Get("/{id}/private-messages/conversations/{conversationId}", gameHandler.GetAudienceConversationMessages)
-				r.Get("/{id}/action-submissions/all", gameHandler.ListAllActionSubmissions)
+					// Game management
+					r.Put("/", gameHandler.UpdateGame)
+					r.Delete("/", gameHandler.DeleteGame)
+					r.Put("/state", gameHandler.UpdateGameState)
 
-				// Logs
-				r.Get("/{gameId}/logs", gameHandler.GetGameLogs)
+					// Participant management
+					// NOTE: join endpoint removed - use application system instead
+					r.Delete("/leave", gameHandler.LeaveGame)
+					r.Post("/participants/direct-add", gameHandler.AddParticipantDirectly)
+					r.Delete("/participants/{userId}", gameHandler.RemovePlayer)
+					r.Post("/participants/{userId}/promote-to-co-gm", gameHandler.PromoteToCoGM)
+					r.Post("/participants/{userId}/demote-from-co-gm", gameHandler.DemoteFromCoGM)
+					r.Post("/participants/{userId}/to-audience", gameHandler.TransitionPlayerToAudience)
+
+					// Game application management
+					r.Post("/apply", gameHandler.ApplyToGame)
+					r.Get("/applications", gameHandler.GetGameApplications)
+					r.Put("/applications/{applicationId}/review", gameHandler.ReviewGameApplication)
+					r.Get("/application", gameHandler.GetMyGameApplication)
+					r.Delete("/application", gameHandler.WithdrawGameApplication)
+
+					// Audience management
+					r.Get("/audience", gameHandler.ListAudienceMembers)
+					r.Put("/settings/auto-accept-audience", gameHandler.UpdateAutoAcceptAudience)
+					r.Get("/characters/audience-npcs", gameHandler.ListAudienceNPCs)
+					r.Get("/private-messages/all", gameHandler.ListAllPrivateConversations)
+					r.Get("/private-messages/participants", gameHandler.GetConversationParticipants)
+					r.Get("/private-messages/conversations/{conversationId}", gameHandler.GetAudienceConversationMessages)
+					r.Get("/action-submissions/all", gameHandler.ListAllActionSubmissions)
+
+					// Logs
+					r.Get("/logs", gameHandler.GetGameLogs)
+				})
+
 			})
 		})
 	})
