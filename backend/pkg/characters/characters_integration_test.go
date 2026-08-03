@@ -10,7 +10,11 @@ import (
 	"testing"
 
 	"actionphase/pkg/core"
+	db "actionphase/pkg/db/services"
 	services "actionphase/pkg/db/services"
+	dbactions "actionphase/pkg/db/services/actions"
+	dbmessages "actionphase/pkg/db/services/messages"
+	"actionphase/pkg/games"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -59,11 +63,22 @@ func TestCharacterAPI_CompleteCharacterLifecycle(t *testing.T) {
 		GameService:         &services.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 		NotificationService: services.NewNotificationService(testDB.Pool, app.ObsLogger),
 	}
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 
 	// Character routes
-	r.Route("/api/v1/games/{gameId}/characters", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
+		r.Use(gameHandler.GameMiddleware())
 		r.Post("/", handler.CreateCharacter)
 		r.Get("/", handler.GetGameCharacters)
 	})
@@ -384,10 +399,21 @@ func TestCharacterAPI_NPCManagement(t *testing.T) {
 		GameService:         &services.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 		NotificationService: services.NewNotificationService(testDB.Pool, app.ObsLogger),
 	}
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 
-	r.Route("/api/v1/games/{gameId}/characters", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
+		r.Use(gameHandler.GameMiddleware())
 		r.Post("/", handler.CreateCharacter)
 		r.Get("/", handler.GetGameCharacters)
 	})
@@ -520,10 +546,21 @@ func TestCharacterAPI_Authorization(t *testing.T) {
 		GameService:         &services.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 		NotificationService: services.NewNotificationService(testDB.Pool, app.ObsLogger),
 	}
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 
-	r.Route("/api/v1/games/{gameId}/characters", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
+		r.Use(gameHandler.GameMiddleware())
 		r.Post("/", handler.CreateCharacter)
 	})
 	r.Route("/api/v1/characters/{id}", func(r chi.Router) {
@@ -757,10 +794,21 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 		GameService:         &services.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 		NotificationService: services.NewNotificationService(testDB.Pool, app.ObsLogger),
 	}
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 
-	r.Route("/api/v1/games/{gameId}/characters", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
+		r.Use(gameHandler.GameMiddleware())
 		r.Post("/", handler.CreateCharacter)
 	})
 	r.Route("/api/v1/characters/{id}", func(r chi.Router) {
@@ -968,10 +1016,21 @@ func TestCharacterAPI_ControllableAndInactive(t *testing.T) {
 		GameService:         &services.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 		NotificationService: services.NewNotificationService(testDB.Pool, app.ObsLogger),
 	}
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 
-	r.Route("/api/v1/games/{gameId}/characters", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
+		r.Use(gameHandler.GameMiddleware())
 		r.Post("/", handler.CreateCharacter)
 		r.Get("/controllable", handler.GetUserControllableCharacters)
 		r.Get("/inactive", handler.ListInactiveCharacters)

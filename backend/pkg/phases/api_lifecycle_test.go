@@ -12,7 +12,10 @@ import (
 	"actionphase/pkg/core"
 	db "actionphase/pkg/db/services"
 	actionsvc "actionphase/pkg/db/services/actions"
+	dbactions "actionphase/pkg/db/services/actions"
+	dbmessages "actionphase/pkg/db/services/messages"
 	phasesvc "actionphase/pkg/db/services/phases"
+	"actionphase/pkg/games"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -191,10 +194,20 @@ func setupFullPhaseAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.
 	tokenAuth := jwtauth.New("HS256", []byte(app.Config.JWT.Secret), nil)
 	userService := &db.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 	r := chi.NewRouter()
 
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Route("/games", func(r chi.Router) {
+		r.Route("/games/{gameID}", func(r chi.Router) {
 			phaseHandler := Handler{
 				App:                     app,
 				PhaseService:            &phasesvc.PhaseService{DB: testDB.Pool},
@@ -207,29 +220,30 @@ func setupFullPhaseAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
+				r.Use(gameHandler.GameMiddleware())
 
-				r.Post("/{gameId}/phases", phaseHandler.CreatePhase)
-				r.Get("/{gameId}/current-phase", phaseHandler.GetCurrentPhase)
-				r.Get("/{gameId}/phases", phaseHandler.GetGamePhases)
-				r.Post("/{gameId}/actions", phaseHandler.SubmitAction)
-				r.Get("/{gameId}/actions", phaseHandler.GetGameActions)
-				r.Get("/{gameId}/actions/mine", phaseHandler.GetUserActions)
+				r.Post("/phases", phaseHandler.CreatePhase)
+				r.Get("/current-phase", phaseHandler.GetCurrentPhase)
+				r.Get("/phases", phaseHandler.GetGamePhases)
+				r.Post("/actions", phaseHandler.SubmitAction)
+				r.Get("/actions", phaseHandler.GetGameActions)
+				r.Get("/actions/mine", phaseHandler.GetUserActions)
 
 				// Action results
-				r.Post("/{gameId}/results", phaseHandler.CreateActionResult)
-				r.Get("/{gameId}/results", phaseHandler.GetGameActionResults)
-				r.Get("/{gameId}/results/mine", phaseHandler.GetUserActionResults)
-				r.Put("/{gameId}/results/{resultId}", phaseHandler.UpdateActionResult)
-				r.Post("/{gameId}/results/{resultId}/publish", phaseHandler.PublishActionResult)
-				r.Post("/{gameId}/phases/{phaseId}/results/publish", phaseHandler.PublishAllPhaseResults)
-				r.Get("/{gameId}/phases/{phaseId}/results/unpublished-count", phaseHandler.GetUnpublishedResultsCount)
+				r.Post("/results", phaseHandler.CreateActionResult)
+				r.Get("/results", phaseHandler.GetGameActionResults)
+				r.Get("/results/mine", phaseHandler.GetUserActionResults)
+				r.Put("/results/{resultId}", phaseHandler.UpdateActionResult)
+				r.Post("/results/{resultId}/publish", phaseHandler.PublishActionResult)
+				r.Post("/phases/{phaseId}/results/publish", phaseHandler.PublishAllPhaseResults)
+				r.Get("/phases/{phaseId}/results/unpublished-count", phaseHandler.GetUnpublishedResultsCount)
 
 				// Draft character updates
-				r.Post("/{gameId}/results/{resultId}/character-updates", phaseHandler.CreateDraftCharacterUpdate)
-				r.Get("/{gameId}/results/{resultId}/character-updates", phaseHandler.GetDraftCharacterUpdates)
-				r.Get("/{gameId}/results/{resultId}/character-updates/count", phaseHandler.GetDraftUpdateCount)
-				r.Put("/{gameId}/results/{resultId}/character-updates/{draftId}", phaseHandler.UpdateDraftCharacterUpdate)
-				r.Delete("/{gameId}/results/{resultId}/character-updates/{draftId}", phaseHandler.DeleteDraftCharacterUpdate)
+				r.Post("/results/{resultId}/character-updates", phaseHandler.CreateDraftCharacterUpdate)
+				r.Get("/results/{resultId}/character-updates", phaseHandler.GetDraftCharacterUpdates)
+				r.Get("/results/{resultId}/character-updates/count", phaseHandler.GetDraftUpdateCount)
+				r.Put("/results/{resultId}/character-updates/{draftId}", phaseHandler.UpdateDraftCharacterUpdate)
+				r.Delete("/results/{resultId}/character-updates/{draftId}", phaseHandler.DeleteDraftCharacterUpdate)
 			})
 		})
 

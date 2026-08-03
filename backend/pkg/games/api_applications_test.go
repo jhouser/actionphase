@@ -41,7 +41,7 @@ func setupApplicationsTestRouter(app *core.App, testDB *core.TestDatabase) *chi.
 			// Public routes (no authentication required)
 			r.Group(func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
-				r.Get("/{id}/applicants", gameHandler.GetPublicGameApplicants)
+				r.With(gameHandler.GameMiddleware()).Get("/{gameID}/applicants", gameHandler.GetPublicGameApplicants)
 			})
 
 			// Authenticated routes
@@ -49,7 +49,7 @@ func setupApplicationsTestRouter(app *core.App, testDB *core.TestDatabase) *chi.
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
 
-				r.Get("/{id}/applications", gameHandler.GetGameApplications)
+				r.With(gameHandler.GameMiddleware()).Get("/{gameID}/applications", gameHandler.GetGameApplications)
 			})
 		})
 	})
@@ -490,5 +490,5 @@ func TestGetPublicGameApplicants_NonexistentGame(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	core.AssertEqual(t, http.StatusInternalServerError, w.Code, "Should return 500 for nonexistent game")
+	core.AssertEqual(t, http.StatusNotFound, w.Code, "Should return 404 for nonexistent game")
 }

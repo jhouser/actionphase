@@ -282,6 +282,9 @@ type GameServiceInterface interface {
 
 	// TransitionPlayerToAudience moves a player to audience role
 	TransitionPlayerToAudience(ctx context.Context, gameID, userID, requestingUserID int32) error
+
+	// GetGameLogs retrieves all logs for a given game
+	GetGameLogs(ctx context.Context, gameID int32) ([]models.GameLog, error)
 }
 
 // GameApplicationServiceInterface defines the contract for game application operations.

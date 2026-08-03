@@ -17,12 +17,7 @@ func (h *Handler) CreatePhase(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_create_phase")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid create phase request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	data := &CreatePhaseRequest{}
 	if err := render.Bind(r, data); err != nil {
@@ -43,24 +38,11 @@ func (h *Handler) CreatePhase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get authenticated user
-	authUser := core.GetAuthenticatedUser(ctx)
-	if authUser == nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "No authenticated user found")
-		return
-	}
-
 	// Get game and check GM permissions (considers admin mode)
 	phaseService := h.PhaseService
-	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game", "error", err)
-		return
-	}
 
-	if !core.IsUserGameMaster(r, authUser.ID, authUser.IsAdmin, *game, h.App.Pool) {
-		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can create phases"), "Phase create permission denied", "game_id", gameID, "user_id", authUser.ID)
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can create phases"), "Phase create permission denied", "game_id", gameID, "user_id", core.GetAuthenticatedUser(ctx).ID)
 		return
 	}
 
@@ -96,12 +78,7 @@ func (h *Handler) GetCurrentPhase(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_current_phase")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get current phase request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	phaseService := h.PhaseService
 	phase, err := phaseService.GetActivePhase(ctx, int32(gameID))
@@ -128,12 +105,7 @@ func (h *Handler) GetGamePhases(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game_phases")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get game phases request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	phaseService := h.PhaseService
 	phases, err := phaseService.GetGamePhases(ctx, int32(gameID))
