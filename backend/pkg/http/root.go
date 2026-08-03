@@ -286,6 +286,7 @@ func (h *Handler) Start() {
 				r.Patch("/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)             // Edit comment
 				r.Delete("/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)            // Delete comment
 				r.Get("/messages/{messageId}", messageHandler.GetMessage)                                 // For deep linking to nested comments
+				r.Get("/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)     // Target + full ancestor chain in one request
 				r.Get("/comments/recent", messageHandler.ListRecentCommentsWithParents)                   // New Comments view
 
 				// Read tracking for common room
@@ -385,6 +386,10 @@ func (h *Handler) Start() {
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
+
+			// Cross-game character list for the current user. Static segment, so
+			// chi matches it ahead of the /{id} route below.
+			r.Get("/controllable", characterHandler.GetUserControllableCharactersAcrossGames)
 
 			// Character management
 			r.Get("/{id}", characterHandler.GetCharacter)

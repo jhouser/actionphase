@@ -116,6 +116,13 @@ export function useUpdateComment() {
       await queryClient.invalidateQueries({
         queryKey: ['gamePosts', variables.gameId]
       });
+
+      // Refresh the "New Comments" list. Its cards render straight from this
+      // query with no local edited copy, so without this the edited comment
+      // keeps showing stale text until a manual refresh.
+      await queryClient.invalidateQueries({
+        queryKey: ['games', variables.gameId, 'recentComments']
+      });
     },
   });
 }
@@ -154,6 +161,12 @@ export function useDeleteComment() {
       // Invalidate comment replies queries
       await queryClient.invalidateQueries({
         queryKey: ['commentReplies', variables.gameId]
+      });
+
+      // Refresh the "New Comments" list so a deleted comment disappears without
+      // a manual refresh (its cards render straight from this query).
+      await queryClient.invalidateQueries({
+        queryKey: ['games', variables.gameId, 'recentComments']
       });
     },
   });

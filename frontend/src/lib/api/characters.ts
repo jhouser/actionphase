@@ -2,6 +2,7 @@ import { BaseApiClient } from './client';
 import { logger } from '@/services/LoggingService';
 import type {
   Character,
+  ControllableCharacterWithGame,
   CharacterData,
   CharacterActivityStats,
   CreateCharacterRequest,
@@ -27,6 +28,15 @@ export class CharactersApi extends BaseApiClient {
 
   async getUserControllableCharacters(gameId: number) {
     return this.client.get<Character[]>(`/api/v1/games/${gameId}/characters/controllable`);
+  }
+
+  /**
+   * Every character the current user controls across all their in_progress
+   * games, each carrying its game context and the user's role in that game.
+   * Backs surfaces with no game in scope, such as the global Utility Drawer.
+   */
+  async getControllableCharactersAcrossGames() {
+    return this.client.get<ControllableCharacterWithGame[]>('/api/v1/characters/controllable');
   }
 
   async getCharacter(id: number) {

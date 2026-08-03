@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test-utils';
 import { RecentActivityCard } from '../RecentActivityCard';
 import type { DashboardMessage } from '../../types/dashboard';
@@ -268,6 +269,49 @@ describe('RecentActivityCard', () => {
     expect(screen.getByText('Author2')).toBeInTheDocument();
     expect(screen.getByText('Message 2 content')).toBeInTheDocument();
     expect(screen.getByText('Comment')).toBeInTheDocument();
+  });
+
+  describe('defaultCollapsed', () => {
+    it('hides message content behind the header when collapsed', () => {
+      renderWithProviders(
+        <RecentActivityCard messages={[baseMessage]} defaultCollapsed />
+      );
+
+      expect(screen.getByText('Recent Activity')).toBeInTheDocument();
+      expect(screen.queryByText('This is a test message')).not.toBeInTheDocument();
+    });
+
+    it('shows the message count while collapsed', () => {
+      const messages = [1, 2, 3].map((id) => ({ ...baseMessage, message_id: id }));
+
+      renderWithProviders(<RecentActivityCard messages={messages} defaultCollapsed />);
+
+      expect(screen.getByText('3')).toBeInTheDocument();
+    });
+
+    it('expands and re-collapses on header click', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <RecentActivityCard messages={[baseMessage]} defaultCollapsed />
+      );
+
+      const header = screen.getByRole('button', { name: /recent activity/i });
+      expect(header).toHaveAttribute('aria-expanded', 'false');
+
+      await user.click(header);
+      expect(screen.getByText('This is a test message')).toBeInTheDocument();
+      expect(header).toHaveAttribute('aria-expanded', 'true');
+
+      await user.click(header);
+      expect(screen.queryByText('This is a test message')).not.toBeInTheDocument();
+    });
+
+    it('renders expanded with no toggle button by default', () => {
+      renderWithProviders(<RecentActivityCard messages={[baseMessage]} />);
+
+      expect(screen.getByText('This is a test message')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /recent activity/i })).not.toBeInTheDocument();
+    });
   });
 
   it('handles message with null character_name correctly', () => {

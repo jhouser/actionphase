@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
 import { renderWithProviders } from '../../test-utils/render';
 import { CommonRoom } from '../CommonRoom';
+import { UtilityDrawerHarness } from '../../test-utils/utilityDrawer';
 import type { Character } from '../../types/characters';
 
 /**
@@ -18,6 +19,10 @@ import type { Character } from '../../types/characters';
  *    permission computed by useCharacterSheetPermissions actually reaches the
  *    component, rather than being hardcoded, and
  *  - opening the sheet closes the drawer so the modal stacks over the room.
+ *
+ * The drawer itself is mounted globally now; what CommonRoom contributes is the
+ * game-scoped context (role, game state, controlled characters) those
+ * permissions are computed from. That contribution is what's under test here.
  *
  * WHY THE REAL CharacterSheet IS NOT RENDERED HERE:
  * The full CharacterSheet component cannot be mounted under jsdom in this test
@@ -104,11 +109,22 @@ function setupPlayerGame(gameState: 'in_progress' | 'completed' = 'in_progress')
   );
 }
 
-/** Render CommonRoom for the wired-up player game and open the Utility Drawer. */
+/**
+ * Render CommonRoom for the wired-up player game and open the Utility Drawer.
+ *
+ * The drawer and the sheet modal it launches now live at the app root rather
+ * than inside CommonRoom, and the button that opens them lives in the global
+ * nav. UtilityDrawerHarness supplies both, mirroring how App composes them —
+ * the provider itself comes from renderWithProviders. CommonRoom contributes
+ * its game context to that provider while mounted.
+ */
 async function renderAndOpenDrawer() {
   const user = userEvent.setup();
   renderWithProviders(
-    <CommonRoom gameId={1} phaseId={1} isCurrentPhase={true} />,
+    <>
+      <CommonRoom gameId={1} phaseId={1} isCurrentPhase={true} />
+      <UtilityDrawerHarness />
+    </>,
     { gameId: 1 }
   );
   await waitFor(() =>
@@ -124,7 +140,7 @@ describe('CommonRoom — Utility Drawer integration', () => {
     Element.prototype.scrollIntoView = () => {};
   });
 
-  it('opens the Utility Drawer from the Common Room header', async () => {
+  it('offers the room-appropriate utilities when the drawer is opened', async () => {
     setupPlayerGame();
     await renderAndOpenDrawer();
 

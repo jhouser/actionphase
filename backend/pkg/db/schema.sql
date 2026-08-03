@@ -569,11 +569,16 @@ CREATE TABLE common_room_polls (
     deadline TIMESTAMPTZ NOT NULL,
     show_individual_votes BOOLEAN DEFAULT FALSE,
     allow_other_option BOOLEAN DEFAULT TRUE,
+    hide_results_from_players BOOLEAN NOT NULL DEFAULT FALSE,
+    allow_audience_voting BOOLEAN NOT NULL DEFAULT FALSE,
 
     -- Metadata
     is_deleted BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    CONSTRAINT poll_hidden_results_excludes_individual_votes
+        CHECK (NOT (hide_results_from_players AND COALESCE(show_individual_votes, FALSE)))
 );
 
 -- Poll options table

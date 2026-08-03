@@ -71,6 +71,7 @@ func setupMessageAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mu
 				r.Patch("/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)
 				r.Delete("/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)
 				r.Get("/posts/{postId}/comments-with-threads", messageHandler.GetPostCommentsWithThreads)
+				r.Get("/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)
 				r.Post("/posts/{postId}/comments/{commentId}/toggle-read", messageHandler.ToggleCommentRead)
 				r.Get("/manual-read-comment-ids", messageHandler.GetManualReadCommentIDs)
 				r.Post("/phases/{phaseId}/mark-all-comments-read", messageHandler.MarkAllCommentsRead)
@@ -726,6 +727,116 @@ func TestMessageAPI_GetPostCommentsWithThreads(t *testing.T) {
 
 	t.Run("returns 400 for invalid limit parameter", func(t *testing.T) {
 		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/posts/%d/comments-with-threads?limit=999", game.ID, post.ID), nil)
+		req.Header.Set("Authorization", "Bearer "+playerToken)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+}
+
+// TestMessageAPI_GetMessageThreadContext tests GET /games/{gameId}/messages/{messageId}/thread-context,
+// the single-request deep-link endpoint that returns a target comment plus a bounded
+// slice of its ancestor chain. Builds a nested thread post → c1 → c2 → c3 and deep-links
+// to c3, verifying the chain assembly, root_post_id, has_full_thread trimming flag, and
+// the max_parents validation the frontend depends on.
+func TestMessageAPI_GetMessageThreadContext(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "messages", "characters", "game_participants", "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupMessageAPITestRouter(app, testDB)
+
+	gm := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	player := testDB.CreateTestUser(t, "player", "player@example.com")
+
+	playerToken, err := core.CreateTestJWTTokenForUser(app, player)
+	require.NoError(t, err)
+
+	game := testDB.CreateTestGame(t, int32(gm.ID), "Test Game")
+
+	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	characterService := &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
+	messageService := &messages.MessageService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	_, err = gameService.AddGameParticipant(context.Background(), game.ID, int32(player.ID), "player")
+	require.NoError(t, err)
+
+	gmChar, err := characterService.CreateCharacter(context.Background(), db.CreateCharacterRequest{
+		GameID: game.ID, UserID: int32Ptr(int32(gm.ID)), Name: "GM Char", CharacterType: "player_character",
+	})
+	require.NoError(t, err)
+	playerChar, err := characterService.CreateCharacter(context.Background(), db.CreateCharacterRequest{
+		GameID: game.ID, UserID: int32Ptr(int32(player.ID)), Name: "Player Char", CharacterType: "player_character",
+	})
+	require.NoError(t, err)
+
+	// Build a nested thread: post → c1 → c2 → c3
+	post, err := messageService.CreatePost(context.Background(), core.CreatePostRequest{
+		GameID: game.ID, AuthorID: int32(gm.ID), CharacterID: gmChar.ID, Content: "Root post.", Visibility: "game",
+	})
+	require.NoError(t, err)
+	c1, err := messageService.CreateComment(context.Background(), core.CreateCommentRequest{
+		GameID: game.ID, ParentID: post.ID, RootPostID: post.ID, AuthorID: int32(player.ID), CharacterID: playerChar.ID, Content: "Comment one.", Visibility: "game",
+	})
+	require.NoError(t, err)
+	c2, err := messageService.CreateComment(context.Background(), core.CreateCommentRequest{
+		GameID: game.ID, ParentID: c1.ID, RootPostID: post.ID, AuthorID: int32(gm.ID), CharacterID: gmChar.ID, Content: "Comment two.", Visibility: "game",
+	})
+	require.NoError(t, err)
+	c3, err := messageService.CreateComment(context.Background(), core.CreateCommentRequest{
+		GameID: game.ID, ParentID: c2.ID, RootPostID: post.ID, AuthorID: int32(player.ID), CharacterID: playerChar.ID, Content: "Comment three.", Visibility: "game",
+	})
+	require.NoError(t, err)
+
+	t.Run("deep-links to nested comment with full ancestor chain", func(t *testing.T) {
+		// max_parents large enough to reach the root, so nothing is trimmed.
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/messages/%d/thread-context?max_parents=10", game.ID, c3.ID), nil)
+		req.Header.Set("Authorization", "Bearer "+playerToken)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response MessageThreadContextResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+		// root_post_id points at the top-level post regardless of trimming.
+		assert.Equal(t, post.ID, response.RootPostID)
+		assert.True(t, response.HasFullThread, "chain reaches the root, so has_full_thread should be true")
+
+		// Chain is ordered parent-to-child and ends at the target comment.
+		require.NotEmpty(t, response.Chain)
+		last := response.Chain[len(response.Chain)-1]
+		assert.Equal(t, c3.ID, last.ID, "last element of the chain is the deep-linked target")
+		assert.Equal(t, "Comment three.", last.Content)
+	})
+
+	t.Run("trims the chain when max_parents is smaller than the depth", func(t *testing.T) {
+		// Only the target + 1 nearest ancestor; the chain no longer reaches the root.
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/messages/%d/thread-context?max_parents=1", game.ID, c3.ID), nil)
+		req.Header.Set("Authorization", "Bearer "+playerToken)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response MessageThreadContextResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+		// root_post_id is still reported even though the chain is trimmed above.
+		assert.Equal(t, post.ID, response.RootPostID)
+		assert.False(t, response.HasFullThread, "chain was trimmed, so has_full_thread should be false")
+		assert.Len(t, response.Chain, 2, "target + 1 ancestor")
+		assert.Equal(t, c3.ID, response.Chain[len(response.Chain)-1].ID)
+	})
+
+	t.Run("returns 400 for out-of-range max_parents", func(t *testing.T) {
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/messages/%d/thread-context?max_parents=999", game.ID, c3.ID), nil)
 		req.Header.Set("Authorization", "Bearer "+playerToken)
 
 		rec := httptest.NewRecorder()

@@ -82,6 +82,17 @@ RETURNING *;
 -- name: GetConversation :one
 SELECT * FROM conversations WHERE id = $1;
 
+-- name: DeleteEmptyConversation :execrows
+-- Hard-deletes a conversation only if it has never had a message sent in it.
+-- The NOT EXISTS is part of the DELETE so the emptiness check and the delete are
+-- atomic: a message arriving concurrently makes the delete affect zero rows
+-- rather than silently discarding it. Participants and read markers cascade.
+DELETE FROM conversations c
+WHERE c.id = $1
+  AND NOT EXISTS (
+      SELECT 1 FROM private_messages pm WHERE pm.conversation_id = c.id
+  );
+
 -- name: GetUserUnreadConversations :many
 -- Get conversations with unread messages for a user in a game, capped at a limit.
 -- Used by the dashboard PM preview to avoid fetching the full conversation list.
@@ -390,6 +401,121 @@ WHERE game_id = $1
   AND message_type = 'comment'
   AND is_deleted = false
   AND deleted_at IS NULL;
+
+-- name: ListRecentUnreadCommentsWithParents :many
+-- Same as ListRecentCommentsWithParents, but excludes comments the user has
+-- manually marked as read. Used by the "New Comments" view's unread-only filter
+-- in manual read mode. Filtering happens before LIMIT/OFFSET so pagination
+-- counts stay accurate.
+WITH RECURSIVE recent_comments AS (
+    SELECT
+        m.id,
+        m.game_id,
+        m.parent_id,
+        m.author_id,
+        m.character_id,
+        m.content,
+        m.created_at,
+        m.edited_at,
+        m.edit_count,
+        m.deleted_at,
+        m.is_deleted,
+        u.username as author_username,
+        c.name as character_name,
+        c.avatar_url as character_avatar_url
+    FROM messages m
+    JOIN users u ON m.author_id = u.id
+    LEFT JOIN characters c ON m.character_id = c.id
+    WHERE m.game_id = $1
+      AND m.message_type = 'comment'
+      AND m.is_deleted = false
+      AND m.deleted_at IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM user_comment_reads ucr
+          WHERE ucr.comment_id = m.id AND ucr.user_id = $4
+      )
+    ORDER BY m.created_at DESC
+    LIMIT $2 OFFSET $3
+),
+-- Walk up the message tree recursively to find the root post for each comment
+root_posts AS (
+    -- Base: walk up from each recent comment, tracking the original comment's id
+    SELECT rc.id AS comment_id, rc.parent_id AS current_id
+    FROM recent_comments rc
+    WHERE rc.parent_id IS NOT NULL
+    UNION ALL
+    -- Recursive step: keep walking up until we hit a post
+    SELECT rp.comment_id, m.parent_id AS current_id
+    FROM root_posts rp
+    JOIN messages m ON m.id = rp.current_id AND m.message_type = 'comment'
+    WHERE m.parent_id IS NOT NULL
+),
+-- Pick the post at the top of each comment's chain
+root_post_ids AS (
+    SELECT rp.comment_id, rp.current_id AS post_id
+    FROM root_posts rp
+    JOIN messages m ON m.id = rp.current_id AND m.message_type = 'post'
+),
+parent_messages AS (
+    SELECT
+        m.id,
+        m.content,
+        m.created_at,
+        m.deleted_at,
+        m.is_deleted,
+        m.message_type,
+        u.username as author_username,
+        c.name as character_name,
+        c.avatar_url as character_avatar_url
+    FROM messages m
+    JOIN users u ON m.author_id = u.id
+    LEFT JOIN characters c ON m.character_id = c.id
+    WHERE m.id IN (
+        SELECT parent_id FROM recent_comments
+        WHERE parent_id IS NOT NULL
+    )
+)
+SELECT
+    rc.id,
+    rc.game_id,
+    rc.parent_id,
+    rp.post_id,
+    rc.author_id,
+    rc.character_id,
+    rc.content,
+    rc.created_at,
+    rc.edited_at,
+    rc.edit_count,
+    rc.deleted_at,
+    rc.is_deleted,
+    rc.author_username,
+    rc.character_name,
+    rc.character_avatar_url,
+    pm.content as parent_content,
+    pm.created_at as parent_created_at,
+    pm.deleted_at as parent_deleted_at,
+    pm.is_deleted as parent_is_deleted,
+    pm.message_type as parent_message_type,
+    pm.author_username as parent_author_username,
+    pm.character_name as parent_character_name,
+    pm.character_avatar_url as parent_character_avatar_url
+FROM recent_comments rc
+LEFT JOIN root_post_ids rp ON rp.comment_id = rc.id
+LEFT JOIN parent_messages pm ON rc.parent_id = pm.id
+ORDER BY rc.created_at DESC;
+
+-- name: GetTotalUnreadCommentCount :one
+-- Count of comments in a game the user has not manually marked as read
+SELECT COUNT(*) as total
+FROM messages m
+WHERE m.game_id = $1
+  AND m.message_type = 'comment'
+  AND m.is_deleted = false
+  AND m.deleted_at IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM user_comment_reads ucr
+      WHERE ucr.comment_id = m.id AND ucr.user_id = $2
+  );
 
 -- name: ListCharacterPostsAndComments :many
 -- Get all posts and comments by a specific character (for Character Page)

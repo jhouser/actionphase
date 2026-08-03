@@ -308,6 +308,55 @@ import { Radio } from '@/components/ui';
 
 ---
 
+### Toggle
+
+Accessible on/off switch (`role="switch"`). Use this instead of hand-rolled
+toggle markup — the off-state uses defined theme tokens (`bg-surface-sunken` +
+`border-theme-strong`) so it stays visible in light mode. (The legacy
+`bg-bg-secondary` / `bg-border-primary` utilities are unassigned in the current
+theme system and render invisible — that was the original toggle bug.)
+
+**Import:**
+```tsx
+import { Toggle } from '@/components/ui';
+```
+
+**Props:**
+- `checked`: `boolean` - Whether the toggle is on (required)
+- `onChange`: `(checked: boolean) => void` - Called with the next value (required)
+- `size`: `'sm' | 'md'` - Track size (default `md`)
+- `label`: `ReactNode` - Optional label rendered left of the switch
+- `description`: `ReactNode` - Optional secondary description under the label
+- `icon`: `ReactNode` - Optional leading icon
+- All standard button HTML attributes (except `type` and `onChange`), e.g.
+  `data-testid`, `aria-label`, `disabled`
+
+**Examples:**
+```tsx
+// Full row with label + description (renders one clickable row)
+<Toggle
+  checked={enabled}
+  onChange={setEnabled}
+  label="Private Messages"
+  description="Get a Discord DM for new private messages."
+/>
+
+// Compact switch with an icon
+<Toggle
+  checked={on}
+  onChange={setOn}
+  size="sm"
+  icon={<EyeOff className="w-5 h-5" />}
+  label="Screenshot Mode"
+  description="Hide all usernames in screenshots."
+/>
+
+// Bare switch (bring your own layout) — always pass an aria-label
+<Toggle checked={on} onChange={setOn} aria-label="Toggle setting" />
+```
+
+---
+
 ## CSS Variables Reference
 
 All components use semantic CSS variables that automatically switch with the theme:

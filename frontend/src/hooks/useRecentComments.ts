@@ -6,10 +6,15 @@ const COMMENTS_PER_PAGE = 20;
 /**
  * Hook to fetch recent comments with their parent context
  * Supports infinite scrolling via cursor-based pagination
+ *
+ * When `unreadOnly` is true the server omits comments the user has manually
+ * marked as read. Filtering server-side (rather than on the fetched pages)
+ * keeps pagination and the total count accurate. `unreadOnly` is part of the
+ * query key so filtered and unfiltered lists cache independently.
  */
-export function useRecentComments(gameId: number | undefined) {
+export function useRecentComments(gameId: number | undefined, unreadOnly: boolean = false) {
   return useInfiniteQuery({
-    queryKey: ['games', gameId, 'recentComments'],
+    queryKey: ['games', gameId, 'recentComments', { unreadOnly }],
     queryFn: async ({ pageParam }: { pageParam?: number }) => {
       if (!gameId) {
         throw new Error('Game ID is required');
@@ -18,7 +23,8 @@ export function useRecentComments(gameId: number | undefined) {
       const response = await apiClient.messages.getRecentComments(
         gameId,
         COMMENTS_PER_PAGE,
-        pageParam ?? 0
+        pageParam ?? 0,
+        unreadOnly
       );
       return response.data;
     },

@@ -15,17 +15,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// anonymousVoterName is the display name used for audience votes, which are never
+// attributed to a specific user or character.
+const anonymousVoterName = "Anonymous"
+
 // Request and Response Types
 
 // CreatePollRequest is the API request for creating a poll
 type CreatePollRequest struct {
-	Question            string              `json:"question"`
-	Description         *string             `json:"description,omitempty"`
-	Deadline            time.Time           `json:"deadline"`
-	PhaseID             *int32              `json:"phase_id,omitempty"`
-	ShowIndividualVotes bool                `json:"show_individual_votes"`
-	AllowOtherOption    bool                `json:"allow_other_option"`
-	Options             []PollOptionRequest `json:"options"`
+	Question               string              `json:"question"`
+	Description            *string             `json:"description,omitempty"`
+	Deadline               time.Time           `json:"deadline"`
+	PhaseID                *int32              `json:"phase_id,omitempty"`
+	ShowIndividualVotes    bool                `json:"show_individual_votes"`
+	AllowOtherOption       bool                `json:"allow_other_option"`
+	HideResultsFromPlayers bool                `json:"hide_results_from_players"`
+	AllowAudienceVoting    bool                `json:"allow_audience_voting"`
+	Options                []PollOptionRequest `json:"options"`
 }
 
 // PollOptionRequest represents a poll option in the API request
@@ -45,16 +51,21 @@ func (req *CreatePollRequest) Bind(r *http.Request) error {
 	if len(req.Options) < 2 {
 		return fmt.Errorf("at least 2 options are required")
 	}
+	if req.HideResultsFromPlayers && req.ShowIndividualVotes {
+		return fmt.Errorf("hide_results_from_players cannot be combined with show_individual_votes")
+	}
 	return nil
 }
 
 // UpdatePollRequest is the API request for updating a poll
 type UpdatePollRequest struct {
-	Question            string    `json:"question"`
-	Description         *string   `json:"description,omitempty"`
-	Deadline            time.Time `json:"deadline"`
-	ShowIndividualVotes bool      `json:"show_individual_votes"`
-	AllowOtherOption    bool      `json:"allow_other_option"`
+	Question               string    `json:"question"`
+	Description            *string   `json:"description,omitempty"`
+	Deadline               time.Time `json:"deadline"`
+	ShowIndividualVotes    bool      `json:"show_individual_votes"`
+	AllowOtherOption       bool      `json:"allow_other_option"`
+	HideResultsFromPlayers bool      `json:"hide_results_from_players"`
+	AllowAudienceVoting    bool      `json:"allow_audience_voting"`
 }
 
 // Bind validates the UpdatePollRequest
@@ -64,6 +75,9 @@ func (req *UpdatePollRequest) Bind(r *http.Request) error {
 	}
 	if req.Deadline.Before(time.Now()) {
 		return fmt.Errorf("deadline must be in the future")
+	}
+	if req.HideResultsFromPlayers && req.ShowIndividualVotes {
+		return fmt.Errorf("hide_results_from_players cannot be combined with show_individual_votes")
 	}
 	return nil
 }
@@ -117,6 +131,7 @@ type OptionResult struct {
 type VoterInfo struct {
 	UserID        int32  `json:"user_id"`
 	CharacterName string `json:"character_name"`
+	IsAnonymous   bool   `json:"is_anonymous,omitempty"`
 }
 
 // OtherResponse represents a free-text "other" response
@@ -124,6 +139,7 @@ type OtherResponse struct {
 	VoteID        int32  `json:"vote_id"`
 	OtherText     string `json:"other_text"`
 	CharacterName string `json:"character_name"`
+	IsAnonymous   bool   `json:"is_anonymous,omitempty"`
 }
 
 // Helper Functions
@@ -199,6 +215,10 @@ func (h *Handler) verifyUserInGame(ctx context.Context, gameID int32, userID int
 type pollViewAccess struct {
 	allowed               bool
 	canSeeIndividualVotes bool // true for GM, Co-GM, audience, or any user viewing a completed game
+	// isPrivileged is true only for GM, Co-GM and audience — the roles that may see
+	// results of a poll flagged hide_results_from_players. Unlike
+	// canSeeIndividualVotes, completing a game does not confer it.
+	isPrivileged bool
 }
 
 // checkPollViewAccess determines what visibility level an authenticated user gets for
@@ -215,18 +235,17 @@ func (h *Handler) checkPollViewAccess(ctx context.Context, gameID int32, userID 
 		return pollViewAccess{}, fmt.Errorf("failed to get game: %w", err)
 	}
 
-	// Completed games: everyone sees full results
+	// GM, Co-GM and audience always see full results, and remain privileged even
+	// after the game completes.
+	if game.GmUserID == userID ||
+		core.IsUserCoGM(ctx, h.App.Pool, gameID, userID) ||
+		core.IsUserAudience(ctx, h.App.Pool, gameID, userID) {
+		return pollViewAccess{allowed: true, canSeeIndividualVotes: true, isPrivileged: true}, nil
+	}
+
+	// Completed games: everyone else sees full results too, but without the
+	// privilege that would unlock polls hidden from players.
 	if game.State.String == "completed" {
-		return pollViewAccess{allowed: true, canSeeIndividualVotes: true}, nil
-	}
-
-	// GM and Co-GM always see full results
-	if game.GmUserID == userID || core.IsUserCoGM(ctx, h.App.Pool, gameID, userID) {
-		return pollViewAccess{allowed: true, canSeeIndividualVotes: true}, nil
-	}
-
-	// Audience always sees full results
-	if core.IsUserAudience(ctx, h.App.Pool, gameID, userID) {
 		return pollViewAccess{allowed: true, canSeeIndividualVotes: true}, nil
 	}
 
@@ -276,15 +295,17 @@ func (h *Handler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serviceReq := core.CreatePollRequest{
-		GameID:              int32(gameID),
-		PhaseID:             data.PhaseID,
-		CreatedByUserID:     userID,
-		Question:            data.Question,
-		Description:         data.Description,
-		Deadline:            data.Deadline,
-		ShowIndividualVotes: data.ShowIndividualVotes,
-		AllowOtherOption:    data.AllowOtherOption,
-		Options:             options,
+		GameID:                 int32(gameID),
+		PhaseID:                data.PhaseID,
+		CreatedByUserID:        userID,
+		Question:               data.Question,
+		Description:            data.Description,
+		Deadline:               data.Deadline,
+		ShowIndividualVotes:    data.ShowIndividualVotes,
+		AllowOtherOption:       data.AllowOtherOption,
+		HideResultsFromPlayers: data.HideResultsFromPlayers,
+		AllowAudienceVoting:    data.AllowAudienceVoting,
+		Options:                options,
 	}
 
 	// Create poll
@@ -514,6 +535,22 @@ func (h *Handler) GetPollResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Authorize before reading results: both checks answer from the poll row we
+	// already have, so an unauthorized request never pays for the results queries.
+
+	// Hidden-results polls never disclose results to players — not after the
+	// deadline, and not once the game completes. GM, co-GM and audience are exempt.
+	if poll.HideResultsFromPlayers && !access.isPrivileged {
+		h.renderError(ctx, w, r, core.ErrForbidden("poll results are hidden by the GM"), "Cannot view results - results hidden from players")
+		return
+	}
+
+	// Regular players can only see results after poll expires; privileged users can always view
+	if !access.canSeeIndividualVotes && !poll.Deadline.Time.Before(time.Now()) {
+		h.renderError(ctx, w, r, core.ErrForbidden("poll results not available until voting closes"), "Cannot view results - poll still active")
+		return
+	}
+
 	// Get poll results; privileged users (GM, co-GM, audience, completed-game viewers) see individual votes
 	results, err := pollService.GetPollResults(ctx, int32(pollID), access.canSeeIndividualVotes)
 	if err != nil {
@@ -521,22 +558,16 @@ func (h *Handler) GetPollResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if poll has expired
-	pollExpired := results.Poll.Deadline.Time.Before(time.Now())
-
-	// Regular players can only see results after poll expires; privileged users can always view
-	if !access.canSeeIndividualVotes {
-		if !pollExpired {
-			h.renderError(ctx, w, r, core.ErrForbidden("poll results not available until voting closes"), "Cannot view results - poll still active")
-			return
-		}
-	}
-
 	// Convert core.PollResults to API response with flattened structure
 	optionResults := make([]OptionResult, len(results.OptionResults))
 	for i, optRes := range results.OptionResults {
 		voters := make([]VoterInfo, len(optRes.Voters))
 		for j, voter := range optRes.Voters {
+			if voter.IsAnonymous {
+				voters[j] = VoterInfo{CharacterName: anonymousVoterName, IsAnonymous: true}
+				continue
+			}
+
 			characterName := ""
 			if voter.CharacterName != nil {
 				characterName = *voter.CharacterName
@@ -566,6 +597,16 @@ func (h *Handler) GetPollResults(w http.ResponseWriter, r *http.Request) {
 
 	otherResponses := make([]OtherResponse, len(results.OtherResponses))
 	for i, other := range results.OtherResponses {
+		if other.IsAnonymous {
+			otherResponses[i] = OtherResponse{
+				VoteID:        other.VoteID,
+				OtherText:     other.OtherText,
+				CharacterName: anonymousVoterName,
+				IsAnonymous:   true,
+			}
+			continue
+		}
+
 		characterName := ""
 		if other.CharacterName != nil {
 			characterName = *other.CharacterName
@@ -648,23 +689,28 @@ func (h *Handler) SubmitVote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isAudience {
-		h.renderError(ctx, w, r, core.ErrForbidden("Audience members cannot vote on polls"), "Audience members cannot vote on polls")
-		return
-	}
-
-	// Players must have an approved character to vote
-	queries := db.New(h.App.Pool)
-	hasCharacter, err := queries.HasApprovedCharacterInGame(ctx, db.HasApprovedCharacterInGameParams{
-		GameID: poll.GameID,
-		UserID: pgtype.Int4{Int32: userID, Valid: true},
-	})
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check character status", "error", err)
-		return
-	}
-	if !hasCharacter {
-		h.renderError(ctx, w, r, core.ErrForbidden("you must have an approved character to vote"), "Player does not have an approved character in this game")
-		return
+		// Audience may vote only when the GM enabled it for this poll.
+		if !poll.AllowAudienceVoting {
+			h.renderError(ctx, w, r, core.ErrForbidden("Audience members cannot vote on polls"), "Audience members cannot vote on polls")
+			return
+		}
+	} else {
+		// Players must have an approved character to vote. Audience members are
+		// exempt: they need not have a character, and their votes are recorded
+		// anonymously.
+		queries := db.New(h.App.Pool)
+		hasCharacter, err := queries.HasApprovedCharacterInGame(ctx, db.HasApprovedCharacterInGameParams{
+			GameID: poll.GameID,
+			UserID: pgtype.Int4{Int32: userID, Valid: true},
+		})
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check character status", "error", err)
+			return
+		}
+		if !hasCharacter {
+			h.renderError(ctx, w, r, core.ErrForbidden("you must have an approved character to vote"), "Player does not have an approved character in this game")
+			return
+		}
 	}
 
 	// Check if deadline has passed
@@ -735,11 +781,13 @@ func (h *Handler) UpdatePoll(w http.ResponseWriter, r *http.Request) {
 
 	// Update poll
 	serviceReq := core.UpdatePollRequest{
-		Question:            data.Question,
-		Description:         data.Description,
-		Deadline:            data.Deadline,
-		ShowIndividualVotes: data.ShowIndividualVotes,
-		AllowOtherOption:    data.AllowOtherOption,
+		Question:               data.Question,
+		Description:            data.Description,
+		Deadline:               data.Deadline,
+		ShowIndividualVotes:    data.ShowIndividualVotes,
+		AllowOtherOption:       data.AllowOtherOption,
+		HideResultsFromPlayers: data.HideResultsFromPlayers,
+		AllowAudienceVoting:    data.AllowAudienceVoting,
 	}
 
 	updatedPoll, err := pollService.UpdatePoll(ctx, int32(pollID), serviceReq)

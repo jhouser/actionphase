@@ -18,6 +18,19 @@ export interface CharacterSheetPermissions {
 }
 
 /**
+ * Whether a game's state still permits editing character sheets. Finished games
+ * are read-only for everyone, GM included.
+ *
+ * Exported because the global Utility Drawer can't use the hook below — it's
+ * mounted at the app root, outside any GameProvider, so it derives permissions
+ * from data rather than context. Sharing this predicate keeps the two paths
+ * from drifting on which states count as finished.
+ */
+export function isEditableGameState(gameState: string | undefined): boolean {
+  return gameState !== 'completed' && gameState !== 'cancelled';
+}
+
+/**
  * Character-sheet view/edit permission logic, shared by any surface that opens
  * the character sheet (the Characters tab, the common-room Utility Drawer, …).
  *
@@ -37,8 +50,7 @@ export function useCharacterSheetPermissions(
   const { isUserCharacter: isUserCharacterById } = useCharacterOwnership(gameId);
 
   return useMemo(() => {
-    const isEditableState =
-      gameState !== 'completed' && gameState !== 'cancelled';
+    const isEditableState = isEditableGameState(gameState);
 
     const isUserCharacter = (character: Character): boolean => {
       // Controllable characters (player characters and assigned NPCs).

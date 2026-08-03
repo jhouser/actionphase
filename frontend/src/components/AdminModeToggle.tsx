@@ -1,4 +1,5 @@
 import { useAdminMode } from '../hooks/useAdminMode';
+import { Toggle } from './ui';
 
 /**
  * AdminModeToggle
@@ -23,33 +24,20 @@ export function AdminModeToggle() {
     <div className="flex items-center space-x-2 px-3 py-2">
       <label
         htmlFor="admin-mode-toggle"
-        className="text-sm font-medium text-white/90 cursor-pointer select-none"
+        className="text-sm font-medium text-content-primary cursor-pointer select-none"
       >
         Admin Mode
       </label>
-      <button
+      <Toggle
         id="admin-mode-toggle"
-        role="switch"
-        aria-checked={adminModeEnabled}
+        checked={adminModeEnabled}
+        onChange={toggleAdminMode}
         aria-label={adminModeEnabled ? 'Disable admin mode' : 'Enable admin mode'}
-        onClick={toggleAdminMode}
-        className={`
-          relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-          focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-interactive-primary
-          ${adminModeEnabled ? 'bg-warning-accent' : 'bg-white/20'}
-        `}
-      >
-        <span
-          className={`
-            inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-            ${adminModeEnabled ? 'translate-x-6' : 'translate-x-1'}
-          `}
-        />
-      </button>
+      />
 
       {/* Active indicator badge */}
       {adminModeEnabled && (
-        <span className="px-2 py-0.5 text-xs font-semibold bg-warning-accent text-warning-text rounded">
+        <span className="px-2 py-0.5 text-xs font-semibold bg-semantic-warning text-white rounded">
           ACTIVE
         </span>
       )}

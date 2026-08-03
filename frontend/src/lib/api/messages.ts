@@ -12,7 +12,8 @@ import type {
   ManualCommentReads,
   PaginatedCommentsResponse,
   RecentCommentsResponse,
-  CommentWithParent
+  CommentWithParent,
+  MessageThreadContext
 } from '../../types/messages';
 import { COMMENT_MAX_DEPTH } from '@/config/comments';
 
@@ -83,6 +84,15 @@ export class MessagesApi extends BaseApiClient {
     return this.client.get<Message>(`/api/v1/games/${gameId}/messages/${messageId}`);
   }
 
+  // Get a message plus a bounded slice of its ancestor chain (target + up to
+  // maxParents nearest ancestors) and the true root post ID, in a single request.
+  // Replaces the per-level getMessage waterfall for deep-linked nested comments.
+  // chain is ordered parent-to-child (nearest included ancestor → target).
+  async getMessageThreadContext(gameId: number, messageId: number, maxParents?: number) {
+    const query = maxParents !== undefined ? `?max_parents=${maxParents}` : '';
+    return this.client.get<MessageThreadContext>(`/api/v1/games/${gameId}/messages/${messageId}/thread-context${query}`);
+  }
+
   // Read tracking endpoints
   async markPostAsRead(gameId: number, postId: number, data: MarkPostReadRequest = {}) {
     return this.client.post<ReadMarker>(`/api/v1/games/${gameId}/posts/${postId}/mark-read`, data);
@@ -117,10 +127,13 @@ export class MessagesApi extends BaseApiClient {
   }
 
   // Recent comments (New Comments view)
-  async getRecentComments(gameId: number, limit: number = 20, offset: number = 0) {
+  async getRecentComments(gameId: number, limit: number = 20, offset: number = 0, unreadOnly: boolean = false) {
     const queryParams = new URLSearchParams();
     queryParams.append('limit', limit.toString());
     queryParams.append('offset', offset.toString());
+    if (unreadOnly) {
+      queryParams.append('unread_only', 'true');
+    }
 
     const url = `/api/v1/games/${gameId}/comments/recent?${queryParams.toString()}`;
     const response = await this.client.get<RecentCommentsResponse>(url);

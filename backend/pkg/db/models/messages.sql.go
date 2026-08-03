@@ -1073,6 +1073,22 @@ func (q *Queries) GetMessage(ctx context.Context, id int32) (GetMessageRow, erro
 	return i, err
 }
 
+const getMessagePhaseID = `-- name: GetMessagePhaseID :one
+SELECT phase_id
+FROM messages
+WHERE id = $1
+`
+
+// Get just the phase_id of a message, used when a new comment inherits its
+// phase from the message it replies to. Deliberately does NOT filter on
+// is_deleted: a reply to a soft-deleted parent still belongs to that phase.
+func (q *Queries) GetMessagePhaseID(ctx context.Context, id int32) (pgtype.Int4, error) {
+	row := q.db.QueryRow(ctx, getMessagePhaseID, id)
+	var phase_id pgtype.Int4
+	err := row.Scan(&phase_id)
+	return phase_id, err
+}
+
 const getMessageReactions = `-- name: GetMessageReactions :many
 SELECT mr.id, mr.message_id, mr.user_id, mr.reaction_type, mr.created_at, u.username
 FROM message_reactions mr
@@ -1119,7 +1135,7 @@ func (q *Queries) GetMessageReactions(ctx context.Context, messageID int32) ([]G
 
 const getMessageWithParentContext = `-- name: GetMessageWithParentContext :many
 WITH RECURSIVE parent_chain AS (
-    -- Base case: Start with the target message
+    -- Base case: Start with the target message.
     SELECT
         m.id,
         m.game_id,
@@ -1138,14 +1154,15 @@ WITH RECURSIVE parent_chain AS (
         m.deleted_by_user_id,
         m.edited_at,
         m.edit_count,
-        m.created_at,
-        m.thread_depth as original_depth
+        m.created_at
     FROM messages m
     WHERE m.id = $1
 
     UNION ALL
 
-    -- Recursive case: Walk up the parent chain to root
+    -- Recursive case: Walk up the parent chain to root. Always continues to root (the
+    -- walk itself is cheap: one indexed lookup per level) so root_post_id is resolvable
+    -- even when the returned slice is trimmed by thread_depth below.
     SELECT
         m.id,
         m.game_id,
@@ -1164,39 +1181,52 @@ WITH RECURSIVE parent_chain AS (
         m.deleted_by_user_id,
         m.edited_at,
         m.edit_count,
-        m.created_at,
-        m.thread_depth as original_depth
+        m.created_at
     FROM messages m
     INNER JOIN parent_chain pch ON m.id = pch.parent_id
+),
+root AS (
+    -- The top-level post is the single row in the chain with no parent.
+    SELECT id AS root_post_id
+    FROM parent_chain
+    WHERE parent_id IS NULL
 )
 SELECT
-    parent_chain.id,
-    parent_chain.game_id,
-    parent_chain.phase_id,
-    parent_chain.author_id,
-    parent_chain.character_id,
-    parent_chain.content,
-    parent_chain.message_type,
-    parent_chain.parent_id,
-    parent_chain.thread_depth,
-    parent_chain.visibility,
-    parent_chain.mentioned_character_ids,
-    parent_chain.is_edited,
-    parent_chain.is_deleted,
-    parent_chain.deleted_at,
-    parent_chain.deleted_by_user_id,
-    parent_chain.edited_at,
-    parent_chain.edit_count,
-    parent_chain.created_at,
+    pc.id,
+    pc.game_id,
+    pc.phase_id,
+    pc.author_id,
+    pc.character_id,
+    pc.content,
+    pc.message_type,
+    pc.parent_id,
+    pc.thread_depth,
+    pc.visibility,
+    pc.mentioned_character_ids,
+    pc.is_edited,
+    pc.is_deleted,
+    pc.deleted_at,
+    pc.deleted_by_user_id,
+    pc.edited_at,
+    pc.edit_count,
+    pc.created_at,
     u.username as author_username,
     c.name as character_name,
     c.avatar_url as character_avatar_url,
-    (SELECT COUNT(*) FROM messages WHERE parent_id = parent_chain.id) as reply_count
-FROM parent_chain
-JOIN users u ON parent_chain.author_id = u.id
-LEFT JOIN characters c ON parent_chain.character_id = c.id
-ORDER BY parent_chain.original_depth ASC
+    (SELECT COUNT(*) FROM messages WHERE parent_id = pc.id) as reply_count,
+    root.root_post_id as root_post_id
+FROM parent_chain pc
+JOIN users u ON pc.author_id = u.id
+LEFT JOIN characters c ON pc.character_id = c.id
+LEFT JOIN root ON true
+WHERE pc.thread_depth > (SELECT m.thread_depth FROM messages m WHERE m.id = $1) - ($2::integer + 1)
+ORDER BY pc.thread_depth ASC
 `
+
+type GetMessageWithParentContextParams struct {
+	MessageID  int32 `json:"message_id"`
+	MaxParents int32 `json:"max_parents"`
+}
 
 type GetMessageWithParentContextRow struct {
 	ID                    int32              `json:"id"`
@@ -1221,14 +1251,23 @@ type GetMessageWithParentContextRow struct {
 	CharacterName         pgtype.Text        `json:"character_name"`
 	CharacterAvatarUrl    pgtype.Text        `json:"character_avatar_url"`
 	ReplyCount            int64              `json:"reply_count"`
+	RootPostID            pgtype.Int4        `json:"root_post_id"`
 }
 
-// Get a message with its full parent chain for deep linking with context
-// Returns messages in parent-to-child order (root → target)
-// Note: Returns ALL parents up to root. Backend can limit depth if needed.
+// Get a message plus a bounded slice of its parent chain for deep linking with context.
+// Walks up from the target, returning the target + up to $2 nearest parents, in a single
+// query (avoids a per-level request waterfall from the client).
+// The trim happens in SQL via thread_depth (a real, monotonic column) so a very deep
+// thread does not join/count rows we will discard. Every returned row also carries
+// root_post_id (the true top-level post) so callers get the real root post ID for read
+// tracking / replies without a second round trip, even when the slice is trimmed.
+// Returns rows in parent-to-child order (nearest-included-parent → target).
 // $1 = message_id (target comment)
-func (q *Queries) GetMessageWithParentContext(ctx context.Context, id int32) ([]GetMessageWithParentContextRow, error) {
-	rows, err := q.db.Query(ctx, getMessageWithParentContext, id)
+// $2 = max_parents (how many ancestor levels above the target to include; 0 = target only)
+// Keep the target and its $2 nearest ancestors. thread_depth is a real messages column,
+// so sqlc can analyze this (unlike a CTE-only hop counter).
+func (q *Queries) GetMessageWithParentContext(ctx context.Context, arg GetMessageWithParentContextParams) ([]GetMessageWithParentContextRow, error) {
+	rows, err := q.db.Query(ctx, getMessageWithParentContext, arg.MessageID, arg.MaxParents)
 	if err != nil {
 		return nil, err
 	}
@@ -1259,6 +1298,7 @@ func (q *Queries) GetMessageWithParentContext(ctx context.Context, id int32) ([]
 			&i.CharacterName,
 			&i.CharacterAvatarUrl,
 			&i.ReplyCount,
+			&i.RootPostID,
 		); err != nil {
 			return nil, err
 		}
