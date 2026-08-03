@@ -12,7 +12,11 @@ import (
 
 	"actionphase/pkg/core"
 	dbmodels "actionphase/pkg/db/models"
+	db "actionphase/pkg/db/services"
 	dbservices "actionphase/pkg/db/services"
+	dbactions "actionphase/pkg/db/services/actions"
+	dbmessages "actionphase/pkg/db/services/messages"
+	"actionphase/pkg/games"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -25,6 +29,16 @@ func setupVoteRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 	tokenAuth := jwtauth.New("HS256", []byte(app.Config.JWT.Secret), nil)
 	userService := &dbservices.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 	router := chi.NewRouter()
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Group(func(r chi.Router) {
@@ -40,7 +54,7 @@ func setupVoteRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				CharacterService:    &dbservices.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger},
 				NotificationService: dbservices.NewNotificationService(testDB.Pool, app.ObsLogger),
 			}
-			r.Post("/games/{gameId}/polls", handler.CreatePoll)
+			r.With(gameHandler.GameMiddleware()).Post("/games/{gameID}/polls", handler.CreatePoll)
 			r.Post("/polls/{pollId}/vote", handler.SubmitVote)
 			r.Get("/polls/{pollId}", handler.GetPoll)
 		})

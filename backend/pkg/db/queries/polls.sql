@@ -14,9 +14,10 @@ INSERT INTO common_room_polls (
     show_individual_votes,
     allow_other_option,
     hide_results_from_players,
-    allow_audience_voting
+    allow_audience_voting,
+    show_running_totals_to_players
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *;
 
 -- name: GetPoll :one
@@ -54,6 +55,7 @@ SET question = $2,
     allow_other_option = $6,
     hide_results_from_players = $7,
     allow_audience_voting = $8,
+    show_running_totals_to_players = $9,
     updated_at = NOW()
 WHERE id = $1 AND is_deleted = FALSE
 RETURNING *;

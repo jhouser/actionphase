@@ -2,13 +2,9 @@ package games
 
 import (
 	"actionphase/pkg/core"
-	db "actionphase/pkg/db/services"
+	db "actionphase/pkg/db/models"
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"strconv"
-
-	"github.com/go-chi/chi/v5"
 )
 
 // Logs retrieves all logs for a given game
@@ -17,12 +13,7 @@ func (h *Handler) GetGameLogs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_logs")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid logs request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get authenticated user
 	user := core.GetAuthenticatedUser(ctx)
@@ -31,18 +22,14 @@ func (h *Handler) GetGameLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
-
+	gameService := h.GameService
 	// Verify user is GM of this game
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game for permission check", "error", err, "game_id", gameID)
-		return
-	}
+	game := ctx.Value("game").(*db.Game)
 
 	if game.State.String != core.GameStateCompleted && game.State.String != core.GameStateCancelled {
 		// Check GM permissions if the game is still incomplete (considers admin mode)
-		if !core.IsUserGameMaster(r, user.ID, user.IsAdmin, *game, h.App.Pool) {
+
+		if !ctx.Value("is_gm").(bool) {
 			h.renderError(ctx, w, r, core.ErrForbidden("only the GM can retrieve game logs while the game is running"), "Game logs access forbidden")
 			return
 		}

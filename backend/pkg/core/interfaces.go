@@ -282,6 +282,9 @@ type GameServiceInterface interface {
 
 	// TransitionPlayerToAudience moves a player to audience role
 	TransitionPlayerToAudience(ctx context.Context, gameID, userID, requestingUserID int32) error
+
+	// GetGameLogs retrieves all logs for a given game
+	GetGameLogs(ctx context.Context, gameID int32) ([]models.GameLog, error)
 }
 
 // GameApplicationServiceInterface defines the contract for game application operations.
@@ -1504,7 +1507,12 @@ type CreatePollRequest struct {
 	// AllowAudienceVoting permits audience members to vote; their votes are
 	// attributed anonymously since they may not have characters.
 	AllowAudienceVoting bool
-	Options             []PollOptionInput // List of poll options
+	// ShowRunningTotalsToPlayers lets players see results while voting is still
+	// open. Vote attribution still follows ShowIndividualVotes: tallies only by
+	// default, per-voter detail when that flag is also set. Mutually exclusive
+	// with HideResultsFromPlayers.
+	ShowRunningTotalsToPlayers bool
+	Options                    []PollOptionInput // List of poll options
 }
 
 // PollOptionInput represents a single poll option during creation.
@@ -1515,13 +1523,14 @@ type PollOptionInput struct {
 
 // UpdatePollRequest represents parameters for updating a poll.
 type UpdatePollRequest struct {
-	Question               string
-	Description            *string
-	Deadline               time.Time
-	ShowIndividualVotes    bool
-	AllowOtherOption       bool
-	HideResultsFromPlayers bool
-	AllowAudienceVoting    bool
+	Question                   string
+	Description                *string
+	Deadline                   time.Time
+	ShowIndividualVotes        bool
+	AllowOtherOption           bool
+	HideResultsFromPlayers     bool
+	AllowAudienceVoting        bool
+	ShowRunningTotalsToPlayers bool
 }
 
 // SubmitVoteRequest represents parameters for submitting a vote.

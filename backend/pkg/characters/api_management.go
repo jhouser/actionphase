@@ -268,30 +268,9 @@ func (h *Handler) ListInactiveCharacters(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_list_inactive_characters")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid list inactive characters request")
-		return
-	}
-
-	// Get authenticated user
-	authUser := core.GetAuthenticatedUser(ctx)
-	if authUser == nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "No authenticated user found")
-		return
-	}
-
-	// Verify user is GM of this game
-	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrNotFound("game not found"), "Failed to get game", "error", err)
-		return
-	}
-
+	gameID := ctx.Value("gameID").(int32)
 	// Check GM permissions (considers admin mode)
-	if !core.IsUserGameMaster(r, authUser.ID, authUser.IsAdmin, *game, h.App.Pool) {
+	if !ctx.Value("is_gm").(bool) {
 		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can view inactive characters"), "List inactive characters forbidden")
 		return
 	}

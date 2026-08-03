@@ -19,12 +19,7 @@ import (
 // Returns gameID, resultID, actionService, and error. This helper reduces ~40 lines of duplication per handler.
 func (h *Handler) validateGMAccessAndResult(w http.ResponseWriter, r *http.Request) (int32, int32, *actionsvc.ActionSubmissionService, error) {
 	// Parse gameID from URL params
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(r.Context(), w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid validate g m access and result request")
-		return 0, 0, nil, err
-	}
+	gameID := r.Context().Value("gameID").(int32)
 
 	// Parse resultID from URL params
 	resultIDStr := chi.URLParam(r, "resultId")

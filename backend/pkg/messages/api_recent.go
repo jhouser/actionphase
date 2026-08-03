@@ -18,12 +18,7 @@ func (h *Handler) ListRecentCommentsWithParents(w http.ResponseWriter, r *http.R
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_list_recent_comments_with_parents")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid list recent comments with parents request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")

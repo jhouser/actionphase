@@ -50,6 +50,7 @@ const basePoll: Poll = {
   allow_other_option: false,
   hide_results_from_players: false,
   allow_audience_voting: false,
+  show_running_totals_to_players: false,
   is_deleted: false,
   user_has_voted: false,
   created_at: new Date().toISOString(),
@@ -117,6 +118,61 @@ describe('PollCard - hidden results', () => {
 
     expect(screen.queryByTestId('poll-results-hidden-notice')).not.toBeInTheDocument();
     expect(usePollResultsMock).toHaveBeenCalledWith(poll.id);
+  });
+});
+
+describe('PollCard - running totals', () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    usePollResultsMock.mockClear();
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+  });
+
+  const renderCard = (ui: React.ReactElement) =>
+    render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+
+  it('fetches results for a player on an open poll once they have voted', () => {
+    const poll = { ...basePoll, show_running_totals_to_players: true, user_has_voted: true };
+
+    renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={false} />);
+
+    expect(usePollResultsMock).toHaveBeenCalledWith(poll.id);
+  });
+
+  it('does not fetch results for a player on an open poll without running totals', () => {
+    const poll = { ...basePoll, show_running_totals_to_players: false, user_has_voted: true };
+
+    renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={false} />);
+
+    // The backend would reject this fetch, so the query stays disabled.
+    expect(usePollResultsMock).toHaveBeenCalledWith(null);
+  });
+
+  it('offers a player a results toggle on an open running-totals poll', () => {
+    const poll = { ...basePoll, show_running_totals_to_players: true };
+
+    renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={false} />);
+
+    expect(screen.getByRole('button', { name: /show results/i })).toBeInTheDocument();
+  });
+
+  it('offers no results toggle on an open poll without running totals', () => {
+    const poll = { ...basePoll, show_running_totals_to_players: false };
+
+    renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={false} />);
+
+    expect(screen.queryByRole('button', { name: /show results/i })).not.toBeInTheDocument();
+  });
+
+  it('still lets the player vote while showing them the running totals', () => {
+    const poll = { ...basePoll, show_running_totals_to_players: true };
+
+    renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={false} />);
+
+    expect(screen.getByRole('button', { name: /vote now/i })).toBeInTheDocument();
   });
 });
 

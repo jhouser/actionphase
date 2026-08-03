@@ -4,7 +4,10 @@ import (
 	"actionphase/pkg/core"
 	dbmodels "actionphase/pkg/db/models"
 	db "actionphase/pkg/db/services"
+	dbactions "actionphase/pkg/db/services/actions"
 	"actionphase/pkg/db/services/messages"
+	dbmessages "actionphase/pkg/db/services/messages"
+	"actionphase/pkg/games"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -34,11 +37,21 @@ func setupMessageAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mu
 	tokenAuth := jwtauth.New("HS256", []byte(app.Config.JWT.Secret), nil)
 	userService := &db.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 	r := chi.NewRouter()
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Route("/games", func(r chi.Router) {
+		r.Route("/games/{gameID}", func(r chi.Router) {
 			messageHandler := Handler{
 				App:            app,
 				UserService:    &db.UserService{DB: testDB.Pool, Logger: app.ObsLogger},
@@ -49,19 +62,20 @@ func setupMessageAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mu
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
+				r.Use(gameHandler.GameMiddleware())
 
 				// Post routes
-				r.With(core.RequireEmailVerificationMiddleware(app.Pool)).Post("/{gameId}/posts", messageHandler.CreatePost)
-				r.Patch("/{gameId}/posts/{postId}", messageHandler.UpdatePost)
-				r.With(core.RequireEmailVerificationMiddleware(app.Pool)).Post("/{gameId}/posts/{postId}/comments", messageHandler.CreateComment)
-				r.Patch("/{gameId}/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)
-				r.Delete("/{gameId}/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)
-				r.Get("/{gameId}/posts/{postId}/comments-with-threads", messageHandler.GetPostCommentsWithThreads)
-				r.Get("/{gameId}/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)
-				r.Post("/{gameId}/posts/{postId}/comments/{commentId}/toggle-read", messageHandler.ToggleCommentRead)
-				r.Get("/{gameId}/manual-read-comment-ids", messageHandler.GetManualReadCommentIDs)
-				r.Post("/{gameId}/phases/{phaseId}/mark-all-comments-read", messageHandler.MarkAllCommentsRead)
-				r.Get("/{gameId}/comments/recent", messageHandler.ListRecentCommentsWithParents)
+				r.With(core.RequireEmailVerificationMiddleware(app.Pool)).Post("/posts", messageHandler.CreatePost)
+				r.Patch("/posts/{postId}", messageHandler.UpdatePost)
+				r.With(core.RequireEmailVerificationMiddleware(app.Pool)).Post("/posts/{postId}/comments", messageHandler.CreateComment)
+				r.Patch("/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)
+				r.Delete("/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)
+				r.Get("/posts/{postId}/comments-with-threads", messageHandler.GetPostCommentsWithThreads)
+				r.Get("/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)
+				r.Post("/posts/{postId}/comments/{commentId}/toggle-read", messageHandler.ToggleCommentRead)
+				r.Get("/manual-read-comment-ids", messageHandler.GetManualReadCommentIDs)
+				r.Post("/phases/{phaseId}/mark-all-comments-read", messageHandler.MarkAllCommentsRead)
+				r.Get("/comments/recent", messageHandler.ListRecentCommentsWithParents)
 			})
 		})
 
