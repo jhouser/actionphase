@@ -13,6 +13,7 @@ import (
 	"actionphase/pkg/core"
 	dbmodels "actionphase/pkg/db/models"
 	dbservices "actionphase/pkg/db/services"
+	"actionphase/pkg/games"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -46,7 +47,18 @@ func setupVisibilityRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				CharacterService:    &dbservices.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger},
 				NotificationService: dbservices.NewNotificationService(testDB.Pool, app.ObsLogger),
 			}
-			r.Post("/games/{gameId}/polls", handler.CreatePoll)
+			// CreatePoll reads the game from context, so it must sit behind
+			// GameMiddleware under a {gameID} route exactly as it does in
+			// pkg/http/root.go.
+			gameHandler := &games.Handler{
+				App:         app,
+				UserService: &dbservices.UserService{DB: testDB.Pool, Logger: app.ObsLogger},
+				GameService: &dbservices.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
+			}
+			r.Route("/games/{gameID}", func(r chi.Router) {
+				r.Use(gameHandler.GameMiddleware())
+				r.Post("/polls", handler.CreatePoll)
+			})
 			r.Post("/polls/{pollId}/vote", handler.SubmitVote)
 			r.Get("/polls/{pollId}/results", handler.GetPollResults)
 		})
