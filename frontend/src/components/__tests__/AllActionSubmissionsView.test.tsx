@@ -22,6 +22,10 @@ vi.mock('../../contexts/GameContext', () => ({
   useGameContext: vi.fn(),
 }));
 
+vi.mock('../../hooks/useCharacterSheetItems', () => ({
+  useCharacterSheetItems: vi.fn(() => []),
+}));
+
 vi.mock('../CharacterAvatar', () => ({
   default: ({ characterName }: { characterName: string }) => (
     <span data-testid="char-avatar">{characterName[0]}</span>
@@ -29,12 +33,18 @@ vi.mock('../CharacterAvatar', () => ({
 }));
 
 vi.mock('../MarkdownPreview', () => ({
-  MarkdownPreview: ({ content }: { content: string }) => <div data-testid="markdown">{content}</div>,
+  MarkdownPreview: ({ content, sheetItemRefs }: { content: string; sheetItemRefs?: SheetItem[] }) => (
+    <div data-testid="markdown" data-sheet-ref-names={(sheetItemRefs ?? []).map((i) => i.name).join(',')}>
+      {content}
+    </div>
+  ),
 }));
 
 import { apiClient } from '../../lib/api';
 import { useAllActionSubmissions } from '../../hooks/useAudience';
 import { useGameContext } from '../../contexts/GameContext';
+import { useCharacterSheetItems } from '../../hooks/useCharacterSheetItems';
+import type { SheetItem } from '../../hooks/useCharacterSheetItems';
 
 const makeSubmission = (overrides = {}) => ({
   id: 1,
@@ -70,6 +80,94 @@ describe('AllActionSubmissionsView', () => {
     vi.mocked(apiClient.phases.getGamePhases).mockResolvedValue({ data: [] } as never);
     vi.mocked(useAllActionSubmissions).mockReturnValue(defaultHookResult as never);
     vi.mocked(useGameContext).mockReturnValue({ allGameCharacters: [] } as never);
+    vi.mocked(useCharacterSheetItems).mockReturnValue([]);
+  });
+
+  describe('sheet item tooltips for audience members', () => {
+    const fireBolt: SheetItem = {
+      id: 'abc-1',
+      name: 'Fire Bolt',
+      type: 'ability',
+      description: 'Hurls a mote of flame.',
+    };
+
+    it('passes the submitting character\'s sheet items to the submission markdown', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useCharacterSheetItems).mockReturnValue([fireBolt]);
+      vi.mocked(useAllActionSubmissions).mockReturnValue({
+        ...defaultHookResult,
+        data: makeInfiniteData([
+          makeSubmission({ content: 'I cast [[Fire Bolt|ability:abc-1]].' }),
+        ]),
+      } as never);
+
+      renderWithProviders(<AllActionSubmissionsView gameId={5} />);
+      await waitFor(() => expect(screen.getByText('Elara')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /▶/ }));
+
+      const submissionMarkdown = screen.getByText('I cast [[Fire Bolt|ability:abc-1]].');
+      expect(submissionMarkdown).toHaveAttribute('data-sheet-ref-names', 'Fire Bolt');
+    });
+
+    it('passes sheet items to the action result markdown as well', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useCharacterSheetItems).mockReturnValue([fireBolt]);
+      vi.mocked(useAllActionSubmissions).mockReturnValue({
+        ...defaultHookResult,
+        data: makeInfiniteData([makeSubmission({ status: 'result_posted', action_result_id: 99 })]),
+      } as never);
+      vi.mocked(apiClient.phases.getGameResults).mockResolvedValue({
+        data: [{ id: 99, action_submission_id: 1, content: 'The [[Fire Bolt|ability:abc-1]] hits!' }],
+      } as never);
+
+      renderWithProviders(<AllActionSubmissionsView gameId={5} />);
+      await waitFor(() => expect(screen.getByText('Elara')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /▶/ }));
+
+      const resultMarkdown = await screen.findByText('The [[Fire Bolt|ability:abc-1]] hits!');
+      expect(resultMarkdown).toHaveAttribute('data-sheet-ref-names', 'Fire Bolt');
+    });
+
+    it('does not request sheet data while the card is collapsed', async () => {
+      vi.mocked(useAllActionSubmissions).mockReturnValue({
+        ...defaultHookResult,
+        data: makeInfiniteData([makeSubmission({ character_id: 10 })]),
+      } as never);
+
+      renderWithProviders(<AllActionSubmissionsView gameId={5} />);
+      await waitFor(() => expect(screen.getByText('Elara')).toBeInTheDocument());
+
+      expect(vi.mocked(useCharacterSheetItems)).toHaveBeenCalledWith(null);
+      expect(vi.mocked(useCharacterSheetItems)).not.toHaveBeenCalledWith(10);
+    });
+
+    it('requests sheet data for the submitting character once expanded', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useAllActionSubmissions).mockReturnValue({
+        ...defaultHookResult,
+        data: makeInfiniteData([makeSubmission({ character_id: 10 })]),
+      } as never);
+
+      renderWithProviders(<AllActionSubmissionsView gameId={5} />);
+      await waitFor(() => expect(screen.getByText('Elara')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /▶/ }));
+
+      expect(vi.mocked(useCharacterSheetItems)).toHaveBeenCalledWith(10);
+    });
+
+    it('requests no sheet data for a submission without a character', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useAllActionSubmissions).mockReturnValue({
+        ...defaultHookResult,
+        data: makeInfiniteData([makeSubmission({ character_id: null })]),
+      } as never);
+
+      renderWithProviders(<AllActionSubmissionsView gameId={5} />);
+      await waitFor(() => expect(screen.getByText('Elara')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /▶/ }));
+
+      expect(vi.mocked(useCharacterSheetItems)).not.toHaveBeenCalledWith(10);
+    });
   });
 
   it('shows loading spinner while phases or submissions are loading', () => {
