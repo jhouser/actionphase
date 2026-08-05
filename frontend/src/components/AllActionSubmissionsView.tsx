@@ -8,6 +8,7 @@ import { Alert } from './ui/Alert';
 import { MarkdownPreview } from './MarkdownPreview';
 import CharacterAvatar from './CharacterAvatar';
 import { useGameContext } from '../contexts/GameContext';
+import { useCharacterSheetItems } from '../hooks/useCharacterSheetItems';
 import { apiClient } from '../lib/api';
 import { logger } from '@/services/LoggingService';
 
@@ -223,6 +224,13 @@ function ActionSubmissionCard({ gameId, submission }: { gameId: number; submissi
   const [loadingResult, setLoadingResult] = useState(false);
 
   const { allGameCharacters, game } = useGameContext();
+
+  // Lazy-fetch the submitting character's sheet items for [[item]] tooltip resolution
+  // when expanded. Audience members (and any participant in a completed game) are
+  // authorized for full sheet data by the backend; see characters.GetCharacterData.
+  // Keyed per-character in the React Query cache, so repeat views cost no extra request.
+  const sheetItems = useCharacterSheetItems(isExpanded && submission.character_id ? submission.character_id : null);
+
   const portraitAvatars = game?.portrait_avatars ?? false;
   const avatarUrl = submission.character_id
     ? (allGameCharacters.find(c => c.id === submission.character_id)?.avatar_url ?? null)
@@ -307,7 +315,7 @@ function ActionSubmissionCard({ gameId, submission }: { gameId: number; submissi
           <div className="mb-6">
             <h4 className="text-sm font-semibold text-content-primary mb-2">Action Submitted:</h4>
             <div className="bg-bg-secondary p-3 rounded-lg border border-border-primary">
-              <MarkdownPreview content={submission.content} fullWidth />
+              <MarkdownPreview content={submission.content} fullWidth sheetItemRefs={sheetItems} />
             </div>
           </div>
 
@@ -321,7 +329,7 @@ function ActionSubmissionCard({ gameId, submission }: { gameId: number; submissi
                 </div>
               ) : actionResult ? (
                 <div className="bg-bg-tertiary p-3 rounded-lg border border-border-primary">
-                  <MarkdownPreview content={actionResult.content} fullWidth />
+                  <MarkdownPreview content={actionResult.content} fullWidth sheetItemRefs={sheetItems} />
                 </div>
               ) : (
                 <div className="text-sm text-content-secondary italic">

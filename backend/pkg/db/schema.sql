@@ -409,7 +409,11 @@ CREATE TABLE messages (
     deleted_at TIMESTAMP,
     deleted_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     edited_at TIMESTAMPTZ,
-    edit_count INTEGER NOT NULL DEFAULT 0
+    edit_count INTEGER NOT NULL DEFAULT 0,
+    -- Avatar the authoring character had when this message was created. Written
+    -- once at insert, never updated on edit. NULL for messages predating this
+    -- column; readers COALESCE to the live characters.avatar_url.
+    character_avatar_url_at_post VARCHAR(500)
 );
 
 CREATE TABLE message_recipients (

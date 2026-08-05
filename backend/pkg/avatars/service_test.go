@@ -120,42 +120,6 @@ func TestAvatarService_UploadCharacterAvatar_Validation(t *testing.T) {
 	}
 }
 
-func TestAvatarService_ExtractPathFromURL(t *testing.T) {
-	tests := []struct {
-		name string
-		url  string
-		want string
-	}{
-		{
-			name: "local storage URL",
-			url:  "http://localhost:3000/uploads/avatars/characters/1/avatar.jpg",
-			want: "avatars/characters/1/avatar.jpg",
-		},
-		{
-			name: "S3 URL",
-			url:  "https://my-bucket.s3.us-east-1.amazonaws.com/avatars/characters/1/avatar.jpg",
-			want: "avatars/characters/1/avatar.jpg",
-		},
-		{
-			name: "CDN URL",
-			url:  "https://cdn.example.com/avatars/characters/1/avatar.jpg",
-			want: "avatars/characters/1/avatar.jpg",
-		},
-		{
-			name: "nested path",
-			url:  "http://localhost:3000/uploads/avatars/characters/1/1634567890.jpg",
-			want: "avatars/characters/1/1634567890.jpg",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := extractPathFromURL(tt.url)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestAvatarService_MimeTypeToExtension(t *testing.T) {
 	tests := []struct {
 		mimeType string

@@ -300,6 +300,9 @@ WHERE id = $1;
 
 -- name: ListRecentCommentsWithParents :many
 -- Get recent comments with their parent comments/posts for New Comments view
+-- Avatars are pinned at authoring time (messages.character_avatar_url_at_post),
+-- so both the comment and its parent COALESCE to the live characters.avatar_url
+-- only for rows predating that column.
 WITH RECURSIVE recent_comments AS (
     SELECT
         m.id,
@@ -315,7 +318,7 @@ WITH RECURSIVE recent_comments AS (
         m.is_deleted,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -355,7 +358,7 @@ parent_messages AS (
         m.message_type,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -422,7 +425,7 @@ WITH RECURSIVE recent_comments AS (
         m.is_deleted,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -466,7 +469,7 @@ parent_messages AS (
         m.message_type,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -519,6 +522,8 @@ WHERE m.game_id = $1
 
 -- name: ListCharacterPostsAndComments :many
 -- Get all posts and comments by a specific character (for Character Page)
+-- Avatars render as pinned at authoring time, so a character's back catalogue
+-- shows how they looked in each entry rather than how they look now.
 -- Returns both posts and comments with parent context for comments
 -- Only returns public (game-visibility) messages, not deleted ones
 -- NPCs only show comments (not top-level posts)
@@ -538,7 +543,7 @@ WITH character_messages AS (
         m.is_deleted,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     JOIN characters c ON m.character_id = c.id
@@ -560,7 +565,7 @@ parent_messages AS (
         m.message_type,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
