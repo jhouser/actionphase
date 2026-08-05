@@ -56,6 +56,9 @@ var _ core.UserAvatarServiceInterface = (*UserAvatarService)(nil)
 //  4. Upload new avatar to storage
 //  5. Update database with new avatar URL
 //
+// Note: unlike character avatars, user avatars are not pinned onto messages, so
+// superseded files are deleted rather than retained.
+//
 // Returns the public URL of the uploaded avatar.
 func (s *UserAvatarService) UploadUserAvatar(
 	ctx context.Context,

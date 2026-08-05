@@ -5,6 +5,9 @@
 -- ============================================================================
 
 -- name: CreatePost :one
+-- character_avatar_url_at_post pins the character's avatar as of this insert so
+-- the post keeps rendering the avatar it was written with. Resolved inline to
+-- keep the capture atomic with the insert.
 INSERT INTO messages (
     game_id,
     phase_id,
@@ -13,9 +16,11 @@ INSERT INTO messages (
     content,
     message_type,
     visibility,
-    mentioned_character_ids
+    mentioned_character_ids,
+    character_avatar_url_at_post
 ) VALUES (
-    $1, $2, $3, $4, $5, 'post', $6, $7
+    $1, $2, $3, $4, $5, 'post', $6, $7,
+    (SELECT avatar_url FROM characters WHERE id = $4)
 )
 RETURNING *;
 
@@ -23,7 +28,7 @@ RETURNING *;
 SELECT m.*,
        u.username as author_username,
        c.name as character_name,
-       c.avatar_url as character_avatar_url,
+       COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
        (SELECT COUNT(*) FROM messages WHERE parent_id = m.id) as comment_count
 FROM messages m
 JOIN users u ON m.author_id = u.id
@@ -35,7 +40,7 @@ WHERE m.id = $1;
 SELECT m.*,
        u.username as author_username,
        c.name as character_name,
-       c.avatar_url as character_avatar_url,
+       COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
        (SELECT COUNT(*) FROM messages WHERE parent_id = m.id) as reply_count
 FROM messages m
 JOIN users u ON m.author_id = u.id
@@ -82,7 +87,8 @@ WITH RECURSIVE parent_chain AS (
         m.deleted_by_user_id,
         m.edited_at,
         m.edit_count,
-        m.created_at
+        m.created_at,
+        m.character_avatar_url_at_post
     FROM messages m
     WHERE m.id = sqlc.arg(message_id)
 
@@ -109,7 +115,8 @@ WITH RECURSIVE parent_chain AS (
         m.deleted_by_user_id,
         m.edited_at,
         m.edit_count,
-        m.created_at
+        m.created_at,
+        m.character_avatar_url_at_post
     FROM messages m
     INNER JOIN parent_chain pch ON m.id = pch.parent_id
 ),
@@ -140,7 +147,7 @@ SELECT
     pc.created_at,
     u.username as author_username,
     c.name as character_name,
-    c.avatar_url as character_avatar_url,
+    COALESCE(pc.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
     (SELECT COUNT(*) FROM messages WHERE parent_id = pc.id) as reply_count,
     root.root_post_id as root_post_id
 FROM parent_chain pc
@@ -156,7 +163,7 @@ ORDER BY pc.thread_depth ASC;  -- Return in parent-to-child order
 SELECT m.*,
        u.username as author_username,
        c.name as character_name,
-       c.avatar_url as character_avatar_url,
+       COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
        (SELECT COUNT(*) FROM messages WHERE parent_id = m.id) as comment_count
 FROM messages m
 JOIN users u ON m.author_id = u.id
@@ -173,7 +180,7 @@ LIMIT $3 OFFSET $4;
 SELECT m.*,
        u.username as author_username,
        c.name as character_name,
-       c.avatar_url as character_avatar_url,
+       COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
        (SELECT COUNT(*) FROM messages WHERE parent_id = m.id) as comment_count
 FROM messages m
 JOIN users u ON m.author_id = u.id
@@ -200,7 +207,8 @@ SELECT
   m.*,
   u.username as author_username,
   c.name as character_name,
-  c.avatar_url as character_avatar_url,
+  -- Editing a post never repaints its avatar, so return the pinned value.
+  COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
   (SELECT COUNT(*) FROM messages WHERE parent_id = m.id) as comment_count
 FROM updated m
 JOIN users u ON m.author_id = u.id
@@ -218,6 +226,9 @@ RETURNING *;
 -- ============================================================================
 
 -- name: CreateDraftPost :one
+-- Pins the avatar at draft-authoring time, matching CreatePost. A draft
+-- published later keeps the avatar it was written with, not the one current at
+-- publication.
 INSERT INTO messages (
     game_id,
     phase_id,
@@ -227,9 +238,11 @@ INSERT INTO messages (
     message_type,
     visibility,
     mentioned_character_ids,
-    is_draft
+    is_draft,
+    character_avatar_url_at_post
 ) VALUES (
-    $1, $2, $3, $4, $5, 'post', $6, $7, true
+    $1, $2, $3, $4, $5, 'post', $6, $7, true,
+    (SELECT avatar_url FROM characters WHERE id = $4)
 )
 RETURNING *;
 
@@ -238,7 +251,7 @@ RETURNING *;
 SELECT m.*,
        u.username as author_username,
        c.name as character_name,
-       c.avatar_url as character_avatar_url,
+       COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
        0::bigint as comment_count
 FROM messages m
 JOIN users u ON m.author_id = u.id
@@ -295,6 +308,7 @@ WHERE phase_id = $1
 -- ============================================================================
 
 -- name: CreateComment :one
+-- Pins the avatar at comment-authoring time. See CreatePost.
 INSERT INTO messages (
     game_id,
     phase_id,
@@ -304,9 +318,11 @@ INSERT INTO messages (
     message_type,
     parent_id,
     visibility,
-    mentioned_character_ids
+    mentioned_character_ids,
+    character_avatar_url_at_post
 ) VALUES (
-    $1, $2, $3, $4, $5, 'comment', $6, $7, $8
+    $1, $2, $3, $4, $5, 'comment', $6, $7, $8,
+    (SELECT avatar_url FROM characters WHERE id = $4)
 )
 RETURNING *;
 
@@ -314,7 +330,7 @@ RETURNING *;
 SELECT m.*,
        u.username as author_username,
        c.name as character_name,
-       c.avatar_url as character_avatar_url,
+       COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
        (SELECT COUNT(*) FROM messages WHERE parent_id = m.id) as reply_count
 FROM messages m
 JOIN users u ON m.author_id = u.id
@@ -329,7 +345,7 @@ WHERE m.id = $1;
 SELECT m.*,
        u.username as author_username,
        c.name as character_name,
-       c.avatar_url as character_avatar_url,
+       COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
        (SELECT COUNT(*) FROM messages WHERE parent_id = m.id) as reply_count
 FROM messages m
 JOIN users u ON m.author_id = u.id
@@ -425,7 +441,7 @@ SELECT comment_id as id FROM comment_tree;
 SELECT m.*,
        u.username as author_username,
        c.name as character_name,
-       c.avatar_url as character_avatar_url,
+       COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
        (SELECT COUNT(*) FROM messages WHERE parent_id = m.id) as comment_count
 FROM messages m
 JOIN users u ON m.author_id = u.id

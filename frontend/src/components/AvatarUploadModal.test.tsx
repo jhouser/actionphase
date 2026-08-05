@@ -289,8 +289,10 @@ describe('AvatarUploadModal', () => {
     const deleteButton = screen.getByRole('button', { name: /remove avatar/i });
     fireEvent.click(deleteButton);
 
+    // The prompt must say the removal is forward-looking only: past posts pin the
+    // avatar they were written with and keep rendering it.
     expect(mockConfirm).toHaveBeenCalledWith(
-      'Are you sure you want to delete this avatar?'
+      expect.stringContaining('Existing posts keep the avatar they were written with')
     );
     expect(mockDeleteMutate).toHaveBeenCalledWith(456, expect.any(Object));
 
