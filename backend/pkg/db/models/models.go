@@ -351,25 +351,26 @@ type IpBan struct {
 }
 
 type Message struct {
-	ID                    int32              `json:"id"`
-	GameID                int32              `json:"game_id"`
-	PhaseID               pgtype.Int4        `json:"phase_id"`
-	AuthorID              int32              `json:"author_id"`
-	CharacterID           int32              `json:"character_id"`
-	Content               string             `json:"content"`
-	MessageType           MessageType        `json:"message_type"`
-	ParentID              pgtype.Int4        `json:"parent_id"`
-	ThreadDepth           int32              `json:"thread_depth"`
-	Visibility            MessageVisibility  `json:"visibility"`
-	MentionedCharacterIds []int32            `json:"mentioned_character_ids"`
-	IsEdited              bool               `json:"is_edited"`
-	IsDeleted             bool               `json:"is_deleted"`
-	IsDraft               bool               `json:"is_draft"`
-	CreatedAt             pgtype.Timestamp   `json:"created_at"`
-	DeletedAt             pgtype.Timestamp   `json:"deleted_at"`
-	DeletedByUserID       pgtype.Int4        `json:"deleted_by_user_id"`
-	EditedAt              pgtype.Timestamptz `json:"edited_at"`
-	EditCount             int32              `json:"edit_count"`
+	ID                       int32              `json:"id"`
+	GameID                   int32              `json:"game_id"`
+	PhaseID                  pgtype.Int4        `json:"phase_id"`
+	AuthorID                 int32              `json:"author_id"`
+	CharacterID              int32              `json:"character_id"`
+	Content                  string             `json:"content"`
+	MessageType              MessageType        `json:"message_type"`
+	ParentID                 pgtype.Int4        `json:"parent_id"`
+	ThreadDepth              int32              `json:"thread_depth"`
+	Visibility               MessageVisibility  `json:"visibility"`
+	MentionedCharacterIds    []int32            `json:"mentioned_character_ids"`
+	IsEdited                 bool               `json:"is_edited"`
+	IsDeleted                bool               `json:"is_deleted"`
+	IsDraft                  bool               `json:"is_draft"`
+	CreatedAt                pgtype.Timestamp   `json:"created_at"`
+	DeletedAt                pgtype.Timestamp   `json:"deleted_at"`
+	DeletedByUserID          pgtype.Int4        `json:"deleted_by_user_id"`
+	EditedAt                 pgtype.Timestamptz `json:"edited_at"`
+	EditCount                int32              `json:"edit_count"`
+	CharacterAvatarUrlAtPost pgtype.Text        `json:"character_avatar_url_at_post"`
 }
 
 type MessageReaction struct {

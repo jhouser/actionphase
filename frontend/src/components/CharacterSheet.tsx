@@ -517,10 +517,12 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
             {/* Warning message */}
             <div className="bg-semantic-error/10 border border-semantic-error rounded-lg p-4">
               <h3 className="font-semibold text-content-primary mb-2">
-                ⚠️ Confirm Deletion
+                ⚠️ Confirm Removal
               </h3>
               <p className="text-content-secondary text-sm">
-                This will permanently delete the avatar for <strong>{character.name}</strong>.
+                <strong>{character.name}</strong> will show initials instead of an
+                avatar from now on. Existing posts keep the avatar they were
+                written with.
               </p>
             </div>
 
