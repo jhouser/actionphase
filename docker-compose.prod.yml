@@ -40,9 +40,15 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
-    # Mount for file uploads if needed
+    # Mount for file uploads if needed.
+    # NOTE: compose replaces this list wholesale rather than merging it with the
+    # base file, so every backend mount must be repeated here.
     volumes:
       - ./uploads:/root/uploads
+      # Game archives. Kept out of ./uploads because that directory is served
+      # statically by the frontend/nginx, and an archive contains every private
+      # message in a game. Downloads go through the authenticated endpoint.
+      - ./archives:/root/archives
 
   # Frontend - Production Config
   frontend:

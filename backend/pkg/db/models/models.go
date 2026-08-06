@@ -280,6 +280,23 @@ type GameDeadline struct {
 	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type GameExport struct {
+	ID                 int32              `json:"id"`
+	GameID             int32              `json:"game_id"`
+	RequestedByUserID  pgtype.Int4        `json:"requested_by_user_id"`
+	Status             string             `json:"status"`
+	ContentFingerprint pgtype.Text        `json:"content_fingerprint"`
+	StoragePath        pgtype.Text        `json:"storage_path"`
+	SizeBytes          pgtype.Int8        `json:"size_bytes"`
+	FileCount          pgtype.Int4        `json:"file_count"`
+	ErrorMessage       pgtype.Text        `json:"error_message"`
+	ProgressNote       pgtype.Text        `json:"progress_note"`
+	StartedAt          pgtype.Timestamptz `json:"started_at"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type GameLog struct {
 	ID        int32              `json:"id"`
 	GameID    int32              `json:"game_id"`

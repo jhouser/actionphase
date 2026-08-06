@@ -129,7 +129,7 @@
       "type": "domain",
       "enforcement": "suggest",
       "priority": "high",
-      "description": "Complete game lifecycle patterns: states (setup, recruitment, in_progress, completed), phase transitions (common room, action, results), character workflows (pending, approved, active, dead), messaging (posts, private messages, action submissions, GM results), and the full turn-based game flow",
+      "description": "Complete game lifecycle patterns: states (setup, recruitment, in_progress, completed), phase types (common_room and action only - no results phase), character workflows (pending, approved, rejected; is_active for removal), messaging (posts/comments/private messages in one messages table, action submissions, action results), audience access and public archive mode for completed games",
       "promptTriggers": {
         "keywords": [
           "game lifecycle",
@@ -146,7 +146,6 @@
           "phase cycle",
           "common room",
           "action phase",
-          "results phase",
           "action submission",
           "GM results",
           "character approval",
@@ -154,7 +153,14 @@
           "character status",
           "character death",
           "game archive",
-          "phase advancement"
+          "phase advancement",
+          "action results",
+          "public archive",
+          "audience access",
+          "audience view",
+          "message visibility",
+          "nested comments",
+          "comment thread"
         ],
         "intentPatterns": [
           "(understand|explain|how).*?(game.*?(flow|lifecycle|cycle|work)|turn-based)",
@@ -163,7 +169,9 @@
           "(create|start|setup|begin).*?game",
           "(approve|reject|activate).*?character",
           "(submit|send).*?(action|result)",
-          "(common room|action phase|results phase)"
+          "(common room|action phase)",
+          "(who|can).*?(see|view|read).*?(private|message|result|submission)",
+          "(public|archive).*?(game|completed)"
         ]
       },
       "fileTriggers": {
@@ -191,7 +199,11 @@
           "action_results",
           "common_room",
           "in_progress",
-          "recruitment"
+          "recruitment",
+          "CanUserViewGame",
+          "is_published",
+          "is_draft",
+          "conversation"
         ]
       }
     },
@@ -302,7 +314,7 @@
       "type": "domain",
       "enforcement": "suggest",
       "priority": "high",
-      "description": "Small feature implementation guide for ActionPhase — end-to-end from database migration through backend service, API handler, frontend hook, and component, following the test pyramid at each layer",
+      "description": "Small feature implementation guide for ActionPhase \u2014 end-to-end from database migration through backend service, API handler, frontend hook, and component, following the test pyramid at each layer",
       "promptTriggers": {
         "keywords": [
           "implement feature",

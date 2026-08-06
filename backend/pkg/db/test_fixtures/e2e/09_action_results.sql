@@ -131,12 +131,13 @@ BEGIN
   ) RETURNING id INTO action3_id;
 
   -- Add PUBLISHED action result for Player 1 (to test viewing results)
-  INSERT INTO action_results (game_id, user_id, phase_id, action_submission_id, content, gm_user_id, is_published, sent_at, created_at, updated_at)
+  INSERT INTO action_results (game_id, user_id, phase_id, action_submission_id, character_id, content, gm_user_id, is_published, sent_at, created_at, updated_at)
   VALUES (
     game_id,
     p1_id,
     completed_phase_id,
     action1_id,
+    (SELECT character_id FROM action_submissions WHERE id = action1_id),
     E'# Basement Investigation Results\n\nYou descend into the basement, flashlight in hand. The sounds grow louder as you approach a hidden door behind some old furniture.\n\n**You discovered:** A secret passage!\n\nMention: @Result Test Char 2 might want to know about this.',
     gm_id,
     true,
@@ -146,12 +147,13 @@ BEGIN
   );
 
   -- Add PUBLISHED action result for Player 2 (to test multiple results)
-  INSERT INTO action_results (game_id, user_id, phase_id, action_submission_id, content, gm_user_id, is_published, sent_at, created_at, updated_at)
+  INSERT INTO action_results (game_id, user_id, phase_id, action_submission_id, character_id, content, gm_user_id, is_published, sent_at, created_at, updated_at)
   VALUES (
     game_id,
     p2_id,
     completed_phase_id,
     action2_id,
+    (SELECT character_id FROM action_submissions WHERE id = action2_id),
     E'# Library Research Results\n\nYour search through the dusty tomes reveals a reference to the \"Order of the Crimson Moon\" - a cult that operated in this town 100 years ago.\n\n**Knowledge Gained:** +1 Occult Lore',
     gm_id,
     true,
@@ -161,12 +163,13 @@ BEGIN
   );
 
   -- Add UNPUBLISHED action result for Player 3 (to test that players can't see unpublished results)
-  INSERT INTO action_results (game_id, user_id, phase_id, action_submission_id, content, gm_user_id, is_published, sent_at, created_at, updated_at)
+  INSERT INTO action_results (game_id, user_id, phase_id, action_submission_id, character_id, content, gm_user_id, is_published, sent_at, created_at, updated_at)
   VALUES (
     game_id,
     p3_id,
     completed_phase_id,
     action3_id,
+    (SELECT character_id FROM action_submissions WHERE id = action3_id),
     'DRAFT: The symbols appear to be a warning... (GM still working on this result)',
     gm_id,
     false,

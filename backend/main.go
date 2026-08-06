@@ -20,6 +20,7 @@ import (
 	dbsvc "actionphase/pkg/db/services"
 	phasesvc "actionphase/pkg/db/services/phases"
 	"actionphase/pkg/discord"
+	"actionphase/pkg/exports"
 	"actionphase/pkg/http"
 	"actionphase/pkg/observability"
 	"actionphase/pkg/scheduler"
@@ -243,6 +244,13 @@ func main() {
 	sched := scheduler.New(phaseService, obs.Logger, time.Minute)
 	cancelScheduler := sched.Start(ctx)
 	defer cancelScheduler()
+
+	// Start the game archive export worker. It requeues jobs abandoned by a
+	// crashed process on startup, then drains the queue on each tick.
+	exportService := exports.NewService(pool, config.Storage.ArchivePath, obs.Logger)
+	exportWorker := exports.NewWorker(exportService, obs.Logger, exports.DefaultPollInterval)
+	cancelExportWorker := exportWorker.Start(ctx)
+	defer cancelExportWorker()
 
 	// Periodically delete expired sessions to prevent accumulation
 	sessionService := &dbsvc.SessionService{DB: pool, Logger: obs.Logger}

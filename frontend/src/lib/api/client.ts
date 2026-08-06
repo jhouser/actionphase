@@ -93,8 +93,11 @@ export class BaseApiClient {
 
         // Downgrade expected non-errors to debug:
         // - /auth/me 401: expected when unauthenticated (probe endpoint)
+        // - exports/latest 404: expected when a completed game has never been
+        //   exported; "no export yet" is a normal state, not a failure.
         const isExpectedNonError =
-          (error.response?.status === 401 && error.config?.url?.includes('/auth/me'));
+          (error.response?.status === 401 && error.config?.url?.includes('/auth/me')) ||
+          (error.response?.status === 404 && error.config?.url?.includes('/exports/latest'));
         const logFn = isExpectedNonError ? logger.debug : logger.error;
         logFn('API Request Failed', {
           method: error.config?.method?.toUpperCase(),
