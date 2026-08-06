@@ -1,6 +1,6 @@
 ---
 name: game-domain
-description: Complete game lifecycle and domain patterns for ActionPhase turn-based gaming platform. Covers game states, phase transitions (common room, action, results), character workflows (creation, approval, death), messaging systems (common room posts, private messages, GM results), action submissions, and the complete flow from recruitment through game completion. Use when working with game state management, phase advancement, character status, or understanding game mechanics.
+description: Complete game lifecycle and domain patterns for ActionPhase turn-based gaming platform. Covers game states, phase transitions (common room and action phases), character workflows (creation, approval, death), messaging systems (common room posts, private messages, action results), action submissions, public archive mode for completed games, and the complete flow from recruitment through game completion. Use when working with game state management, phase advancement, character status, audience access, or understanding game mechanics.
 ---
 
 # ActionPhase Game Domain
@@ -12,10 +12,11 @@ Comprehensive guide to the game lifecycle, state management, phase transitions, 
 ## When to Use This Skill
 
 - Understanding game flow and state transitions
-- Implementing phase management (common room, action, results)
+- Implementing phase management (common room and action phases)
 - Working with character workflows and approvals
 - Building messaging systems (posts, comments, private messages)
-- Managing action submissions and GM results
+- Managing action submissions and action results
+- Reasoning about visibility, audience access, and public archive mode
 - Debugging game state issues
 - Designing features that interact with game mechanics
 
@@ -31,8 +32,13 @@ Comprehensive guide to the game lifecycle, state management, phase transitions, 
 
 **IN_PROGRESS** contains the repeating phase cycle:
 ```
-COMMON ROOM (discussion) → ACTION (submissions) → RESULTS (GM feedback) → [repeat]
+COMMON ROOM (discussion) → ACTION (submissions + GM results) → [repeat]
+INTERLUDE (private messaging only) may occur between cycles
 ```
+
+⚠️ **There are THREE phase types: `common_room`, `action`, and `interlude`.**
+There is no `results` phase — GM results are `action_results` rows attached to
+an *action* phase. See [phase-system.md](resources/phase-system.md).
 
 **See**: [game-states.md](resources/game-states.md) for complete state definitions and transition rules
 
@@ -59,26 +65,42 @@ state CHECK (state IN (
 ### Phase Types
 
 ```sql
-phase_type CHECK (phase_type IN (
+-- Live constraint (migration 20260605174513); see warning below
+CHECK (phase_type IN (
     'common_room',  -- Discussion/planning phase
-    'action',       -- Players submit actions
-    'results'       -- GM publishes results
+    'action',       -- Players submit actions; GM publishes results here
+    'interlude'     -- Private messaging only: no public posts, no submissions
 ))
 ```
+
+Canonical list: `core.ValidPhaseTypes` (`backend/pkg/core/constants.go:43`).
+
+Results live in the `action_results` table (FK to `game_phases` + `action_submissions`),
+not in a phase of their own.
+
+⚠️ **`backend/pkg/db/schema.sql` is STALE** — it still shows the two-type
+constraint and omits `interlude`. sqlc generates from it, but the live database
+is defined by `backend/pkg/db/migrations/`. **Trust the migrations and
+`core/constants.go`, not `schema.sql`.**
 
 **See**: [phase-system.md](resources/phase-system.md)
 
 ### Character Status
 
 ```sql
-status CHECK (status IN (
-    'pending',    -- Awaiting GM review
-    'approved',   -- GM approved, waiting for game start
-    'active',     -- In gameplay
-    'rejected',   -- GM rejected
-    'dead'        -- Died in-game
-))
+-- backend/pkg/db/schema.sql — NOTE: no CHECK constraint; values are enforced in code
+status VARCHAR(50) DEFAULT 'pending'
 ```
+
+Values actually used in code: `pending` (awaiting GM review), `approved` (GM
+approved), `rejected` (GM rejected; player revises and resubmits).
+
+⚠️ **There is no `dead` status.** Character removal from play is modeled by the
+separate `characters.is_active` boolean, and the player-side transition is
+`POST /api/v1/games/{gameID}/participants/{userId}/to-audience` (permadeath —
+moves the *player* to the audience role). Inactive characters are listed via
+`GET /api/v1/games/{gameID}/characters/inactive` and can be reassigned with
+`PUT /api/v1/characters/{id}/reassign`.
 
 **See**: [character-workflows.md](resources/character-workflows.md)
 
@@ -104,8 +126,13 @@ Games transition through defined states with specific rules for advancement.
 The repeating cycle during IN_PROGRESS state:
 
 1. **COMMON ROOM**: Public discussion forum, planning, coordination
-2. **ACTION**: Private action submissions, one per player
-3. **RESULTS**: GM sends private results to each player
+2. **ACTION**: Private action submissions, one per player; the GM writes and
+   publishes `action_results` against this same phase
+
+Phases are **created and activated**, not "advanced" through a dedicated
+endpoint. A phase becomes live either when the GM activates it or when the
+background scheduler reaches its `start_time`
+(`RunScheduledActivations`, `backend/pkg/db/services/phases/scheduler.go`).
 
 **Details**: [phase-system.md](resources/phase-system.md)
 
@@ -113,24 +140,60 @@ The repeating cycle during IN_PROGRESS state:
 
 Players create characters that go through approval workflow:
 
-**PENDING** → **APPROVED** → **ACTIVE** (when game starts)
+**PENDING** → **APPROVED** (GM approves; character plays)
 
 Or: **PENDING** → **REJECTED** (player revises and resubmits)
 
-Or: **ACTIVE** → **DEAD** (character dies, may create new one)
+Removal from play is `is_active = false` (not a status value); the player may be
+moved to the audience role via the permadeath transition.
 
 **Details**: [character-workflows.md](resources/character-workflows.md)
 
 ### 4. Messaging System
 
-Four distinct message types with different visibility rules:
+Message content lives in two places:
 
-- **Common Room Posts**: Public to all participants
-- **Private Messages**: Between specific characters
-- **Action Submissions**: Private to player (GM sees after ACTION phase)
-- **GM Results**: Private GM → player messages
+- **`messages` table** — one table for common room content, discriminated by
+  `message_type` (`post` / `comment` / `private_message`) and `visibility`
+  (`game` / `private`). Comments nest via self-referential `parent_id` with a
+  denormalized `thread_depth`; threads can be **very** deep.
+- **`conversations` + `private_messages`** — character-to-character direct and
+  group conversations.
+
+Plus **`action_submissions`** (one per player per phase; hidden from other
+players) and **`action_results`** (GM → player, gated by `is_published`).
 
 **Details**: [messaging-system.md](resources/messaging-system.md)
+
+### 5. Visibility & Public Archive Mode
+
+⚠️ **The single most misunderstood part of this domain.** Once a game reaches
+`completed`, **`CanUserViewGame` returns true for ANY authenticated user**
+(`backend/pkg/db/services/games.go:1029`). Completed games are a public archive.
+
+Audience members and GMs can read **all** private conversations and **all**
+action submissions in a game via dedicated queries that apply no participant
+filter — `ListAllPrivateConversations`, `GetAudienceConversationMessages`
+(`pkg/db/queries/messages.sql`), and `ListAllActionSubmissions`
+(`pkg/db/queries/phases.sql`).
+
+So private messages and results are **not** permanently private. Completion
+also lifts two play-time restrictions:
+
+- **Poll vote attribution** — every authenticated user gets
+  `canSeeIndividualVotes` regardless of the poll's `show_individual_votes`
+  (`checkPollViewAccess`, `backend/pkg/polls/api_polls.go`). But
+  `hide_results_from_players` is **not** lifted: only GM/co-GM/audience
+  (`isPrivileged`) ever see those polls.
+- **Anonymous games** — usernames are disclosed to everyone once completed
+  (`CanSeeUsernamesInAnonymousGame`, `backend/pkg/core/permissions.go`).
+
+What *does* stay hidden: drafts (`is_draft`) and soft-deleted content
+(`is_deleted` / `deleted_at`). Cancelled games are **not** public and follow
+normal permission rules, keeping both restrictions above.
+
+**Always reuse `CanUserViewGame` for read authorization rather than
+hand-rolling a participant check.**
 
 ---
 
@@ -155,17 +218,21 @@ Four distinct message types with different visibility rules:
 - Phase history and current phase
 - Type, number, timing
 
-**posts** + **comments**
-- Common room discussions
+**messages**
+- Common room posts AND comments AND private messages in ONE table
+- Discriminated by `message_type` + `visibility`
+- Self-referential `parent_id` for nested comment trees (+ `thread_depth`)
+- ⚠️ There are no separate `posts` / `comments` tables
 
-**private_messages**
-- Character-to-character messages
+**conversations** + **conversation_participants** + **private_messages**
+- Character-to-character direct and group conversations
+- Note: `conversations` has NO `phase_id` — they span phases
 
 **action_submissions**
-- Player actions during ACTION phase
+- Player actions during an action phase (`UNIQUE(game_id, user_id, phase_id)`)
 
 **action_results**
-- GM results during RESULTS phase
+- GM results attached to an action phase and submission; gated by `is_published`
 
 **See**: [data-models.md](resources/data-models.md) for complete schema
 
@@ -179,33 +246,52 @@ GET/POST/PUT/DELETE  /api/v1/games
 PUT                  /api/v1/games/{id}/state
 ```
 
+⚠️ Routes below are transcribed from `backend/pkg/http/root.go`. Most game
+content is nested under `/api/v1/games/{gameID}/...` — there are **no**
+top-level `/api/v1/phases/...` routes.
+
 ### Characters
 ```
-GET/POST  /api/v1/games/{game_id}/characters
-POST      /api/v1/characters/{id}/approve
-POST      /api/v1/characters/{id}/reject
+GET/POST  /api/v1/games/{gameID}/characters
+GET       /api/v1/games/{gameID}/characters/inactive
+POST      /api/v1/characters/{id}/approve     -- body carries "approved"|"rejected"
+PUT       /api/v1/characters/{id}/reassign
+PUT       /api/v1/characters/{id}/rename
 ```
+(There is no `POST /characters/{id}/reject`; rejection goes through `/approve`.)
 
 ### Phases
 ```
-GET   /api/v1/games/{game_id}/phases
-POST  /api/v1/phases/advance
-GET   /api/v1/games/{game_id}/phases/current
+GET   /api/v1/games/{gameID}/phases
+POST  /api/v1/games/{gameID}/phases
+GET   /api/v1/games/{gameID}/current-phase
 ```
+(There is no `POST /api/v1/phases/advance`.)
 
-### Messaging
+### Messaging (Common Room)
 ```
-GET/POST  /api/v1/games/{game_id}/posts
-GET/POST  /api/v1/games/{game_id}/posts/{id}/comments
-GET/POST  /api/v1/games/{game_id}/messages/private
+GET   /api/v1/games/{gameID}/posts
+GET   /api/v1/games/{gameID}/posts/{postId}/comments
+GET   /api/v1/games/{gameID}/posts/{postId}/comments-with-threads  -- paginated + nested
+GET   /api/v1/games/{gameID}/messages/{messageId}/thread-context   -- ancestor chain
+GET   /api/v1/games/{gameID}/comments/recent
 ```
 
 ### Actions & Results
 ```
-GET/POST/PUT  /api/v1/phases/{phase_id}/actions
-GET           /api/v1/phases/{phase_id}/actions/all  (GM only)
-POST          /api/v1/phases/{phase_id}/results      (GM only)
-GET           /api/v1/phases/{phase_id}/results      (Player)
+POST/GET  /api/v1/games/{gameID}/actions
+GET       /api/v1/games/{gameID}/actions/mine
+POST/GET  /api/v1/games/{gameID}/results
+GET       /api/v1/games/{gameID}/results/mine
+POST      /api/v1/games/{gameID}/results/{resultId}/publish
+POST      /api/v1/games/{gameID}/phases/{phaseId}/results/publish   -- bulk
+```
+
+### Audience / Archive Access
+```
+GET  /api/v1/games/{gameID}/private-messages/all
+GET  /api/v1/games/{gameID}/private-messages/conversations/{conversationId}
+GET  /api/v1/games/{gameID}/action-submissions/all
 ```
 
 **See**: [api-reference.md](resources/api-reference.md) for complete API documentation
@@ -217,13 +303,16 @@ GET           /api/v1/phases/{phase_id}/results      (Player)
 ### Key Constraints
 
 - ✅ Only ONE active phase per game
-- ✅ One action submission per player per phase
-- ✅ Actions locked after deadline
-- ✅ Only GM can advance phases
-- ✅ Must have ACTIVE character to post/act
-- ✅ Action submissions hidden from GM until ACTION phase ends
-- ✅ Private messages never visible to GM (unless included)
-- ✅ Results remain private forever (unless player shares)
+- ✅ One action submission per player per phase (`UNIQUE(game_id, user_id, phase_id)`)
+- ✅ Only the GM/co-GM creates and activates phases (or the scheduler, by `start_time`)
+- ✅ Must have an active character to post/act
+- ✅ Action results are hidden from the player until `is_published`
+- ✅ Drafts (`is_draft`) are visible only to their author
+- ✅ Soft-deleted content (`is_deleted` / `deleted_at`) is hidden from normal reads
+- ✅ Completed games are a PUBLIC ARCHIVE readable by any authenticated user
+- ✅ Audience and GM can read ALL private conversations and ALL action submissions
+- ❌ NOT TRUE: "private messages are never visible to the GM"
+- ❌ NOT TRUE: "results remain private forever"
 
 **See**: [business-rules.md](resources/business-rules.md) for complete rules
 
@@ -240,18 +329,21 @@ GET           /api/v1/phases/{phase_id}/results      (Player)
 # Full example in resources
 ```
 
-### Workflow 2: Phase Advancement Cycle
+### Workflow 2: Phase Cycle
 
 ```bash
-# Common Room → ACTION → RESULTS → (new Common Room)
+# Common Room → ACTION (submissions + published results) → (new Common Room)
+# GM creates the next phase and activates it, or sets start_time and lets
+# the scheduler activate it.
 
 # Full example in resources
 ```
 
-### Workflow 3: Character Death and Replacement
+### Workflow 3: Character Removal and Replacement
 
 ```bash
-# Mark dead → Player creates new → GM approves → Becomes active
+# Set characters.is_active = false → optionally move player to audience
+# (permadeath) → player creates new character → GM approves
 
 # Full example in resources
 ```
@@ -268,16 +360,18 @@ GET           /api/v1/phases/{phase_id}/results      (Player)
 # Load test fixtures
 ./backend/pkg/db/test_fixtures/apply_e2e.sh
 
-# Login as GM and advance phase
+# Login as GM and create the next phase
 ./backend/scripts/api-test.sh login-gm
 curl -X POST -H "Authorization: Bearer $(cat /tmp/api-token.txt)" \
-  http://localhost:3000/api/v1/phases/advance \
-  -d '{"game_id": 164}'
+  -H "Content-Type: application/json" \
+  http://localhost:3000/api/v1/games/164/phases \
+  -d '{"phase_type": "action", "title": "Descent"}'
 
 # Login as player and submit action
 ./backend/scripts/api-test.sh login-player
 curl -X POST -H "Authorization: Bearer $(cat /tmp/api-token.txt)" \
-  http://localhost:3000/api/v1/phases/456/actions \
+  -H "Content-Type: application/json" \
+  http://localhost:3000/api/v1/games/164/actions \
   -d '{"content": "I investigate the library"}'
 ```
 
@@ -319,7 +413,7 @@ WHERE a.phase_id = 456;
 | Need to... | Read this |
 |------------|-----------|
 | Understand game states and transitions | [game-states.md](resources/game-states.md) |
-| Learn phase cycle (common room → action → results) | [phase-system.md](resources/phase-system.md) |
+| Learn phase cycle (common room → action) | [phase-system.md](resources/phase-system.md) |
 | Understand character approval workflow | [character-workflows.md](resources/character-workflows.md) |
 | Learn messaging types and visibility | [messaging-system.md](resources/messaging-system.md) |
 | See complete data model | [data-models.md](resources/data-models.md) |
@@ -333,11 +427,14 @@ WHERE a.phase_id = 456;
 
 ## Design Principles
 
-### Privacy by Design
-- Action submissions hidden from GM during ACTION phase
-- Private messages never visible to GM (unless included)
-- Results remain private between GM and player
-- Dead characters cannot see new content
+### Privacy Is Scoped to the ACTIVE Game, Not Permanent
+- Drafts are visible only to their author (`is_draft`)
+- Action results are hidden from the player until `is_published`
+- Soft-deleted content is hidden from normal reads
+- **But**: audience members and GMs can read all private conversations and all
+  action submissions, and a `completed` game is readable by any authenticated
+  user. Privacy here means "not visible to other *players* mid-game" — it does
+  not mean "never disclosed."
 
 ### Asynchronous by Default
 - No real-time requirements
@@ -352,10 +449,11 @@ WHERE a.phase_id = 456;
 - GM sets deadlines and pacing
 
 ### Public Archive
-- Completed games become public
-- Action submissions revealed on completion
-- Private messages remain private
-- Results remain private
+- Completed games become readable by ANY authenticated user
+  (`CanUserViewGame`, `backend/pkg/db/services/games.go:1029`)
+- Action submissions, private conversations, and published results are all
+  part of that archive
+- Cancelled games are NOT public — they follow normal permission rules
 - Creates valuable reference material
 
 ---

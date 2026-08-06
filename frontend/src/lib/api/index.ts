@@ -36,6 +36,10 @@
  *   apiClient.users.getUserProfile(userId);
  *   apiClient.users.updateUserProfile(data);
  *
+ *   // Exports (completed games only)
+ *   apiClient.exports.requestExport(gameId);
+ *   apiClient.exports.getLatestExport(gameId);
+ *
  *   // Utility methods
  *   apiClient.setAuthToken(token);
  *   apiClient.getAuthToken();
@@ -56,6 +60,7 @@ import { HandoutsApi } from './handouts';
 import { DeadlinesApi } from './deadlines';
 import { PollsApi } from './polls';
 import { UsersApi } from './users';
+import { ExportsApi } from './exports';
 
 class ApiClient extends BaseApiClient {
   public auth: AuthApi;
@@ -70,6 +75,7 @@ class ApiClient extends BaseApiClient {
   public deadlines: DeadlinesApi;
   public polls: PollsApi;
   public users: UsersApi;
+  public exports: ExportsApi;
 
   constructor() {
     super();
@@ -87,6 +93,7 @@ class ApiClient extends BaseApiClient {
     this.deadlines = new DeadlinesApi();
     this.polls = new PollsApi();
     this.users = new UsersApi();
+    this.exports = new ExportsApi();
   }
 }
 

@@ -191,6 +191,15 @@ type StorageConfig struct {
 	S3Bucket   string `env:"STORAGE_S3_BUCKET"`
 	S3Region   string `env:"STORAGE_S3_REGION"`
 	S3Endpoint string `env:"STORAGE_S3_ENDPOINT"` // Optional, for S3-compatible services (MinIO, DigitalOcean Spaces)
+
+	// ArchivePath is the filesystem directory for game export archives.
+	//
+	// Always local disk regardless of Backend, and deliberately outside
+	// LocalPath: archives hold every private message in a game, whereas the
+	// uploads tree is public-by-design imagery served statically (and backed by
+	// a public-read bucket in production). Downloads go through an authorizing
+	// handler instead. See exports.ArchiveStore.
+	ArchivePath string `env:"STORAGE_ARCHIVE_PATH"`
 }
 
 // LoadConfig loads configuration from environment variables with sensible defaults.
@@ -252,6 +261,9 @@ func LoadConfig() (*Config, error) {
 			S3Bucket:   getEnvString("STORAGE_S3_BUCKET", ""),
 			S3Region:   getEnvString("STORAGE_S3_REGION", "us-east-1"),
 			S3Endpoint: getEnvString("STORAGE_S3_ENDPOINT", ""),
+			// Sibling of ./uploads rather than a subdirectory of it, so a static
+			// file server mapping the uploads tree never exposes archives.
+			ArchivePath: getEnvString("STORAGE_ARCHIVE_PATH", "./archives"),
 		},
 		Discord: DiscordConfig{
 			BotToken:          getEnvString("DISCORD_BOT_TOKEN", ""),
