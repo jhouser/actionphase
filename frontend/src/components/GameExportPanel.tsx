@@ -146,5 +146,3 @@ export const GameExportPanel: React.FC<GameExportPanelProps> = ({ gameId, isComp
     </div>
   );
 };
-
-export default GameExportPanel;

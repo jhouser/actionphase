@@ -7,7 +7,7 @@ import type { GameExport } from '../types/exports';
 /** How often to re-check a job that is still assembling. */
 const POLL_INTERVAL_MS = 3000;
 
-export const gameExportQueryKey = (gameId: number) => ['game-export', gameId] as const;
+const gameExportQueryKey = (gameId: number) => ['game-export', gameId] as const;
 
 interface UseGameExportOptions {
   /**
