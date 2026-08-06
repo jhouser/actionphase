@@ -119,9 +119,21 @@ func IsUserGameMasterCtx(ctx context.Context, userID int32, isAdmin bool, game m
 // Rule: players cannot see each other's usernames in anonymous games.
 // GMs, co-GMs, and audience members can always see usernames.
 //
+// Anonymity is a play-time protection, not a permanent one. Once a game is
+// COMPLETED it becomes a public archive readable by any authenticated user
+// (CanUserViewGame), so usernames are disclosed to everyone — mirroring how
+// completion lifts the individual-vote restriction on polls
+// (checkPollViewAccess, pkg/polls/api_polls.go). Cancelled games are NOT
+// public and keep the play-time rule.
+//
 // If the game is not anonymous, always returns true.
 func CanSeeUsernamesInAnonymousGame(ctx context.Context, db *pgxpool.Pool, game models.Game, userID int32) bool {
 	if !game.IsAnonymous {
+		return true
+	}
+
+	// Completed games are a public archive: anonymity no longer applies.
+	if game.State.Valid && game.State.String == GameStateCompleted {
 		return true
 	}
 

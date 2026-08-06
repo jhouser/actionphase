@@ -939,7 +939,7 @@ WITH character_messages AS (
         m.is_deleted,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     JOIN characters c ON m.character_id = c.id
@@ -961,7 +961,7 @@ parent_messages AS (
         m.message_type,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -1032,6 +1032,8 @@ type ListCharacterPostsAndCommentsRow struct {
 }
 
 // Get all posts and comments by a specific character (for Character Page)
+// Avatars render as pinned at authoring time, so a character's back catalogue
+// shows how they looked in each entry rather than how they look now.
 // Returns both posts and comments with parent context for comments
 // Only returns public (game-visibility) messages, not deleted ones
 // NPCs only show comments (not top-level posts)
@@ -1095,7 +1097,7 @@ WITH RECURSIVE recent_comments AS (
         m.is_deleted,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -1133,7 +1135,7 @@ parent_messages AS (
         m.message_type,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -1205,6 +1207,9 @@ type ListRecentCommentsWithParentsRow struct {
 }
 
 // Get recent comments with their parent comments/posts for New Comments view
+// Avatars are pinned at authoring time (messages.character_avatar_url_at_post),
+// so both the comment and its parent COALESCE to the live characters.avatar_url
+// only for rows predating that column.
 // Walk up the message tree recursively to find the root post for each comment
 // Pick the post at the top of each comment's chain
 func (q *Queries) ListRecentCommentsWithParents(ctx context.Context, arg ListRecentCommentsWithParentsParams) ([]ListRecentCommentsWithParentsRow, error) {
@@ -1267,7 +1272,7 @@ WITH RECURSIVE recent_comments AS (
         m.is_deleted,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -1309,7 +1314,7 @@ parent_messages AS (
         m.message_type,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id

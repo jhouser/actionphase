@@ -371,7 +371,7 @@ comment_tree AS (
     m.deleted_by_user_id,
     u.username as author_username,
     c.name as character_name,
-    c.avatar_url as character_avatar_url,
+    COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
     0::int as depth
   FROM messages m
   JOIN top_level_comments tlc ON m.id = tlc.id
@@ -404,7 +404,7 @@ comment_tree AS (
     m.deleted_by_user_id,
     u.username as author_username,
     c.name as character_name,
-    c.avatar_url as character_avatar_url,
+    COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
     comment_tree.depth + 1 as depth
   FROM messages m
   JOIN comment_tree ON m.parent_id = comment_tree.id AND comment_tree.depth + 1 < $4
