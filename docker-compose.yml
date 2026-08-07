@@ -40,6 +40,11 @@ services:
       RUN_MIGRATIONS: "true"
     volumes:
       - uploads:/root/uploads
+      # Archives are NOT in the uploads volume: that one is mounted into the
+      # nginx web root, which would serve game archives (containing every
+      # private message) to anyone who guessed the path. Downloads must go
+      # through the authorizing handler instead.
+      - archives:/root/archives
     depends_on:
       db:
         condition: service_healthy
@@ -95,4 +100,8 @@ volumes:
   pgdata:
     driver: local
   uploads:
+    driver: local
+  # Deliberately not mounted into the frontend container: game archives are
+  # private and served only via the authenticated download endpoint.
+  archives:
     driver: local
