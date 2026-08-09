@@ -161,6 +161,11 @@ export function useGameTabs({
       tabList.push({ id: 'info', label: 'Game Info', icon: icons.info });
     }
 
+    if (isGM) {
+      // Loot Tables tab for GM only (not visible to players or audience)
+      tabList.push({ id: 'loot_tables', label: 'Loot Tables', icon: icons.info });
+    }
+
     if (isGM || (gameState === 'completed' || gameState === 'cancelled')) {
       // Game Logs for the game
       tabList.push({ id: 'logs', 'label': 'Game Logs', icon: icons.info });

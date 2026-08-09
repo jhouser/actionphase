@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
 )
 
 func (h *Handler) GetGameLootTables(w http.ResponseWriter, r *http.Request) {
@@ -16,32 +17,14 @@ func (h *Handler) GetGameLootTables(w http.ResponseWriter, r *http.Request) {
 
 	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid loot tables request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
-	// Get authenticated user
-	user := core.GetAuthenticatedUser(ctx)
-	if user == nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "No authenticated user found")
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can see and edit loot tables"), "Loot tables access forbidden")
 		return
 	}
 
 	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
-	// Verify user is GM of this game
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game for permission check", "error", err, "game_id", gameID)
-		return
-	}
-
-	if !core.IsUserGameMaster(r, user.ID, user.IsAdmin, *game, h.App.Pool) {
-		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can see and edit loot tables"), "Loot tables access forbidden")
-		return
-	}
 
 	lootTables, err := gameService.GetGameLootTables(ctx, int32(gameID))
 	if err != nil {
@@ -71,17 +54,45 @@ func (h *Handler) AddGameLootTable(w http.ResponseWriter, r *http.Request) {
 
 	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables_add")()
 
+	gameID := ctx.Value("gameID").(int32)
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can see and edit loot tables"), "Loot tables access forbidden")
+		return
+	}
+
+	data := &UpdateLootTableRequest{}
+	if err := render.Bind(r, data); err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid update loot table request", "error", err)
+		return
+	}
+
+	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	newLootTable, err := gameService.CreateLootTable(ctx, int32(gameID), data.Name)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to create loot table", "error", err, "game_id", gameID)
+		return
+	}
+
+	for _, item := range data.Items {
+		_, err := gameService.AddLootTableContent(ctx, newLootTable.ID, item.Name, item.Data)
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to save loot table items", "error", err, "game_id", gameID)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(newLootTable)
 }
 
-func (h *Handler) GetGameLootTableContents(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeleteGameLootTable(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables")()
+	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables_delete")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid loot tables request")
+	gameID := ctx.Value("gameID").(int32)
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can see and edit loot tables"), "Loot tables access forbidden")
 		return
 	}
 
@@ -92,25 +103,44 @@ func (h *Handler) GetGameLootTableContents(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Get authenticated user
-	user := core.GetAuthenticatedUser(ctx)
-	if user == nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "No authenticated user found")
+	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+
+	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check loot table ownership", "error", err, "table_id", tableID, "game_id", gameID)
+		return
+	}
+	if !isLootTableInGame {
+		h.renderError(ctx, w, r, core.ErrForbidden("loot table does not belong to this game"), "Loot table access forbidden")
+		return
+	}
+
+	err = gameService.DeleteLootTable(ctx, int32(tableID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete loot table", "error", err, "table_id", tableID)
+		return
+	}
+}
+
+func (h *Handler) GetGameLootTableContents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables")()
+
+	gameID := ctx.Value("gameID").(int32)
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can see and edit loot tables"), "Loot tables access forbidden")
+		return
+	}
+
+	tableIDStr := chi.URLParam(r, "tableId")
+	tableID, err := strconv.ParseInt(tableIDStr, 10, 32)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid table ID")), "Invalid loot table contents request")
 		return
 	}
 
 	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
-	// Verify user is GM of this game
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game for permission check", "error", err, "game_id", gameID)
-		return
-	}
-
-	if !core.IsUserGameMaster(r, user.ID, user.IsAdmin, *game, h.App.Pool) {
-		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can see and edit loot tables"), "Loot tables access forbidden")
-		return
-	}
 
 	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
 	if err != nil {
@@ -142,4 +172,79 @@ func (h *Handler) GetGameLootTableContents(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func (h *Handler) AddGameLootTableContent(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables")()
+
+	gameID := ctx.Value("gameID").(int32)
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can see and edit loot tables"), "Loot tables access forbidden")
+		return
+	}
+
+	tableIDStr := chi.URLParam(r, "tableId")
+	tableID, err := strconv.ParseInt(tableIDStr, 10, 32)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid table ID")), "Invalid loot table contents request")
+		return
+	}
+
+	data := &UpdateLootTableContentRequest{}
+	if err := render.Bind(r, data); err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid update loot table content request", "error", err)
+		return
+	}
+
+	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+
+	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check loot table ownership", "error", err, "table_id", tableID, "game_id", gameID)
+		return
+	}
+	if !isLootTableInGame {
+		h.renderError(ctx, w, r, core.ErrForbidden("loot table does not belong to this game"), "Loot table access forbidden")
+		return
+	}
+
+	_, err = gameService.AddLootTableContent(ctx, int32(tableID), data.Name, data.Data)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to add loot table content", "error", err, "table_id", tableID)
+		return
+	}
+}
+
+func (h *Handler) DeleteGameLootTableContent(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables")()
+
+	gameID := ctx.Value("gameID").(int32)
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can see and edit loot tables"), "Loot tables access forbidden")
+		return
+	}
+
+	tableIDStr := chi.URLParam(r, "tableId")
+	tableID, err := strconv.ParseInt(tableIDStr, 10, 32)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid table ID")), "Invalid loot table contents request")
+		return
+	}
+
+	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+
+	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check loot table ownership", "error", err, "table_id", tableID, "game_id", gameID)
+		return
+	}
+	if !isLootTableInGame {
+		h.renderError(ctx, w, r, core.ErrForbidden("loot table does not belong to this game"), "Loot table access forbidden")
+		return
+	}
+
 }

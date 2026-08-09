@@ -119,3 +119,24 @@ type ReviewApplicationRequest struct {
 func (r *ReviewApplicationRequest) Bind(req *http.Request) error {
 	return nil
 }
+
+type UpdateLootTableRequest struct {
+	Name  string `json:"name" validate:"required"`
+	Items []struct {
+		Name string `json:"name" validate:"required"`
+		Data string `json:"data" validate:"required"`
+	} `json:"items"`
+}
+
+func (r *UpdateLootTableRequest) Bind(req *http.Request) error {
+	return nil
+}
+
+type UpdateLootTableContentRequest struct {
+	Name string `json:"name" validate:"required"`
+	Data string `json:"data" validate:"required"`
+}
+
+func (r *UpdateLootTableContentRequest) Bind(req *http.Request) error {
+	return nil
+}

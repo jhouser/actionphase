@@ -359,7 +359,11 @@ func (h *Handler) Start() {
 				r.Get("/logs", gameHandler.GetGameLogs)
 
 				r.Get("/loot-tables", gameHandler.GetGameLootTables)
+				r.Post("/loot-tables", gameHandler.AddGameLootTable)
+				r.Delete("/loot-tables/{tableId}", gameHandler.DeleteGameLootTable)
 				r.Get("/loot-tables/{tableId}/contents", gameHandler.GetGameLootTableContents)
+				r.Post("/loot-tables/{tableId}/contents", gameHandler.AddGameLootTableContent)
+				r.Delete("/loot-tables/{tableId}/contents", gameHandler.DeleteGameLootTableContent)
 			})
 		})
 	})

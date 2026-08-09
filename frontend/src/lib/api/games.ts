@@ -15,7 +15,8 @@ import type {
   GameListingResponse,
   GameLog,
   LootTable,
-  LootTableContent
+  LootTableContent,
+  CreateLootTableRequest
 } from '../../types/games';
 import type {
   AudienceConversationListItem,
@@ -237,6 +238,14 @@ export class GamesApi extends BaseApiClient {
 
   async getLootTables(gameId: number) {
     return this.client.get<LootTable[]>(`/api/v1/games/${gameId}/loot-tables`);
+  }
+
+  async createLootTable(gameId: number, data: CreateLootTableRequest) {
+    return this.client.post<LootTable[]>(`/api/v1/games/${gameId}/loot-tables`, { name: data.name, items: data.items });
+  }
+
+  async deleteLootTable(gameId: number, lootTableId: number) {
+    return this.client.delete(`/api/v1/games/${gameId}/loot-tables/${lootTableId}`);
   }
 
   async getLootTableContents(gameId: number, tableId: number) {

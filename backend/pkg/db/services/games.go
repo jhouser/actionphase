@@ -1332,11 +1332,12 @@ func (gs *GameService) GetGameLootTableContents(ctx context.Context, lootTableID
 }
 
 // AddLootTableContent - Add an item to a loot table
-func (gs *GameService) AddLootTableContent(ctx context.Context, lootTableID int32, itemName string) (*models.GameLootTableContent, error) {
+func (gs *GameService) AddLootTableContent(ctx context.Context, lootTableID int32, itemName string, itemData string) (*models.GameLootTableContent, error) {
 	queries := models.New(gs.DB)
 	content, err := queries.AddLootTableContent(ctx, models.AddLootTableContentParams{
 		LootTableID: lootTableID,
 		Name:        itemName,
+		Data:        pgtype.Text{String: itemData, Valid: true},
 	})
 	return &content, err
 }

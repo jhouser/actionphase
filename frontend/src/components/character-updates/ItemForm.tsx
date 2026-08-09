@@ -3,7 +3,7 @@ import { Button, Input, Select } from '../ui';
 import { CommentEditor } from '../CommentEditor';
 import { apiClient } from '@/lib/api';
 import { useOptionalGameContext } from '@/contexts/GameContext';
-import { useQuery } from 'node_modules/@tanstack/react-query/build/modern/useQuery';
+import { useQuery } from '@tanstack/react-query';
 
 export interface ItemFormData {
   name: string;

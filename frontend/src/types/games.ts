@@ -113,6 +113,11 @@ export interface GameLog {
   created_at: string;
 }
 
+export interface CreateLootTableRequest {
+  name: string;
+  items: LootTableContent[] | undefined;
+  file: File | undefined;
+}
 export interface LootTable {
   id: number;
   game_id: number;

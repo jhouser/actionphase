@@ -17,6 +17,7 @@ import { HandoutsList } from './HandoutsList';
 import type { GameWithDetails, GameParticipant } from '../types/games';
 import type { GamePhase } from '../types/phases';
 import { GameLogsView } from './GameLogsView';
+import { LootTablesView } from './LootTablesView';
 
 // Lazy load PollsTab to match CommonRoom's lazy loading and prevent duplicate chunks
 const PollsTab = lazy(() => import('./PollsTab').then(m => ({ default: m.PollsTab })));
@@ -313,6 +314,10 @@ export function GameTabContent({
   // Audience Tab (In Progress & Completed)
   if (activeTab === 'audience' && (game.state === 'in_progress' || game.state === 'completed')) {
     return <AudienceView gameId={gameId} />;
+  }
+
+  if (activeTab === 'loot_tables') {
+    return <LootTablesView gameId={gameId} />
   }
 
   if (activeTab === 'logs') {
