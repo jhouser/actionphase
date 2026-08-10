@@ -157,6 +157,7 @@ func (h *Handler) Start() {
 			NotificationService:     db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 			MessageService:          &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
 			ActionSubmissionService: &dbactions.ActionSubmissionService{DB: h.App.Pool, Logger: h.App.ObsLogger, NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger)},
+			GameStatsService:        &db.GameStatsService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 		}
 		userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 
@@ -222,6 +223,9 @@ func (h *Handler) Start() {
 				r.Get("/private-messages/participants", gameHandler.GetConversationParticipants)
 				r.Get("/private-messages/conversations/{conversationId}", gameHandler.GetAudienceConversationMessages)
 				r.Get("/action-submissions/all", gameHandler.ListAllActionSubmissions)
+
+				// Post-game statistics (completed games only; handler enforces)
+				r.Get("/stats", gameHandler.GetGameStats)
 
 				// Character management within games
 				characterHandler := characters.Handler{

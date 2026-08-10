@@ -1748,6 +1748,16 @@ type CharacterServiceInterface interface {
 	AssignNPCToAudience(ctx context.Context, characterID, assignedUserID, assignedByUserID int32) (*models.NpcAssignment, error)
 }
 
+// GameStatsServiceInterface defines the contract for post-game statistics.
+//
+// Kept separate from GameServiceInterface: these are read-only analytics over
+// content other services own, with no bearing on game lifecycle.
+type GameStatsServiceInterface interface {
+	// GetGameStats returns the full statistics payload for a game. Callers are
+	// responsible for authorization; this method applies none.
+	GetGameStats(ctx context.Context, gameID int32) (*GameStats, error)
+}
+
 // UserPreferencesServiceInterface defines the contract for user preferences operations.
 type UserPreferencesServiceInterface interface {
 	GetUserPreferences(ctx context.Context, userID int32) (*PreferencesData, error)

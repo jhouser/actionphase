@@ -431,6 +431,87 @@ describe('useGameTabs', () => {
       expect(handoutsTab).toBeDefined();
     });
 
+    it('should show Stats tab in completed state', () => {
+      const { result } = renderHook(
+        () =>
+          useGameTabs({
+            gameState: 'completed',
+            isGM: false,
+            participantCount: 3,
+            currentPhaseType: undefined,
+            isAudience: false,
+            isParticipant: true,
+            hasCharacters: true,
+          }),
+        { wrapper }
+      );
+
+      const statsTab = result.current.tabs.find(tab => tab.id === 'stats');
+      expect(statsTab).toBeDefined();
+      expect(statsTab?.label).toBe('Stats');
+    });
+
+    it('should show Audience tab alongside Stats for a non-GM non-audience viewer', () => {
+      // The Stats tab deep-links into the Audience tab, so wherever Stats is
+      // visible the link target must be too — including for a plain player or
+      // an outside viewer of the public archive.
+      const { result } = renderHook(
+        () =>
+          useGameTabs({
+            gameState: 'completed',
+            isGM: false,
+            participantCount: 3,
+            currentPhaseType: undefined,
+            isAudience: false,
+            isParticipant: false,
+            hasCharacters: false,
+          }),
+        { wrapper }
+      );
+
+      expect(result.current.tabs.find(tab => tab.id === 'stats')).toBeDefined();
+      expect(result.current.tabs.find(tab => tab.id === 'audience')).toBeDefined();
+      expect(result.current.tabs.find(tab => tab.id === 'history')).toBeDefined();
+    });
+
+    it('should NOT show Stats tab in cancelled state', () => {
+      // The stats endpoint serves completed games only; a cancelled game is not
+      // a public archive, so the tab would only ever render an error.
+      const { result } = renderHook(
+        () =>
+          useGameTabs({
+            gameState: 'cancelled',
+            isGM: true,
+            participantCount: 3,
+            currentPhaseType: undefined,
+            isAudience: false,
+            isParticipant: true,
+            hasCharacters: true,
+          }),
+        { wrapper }
+      );
+
+      expect(result.current.tabs.find(tab => tab.id === 'stats')).toBeUndefined();
+    });
+
+    it('should NOT show Stats tab while the game is in progress', () => {
+      const { result } = renderHook(
+        () =>
+          useGameTabs({
+            gameState: 'in_progress',
+            isGM: true,
+            participantCount: 3,
+            currentPhaseType: 'common_room',
+            isAudience: false,
+            isParticipant: true,
+            hasCharacters: true,
+          }),
+        { wrapper }
+      );
+
+      expect(result.current.tabs.find(tab => tab.id === 'stats')).toBeUndefined();
+    });
+
     it('should show Handouts tab in cancelled state', () => {
       const { result } = renderHook(
         () =>
