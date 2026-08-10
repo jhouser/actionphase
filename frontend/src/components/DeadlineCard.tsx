@@ -112,11 +112,32 @@ export function DeadlineCard({ deadline, isGM, onEdit, onDelete, onExtend, onCli
         ${onClick ? 'cursor-pointer hover:shadow-md' : ''}
         ${isGM ? 'hover:shadow-md' : ''}
       `}
-      onClick={onClick}
       onMouseEnter={() => isGM && setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
+      // focus/blur here are the delegated focusin/focusout, so they also fire as
+      // focus moves between descendants. Ignoring moves that stay inside the card
+      // keeps the GM actions mounted while tabbing into them.
+      onFocus={() => isGM && setShowActions(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setShowActions(false);
+        }
+      }}
       title={deadline.title} // Show full title on hover
     >
+      {/* Click target. A real <button> covering the card, rather than role="button"
+          on the container, so the GM action buttons are siblings instead of nested
+          controls — nesting breaks the container's accessible name and lets a
+          bubbled Space keypress hijack the inner button's activation. */}
+      {onClick && (
+        <button
+          type="button"
+          onClick={onClick}
+          className="absolute inset-0 z-0 rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-interactive-primary"
+          aria-label={deadline.title}
+        />
+      )}
+
       {/* GM Actions (shown on hover) */}
       {isGM && showActions && (
         <div className="absolute top-1 right-1 flex gap-1 z-10">
@@ -168,26 +189,30 @@ export function DeadlineCard({ deadline, isGM, onEdit, onDelete, onExtend, onCli
         </div>
       )}
 
-      {/* Title (emoji removed for more space) */}
-      <div className="mb-1">
-        <span className="text-sm font-semibold text-content-primary" title={deadline.title}>
-          {displayTitle}
-        </span>
+      {/* Card text. pointer-events-none so clicks fall through to the overlay
+          button beneath it; it carries no interactive elements of its own. */}
+      <div className="relative pointer-events-none">
+        {/* Title (emoji removed for more space) */}
+        <div className="mb-1">
+          <span className="text-sm font-semibold text-content-primary" title={deadline.title}>
+            {displayTitle}
+          </span>
+        </div>
+
+        {/* Countdown */}
+        {countdown && (
+          <div className={`text-2xl font-bold mb-1 ${urgencyTextClasses[urgency]}`}>
+            {countdown}
+          </div>
+        )}
+
+        {/* Date/Time */}
+        {formattedDate && (
+          <div className="text-xs text-content-secondary">
+            {urgency === 'expired' ? 'Due: ' : ''}{formattedDate}
+          </div>
+        )}
       </div>
-
-      {/* Countdown */}
-      {countdown && (
-        <div className={`text-2xl font-bold mb-1 ${urgencyTextClasses[urgency]}`}>
-          {countdown}
-        </div>
-      )}
-
-      {/* Date/Time */}
-      {formattedDate && (
-        <div className="text-xs text-content-secondary">
-          {urgency === 'expired' ? 'Due: ' : ''}{formattedDate}
-        </div>
-      )}
 
       {/* Description Tooltip (only for non-system deadlines with user-entered descriptions) */}
       {deadline.description && deadline.description.trim() && !deadline.is_system_deadline && (

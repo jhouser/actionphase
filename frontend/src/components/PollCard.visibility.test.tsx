@@ -220,4 +220,42 @@ describe('PollCard - audience voting', () => {
 
     expect(screen.getByRole('button', { name: /change vote/i })).toBeInTheDocument();
   });
+
+  // A completed or cancelled game is an immutable archive. The backend's
+  // DeletePoll handler authorizes on GM alone and never checks game state, so
+  // this button is the only thing standing between a GM and deleting a poll
+  // out of a finished game's history.
+  describe('delete button and game state', () => {
+    it('offers the GM a delete button in a live game', () => {
+      renderCard(
+        <PollCard poll={basePoll} gameId={100} isGM={true} isAudience={false} gameState="in_progress" />
+      );
+
+      expect(screen.getByRole('button', { name: /delete poll/i })).toBeInTheDocument();
+    });
+
+    it('withholds delete once the game is completed', () => {
+      renderCard(
+        <PollCard poll={basePoll} gameId={100} isGM={true} isAudience={false} gameState="completed" />
+      );
+
+      expect(screen.queryByRole('button', { name: /delete poll/i })).not.toBeInTheDocument();
+    });
+
+    it('withholds delete once the game is cancelled', () => {
+      renderCard(
+        <PollCard poll={basePoll} gameId={100} isGM={true} isAudience={false} gameState="cancelled" />
+      );
+
+      expect(screen.queryByRole('button', { name: /delete poll/i })).not.toBeInTheDocument();
+    });
+
+    it('never offers delete to a non-GM', () => {
+      renderCard(
+        <PollCard poll={basePoll} gameId={100} isGM={false} isAudience={false} gameState="in_progress" />
+      );
+
+      expect(screen.queryByRole('button', { name: /delete poll/i })).not.toBeInTheDocument();
+    });
+  });
 });
