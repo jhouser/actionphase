@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { TabNavigation, type Tab } from '../TabNavigation';
@@ -542,6 +542,110 @@ describe('TabNavigation', () => {
 
       expect(label).toHaveAttribute('for', 'tab-select');
       expect(select).toHaveAttribute('id', 'tab-select');
+    });
+  });
+
+  describe('Sticky mode', () => {
+    // jsdom ships no IntersectionObserver. Stub it so we can drive the pinned
+    // state directly instead of trying to simulate scrolling.
+    let triggerIntersection: ((isIntersecting: boolean) => void) | undefined;
+
+    beforeEach(() => {
+      triggerIntersection = undefined;
+      vi.stubGlobal(
+        'IntersectionObserver',
+        class {
+          constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+            triggerIntersection = (isIntersecting: boolean) =>
+              act(() => cb([{ isIntersecting }]));
+          }
+          observe() {}
+          disconnect() {}
+        }
+      );
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      document.documentElement.style.removeProperty('--game-tabbar-h');
+    });
+
+    const renderSticky = (sticky: boolean) =>
+      render(
+        <TabNavigation
+          tabs={mockTabs}
+          activeTab="tab1"
+          onTabChange={mockOnTabChange}
+          sticky={sticky}
+        />
+      );
+
+    it('does not pin the bar unless sticky is requested', () => {
+      const { container } = renderSticky(false);
+
+      const bar = container.querySelector('[data-pinned]');
+      expect(bar).toBeNull();
+      expect(container.querySelector('.sticky')).toBeNull();
+    });
+
+    it('pins the bar below the navbar when sticky', () => {
+      const { container } = renderSticky(true);
+
+      const bar = container.querySelector('[data-pinned]');
+      expect(bar).toHaveClass('sticky', 'top-16');
+      // Must stay below the global nav (z-50) so it cannot cover it.
+      expect(bar).toHaveClass('z-30');
+    });
+
+    it('starts uncondensed and condenses once the bar reaches the navbar', () => {
+      const { container } = renderSticky(true);
+      const bar = container.querySelector('[data-pinned]')!;
+      const firstTab = screen.getByRole('tab', { name: /First Tab/i });
+
+      // Sentinel still visible => bar has not reached its offset yet.
+      expect(bar).toHaveAttribute('data-pinned', 'false');
+      expect(firstTab).toHaveClass('py-3');
+
+      triggerIntersection!(false);
+
+      expect(bar).toHaveAttribute('data-pinned', 'true');
+      expect(firstTab).toHaveClass('py-1.5');
+    });
+
+    it('restores full height when scrolled back to the top', () => {
+      const { container } = renderSticky(true);
+      const bar = container.querySelector('[data-pinned]')!;
+
+      triggerIntersection!(false);
+      expect(bar).toHaveAttribute('data-pinned', 'true');
+
+      triggerIntersection!(true);
+      expect(bar).toHaveAttribute('data-pinned', 'false');
+      expect(screen.getByRole('tab', { name: /First Tab/i })).toHaveClass('py-3');
+    });
+
+    it('publishes its height so nested sticky headers can clear it', () => {
+      const { unmount } = renderSticky(true);
+
+      // jsdom reports every height as 0, so the value itself proves nothing
+      // about real measurement — only that the variable is published at all.
+      expect(
+        document.documentElement.style.getPropertyValue('--game-tabbar-h')
+      ).not.toBe('');
+
+      // Leaving the page must not leave a stale offset behind for other pages.
+      unmount();
+      expect(
+        document.documentElement.style.getPropertyValue('--game-tabbar-h')
+      ).toBe('');
+    });
+
+    it('does not publish a height when not sticky', () => {
+      renderSticky(false);
+
+      expect(
+        document.documentElement.style.getPropertyValue('--game-tabbar-h')
+      ).toBe('');
     });
   });
 });

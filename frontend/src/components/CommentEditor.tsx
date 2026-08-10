@@ -6,6 +6,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { CharacterAutocomplete } from './CharacterAutocomplete';
 import { SheetItemAutocomplete } from './SheetItemAutocomplete';
 import { Button, Textarea, Modal } from './ui';
+import { STICKY_BELOW_TABS } from './TabNavigation';
 import type { Character } from '../types/characters';
 import type { SheetItem } from '../hooks/useCharacterSheetItems';
 
@@ -435,7 +436,10 @@ export const CommentEditor = memo(function CommentEditor({
   return (
     <div className="comment-editor">
       {/* Tab bar + secondary controls */}
-      <div className={`${stickyTabBar ? 'sticky top-16' : ''} z-10 surface-base border-b border-theme-default`}>
+      <div
+        className={`${stickyTabBar ? 'sticky' : ''} z-10 surface-base border-b border-theme-default`}
+        style={stickyTabBar ? { top: STICKY_BELOW_TABS } : undefined}
+      >
         <div className="flex items-center justify-between pt-2 pb-1 gap-2">
           {/* Manila-style tabs */}
           <div className="flex items-end gap-1 shrink-0">

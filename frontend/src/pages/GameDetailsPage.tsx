@@ -538,6 +538,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
               onTabChange={setActiveTab}
               getTabHref={getTabHref}
               overflowTabIds={overflowTabIds}
+              sticky
             />
 
             {/* Tab Content */}
