@@ -14,6 +14,7 @@ type Handler struct {
 	NotificationService     core.NotificationServiceInterface
 	MessageService          core.MessageServiceInterface
 	ActionSubmissionService core.ActionSubmissionServiceInterface
+	GameStatsService        core.GameStatsServiceInterface
 }
 
 // All handler methods are organized into separate files:
