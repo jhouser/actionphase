@@ -423,10 +423,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
 
   return (
     <div className="max-w-full" data-testid="common-room-container">
-      {/* Sticky header bar — keeps the phase title visible while scrolling a
-          long thread. Pins under the global nav (h-16), which is where the
-          Utilities button now lives. */}
-      <div className="sticky top-16 z-30 -mx-4 mb-4 px-4 py-3 surface-base border-b-2 border-theme-strong shadow-sm">
+      <div className="mb-4">
         <h2 className="text-xl md:text-2xl font-bold text-content-primary truncate">
           Common Room{phaseTitle && ` - ${phaseTitle}`}
         </h2>
