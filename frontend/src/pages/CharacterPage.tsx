@@ -13,6 +13,7 @@ import { Spinner, Alert, Badge, Card, CardBody } from '../components/ui';
 import { formatDistanceToNow } from 'date-fns';
 import type { CharacterMessage } from '../types/messages';
 import { CharacterActivityStats } from '../components/CharacterActivityStats';
+import { MessageCharacterButton } from '../components/MessageCharacterButton';
 
 /**
  * CharacterPage - Displays a character's profile and public activity feed
@@ -108,8 +109,13 @@ export function CharacterPage() {
                 size="xl"
                 shape={portraitAvatars ? 'portrait' : 'circle'}
               />
-              <div>
-                <h1 className="text-2xl font-bold text-text-heading">{characterData.name}</h1>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="min-w-0 text-2xl font-bold text-text-heading break-words">
+                    {characterData.name}
+                  </h1>
+                  <MessageCharacterButton character={characterData} />
+                </div>
                 <div className="flex items-center gap-2 mt-1">
                   {characterData.character_type && (
                     <Badge variant="secondary">{characterData.character_type === 'npc' ? 'NPC' : 'Player Character'}</Badge>

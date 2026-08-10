@@ -11,15 +11,25 @@ interface NewConversationModalProps {
   allCharacters: Character[]; // All game characters (from GameContext)
   isAnonymous: boolean;
   allowGroupConversations: boolean;
+  /**
+   * Character IDs to pre-select as participants, e.g. when the modal was opened
+   * from the envelope shortcut on a character sheet or profile. Only the first
+   * is used when the game disallows group conversations.
+   */
+  initialParticipantIds?: number[];
   onClose: () => void;
   onConversationCreated: (conversationId: number) => void;
 }
 
-export function NewConversationModal({ gameId, characters, allCharacters, isAnonymous, allowGroupConversations, onClose, onConversationCreated }: NewConversationModalProps) {
+export function NewConversationModal({ gameId, characters, allCharacters, isAnonymous, allowGroupConversations, initialParticipantIds, onClose, onConversationCreated }: NewConversationModalProps) {
   const [title, setTitle] = useState('');
   const [yourCharacterId, setYourCharacterId] = useState<number | null>(null);
-  const [selectedParticipants, setSelectedParticipants] = useState<Set<number>>(new Set());
-  const [singleParticipant, setSingleParticipant] = useState<number | null>(null);
+  const [selectedParticipants, setSelectedParticipants] = useState<Set<number>>(
+    () => new Set(initialParticipantIds ?? [])
+  );
+  const [singleParticipant, setSingleParticipant] = useState<number | null>(
+    () => initialParticipantIds?.[0] ?? null
+  );
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +47,20 @@ export function NewConversationModal({ gameId, characters, allCharacters, isAnon
       setYourCharacterId(characters[0].id);
     }
   }, [characters, yourCharacterId]);
+
+  // A pre-selected participant that turns out to be the sending character would
+  // be submitted twice; drop it. The list already hides it, so without this the
+  // stale selection would be invisible but still sent.
+  useEffect(() => {
+    if (yourCharacterId === null) return;
+    setSelectedParticipants((prev) => {
+      if (!prev.has(yourCharacterId)) return prev;
+      const next = new Set(prev);
+      next.delete(yourCharacterId);
+      return next;
+    });
+    setSingleParticipant((prev) => (prev === yourCharacterId ? null : prev));
+  }, [yourCharacterId]);
 
   const handleToggleParticipant = (characterId: number) => {
     const newSelected = new Set(selectedParticipants);
@@ -126,6 +150,7 @@ export function NewConversationModal({ gameId, characters, allCharacters, isAnon
 
         <div className="mb-4">
           <Input
+            id="conversation-title"
             label="Conversation Title *"
             type="text"
             value={title}
@@ -221,6 +246,7 @@ export function NewConversationModal({ gameId, characters, allCharacters, isAnon
             </>
           ) : (
             <Select
+              id="conversation-participant"
               label="Participant *"
               value={singleParticipant ?? ''}
               onChange={(e) => setSingleParticipant(Number(e.target.value) || null)}
