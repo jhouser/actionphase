@@ -249,12 +249,14 @@ describe('DeadlineCard', () => {
     it('calls onClick when card is clicked', async () => {
       const user = userEvent.setup();
       const onClick = vi.fn();
-      const { container } = render(
+      render(
         <DeadlineCard deadline={mockDeadline} isGM={false} onClick={onClick} />
       );
 
-      const card = container.firstChild as HTMLElement;
-      await user.click(card);
+      // The click target is a button overlaying the card (absolute inset-0),
+      // not the container itself — jsdom does no layout, so the click must be
+      // aimed at the button rather than the container's center.
+      await user.click(screen.getByRole('button', { name: mockDeadline.title }));
 
       expect(onClick).toHaveBeenCalledTimes(1);
     });
@@ -276,6 +278,70 @@ describe('DeadlineCard', () => {
 
       const card = container.firstChild as HTMLElement;
       expect(card).not.toHaveClass('cursor-pointer');
+    });
+
+    it('activates via the keyboard, so the card is not mouse-only', async () => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      render(<DeadlineCard deadline={mockDeadline} isGM={false} onClick={onClick} />);
+
+      await user.tab();
+      expect(screen.getByRole('button', { name: mockDeadline.title })).toHaveFocus();
+
+      await user.keyboard('{Enter}');
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('GM actions alongside a clickable card', () => {
+    // Regression: the GM buttons used to be nested inside a role="button" card.
+    // A bubbled Space keypress hit the container's preventDefault + navigate,
+    // so Space on Delete navigated instead of deleting.
+    it('deletes rather than navigates when Space activates the delete button', async () => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      const onDelete = vi.fn();
+      const { container } = render(
+        <DeadlineCard
+          deadline={mockDeadline}
+          isGM={true}
+          onClick={onClick}
+          onDelete={onDelete}
+        />
+      );
+
+      await user.hover(container.firstChild as HTMLElement);
+
+      const deleteButton = await screen.findByLabelText('Delete deadline');
+      deleteButton.focus();
+      await user.keyboard(' ');
+
+      expect(onDelete).toHaveBeenCalledTimes(1);
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    // The GM actions are hover-gated, so without focus revealing them they are
+    // mouse-only. Tabbing must walk the whole card: click target -> Edit -> Delete.
+    it('reaches every GM action by keyboard alone', async () => {
+      const user = userEvent.setup();
+      render(
+        <DeadlineCard
+          deadline={mockDeadline}
+          isGM={true}
+          onClick={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      );
+
+      await user.tab();
+      expect(screen.getByRole('button', { name: mockDeadline.title })).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByLabelText('Edit deadline')).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByLabelText('Delete deadline')).toHaveFocus();
     });
   });
 });

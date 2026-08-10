@@ -96,7 +96,8 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
   };
 
   return (
-    <Card variant="default" padding="md">
+    // Anchor for deadline deep-links (?poll=<id>), which scroll to this card.
+    <Card id={`poll-${poll.id}`} variant="default" padding="md">
       <CardHeader>
         <div className="flex justify-between items-start gap-4">
           <div className="flex-1">

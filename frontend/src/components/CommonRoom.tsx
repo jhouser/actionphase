@@ -584,7 +584,9 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
       ) : (
         /* Polls Tab */
         <Suspense fallback={<div className="flex justify-center py-8"><Spinner size="lg" label="Loading polls..." /></div>}>
-          <PollsTab gameId={gameId} phaseId={phaseId} isGM={isGM} isCurrentPhase={isCurrentPhase} isAudience={isAudience} />
+          {/* gameState gates PollCard's Delete button — a completed or cancelled
+              game is an immutable archive. Omitting it left the button live here. */}
+          <PollsTab gameId={gameId} phaseId={phaseId} isGM={isGM} isCurrentPhase={isCurrentPhase} isAudience={isAudience} gameState={gameState} />
         </Suspense>
       )}
 
