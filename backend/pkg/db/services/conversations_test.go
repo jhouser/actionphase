@@ -285,6 +285,82 @@ func TestConversationService_GetConversationMessages(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not a participant")
 	})
+
+	t.Run("returns only the target message and its predecessor", func(t *testing.T) {
+		all, err := service.GetConversationMessages(context.Background(), conversation.ID, int32(player1.ID))
+		require.NoError(t, err)
+		require.Len(t, all, 3)
+
+		// Ask for context around the third message; only it and the second
+		// should come back, oldest first — not the whole conversation.
+		msgs, err := service.GetMessageWithContext(context.Background(), conversation.ID, all[2].ID, int32(player1.ID))
+
+		require.NoError(t, err)
+		require.Len(t, msgs, 2)
+		assert.Equal(t, "Second message", msgs[0].Content)
+		assert.Equal(t, "Third message", msgs[1].Content)
+	})
+
+	t.Run("returns context for a middle message, not the newest", func(t *testing.T) {
+		all, err := service.GetConversationMessages(context.Background(), conversation.ID, int32(player1.ID))
+		require.NoError(t, err)
+		require.Len(t, all, 3)
+
+		msgs, err := service.GetMessageWithContext(context.Background(), conversation.ID, all[1].ID, int32(player1.ID))
+
+		require.NoError(t, err)
+		require.Len(t, msgs, 2)
+		assert.Equal(t, "First message", msgs[0].Content)
+		assert.Equal(t, "Second message", msgs[1].Content)
+	})
+
+	t.Run("returns a single row when the target opened the conversation", func(t *testing.T) {
+		all, err := service.GetConversationMessages(context.Background(), conversation.ID, int32(player1.ID))
+		require.NoError(t, err)
+		require.NotEmpty(t, all)
+
+		msgs, err := service.GetMessageWithContext(context.Background(), conversation.ID, all[0].ID, int32(player1.ID))
+
+		require.NoError(t, err)
+		require.Len(t, msgs, 1)
+		assert.Equal(t, "First message", msgs[0].Content)
+	})
+
+	t.Run("rejects non-participant from viewing message context", func(t *testing.T) {
+		all, err := service.GetConversationMessages(context.Background(), conversation.ID, int32(player1.ID))
+		require.NoError(t, err)
+		require.NotEmpty(t, all)
+
+		outsider := testDB.CreateTestUser(t, "outsider", "outsider@example.com")
+
+		_, err = service.GetMessageWithContext(context.Background(), conversation.ID, all[2].ID, int32(outsider.ID))
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not a participant")
+	})
+
+	t.Run("returns no rows for a message in another conversation", func(t *testing.T) {
+		// Scoping the query by conversation_id prevents using a message id from
+		// a conversation the caller can see to read one they cannot.
+		otherConversation, err := service.CreateConversation(context.Background(), CreateConversationRequest{
+			GameID:          game.ID,
+			CreatedByUserID: int32(player1.ID),
+			ParticipantIDs:  []int32{char1.ID, char2.ID},
+		})
+		require.NoError(t, err)
+		foreign, err := service.SendMessage(context.Background(), SendMessageRequest{
+			ConversationID:    otherConversation.ID,
+			SenderUserID:      int32(player1.ID),
+			SenderCharacterID: char1.ID,
+			Content:           "Message in another conversation",
+		})
+		require.NoError(t, err)
+
+		msgs, err := service.GetMessageWithContext(context.Background(), conversation.ID, foreign.ID, int32(player1.ID))
+
+		require.NoError(t, err)
+		assert.Empty(t, msgs)
+	})
 }
 
 func TestConversationService_GetUserConversations(t *testing.T) {
@@ -433,6 +509,21 @@ func TestConversationService_MarkAsRead(t *testing.T) {
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not a participant")
+	})
+
+	t.Run("succeeds on a conversation with no messages", func(t *testing.T) {
+		// There is no last message to mark read against; this must be a no-op
+		// rather than an error.
+		emptyConversation, err := service.CreateConversation(context.Background(), CreateConversationRequest{
+			GameID:          game.ID,
+			CreatedByUserID: int32(player1.ID),
+			ParticipantIDs:  []int32{char1.ID, char2.ID},
+		})
+		require.NoError(t, err)
+
+		err = service.MarkConversationAsRead(context.Background(), emptyConversation.ID, int32(player2.ID))
+
+		require.NoError(t, err)
 	})
 }
 
@@ -1193,6 +1284,16 @@ func TestConversationService_GetUserConversations_DeletedMessagePreview(t *testi
 
 		// The preview should show the first (non-deleted) message, not the deleted one
 		assert.Equal(t, "First message", conversations[0].LastMessage, "deleted message should not appear in preview")
+	})
+
+	t.Run("message context masks deleted content", func(t *testing.T) {
+		msgs, err := service.GetMessageWithContext(ctx, conv.ID, msg2.ID, user1.ID)
+
+		require.NoError(t, err)
+		require.Len(t, msgs, 2)
+		assert.Equal(t, "First message", msgs[0].Content)
+		// The deleted message's real content must not leak through the preview.
+		assert.Equal(t, "[Message deleted]", msgs[1].Content)
 	})
 }
 

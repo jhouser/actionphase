@@ -221,7 +221,8 @@ CREATE TABLE npc_assignments (
 CREATE TABLE game_phases (
     id SERIAL PRIMARY KEY,
     game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-    phase_type VARCHAR(20) NOT NULL CHECK (phase_type IN ('common_room', 'action')),
+    -- 'interlude' added by migration 20260605174513; private messaging only.
+    phase_type VARCHAR(20) NOT NULL CHECK (phase_type IN ('common_room', 'action', 'interlude')),
     phase_number INTEGER NOT NULL,
     title VARCHAR(255) NOT NULL DEFAULT 'Untitled Phase',
     description TEXT,
@@ -425,7 +426,11 @@ CREATE TABLE messages (
     deleted_at TIMESTAMP,
     deleted_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     edited_at TIMESTAMPTZ,
-    edit_count INTEGER NOT NULL DEFAULT 0
+    edit_count INTEGER NOT NULL DEFAULT 0,
+    -- Avatar the authoring character had when this message was created. Written
+    -- once at insert, never updated on edit. NULL for messages predating this
+    -- column; readers COALESCE to the live characters.avatar_url.
+    character_avatar_url_at_post VARCHAR(500)
 );
 
 CREATE TABLE message_recipients (
@@ -587,6 +592,7 @@ CREATE TABLE common_room_polls (
     allow_other_option BOOLEAN DEFAULT TRUE,
     hide_results_from_players BOOLEAN NOT NULL DEFAULT FALSE,
     allow_audience_voting BOOLEAN NOT NULL DEFAULT FALSE,
+    show_running_totals_to_players BOOLEAN NOT NULL DEFAULT FALSE,
 
     -- Metadata
     is_deleted BOOLEAN DEFAULT FALSE,
@@ -594,7 +600,9 @@ CREATE TABLE common_room_polls (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
     CONSTRAINT poll_hidden_results_excludes_individual_votes
-        CHECK (NOT (hide_results_from_players AND COALESCE(show_individual_votes, FALSE)))
+        CHECK (NOT (hide_results_from_players AND COALESCE(show_individual_votes, FALSE))),
+    CONSTRAINT poll_hidden_results_excludes_running_totals
+        CHECK (NOT (hide_results_from_players AND show_running_totals_to_players))
 );
 
 -- Poll options table
@@ -686,3 +694,42 @@ CREATE TABLE user_discord_accounts (
   UNIQUE(user_id),
   UNIQUE(discord_user_id)
 );
+
+-- Game archive exports (migration 20260805171316)
+-- Async jobs assembling a completed game into a downloadable ZIP of Markdown.
+CREATE TABLE game_exports (
+    id SERIAL PRIMARY KEY,
+    game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    requested_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'running', 'complete', 'failed')),
+    content_fingerprint VARCHAR(64),
+    storage_path TEXT,
+    size_bytes BIGINT,
+    file_count INTEGER,
+    error_message TEXT,
+    progress_note TEXT,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    -- Retention (migration 20260805213816): after this, the artifact is swept
+    -- and storage_path cleared; the row stays as history.
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT game_exports_complete_has_expiry
+        CHECK (status <> 'complete' OR expires_at IS NOT NULL),
+    CONSTRAINT game_exports_failed_has_reason
+        CHECK (status <> 'failed' OR error_message IS NOT NULL)
+);
+
+CREATE INDEX idx_game_exports_cache
+    ON game_exports(game_id, completed_at DESC)
+    WHERE status = 'complete';
+CREATE INDEX idx_game_exports_claim
+    ON game_exports(created_at)
+    WHERE status IN ('pending', 'running');
+CREATE UNIQUE INDEX idx_game_exports_one_active
+    ON game_exports(game_id)
+    WHERE status IN ('pending', 'running');
+CREATE INDEX idx_game_exports_expiry
+    ON game_exports(expires_at)
+    WHERE status = 'complete' AND storage_path IS NOT NULL;

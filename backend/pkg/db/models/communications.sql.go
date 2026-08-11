@@ -222,27 +222,48 @@ func (q *Queries) GetConversation(ctx context.Context, id int32) (Conversation, 
 }
 
 const getConversationMessages = `-- name: GetConversationMessages :many
-SELECT pm.id,
-       pm.conversation_id,
-       pm.sender_user_id,
-       pm.sender_character_id,
-       pm.content,
-       pm.created_at,
-       pm.updated_at,
-       pm.deleted_at,
-       pm.is_deleted,
-       pm.is_edited,
-       pm.edited_at,
-       pm.edit_count,
-       u.username as sender_username,
-       c.name as sender_character_name,
-       c.avatar_url as sender_avatar_url
-FROM private_messages pm
-JOIN users u ON pm.sender_user_id = u.id
-LEFT JOIN characters c ON pm.sender_character_id = c.id
-WHERE pm.conversation_id = $1
-ORDER BY pm.created_at
+SELECT id, conversation_id, sender_user_id, sender_character_id, content, created_at, updated_at, deleted_at, is_deleted, is_edited, edited_at, edit_count, sender_username, sender_character_name, sender_avatar_url FROM (
+    SELECT pm.id,
+           pm.conversation_id,
+           pm.sender_user_id,
+           pm.sender_character_id,
+           pm.content,
+           pm.created_at,
+           pm.updated_at,
+           pm.deleted_at,
+           pm.is_deleted,
+           pm.is_edited,
+           pm.edited_at,
+           pm.edit_count,
+           u.username as sender_username,
+           c.name as sender_character_name,
+           c.avatar_url as sender_avatar_url
+    FROM private_messages pm
+    JOIN users u ON pm.sender_user_id = u.id
+    LEFT JOIN characters c ON pm.sender_character_id = c.id
+    WHERE pm.conversation_id = $1
+      -- Compared as (created_at, id) so messages sharing a created_at still have
+      -- a total order; the target itself satisfies <= and is always included.
+      -- A target in another conversation matches nothing, so a message id the
+      -- caller can see cannot be used to read a conversation they cannot.
+      AND (
+          $2::int IS NULL
+          OR (pm.created_at, pm.id) <= (
+              SELECT target.created_at, target.id FROM private_messages target
+              WHERE target.id = $2::int
+                AND target.conversation_id = $1
+          )
+      )
+    ORDER BY pm.created_at DESC, pm.id DESC
+    LIMIT CASE WHEN $2::int IS NULL THEN NULL ELSE 2 END
+) recent
+ORDER BY recent.created_at, recent.id
 `
+
+type GetConversationMessagesParams struct {
+	ConversationID int32       `json:"conversation_id"`
+	ContextFor     pgtype.Int4 `json:"context_for"`
+}
 
 type GetConversationMessagesRow struct {
 	ID                  int32              `json:"id"`
@@ -262,8 +283,18 @@ type GetConversationMessagesRow struct {
 	SenderAvatarUrl     pgtype.Text        `json:"sender_avatar_url"`
 }
 
-func (q *Queries) GetConversationMessages(ctx context.Context, conversationID int32) ([]GetConversationMessagesRow, error) {
-	rows, err := q.db.Query(ctx, getConversationMessages, conversationID)
+// Returns a conversation's messages oldest-first.
+//
+// With @context_for NULL (the common case) this is the whole thread. With it set
+// to a message id, the result is narrowed to that message and the one
+// immediately preceding it — enough to preview an unread message and recall the
+// thread without sending a long conversation's entire history over the wire.
+//
+// The two modes share one query so the column list has a single source of truth;
+// the bound is a separate AND conjunct from conversation_id, so the
+// idx_private_messages_conversation_id scan is used either way.
+func (q *Queries) GetConversationMessages(ctx context.Context, arg GetConversationMessagesParams) ([]GetConversationMessagesRow, error) {
+	rows, err := q.db.Query(ctx, getConversationMessages, arg.ConversationID, arg.ContextFor)
 	if err != nil {
 		return nil, err
 	}
@@ -400,6 +431,23 @@ func (q *Queries) GetGameThreads(ctx context.Context, gameID int32) ([]GetGameTh
 		return nil, err
 	}
 	return items, nil
+}
+
+const getLastConversationMessageID = `-- name: GetLastConversationMessageID :one
+SELECT pm.id
+FROM private_messages pm
+WHERE pm.conversation_id = $1
+ORDER BY pm.created_at DESC, pm.id DESC
+LIMIT 1
+`
+
+// The newest message id in a conversation, for read-tracking. Cheaper than
+// reading every message just to take the last one's id.
+func (q *Queries) GetLastConversationMessageID(ctx context.Context, conversationID int32) (int32, error) {
+	row := q.db.QueryRow(ctx, getLastConversationMessageID, conversationID)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getPhaseThreads = `-- name: GetPhaseThreads :many
@@ -939,7 +987,7 @@ WITH character_messages AS (
         m.is_deleted,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     JOIN characters c ON m.character_id = c.id
@@ -961,7 +1009,7 @@ parent_messages AS (
         m.message_type,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -1032,6 +1080,8 @@ type ListCharacterPostsAndCommentsRow struct {
 }
 
 // Get all posts and comments by a specific character (for Character Page)
+// Avatars render as pinned at authoring time, so a character's back catalogue
+// shows how they looked in each entry rather than how they look now.
 // Returns both posts and comments with parent context for comments
 // Only returns public (game-visibility) messages, not deleted ones
 // NPCs only show comments (not top-level posts)
@@ -1095,7 +1145,7 @@ WITH RECURSIVE recent_comments AS (
         m.is_deleted,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -1133,7 +1183,7 @@ parent_messages AS (
         m.message_type,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -1205,6 +1255,9 @@ type ListRecentCommentsWithParentsRow struct {
 }
 
 // Get recent comments with their parent comments/posts for New Comments view
+// Avatars are pinned at authoring time (messages.character_avatar_url_at_post),
+// so both the comment and its parent COALESCE to the live characters.avatar_url
+// only for rows predating that column.
 // Walk up the message tree recursively to find the root post for each comment
 // Pick the post at the top of each comment's chain
 func (q *Queries) ListRecentCommentsWithParents(ctx context.Context, arg ListRecentCommentsWithParentsParams) ([]ListRecentCommentsWithParentsRow, error) {
@@ -1267,7 +1320,7 @@ WITH RECURSIVE recent_comments AS (
         m.is_deleted,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id
@@ -1309,7 +1362,7 @@ parent_messages AS (
         m.message_type,
         u.username as author_username,
         c.name as character_name,
-        c.avatar_url as character_avatar_url
+        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url
     FROM messages m
     JOIN users u ON m.author_id = u.id
     LEFT JOIN characters c ON m.character_id = c.id

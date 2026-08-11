@@ -14,6 +14,7 @@ import (
 	dbphases "actionphase/pkg/db/services/phases"
 	"actionphase/pkg/deadlines"
 	"actionphase/pkg/docs"
+	"actionphase/pkg/exports"
 	"actionphase/pkg/games"
 	"actionphase/pkg/handouts"
 	httpmiddleware "actionphase/pkg/http/middleware"
@@ -156,6 +157,7 @@ func (h *Handler) Start() {
 			NotificationService:     db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 			MessageService:          &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
 			ActionSubmissionService: &dbactions.ActionSubmissionService{DB: h.App.Pool, Logger: h.App.ObsLogger, NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger)},
+			GameStatsService:        &db.GameStatsService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 		}
 		userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 
@@ -221,6 +223,9 @@ func (h *Handler) Start() {
 				r.Get("/private-messages/participants", gameHandler.GetConversationParticipants)
 				r.Get("/private-messages/conversations/{conversationId}", gameHandler.GetAudienceConversationMessages)
 				r.Get("/action-submissions/all", gameHandler.ListAllActionSubmissions)
+
+				// Post-game statistics (completed games only; handler enforces)
+				r.Get("/stats", gameHandler.GetGameStats)
 
 				// Character management within games
 				characterHandler := characters.Handler{
@@ -325,6 +330,18 @@ func (h *Handler) Start() {
 				r.Delete("/handouts/{handoutId}", handoutHandler.DeleteHandout)
 				r.Post("/handouts/{handoutId}/publish", handoutHandler.PublishHandout)
 				r.Post("/handouts/{handoutId}/unpublish", handoutHandler.UnpublishHandout)
+
+				// Game archive exports (completed games only). Read access is
+				// CanUserViewGame, so any authenticated user may export a
+				// completed game's public archive.
+				exportHandler := &exports.Handler{
+					App:           h.App,
+					UserService:   &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					GameService:   &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					ExportService: exports.NewService(h.App.Pool, h.App.Config.Storage.ArchivePath, h.App.ObsLogger),
+				}
+				r.Post("/exports", exportHandler.RequestExport)
+				r.Get("/exports/latest", exportHandler.GetLatestExport)
 
 				// Handout comments
 				r.Post("/handouts/{handoutId}/comments", handoutHandler.CreateHandoutComment)
@@ -495,6 +512,33 @@ func (h *Handler) Start() {
 		})
 	})
 	apiV1Router.Mount("/deadlines", deadlinesRouter)
+
+	// Game archive export downloads. Not nested under /games because the export
+	// id is the addressable resource; the handler resolves the game from the
+	// export row and re-checks CanUserViewGame, so a leaked export id grants
+	// nothing the caller could not already read.
+	exportsRouter := chi.NewRouter()
+	exportsRouter.Route("/", func(r chi.Router) {
+		exportHandler := &exports.Handler{
+			App:           h.App,
+			UserService:   &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+			GameService:   &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+			ExportService: exports.NewService(h.App.Pool, h.App.Config.Storage.ArchivePath, h.App.ObsLogger),
+		}
+
+		r.Group(func(r chi.Router) {
+			tokenAuth := h.getTokenAuth()
+			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+			r.Use(jwtauth.Verifier(tokenAuth))
+			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(h.sessionValidateMW())
+			r.Use(core.RequireAuthenticationMiddleware(userService))
+			r.Use(core.AdminModeMiddleware)
+
+			r.Get("/{exportID}/download", exportHandler.DownloadExport)
+		})
+	})
+	apiV1Router.Mount("/exports", exportsRouter)
 
 	// Polls API (for poll-specific operations)
 	pollsRouter := chi.NewRouter()

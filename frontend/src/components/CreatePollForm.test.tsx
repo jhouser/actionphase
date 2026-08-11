@@ -54,6 +54,8 @@ const hideResults = () =>
   screen.getByLabelText(/hide results from players/i) as HTMLInputElement;
 const audienceVoting = () =>
   screen.getByLabelText(/allow audience members to vote/i) as HTMLInputElement;
+const runningTotals = () =>
+  screen.getByLabelText(/show running totals to players/i) as HTMLInputElement;
 
 // Fills everything the form requires before it will submit. Text inputs are
 // queried by placeholder because the shared Input components do not associate
@@ -175,5 +177,105 @@ describe('CreatePollForm - poll visibility options', () => {
         allow_audience_voting: false,
       })
     );
+  });
+});
+
+describe('CreatePollForm - running totals', () => {
+  beforeEach(() => {
+    mutateAsync.mockClear();
+  });
+
+  it('offers the running-totals option, off by default', async () => {
+    renderForm();
+
+    expect(runningTotals()).toBeInTheDocument();
+    expect(runningTotals().checked).toBe(false);
+
+    fillRequiredFields('Plain poll');
+    fireEvent.click(screen.getByRole('button', { name: /create poll/i }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ show_running_totals_to_players: false })
+    );
+  });
+
+  it('blocks hiding results while running totals are shown', () => {
+    renderForm();
+
+    fireEvent.click(runningTotals());
+
+    expect(runningTotals().checked).toBe(true);
+    expect(hideResults()).toBeDisabled();
+    expect(hideResults().checked).toBe(false);
+  });
+
+  it('disables running totals once results are hidden', () => {
+    renderForm();
+
+    fireEvent.click(hideResults());
+
+    expect(hideResults().checked).toBe(true);
+    expect(runningTotals()).toBeDisabled();
+  });
+
+  it('clears hidden results when running totals are turned on', () => {
+    renderForm();
+
+    fireEvent.click(hideResults());
+    expect(hideResults().checked).toBe(true);
+
+    // Freeing the control lets the GM pick the opposite option instead.
+    fireEvent.click(hideResults());
+    fireEvent.click(runningTotals());
+
+    expect(runningTotals().checked).toBe(true);
+    expect(hideResults().checked).toBe(false);
+  });
+
+  it('combines running totals with individual votes', async () => {
+    renderForm();
+
+    fillRequiredFields('Who is winning?');
+
+    // The two disclosure options are complementary, not exclusive.
+    fireEvent.click(runningTotals());
+    fireEvent.click(showIndividualVotes());
+
+    expect(runningTotals().checked).toBe(true);
+    expect(showIndividualVotes().checked).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /create poll/i }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        show_running_totals_to_players: true,
+        show_individual_votes: true,
+        hide_results_from_players: false,
+      })
+    );
+  });
+
+  it('never submits running totals together with hidden results', async () => {
+    renderForm();
+
+    fillRequiredFields('Exclusive poll');
+
+    // Switching between the two requires clearing the first: while hiding is on
+    // the running-totals box is disabled, and vice versa.
+    fireEvent.click(hideResults());
+    fireEvent.click(hideResults());
+    fireEvent.click(runningTotals());
+
+    fireEvent.click(screen.getByRole('button', { name: /create poll/i }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+
+    const payload = mutateAsync.mock.calls[0][0];
+    expect(
+      payload.show_running_totals_to_players && payload.hide_results_from_players
+    ).toBe(false);
+    expect(payload.show_running_totals_to_players).toBe(true);
   });
 });

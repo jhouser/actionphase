@@ -24,6 +24,7 @@ import type {
   AudienceConversationMessage
 } from '../../types/conversations';
 import type { ActionSubmission } from '../../types/phases';
+import type { GameStats } from '../../types/gameStats';
 
 /**
  * Games API client
@@ -263,5 +264,11 @@ export class GamesApi extends BaseApiClient {
 
   async giveRandomLootTableContent(gameId: number, tableId: number, characterId: number) {
     return this.client.post<LootTableContent>(`/api/v1/games/${gameId}/loot-tables/${tableId}/random/${characterId}`, { });
+  }
+  
+  // Post-game statistics. Returns 409 unless the game is completed, so only
+  // call this for completed games.
+  async getGameStats(id: number) {
+    return this.client.get<GameStats>(`/api/v1/games/${id}/stats`);
   }
 }

@@ -30,13 +30,17 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
   const resultsHiddenFromMe =
     poll.hide_results_from_players && !isGM && !isAudience;
 
+  // Running totals let players view an active poll's results, the same live view
+  // GMs and audience already have. The backend applies the same rule.
+  const canViewLiveResults = isGM || isAudience || poll.show_running_totals_to_players;
+
   // Calculate initial showResults state with permission check
-  // Players can only see results on expired polls
+  // Players can only see results on expired polls, unless the GM enabled running totals
   // GMs and audience can see results anytime (even on active polls)
   const initialShowResults =
     !resultsHiddenFromMe &&
     (isExpired || poll.user_has_voted) && // User has voted or poll expired
-    (isExpired || isGM || isAudience);     // AND user has permission to view
+    (isExpired || canViewLiveResults);    // AND user has permission to view
 
   const [showResults, setShowResults] = useState(initialShowResults);
 
@@ -46,10 +50,10 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
     const shouldShowResults =
       !resultsHiddenFromMe &&
       (isExpired || poll.user_has_voted) && // User has voted or poll expired
-      (isExpired || isGM || isAudience);     // AND user has permission to view
+      (isExpired || canViewLiveResults);    // AND user has permission to view
 
     setShowResults(shouldShowResults);
-  }, [isExpired, poll.user_has_voted, isGM, isAudience, resultsHiddenFromMe]);
+  }, [isExpired, poll.user_has_voted, canViewLiveResults, resultsHiddenFromMe]);
 
   // Who may cast a vote: players always, audience only when the GM enabled it.
   // GMs never vote on their own polls.
@@ -92,7 +96,8 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
   };
 
   return (
-    <Card variant="default" padding="md">
+    // Anchor for deadline deep-links (?poll=<id>), which scroll to this card.
+    <Card id={`poll-${poll.id}`} variant="default" padding="md">
       <CardHeader>
         <div className="flex justify-between items-start gap-4">
           <div className="flex-1">
@@ -155,7 +160,7 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
                 // Only show results if user is allowed to view them
                 // Players can only see results on expired polls
                 // GMs and audience can see results anytime
-                if (!resultsHiddenFromMe && (isExpired || isGM || isAudience)) {
+                if (!resultsHiddenFromMe && (isExpired || canViewLiveResults)) {
                   setShowResults(true);
                 }
               }}
@@ -194,8 +199,9 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
                 Change Vote
               </Button>
             )}
-            {/* Show Results button: GM and audience can always see, players only after expiration */}
-            {(isGM || isAudience) && (
+            {/* Show Results button: GM and audience can always see; players only
+                after expiration, or live when the GM enabled running totals */}
+            {canViewLiveResults && !resultsHiddenFromMe && (
               <Button
                 variant="secondary"
                 onClick={() => setShowResults(!showResults)}

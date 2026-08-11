@@ -2,6 +2,8 @@ package avatars
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -50,9 +52,11 @@ var _ core.AvatarServiceInterface = (*AvatarService)(nil)
 // Process:
 //  1. Validate content type
 //  2. Read file into memory (to check size)
-//  3. Delete old avatar if exists
-//  4. Upload new avatar to storage
-//  5. Update database with new avatar URL
+//  3. Upload new avatar to storage
+//  4. Update database with new avatar URL
+//
+// The previously current avatar file is retained, not deleted — see
+// DeleteCharacterAvatar for why.
 //
 // Returns the public URL of the uploaded avatar.
 func (s *AvatarService) UploadCharacterAvatar(
@@ -73,21 +77,11 @@ func (s *AvatarService) UploadCharacterAvatar(
 		return "", err
 	}
 
-	// Get current character to check for existing avatar
 	queries := db.New(s.DB)
-	character, err := queries.GetCharacter(ctx, characterID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get character: %w", err)
-	}
 
-	// Delete old avatar if exists
-	if character.AvatarUrl.Valid && character.AvatarUrl.String != "" {
-		oldPath := extractPathFromURL(character.AvatarUrl.String)
-		if err := s.Storage.Delete(ctx, oldPath); err != nil {
-			// Log error but don't fail upload - old file might already be gone
-			// In production, use proper logging here
-		}
-	}
+	// The previous avatar file is deliberately left in storage. Storage paths are
+	// timestamped, so each upload creates a new file and superseded ones remain
+	// resolvable for any message that pinned them.
 
 	// Generate storage path: avatars/characters/{characterID}/{timestamp}_{filename}
 	ext := filepath.Ext(filename)
@@ -95,8 +89,13 @@ func (s *AvatarService) UploadCharacterAvatar(
 		// Derive extension from content type
 		ext = mimeTypeToExtension(contentType)
 	}
-	timestamp := time.Now().Unix()
-	storagePath := fmt.Sprintf("avatars/characters/%d/%d%s", characterID, timestamp, ext)
+	// Superseded avatar files are retained so messages that pinned them keep
+	// resolving — which only holds if every upload lands on a distinct path. A
+	// timestamp alone is not enough: two uploads can share a millisecond, and the
+	// second would silently overwrite the file older posts still point at. The
+	// random suffix makes collisions a non-issue regardless of clock granularity.
+	storagePath := fmt.Sprintf("avatars/characters/%d/%d_%s%s",
+		characterID, time.Now().UnixMilli(), randomSuffix(), ext)
 
 	// Upload to storage
 	avatarURL, err := s.Storage.Upload(ctx, storagePath, fileData, contentType)
@@ -118,29 +117,18 @@ func (s *AvatarService) UploadCharacterAvatar(
 	return avatarURL, nil
 }
 
-// DeleteCharacterAvatar removes a character's avatar.
-// Deletes the file from storage and updates the database.
+// DeleteCharacterAvatar clears a character's avatar so they render as initials
+// from now on.
+//
+// This deliberately does NOT delete the file from storage. Messages pin the
+// avatar URL they were authored with (messages.character_avatar_url_at_post), so
+// removing the underlying file would retroactively blank the avatar on every post
+// the character had already written — silently and irreversibly. A player
+// clicking "Remove Avatar" is asking to look different going forward, not to
+// rewrite their own history.
 func (s *AvatarService) DeleteCharacterAvatar(ctx context.Context, characterID int32) error {
 	queries := db.New(s.DB)
 
-	// Get current character
-	character, err := queries.GetCharacter(ctx, characterID)
-	if err != nil {
-		return fmt.Errorf("failed to get character: %w", err)
-	}
-
-	// If no avatar, nothing to delete
-	if !character.AvatarUrl.Valid || character.AvatarUrl.String == "" {
-		return nil
-	}
-
-	// Delete from storage
-	oldPath := extractPathFromURL(character.AvatarUrl.String)
-	if err := s.Storage.Delete(ctx, oldPath); err != nil {
-		// Log error but continue - file might already be gone
-	}
-
-	// Update database
 	if err := queries.DeleteCharacterAvatar(ctx, characterID); err != nil {
 		return fmt.Errorf("failed to delete character avatar from database: %w", err)
 	}
@@ -173,21 +161,16 @@ func readAndValidateSize(file io.Reader, maxSize int64) (io.Reader, int64, error
 	return strings.NewReader(string(data)), size, nil
 }
 
-// extractPathFromURL extracts the storage path from a public URL.
-// Example: "http://localhost:3000/uploads/avatars/characters/1/avatar.jpg" -> "avatars/characters/1/avatar.jpg"
-func extractPathFromURL(url string) string {
-	// Simple extraction: find the last occurrence of "avatars/" and take everything after
-	// This works for both local and S3 URLs
-	index := strings.LastIndex(url, "avatars/")
-	if index == -1 {
-		// Fallback: return everything after last slash
-		lastSlash := strings.LastIndex(url, "/")
-		if lastSlash != -1 {
-			return url[lastSlash+1:]
-		}
-		return url
+// randomSuffix returns a short random hex string used to keep avatar storage
+// paths unique, so a new upload can never overwrite a file that existing
+// messages have pinned. Falls back to empty on the (practically impossible)
+// read failure; the timestamp alone still separates uploads in that case.
+func randomSuffix() string {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		return ""
 	}
-	return url[index:]
+	return hex.EncodeToString(b)
 }
 
 // mimeTypeToExtension converts a MIME type to a file extension.

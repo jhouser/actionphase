@@ -105,7 +105,7 @@ const AvatarUploadModal: React.FC<AvatarUploadModalProps> = ({
 
   const handleDelete = () => {
     // eslint-disable-next-line no-alert
-    if (!confirm('Are you sure you want to delete this avatar?')) return;
+    if (!confirm('Remove this avatar? The character will show initials from now on. Existing posts keep the avatar they were written with.')) return;
 
     deleteMutation.mutate(characterId, {
       onSuccess: () => {

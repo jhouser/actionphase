@@ -12,6 +12,12 @@ import type { CharacterMessage, CharacterMessagesResponse } from '../types/messa
 vi.mock('../hooks/useCharacterComments');
 vi.mock('../hooks/useCharacterStats');
 
+// The envelope shortcut has its own suite; stub its gate so this file's blanket
+// useQuery mock (which answers every query with the character) doesn't feed it
+// a phase payload it never sees in production.
+vi.mock('../hooks/useCanMessageCharacter');
+import { useCanMessageCharacter } from '../hooks/useCanMessageCharacter';
+
 vi.mock('@tanstack/react-query', async () => {
   const actual = await vi.importActual('@tanstack/react-query');
   return {
@@ -100,6 +106,14 @@ function renderCharacterPage(characterId = '42') {
 describe('CharacterPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: no messaging affordance. Its own gate is covered by
+    // useCanMessageCharacter's suite; stubbing it here also keeps this file's
+    // blanket useQuery mock from feeding the real hook a phase payload it
+    // would never receive in production.
+    vi.mocked(useCanMessageCharacter).mockReturnValue({
+      canMessage: false,
+      gameId: undefined,
+    });
     // Default: stats not loaded (undefined data)
     vi.mocked(useCharacterStatsModule.useCharacterStats).mockReturnValue({
       data: undefined,
@@ -403,5 +417,44 @@ describe('CharacterPage', () => {
     expect(screen.queryByText('NPC')).not.toBeInTheDocument();
     // Character name still renders
     expect(screen.getByText('Aelindra')).toBeInTheDocument();
+  });
+
+  describe('private message shortcut', () => {
+    function renderLoadedPage() {
+      vi.mocked(useQuery).mockReturnValue({
+        data: mockCharacter,
+        isLoading: false,
+        isError: false,
+      } as Partial<UseQueryResult<Character>>);
+
+      vi.mocked(useCharacterCommentsModule.useCharacterComments).mockReturnValue({
+        data: { pages: [{ messages: [], pagination: { total: 0, limit: 20, offset: 0 } }] },
+        isLoading: false,
+        isError: false,
+        fetchNextPage: vi.fn(),
+        hasNextPage: false,
+        isFetchingNextPage: false,
+      } as Partial<UseInfiniteQueryResult<CharacterMessagesResponse>>);
+
+      return renderCharacterPage();
+    }
+
+    it('offers the envelope when the user may message this character', () => {
+      vi.mocked(useCanMessageCharacter).mockReturnValue({ canMessage: true, gameId: 7 });
+
+      renderLoadedPage();
+
+      expect(
+        screen.getByRole('button', { name: `Send a private message to ${mockCharacter.name}` })
+      ).toBeInTheDocument();
+    });
+
+    it('omits the envelope when the user may not message this character', () => {
+      renderLoadedPage();
+
+      expect(
+        screen.queryByRole('button', { name: /send a private message/i })
+      ).not.toBeInTheDocument();
+    });
   });
 });
