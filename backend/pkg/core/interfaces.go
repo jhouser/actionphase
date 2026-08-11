@@ -1772,6 +1772,9 @@ type ConversationServiceInterface interface {
 	GetConversationParticipants(ctx context.Context, conversationID int32) ([]models.GetConversationParticipantsRow, error)
 	SendMessage(ctx context.Context, req SendConversationMessageRequest) (*models.PrivateMessage, error)
 	GetConversationMessages(ctx context.Context, conversationID int32, userID int32) ([]models.GetConversationMessagesRow, error)
+	// GetMessageWithContext returns a single message plus the one preceding it,
+	// for previewing an unread message without reading the whole conversation.
+	GetMessageWithContext(ctx context.Context, conversationID int32, messageID int32, userID int32) ([]models.GetConversationMessagesRow, error)
 	MarkConversationAsRead(ctx context.Context, conversationID int32, userID int32) error
 	AddParticipant(ctx context.Context, conversationID int32, characterID int32) error
 	UpdatePrivateMessage(ctx context.Context, messageID int32, userID int32, content string) (*models.PrivateMessage, error)
