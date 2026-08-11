@@ -45,6 +45,18 @@ export class ConversationsApi extends BaseApiClient {
     return this.client.get<{ messages: PrivateMessage[] }>(`/api/v1/games/${gameId}/conversations/${conversationId}/messages`);
   }
 
+  /**
+   * Returns just `messageId` and the message before it, rather than the whole
+   * conversation. Used to preview an unread message in the dashboard inbox
+   * without pulling a long thread's full history over the wire.
+   */
+  async getMessageWithContext(gameId: number, conversationId: number, messageId: number) {
+    return this.client.get<{ messages: PrivateMessage[] }>(
+      `/api/v1/games/${gameId}/conversations/${conversationId}/messages`,
+      { params: { context_for: messageId } }
+    );
+  }
+
   async sendMessage(gameId: number, conversationId: number, data: SendMessageRequest) {
     return this.client.post<PrivateMessage>(`/api/v1/games/${gameId}/conversations/${conversationId}/messages`, data);
   }

@@ -15,6 +15,11 @@ var (
 	// ErrConversationDeleteForbidden is returned when the requesting user is
 	// neither the conversation's creator nor a GM of the game.
 	ErrConversationDeleteForbidden = errors.New("forbidden: only the creator or a GM can delete this conversation")
+
+	// ErrNotConversationParticipant is returned when the requesting user is not
+	// a participant in the conversation. Distinct from a database failure so
+	// handlers can render a 403 rather than a 500.
+	ErrNotConversationParticipant = errors.New("user is not a participant in this conversation")
 )
 
 // CreateConversationRequest is the domain request for creating a conversation.

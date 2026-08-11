@@ -650,6 +650,56 @@ func TestConversationAPI_GetConversationMessages(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "don't have access")
 	})
 
+	// The GM passes the handler's conversation-access check (GMs can access any
+	// conversation in their game) but is not a participant in this one, so the
+	// service's participant check is what rejects them. That rejection must
+	// surface as a 403, not a 500 — it is a permission decision, not a failure.
+	t.Run("rejects a GM who is not a participant with 403, not 500", func(t *testing.T) {
+		gmToken, err := core.CreateTestJWTTokenForUser(app, gm)
+		core.AssertNoError(t, err, "Should create gm token")
+
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/conversations/%d/messages", game.ID, conversation.ID), nil)
+		req.Header.Set("Authorization", "Bearer "+gmToken)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Contains(t, rec.Body.String(), "don't have access")
+	})
+
+	t.Run("rejects a non-participant GM requesting scoped message context with 403", func(t *testing.T) {
+		gmToken, err := core.CreateTestJWTTokenForUser(app, gm)
+		core.AssertNoError(t, err, "Should create gm token")
+
+		messages, err := conversationService.GetConversationMessages(context.Background(), conversation.ID, int32(player1.ID))
+		core.AssertNoError(t, err, "Should read messages as participant")
+		require.NotEmpty(t, messages)
+
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/conversations/%d/messages?context_for=%d", game.ID, conversation.ID, messages[len(messages)-1].ID), nil)
+		req.Header.Set("Authorization", "Bearer "+gmToken)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Contains(t, rec.Body.String(), "don't have access")
+	})
+
+	t.Run("rejects a non-participant GM marking the conversation as read with 403", func(t *testing.T) {
+		gmToken, err := core.CreateTestJWTTokenForUser(app, gm)
+		core.AssertNoError(t, err, "Should create gm token")
+
+		req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/games/%d/conversations/%d/read", game.ID, conversation.ID), nil)
+		req.Header.Set("Authorization", "Bearer "+gmToken)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Contains(t, rec.Body.String(), "don't have access")
+	})
+
 	t.Run("returns empty array when no messages", func(t *testing.T) {
 		// Create empty conversation
 		emptyConv, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
