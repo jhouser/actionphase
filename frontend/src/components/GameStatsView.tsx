@@ -407,5 +407,3 @@ function SortableHeader({
     </th>
   );
 }
-
-export default GameStatsView;

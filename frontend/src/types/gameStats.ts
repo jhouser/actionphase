@@ -7,7 +7,7 @@
  * below. The UI says "comments" throughout to keep the two unambiguous.
  */
 
-export interface CommentStats {
+interface CommentStats {
   total_comments: number;
   avg_comment_length: number;
   longest_comment_length: number;
@@ -16,7 +16,7 @@ export interface CommentStats {
   avg_thread_depth: number;
 }
 
-export interface PrivateMessageStats {
+interface PrivateMessageStats {
   total_private_messages: number;
   avg_private_message_length: number;
   longest_private_message_length: number;
@@ -25,7 +25,7 @@ export interface PrivateMessageStats {
 }
 
 /** The private conversation with the most messages. */
-export interface LongestConversation {
+interface LongestConversation {
   conversation_id: number;
   title?: string;
   conversation_type: string;
@@ -47,7 +47,7 @@ export interface CharacterWriting {
 }
 
 /** The single longest comment, carrying enough identity to deep-link to it. */
-export interface LongestComment {
+interface LongestComment {
   message_id: number;
   content_length: number;
   character_name?: string;
