@@ -66,6 +66,35 @@ describe('MarkdownPreview', () => {
       expect(blockquote).toHaveClass('border-l-4');
     });
 
+    it('preserves hard line breaks inside blockquotes', () => {
+      // Regression: the blockquote renderer emitted raw source text instead of
+      // parsing its child tokens, so every line collapsed onto one line.
+      const { container } = render(
+        <MarkdownPreview content={'> RANDOM BULLSHIT  \n12  \n313  \n2312  \n312'} />
+      );
+      const blockquote = container.querySelector('blockquote');
+      expect(blockquote).toBeInTheDocument();
+      expect(blockquote?.querySelectorAll('br')).toHaveLength(4);
+      expect(blockquote?.textContent).not.toContain('BULLSHIT 12');
+    });
+
+    it('renders markdown syntax inside blockquotes', () => {
+      const { container } = render(
+        <MarkdownPreview content={'> This is **bold** and *italic*'} />
+      );
+      const blockquote = container.querySelector('blockquote');
+      expect(blockquote?.querySelector('strong')?.textContent).toBe('bold');
+      expect(blockquote?.querySelector('em')?.textContent).toBe('italic');
+    });
+
+    it('renders multiple paragraphs inside a blockquote', () => {
+      const { container } = render(
+        <MarkdownPreview content={'> First para\n>\n> Second para'} />
+      );
+      const blockquote = container.querySelector('blockquote');
+      expect(blockquote?.querySelectorAll('p')).toHaveLength(2);
+    });
+
     it('renders horizontal rules correctly', () => {
       const { container } = render(<MarkdownPreview content="---" />);
       const hr = container.querySelector('hr');
