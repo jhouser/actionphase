@@ -17,6 +17,20 @@ const phaseParamOptions = {
   serialize: (v: number | null) => (v === null || v === undefined ? '' : String(v)),
 } as const;
 
+// The character filter is an OR filter over character ids, stored in the URL as a
+// comma-separated list so a filtered view can be linked or survive a refresh.
+// NaN entries are dropped rather than trusted — the param is user-editable.
+const characterFilterParamOptions = {
+  deserialize: (s: string) =>
+    new Set(
+      s
+        .split(',')
+        .map(part => parseInt(part, 10))
+        .filter(id => !Number.isNaN(id))
+    ),
+  serialize: (v: Set<number>) => [...v].join(','),
+} as const;
+
 interface HistoryViewProps {
   gameId: number;
   currentPhaseId?: number;
@@ -31,8 +45,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
   const allGameCharacters = gameContext?.allGameCharacters;
 
   // Submissions and results carry only character_id/character_name, so the
-  // avatar URL is looked up from the game's character list — same as
-  // ActionsList and AllActionSubmissionsView.
+  // avatar URL is looked up from the game's character list — same as ActionsList.
   const getAvatarUrl = (characterId?: number | null) =>
     characterId
       ? (allGameCharacters?.find(c => c.id === characterId)?.avatar_url ?? null)
@@ -47,11 +60,29 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
     'submissions',
     { replace: false }
   );
+  const [selectedCharacterIds, setSelectedCharacterIds] = useUrlParam<Set<number>>(
+    'characters',
+    new Set<number>(),
+    { ...characterFilterParamOptions, replace: true }
+  );
   const [expandedSubmissions, setExpandedSubmissions] = useState<Set<number>>(new Set());
   const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const commentParam = searchParams.get('comment');
+
+  // Leaving the drill-down clears the phase and the character filter together.
+  // These cannot be two useUrlParam setters: each one's functional update reads
+  // the committed search params, not the other's pending write, so the second
+  // call would clobber the first and the filter would survive the navigation.
+  const exitPhaseDrillDown = () => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('phase');
+      next.delete('characters');
+      return next;
+    });
+  };
 
   const { data: phasesData, isLoading } = useQuery({
     queryKey: ['gamePhases', gameId],
@@ -74,25 +105,30 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
   const { data: userActionResults, isLoading: isLoadingUserResults, error: userResultsError } = useQuery({
     queryKey: ['actionResults', 'user', gameId],
     queryFn: () => apiClient.phases.getUserResults(gameId).then(res => res.data),
-    enabled: !!gameId && !isGM && hasSelectedPhase,
+    enabled: !!gameId && !isGM && !isAudience && hasSelectedPhase,
   });
+
+  // Audience uses the same game-wide endpoint as the GM: it admits audience
+  // members and withholds unpublished drafts from them server-side, so an
+  // audience member sees the whole cast's published results, not just their own
+  // (they have no characters, so the per-user endpoint returns nothing).
+  const seesAllResults = isGM || isAudience;
 
   const { data: gmActionResults, isLoading: isLoadingGMResults, error: gmResultsError } = useQuery({
     queryKey: ['actionResults', 'game', gameId],
     queryFn: () => apiClient.phases.getGameResults(gameId).then(res => res.data),
-    enabled: !!gameId && isGM && hasSelectedPhase,
+    enabled: !!gameId && seesAllResults && hasSelectedPhase,
   });
 
-  // Use GM results if GM, otherwise user results
-  const actionResults = isGM ? gmActionResults : userActionResults;
-  const isLoadingResults = isGM ? isLoadingGMResults : isLoadingUserResults;
-  const resultsError = isGM ? gmResultsError : userResultsError;
+  const actionResults = seesAllResults ? gmActionResults : userActionResults;
+  const isLoadingResults = seesAllResults ? isLoadingGMResults : isLoadingUserResults;
+  const resultsError = seesAllResults ? gmResultsError : userResultsError;
 
   // Fetch action submissions for the game (use appropriate endpoint based on isGM)
   const { data: userActionSubmissionsData, isLoading: isLoadingUserSubmissions, error: userSubmissionsError } = useQuery<ActionWithDetails[]>({
     queryKey: ['userActions', gameId],
     queryFn: () => apiClient.phases.getUserActions(gameId).then(res => res.data),
-    enabled: !!gameId && !isGM && hasSelectedPhase,
+    enabled: !!gameId && !isGM && !isAudience && hasSelectedPhase,
   });
 
   const { data: gmActionSubmissionsData, isLoading: isLoadingGMSubmissions, error: gmSubmissionsError } = useQuery<ActionWithDetails[]>({
@@ -101,13 +137,93 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
     enabled: !!gameId && isGM && hasSelectedPhase,
   });
 
-  // Use GM submissions if GM, otherwise user submissions
-  const actionSubmissions = isGM ? (gmActionSubmissionsData || []) : (userActionSubmissionsData || []);
-  const isLoadingSubmissions = isGM ? isLoadingGMSubmissions : isLoadingUserSubmissions;
-  const submissionsError = isGM ? gmSubmissionsError : userSubmissionsError;
+  // Audience members cannot use the GM submissions endpoint — it rejects
+  // non-GMs outright — so they read the audience listing, which authorizes on
+  // "can view this game" instead. It is paginated, but this view drills into a
+  // single phase at a time, so one generous page covers the phase rather than
+  // dragging infinite scroll into a drill-down.
+  const {
+    data: audienceSubmissionsData,
+    isLoading: isLoadingAudienceSubmissions,
+    error: audienceSubmissionsError,
+  } = useQuery<ActionWithDetails[]>({
+    queryKey: ['audienceActions', gameId, selectedPhaseId],
+    queryFn: () =>
+      apiClient.games
+        .listAllActionSubmissions(gameId, { phaseId: selectedPhaseId ?? undefined, limit: 200 })
+        .then(res => (res.data.action_submissions ?? []) as unknown as ActionWithDetails[]),
+    enabled: !!gameId && isAudience && !isGM && hasSelectedPhase,
+  });
+
+  // Memoised because the `|| []` fallbacks mint a new array on every render, which
+  // would invalidate the phase/filter memos downstream each time.
+  const actionSubmissions = useMemo(
+    () =>
+      isGM
+        ? (gmActionSubmissionsData || [])
+        : isAudience
+          ? (audienceSubmissionsData || [])
+          : (userActionSubmissionsData || []),
+    [isGM, isAudience, gmActionSubmissionsData, audienceSubmissionsData, userActionSubmissionsData]
+  );
+  const isLoadingSubmissions = isGM
+    ? isLoadingGMSubmissions
+    : isAudience
+      ? isLoadingAudienceSubmissions
+      : isLoadingUserSubmissions;
+  const submissionsError = isGM
+    ? gmSubmissionsError
+    : isAudience
+      ? audienceSubmissionsError
+      : userSubmissionsError;
 
   // Get the selected phase details
   const selectedPhase = phases.find(p => p.id === selectedPhaseId);
+
+  const phaseSubmissions = useMemo(
+    () => actionSubmissions.filter(s => s.phase_id === selectedPhaseId),
+    [actionSubmissions, selectedPhaseId]
+  );
+  const phaseResults = useMemo(
+    () => (actionResults || []).filter(r => r.phase_id === selectedPhaseId),
+    [actionResults, selectedPhaseId]
+  );
+
+  // Filter chips are derived from the rows actually present in this phase rather
+  // than from the game's full cast: offering a character with nothing in the phase
+  // would only ever produce an empty list. Submissions and results are pooled so
+  // the chip row stays identical across the two sub-tabs — switching tabs with a
+  // filter applied should narrow the other tab, not silently drop the selection.
+  const characterFilterOptions = useMemo(() => {
+    const byId = new Map<number, string>();
+    for (const entry of [...phaseSubmissions, ...phaseResults]) {
+      if (entry.character_id) {
+        byId.set(entry.character_id, entry.character_name || 'Unknown Character');
+      }
+    }
+    return [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [phaseSubmissions, phaseResults]);
+
+  // OR filter: a row survives if its character is any of the selected ones. An
+  // empty selection means "no filter" rather than "match nothing".
+  const matchesCharacterFilter = (characterId?: number | null) =>
+    selectedCharacterIds.size === 0 ||
+    (characterId !== null && characterId !== undefined && selectedCharacterIds.has(characterId));
+
+  const visibleSubmissions = phaseSubmissions.filter(s => matchesCharacterFilter(s.character_id));
+  const visibleResults = phaseResults.filter(r => matchesCharacterFilter(r.character_id));
+
+  const toggleCharacterFilter = (characterId: number) => {
+    const next = new Set(selectedCharacterIds);
+    if (next.has(characterId)) {
+      next.delete(characterId);
+    } else {
+      next.add(characterId);
+    }
+    setSelectedCharacterIds(next);
+  };
 
   const toggleSubmissionExpanded = (submissionId: number) => {
     const newExpanded = new Set(expandedSubmissions);
@@ -186,7 +302,11 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
       <div>
         <Button
           variant="ghost"
-          onClick={() => setSelectedPhaseId(null)}
+          // Character ids are phase-scoped in practice — a cast member with rows in
+          // this phase may have none in the next — so leaving the drill-down clears
+          // the filter rather than carrying a stale selection into a phase where it
+          // would silently hide everything.
+          onClick={exitPhaseDrillDown}
           className="mb-4 flex items-center text-interactive-primary hover:text-interactive-primary-hover"
         >
           <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -240,6 +360,46 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
               {/* Polls tab is not shown for Action phases (handled by the outer if/else at line 105) */}
             </div>
 
+            {/* Character filter — applies to both Submissions and Results */}
+            {activeTab !== 'polls' && characterFilterOptions.length > 0 && (
+              <div className="border border-border-primary rounded-lg p-4 bg-bg-secondary mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-content-primary">Filter by Character</h4>
+                  {selectedCharacterIds.size > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedCharacterIds(new Set())}
+                      className="text-xs"
+                    >
+                      Clear filters
+                    </Button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {characterFilterOptions.map(({ id, name }) => {
+                    const isSelected = selectedCharacterIds.has(id);
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => toggleCharacterFilter(id)}
+                        aria-pressed={isSelected}
+                        className={`
+                          px-3 py-1.5 rounded-full text-sm font-medium transition-colors
+                          ${isSelected
+                            ? 'bg-interactive-primary text-white'
+                            : 'bg-bg-primary border border-border-primary text-content-primary hover:bg-bg-tertiary'
+                          }
+                        `}
+                      >
+                        {name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Tab Content */}
             {activeTab === 'submissions' ? (
               // Submissions Tab
@@ -251,20 +411,21 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                 ) : submissionsError ? (
                   <Alert variant="danger">Error loading action submissions</Alert>
                 ) : (() => {
-                  // Filter submissions for this specific phase
-                  const phaseSubmissions = actionSubmissions.filter(s => s.phase_id === selectedPhaseId);
-
-                  if (phaseSubmissions.length === 0) {
+                  if (visibleSubmissions.length === 0) {
                     return (
                       <div className="p-4 surface-raised border border-theme-default rounded">
-                        <p className="text-content-secondary">No action submissions for this phase.</p>
+                        <p className="text-content-secondary">
+                          {selectedCharacterIds.size > 0
+                            ? 'No action submissions match the selected characters.'
+                            : 'No action submissions for this phase.'}
+                        </p>
                       </div>
                     );
                   }
 
                   return (
                     <div className="space-y-4">
-                      {phaseSubmissions.map((submission) => {
+                      {visibleSubmissions.map((submission) => {
                         const isExpanded = expandedSubmissions.has(submission.id);
                         const isCollapsible = submission.content.length > 200;
                         const previewContent = submission.content.substring(0, 200) + '...';
@@ -283,7 +444,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                                   <div>
                                     <span className="font-semibold text-content-primary">{submission.character_name}</span>
                                     {submission.is_draft && (
-                                      <span className="inline-block px-2 py-1 text-xs bg-warning-subtle text-warning rounded ml-2">
+                                      <span className="inline-block px-2 py-1 text-xs bg-semantic-warning-subtle text-content-primary rounded ml-2">
                                         Draft
                                       </span>
                                     )}
@@ -339,20 +500,21 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                 ) : resultsError ? (
                   <Alert variant="danger">Error loading action results</Alert>
                 ) : (() => {
-                  // Filter results for this specific phase
-                  const phaseResults = (actionResults || []).filter(r => r.phase_id === selectedPhaseId);
-
-                  if (phaseResults.length === 0) {
+                  if (visibleResults.length === 0) {
                     return (
                       <div className="p-4 surface-raised border border-theme-default rounded">
-                        <p className="text-content-secondary">No action results for this phase.</p>
+                        <p className="text-content-secondary">
+                          {selectedCharacterIds.size > 0
+                            ? 'No action results match the selected characters.'
+                            : 'No action results for this phase.'}
+                        </p>
                       </div>
                     );
                   }
 
                   return (
                     <div className="space-y-4">
-                      {phaseResults.map((result) => {
+                      {visibleResults.map((result) => {
                         const isExpanded = expandedResults.has(result.id);
                         const isCollapsible = result.content.length > 200;
                         const previewContent = result.content.substring(0, 200) + '...';
@@ -373,7 +535,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                                       {result.character_name || 'Unknown Character'}
                                     </span>
                                     {!result.is_published && (
-                                      <span className="inline-block px-2 py-1 text-xs bg-warning-subtle text-warning rounded">
+                                      <span className="inline-block px-2 py-1 text-xs bg-semantic-warning-subtle text-content-primary rounded">
                                         Draft (Unpublished)
                                       </span>
                                     )}

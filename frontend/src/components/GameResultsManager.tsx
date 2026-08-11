@@ -36,10 +36,18 @@ export function GameResultsManager({ gameId, currentPhase, className = '' }: Gam
     );
   }
 
-  // Filter results to only show those from the current phase (if provided)
-  const allResults = currentPhase?.id
-    ? (results || []).filter(r => r.phase_id === currentPhase.id)
-    : (results || []);
+  // Filter results to only show those from the current phase (if provided).
+  //
+  // Newest first, unlike everywhere else results are shown: this is the composing
+  // view, so a GM who just wrote a result needs it at the top to confirm it landed
+  // and to edit it. GetGameResults returns oldest-first to keep the History tab
+  // chronological for every role, so the order is flipped back here rather than in
+  // SQL — the two views share one endpoint and want opposite orders.
+  //
+  // Sorting a copy: `results` is React Query's cached array and sort() mutates.
+  const allResults = [...(results || [])]
+    .filter(r => !currentPhase?.id || r.phase_id === currentPhase.id)
+    .sort((a, b) => b.id - a.id);
   const unpublishedResults = allResults.filter(r => !r.is_published);
   const publishedResults = allResults.filter(r => r.is_published);
 

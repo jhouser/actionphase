@@ -132,7 +132,11 @@ JOIN game_phases gp ON results.phase_id = gp.id
 JOIN users u ON results.gm_user_id = u.id
 LEFT JOIN characters c ON results.character_id = c.id
 WHERE results.game_id = $1 AND results.user_id = $2 AND results.is_published = true
-ORDER BY gp.phase_number DESC;
+-- Ascending within a phase, unlike the GM-facing queries: a player reading a
+-- reveal delivered in several parts wants them in the order the GM sent them.
+-- Only published rows are returned here, so sent_at is always populated; id is
+-- the tiebreaker for results published in the same transaction.
+ORDER BY gp.phase_number DESC, results.sent_at, results.id;
 
 -- name: GetPhaseResults :many
 SELECT results.*, u.username, gm.username as gm_username,
@@ -142,7 +146,12 @@ JOIN users u ON results.user_id = u.id
 JOIN users gm ON results.gm_user_id = gm.id
 LEFT JOIN characters c ON results.character_id = c.id
 WHERE results.phase_id = $1
-ORDER BY results.sent_at;
+-- Newest first. sent_at cannot order these: it is NULL until a result is
+-- published, so drafts would all tie. Note this disagrees with GetGameResults,
+-- which sorts ascending for the History tab — this query currently has no
+-- callers, so there is nothing to be consistent with. Match GetGameResults if it
+-- ever gets wired to a read path, or delete it.
+ORDER BY results.id DESC;
 
 -- name: GetGameResults :many
 SELECT results.*, u.username, gp.phase_type, gp.phase_number,
@@ -152,7 +161,20 @@ JOIN users u ON results.user_id = u.id
 JOIN game_phases gp ON results.phase_id = gp.id
 LEFT JOIN characters c ON results.character_id = c.id
 WHERE results.game_id = $1
-ORDER BY gp.phase_number, results.sent_at;
+-- Oldest first within a phase, matching GetUserResults so the History tab reads
+-- chronologically for every role. The GM and audience path returns the whole cast
+-- (drafts included) while players get only their own published rows, but the two
+-- are read side by side in the same view and disagreeing on order made the same
+-- phase look different depending on who was logged in.
+--
+-- id (SERIAL) rather than sent_at: this query returns unpublished drafts, whose
+-- sent_at is NULL until publish, so ordering by it would leave every draft tied
+-- and arbitrary. A GM writes results in the order they mean them to be read, so
+-- creation order is the chronological order.
+--
+-- GameResultsManager (the GM composing view) shares this query but wants newest
+-- first, so it reverses client-side; see the comment there.
+ORDER BY gp.phase_number, results.id;
 
 -- Additional queries for comprehensive phase management
 
@@ -190,7 +212,8 @@ SELECT * FROM action_results WHERE id = $1;
 -- name: GetUserPhaseResults :many
 SELECT * FROM action_results
 WHERE phase_id = $1 AND user_id = $2
-ORDER BY sent_at;
+-- See GetGameResults: sent_at is NULL for drafts, so it cannot order them.
+ORDER BY id DESC;
 
 -- name: PublishActionResult :one
 UPDATE action_results

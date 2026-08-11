@@ -1018,17 +1018,49 @@ describe('GameResultsManager', () => {
         expect(buttons).toHaveLength(2);
       });
 
-      // Expand only the first result
+      // Expand one result and assert the other is unaffected. This view sorts
+      // newest first, so the topmost card is longResult2 (higher id) — hence
+      // clicking index 0 expands that one, not longResult1.
       const expandButtons = screen.getAllByText(/show full content/i);
       await user.click(expandButtons[0]);
 
-      // First should be expanded, second still collapsed
+      // The clicked result expands; the other stays collapsed.
       await waitFor(() => {
-        expect(screen.getByText(longResult1.content)).toBeInTheDocument();
-        expect(screen.queryByText(longResult2.content)).not.toBeInTheDocument();
+        expect(screen.getByText(longResult2.content)).toBeInTheDocument();
+        expect(screen.queryByText(longResult1.content)).not.toBeInTheDocument();
         expect(screen.getByText(/show less/i)).toBeInTheDocument();
-        expect(screen.getByText(/show full content/i)).toBeInTheDocument(); // Second is still collapsed
+        expect(screen.getByText(/show full content/i)).toBeInTheDocument(); // The other is still collapsed
       });
+    });
+  });
+
+  describe('Ordering', () => {
+    // This is the composing view: a GM who just wrote a result needs it at the
+    // top to confirm it landed and to edit it. The endpoint returns oldest-first
+    // so the History tab reads chronologically for every role, so the order is
+    // reversed here — the two views share one query and want opposite orders.
+    it('shows the newest result first, independent of the order the API returns', async () => {
+      const older: ActionResult = {
+        ...mockUnpublishedResult,
+        id: 1,
+        content: 'Older result written first.',
+      };
+      const newer: ActionResult = {
+        ...mockUnpublishedResult,
+        id: 2,
+        content: 'Newer result written second.',
+      };
+      // Ascending, matching what GetGameResults actually sends.
+      setupDefaultHandlers([older, newer]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByText(newer.content)).toBeInTheDocument();
+      });
+
+      const rendered = screen.getAllByText(/result written/i).map(el => el.textContent);
+      expect(rendered).toEqual([newer.content, older.content]);
     });
   });
 
