@@ -16,7 +16,8 @@ import type {
   GameLog,
   LootTable,
   LootTableContent,
-  CreateLootTableRequest
+  CreateLootTableRequest,
+  UpdateLootTableRequest
 } from '../../types/games';
 import type {
   AudienceConversationListItem,
@@ -241,7 +242,11 @@ export class GamesApi extends BaseApiClient {
   }
 
   async createLootTable(gameId: number, data: CreateLootTableRequest) {
-    return this.client.post<LootTable[]>(`/api/v1/games/${gameId}/loot-tables`, { name: data.name, items: data.items });
+    return this.client.post<LootTable>(`/api/v1/games/${gameId}/loot-tables`, { name: data.name, items: data.items });
+  }
+
+  async updateLootTable(gameId: number, lootTableId: number, data: UpdateLootTableRequest) {
+    return this.client.put(`/api/v1/games/${gameId}/loot-tables/${lootTableId}`, { name: data.name });
   }
 
   async deleteLootTable(gameId: number, lootTableId: number) {
@@ -250,5 +255,13 @@ export class GamesApi extends BaseApiClient {
 
   async getLootTableContents(gameId: number, tableId: number) {
     return this.client.get<LootTableContent[]>(`/api/v1/games/${gameId}/loot-tables/${tableId}/contents`);
+  }
+
+  async setLootTableContents(gameId: number, tableId: number, contents: LootTableContent[]) {
+    return this.client.post(`/api/v1/games/${gameId}/loot-tables/${tableId}/contents`, { items: contents });
+  }
+
+  async giveRandomLootTableContent(gameId: number, tableId: number, characterId: number) {
+    return this.client.post<LootTableContent>(`/api/v1/games/${gameId}/loot-tables/${tableId}/random/${characterId}`, { });
   }
 }

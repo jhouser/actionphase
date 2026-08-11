@@ -363,10 +363,11 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
               />
             ) : module.type === 'inventory' ? (
               <InventoryManager
+                characterId={characterId}
                 items={parseJsonField('inventory', 'items') as InventoryItem[]}
                 currency={parseJsonField('currency', 'currency') as CurrencyEntry[]}
                 canEdit={canEditStats}
-                onItemsChange={(items) => saveJsonField('inventory', 'items', items)}
+                onItemsChange={(items, reloadOnly) => { if (!reloadOnly) saveJsonField('inventory', 'items', items); else queryClient.invalidateQueries({ queryKey: ['characterData', characterId] }); }}
                 onCurrencyChange={(currency) => saveJsonField('currency', 'currency', currency)}
               />
             ) : (

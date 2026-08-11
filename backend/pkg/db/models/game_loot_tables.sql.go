@@ -93,3 +93,27 @@ func (q *Queries) IsLootTableInGame(ctx context.Context, arg IsLootTableInGamePa
 	err := row.Scan(&is_game_loot_table)
 	return is_game_loot_table, err
 }
+
+const updateLootTable = `-- name: UpdateLootTable :one
+UPDATE game_loot_tables
+SET name = $2
+WHERE id = $1
+RETURNING id, game_id, name, created_at
+`
+
+type UpdateLootTableParams struct {
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
+}
+
+func (q *Queries) UpdateLootTable(ctx context.Context, arg UpdateLootTableParams) (GameLootTable, error) {
+	row := q.db.QueryRow(ctx, updateLootTable, arg.ID, arg.Name)
+	var i GameLootTable
+	err := row.Scan(
+		&i.ID,
+		&i.GameID,
+		&i.Name,
+		&i.CreatedAt,
+	)
+	return i, err
+}

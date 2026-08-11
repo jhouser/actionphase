@@ -699,8 +699,15 @@ func setupGameTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 
 					// Logs
 					r.Get("/logs", gameHandler.GetGameLogs)
-				})
 
+					r.Get("/loot-tables", gameHandler.GetGameLootTables)
+					r.Post("/loot-tables", gameHandler.AddGameLootTable)
+					r.Put("/loot-tables/{tableId}", gameHandler.UpdateGameLootTable)
+					r.Delete("/loot-tables/{tableId}", gameHandler.DeleteGameLootTable)
+					r.Get("/loot-tables/{tableId}/contents", gameHandler.GetGameLootTableContents)
+					r.Post("/loot-tables/{tableId}/contents", gameHandler.UpdateGameLootTableContent)
+					r.Post("/loot-tables/{tableId}/random/{characterId}", gameHandler.SetRandomLootForCharacter)
+				})
 			})
 		})
 	})

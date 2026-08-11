@@ -7,6 +7,9 @@ import { AddCurrencyModal } from './AddCurrencyModal';
 import { Button } from './ui';
 import { generateId } from '../utils/generateId';
 import { logger } from '@/services/LoggingService';
+import { apiClient } from '@/lib/api';
+import { useGameContext } from '@/contexts/GameContext';
+import { useToast } from '@/contexts/ToastContext';
 
 // Defensive helper to ensure all items have ID fields
 // This protects against data corruption from draft merge bugs
@@ -24,14 +27,16 @@ const ensureIds = <T extends { id?: string }>(
 };
 
 interface InventoryManagerProps {
+  characterId: number;
   items: InventoryItem[];
   currency: CurrencyEntry[];
   canEdit: boolean;
-  onItemsChange: (items: InventoryItem[]) => void;
+  onItemsChange: (items: InventoryItem[], reloadOnly: boolean) => void;
   onCurrencyChange: (currency: CurrencyEntry[]) => void;
 }
 
 export const InventoryManager: React.FC<InventoryManagerProps> = ({
+  characterId,
   items,
   currency,
   canEdit,
@@ -46,14 +51,26 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAddCurrency, setShowAddCurrency] = useState(false);
 
+  const gameContext = useGameContext();
+
+  const { showSuccess } = useToast();
+
   const addItem = (itemData: Omit<InventoryItem, 'id'>) => {
     const newItem: InventoryItem = {
       id: generateId(),
       ...itemData
     };
-    onItemsChange([...validatedItems, newItem]);
+    onItemsChange([...validatedItems, newItem], false);
     setShowAddItem(false);
   };
+
+  const addRandomItem = (lootTableId: number): void => {
+    apiClient.games.giveRandomLootTableContent(gameContext.gameId, lootTableId, characterId).then((r) => {
+      onItemsChange([...validatedItems, {id: generateId(), ...JSON.parse(r.data.data)}], true);
+      setShowAddItem(false);
+      showSuccess(`Added item ${r.data.name} to character sheet`);
+    });
+  }
 
   const addCurrency = (currencyData: Omit<CurrencyEntry, 'id'>) => {
     const newCurrency: CurrencyEntry = {
@@ -65,7 +82,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   };
 
   const removeItem = (id: string) => {
-    onItemsChange(validatedItems.filter(i => i.id !== id));
+    onItemsChange(validatedItems.filter(i => i.id !== id), false);
   };
 
   const removeCurrency = (id: string) => {
@@ -73,7 +90,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   };
 
   const updateItem = (id: string, updates: Partial<InventoryItem>) => {
-    onItemsChange(validatedItems.map(i => i.id === id ? { ...i, ...updates } : i));
+    onItemsChange(validatedItems.map(i => i.id === id ? { ...i, ...updates } : i), false);
   };
 
   const updateCurrency = (id: string, updates: Partial<CurrencyEntry>) => {
@@ -161,6 +178,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
           {showAddItem && (
             <AddItemModal
               onAdd={addItem}
+              onAddRandom={addRandomItem}
               onCancel={() => setShowAddItem(false)}
             />
           )}

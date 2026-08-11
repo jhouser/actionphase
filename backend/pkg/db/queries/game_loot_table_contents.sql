@@ -14,7 +14,3 @@ SELECT
 FROM game_loot_table_contents
 WHERE loot_table_id = $1
 ORDER BY id ASC;
-
-
--- name: DeleteLootTableContent :exec
-DELETE FROM game_loot_table_contents WHERE id = $1;

@@ -1288,6 +1288,13 @@ func (gs *GameService) GetGameLogs(ctx context.Context, gameID int32) ([]models.
 	return logs, err
 }
 
+// GetGameLogs - Get game logs
+func (gs *GameService) AddGameLog(ctx context.Context, arg models.CreateLogParams) (models.GameLog, error) {
+	queries := models.New(gs.DB)
+	log, err := queries.CreateLog(ctx, arg)
+	return log, err
+}
+
 // GetGameLootTables - Get game loot tables
 func (gs *GameService) GetGameLootTables(ctx context.Context, gameID int32) ([]models.GameLootTable, error) {
 	queries := models.New(gs.DB)
@@ -1318,6 +1325,16 @@ func (gs *GameService) CreateLootTable(ctx context.Context, gameID int32, name s
 	return &lootTable, err
 }
 
+// UpdateLootTable - Update an existing loot table
+func (gs *GameService) UpdateLootTable(ctx context.Context, lootTableID int32, name string) (*models.GameLootTable, error) {
+	queries := models.New(gs.DB)
+	lootTable, err := queries.UpdateLootTable(ctx, models.UpdateLootTableParams{
+		ID:   lootTableID,
+		Name: name,
+	})
+	return &lootTable, err
+}
+
 // DeleteLootTable - Remove a loot table from a game
 func (gs *GameService) DeleteLootTable(ctx context.Context, lootTableID int32) error {
 	queries := models.New(gs.DB)
@@ -1340,12 +1357,6 @@ func (gs *GameService) AddLootTableContent(ctx context.Context, lootTableID int3
 		Data:        pgtype.Text{String: itemData, Valid: true},
 	})
 	return &content, err
-}
-
-// DeleteLootTableContent - Remove an item from a loot table
-func (gs *GameService) DeleteLootTableContent(ctx context.Context, contentID int32) error {
-	queries := models.New(gs.DB)
-	return queries.DeleteLootTableContent(ctx, contentID)
 }
 
 // DeleteLootTableContents - Remove all items from a loot table

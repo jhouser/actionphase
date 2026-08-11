@@ -132,11 +132,13 @@ func (r *UpdateLootTableRequest) Bind(req *http.Request) error {
 	return nil
 }
 
-type UpdateLootTableContentRequest struct {
-	Name string `json:"name" validate:"required"`
-	Data string `json:"data" validate:"required"`
+type UpdateLootTableContentsRequest struct {
+	Items []struct {
+		Name string `json:"name" validate:"required"`
+		Data string `json:"data" validate:"required"`
+	} `json:"items"`
 }
 
-func (r *UpdateLootTableContentRequest) Bind(req *http.Request) error {
+func (r *UpdateLootTableContentsRequest) Bind(req *http.Request) error {
 	return nil
 }

@@ -1,17 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { Button, Input } from '../ui';
-import { Modal } from '../Modal';
-import type { CreateLootTableRequest, LootTable, LootTableContent } from '@/types/games';
+import type { LootTable, LootTableContent } from '@/types/games';
 import { AddItemModal } from '../AddItemModal';
 import type { InventoryItem } from '@/types/characters';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
 import { useOptionalGameContext } from '@/contexts/GameContext';
+import { DownloadIcon, TrashIcon, UploadIcon } from 'lucide-react';
+import Papa from 'papaparse'
 
+export interface EditLootTable {
+  id?: number;
+  name: string;
+  items?: LootTableContent[];
+  itemsChanged: boolean;
+}
+
+const CSVSeparatorCharacter = ';';
 
 interface LootTableFormProps {
   onClose: () => void;
-  onSubmit: (data: CreateLootTableRequest) => void;
+  onSubmit: (data: EditLootTable) => void;
   isSubmitting: boolean;
   lootTable?: LootTable;
 }
@@ -21,22 +30,23 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
 
   const { data: lootTableContents } = useQuery({
     queryKey: ['lootTableContents', lootTable?.id],
-    queryFn: () => apiClient.games.getLootTableContents(gameContext!.gameId, lootTable?.id!).then(res => res.data),
+    queryFn: () => apiClient.games.getLootTableContents(gameContext!.gameId, lootTable?.id ?? 0).then(res => res.data),
     enabled: !!lootTable?.id
   });
 
   useEffect(() => {
-    setFormData({
-      name: formData?.name || '',
+    setFormData(p => ({
+      ...p,
       items: lootTableContents || undefined,
-      file: formData?.file || undefined
-    });
+      itemsChanged: false
+    }));
   }, [lootTableContents]);
 
-  const [formData, setFormData] = useState<CreateLootTableRequest>({
+  const [formData, setFormData] = useState<EditLootTable>({
+    id: lootTable?.id,
     name: lootTable?.name || '',
     items:  undefined,
-    file: undefined
+    itemsChanged: false
   });
   const [isAddingContent, setIsAddingContent] = useState(false);
 
@@ -47,18 +57,80 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
 
   
   const addItem = (itemData: Omit<InventoryItem, 'id'>) => {
-    let newContent : LootTableContent = {
+    const newContent : LootTableContent = {
       id: 0,
       name: itemData.name,
       data: JSON.stringify(itemData),
     }
-    setFormData(p => ({...p, items: [...(p.items || []), newContent]}));
+    setFormData(p => ({...p, items: [...(p.items || []), newContent], itemsChanged: true}));
     setIsAddingContent(false);
   };
+
+  const processCSVFile = (csvText: string): LootTableContent[] => {
+    const result : LootTableContent[] = Papa.parse(csvText, {
+      delimiter: CSVSeparatorCharacter,
+      header: true
+    }).data.map(i => ({id: 0, name: (i as InventoryItem)['name'], data: JSON.stringify(i) }));
+    return result;
+  }
+
+  const createCSVString = (contents: LootTableContent[]): string => {
+    return Papa.unparse(contents.map(i => JSON.parse(i.data)), { delimiter: CSVSeparatorCharacter });
+  }
+
+  const importLootTable = (event: ChangeEvent<HTMLInputElement>): void => {
+    if (!event.target.files) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        const csvContents = processCSVFile(e.target.result as string)
+        if (csvContents.length > 0) {
+          setFormData(p => ({
+            ...p,
+            items: csvContents,
+            itemsChanged: true
+          }));
+        }
+      }
+    }
+    reader.readAsText(event.target.files[0]); 
+  }
+
+
+  const exportLootTable = (_: React.MouseEvent<HTMLButtonElement>): void => {
+    const el = document.createElement('a');
+    el.setAttribute('href', `data:application/octet-stream;charset=utf-8;base64,${btoa(createCSVString(formData.items || []))}`);
+    el.setAttribute('download', `${formData.name.toLowerCase().replaceAll(' ', '_') || 'loot_table'}.csv`);
+    el.style.display = 'none';
+
+    document.body.appendChild(el);
+    el.click();
+    document.body.removeChild(el);
+  };
+  
 
   return (
     <div>
       <form onSubmit={handleSubmit}>
+        <div className="flex justify-end space-x-3 mt-6">
+          <label 
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-content-secondary hover:text-content-primary hover:bg-interactive-primary-subtle transition-colors"
+            htmlFor='import-loot-table'>
+            <UploadIcon  className="h-5 w-5" />
+            <input disabled={isSubmitting} type="file" id="import-loot-table" accept=".csv" onChange={importLootTable} className="hidden" />
+          </label>
+          <button
+            type="button"
+            disabled={isSubmitting}
+            aria-label="Export Loot Table"
+            onClick={exportLootTable}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-content-secondary hover:text-content-primary hover:bg-interactive-primary-subtle transition-colors"
+          >
+            <DownloadIcon  className="h-5 w-5" />
+          </button>
+        </div>
         <div className="space-y-4">
 
             <div>
@@ -77,7 +149,21 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
             </div>
             <div >
               {formData.items && formData.items.length > 0 
-                ? (formData.items.map((item, index) => (<div className="block text-sm font-medium text-content-primary mb-2" key={index}>{index + 1} - {item.name}</div>))) 
+                ? (formData.items.map((item, index) => (
+                  <div className="md:flex items-center" key={index}>
+                    <div className="mb-1">
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        aria-label="Export Loot Table"
+                        onClick={_ => setFormData(p => ({...p, items: formData.items?.filter(i => i !== item), itemsChanged: true }))}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md text-content-secondary hover:text-content-primary hover:bg-interactive-primary-subtle transition-colors"
+                      >
+                        <TrashIcon  className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <div className="block text-sm font-medium text-content-primary mb-2">{index + 1} - {item.name}</div>
+                  </div>))) 
                 : (<div></div>)}
             </div>
 
@@ -111,8 +197,8 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
             data-faro-user-action-name="create-loot-table"
           >
             {isSubmitting 
-              ? !!lootTable ? 'Updating...' : 'Creating...' 
-              : !!lootTable ? 'Update Loot Table' : 'Create Loot Table'}
+              ? lootTable ? 'Updating...' : 'Creating...' 
+              : lootTable ? 'Update Loot Table' : 'Create Loot Table'}
           </Button>
         </div>
       </form>
@@ -121,6 +207,7 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
       {isAddingContent && (
         <AddItemModal
           onAdd={addItem}
+          onAddRandom={_ => {}}
           onCancel={() => {setIsAddingContent(false)}}
         />
       )}

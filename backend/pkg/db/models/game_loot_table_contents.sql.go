@@ -37,15 +37,6 @@ func (q *Queries) AddLootTableContent(ctx context.Context, arg AddLootTableConte
 	return i, err
 }
 
-const deleteLootTableContent = `-- name: DeleteLootTableContent :exec
-DELETE FROM game_loot_table_contents WHERE id = $1
-`
-
-func (q *Queries) DeleteLootTableContent(ctx context.Context, id int32) error {
-	_, err := q.db.Exec(ctx, deleteLootTableContent, id)
-	return err
-}
-
 const deleteLootTableContents = `-- name: DeleteLootTableContents :exec
 DELETE FROM game_loot_table_contents WHERE loot_table_id = $1
 `

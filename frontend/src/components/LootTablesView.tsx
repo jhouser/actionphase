@@ -1,22 +1,9 @@
-import { useState } from 'react';
-import { CountdownTimer } from './CountdownTimer';
-import { PhaseCard } from './PhaseCard';
-import { CreatePhaseModal } from './CreatePhaseModal';
-import type { DraftPostData } from './CreatePhaseModal';
-import { EditPhaseModal } from './EditPhaseModal';
-import { usePhaseManagement } from '../hooks/usePhaseManagement';
-import { apiClient } from '../lib/api';
-import { Button } from './ui';
-import { PHASE_TYPE_LABELS } from '../types/phases';
-import type { GamePhase, CreatePhaseRequest } from '../types/phases';
-import { localDateTimeToUTC } from '../utils/timezone';
-import { useToast } from '../contexts/ToastContext';
+import { Button, Modal } from './ui';
 import { useLootTableManagement } from '@/hooks/useLootTablemanagement';
-import type { CreateLootTableRequest, LootTable } from '@/types/games';
-import { LootTableForm } from './loot-tables/LootTableForm';
+import { LootTableForm, type EditLootTable } from './loot-tables/LootTableForm';
 import { useUrlParam } from '@/hooks/useUrlParam';
-import { Link } from 'react-router-dom';
-import { PencilIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { useState } from 'react';
 
 interface LootTablesProps {
   gameId: number;
@@ -34,10 +21,7 @@ const newLootTableParamOptions = {
   serialize: (v: boolean | null) => (v === null || v === undefined ? '' : String(v)),
 } as const;
 
-export function LootTablesView({ gameId, className = '' }: LootTablesProps) {
-  const { showWarning } = useToast();
-  const [editingLootTable, setEditingLootTable] = useState<LootTable | null>(null);
-  
+export function LootTablesView({ gameId, className = '' }: LootTablesProps) {  
   const [selectedLootTableId, setSelectedLootTableId] = useUrlParam<number | null>(
     'table',
     null,
@@ -54,16 +38,25 @@ export function LootTablesView({ gameId, className = '' }: LootTablesProps) {
     lootTables,
     isLoading,
     createLootTableMutation,
+    updateLootTableMutation,
+    updateLootTableContentsMutation,
     deleteLootTableMutation
   } = useLootTableManagement(gameId);
 
+  const [checkDeleteLootTable, setCheckDeleteLootTable] = useState(false);
+
   const selectedTable = lootTables.find(t => t.id === selectedLootTableId);
 
+  const [lootTableToDelete, setLootTableToDelete] = useState<number | undefined>();
+
   const deleteLootTable = async (lootTableId: number) => {
-    const confirmed = window.confirm('Are you sure you want to delete this loot table? This action cannot be undone.');
-    if (!confirmed) {
+    setLootTableToDelete(undefined);
+    if(!checkDeleteLootTable) {
+      setLootTableToDelete(lootTableId);
+      setCheckDeleteLootTable(true);
       return;
     }
+    setCheckDeleteLootTable(false);
     await deleteLootTableMutation.mutateAsync(lootTableId);
   }
 
@@ -82,15 +75,15 @@ export function LootTablesView({ gameId, className = '' }: LootTablesProps) {
     );
   }
 
-  if ((!!selectedLootTableId && !!selectedTable) || newLootTable) {
+  if ((selectedLootTableId !== null && selectedTable) || newLootTable) {
     return <div>
         <Button
           variant="ghost"
           onClick={() => {
-            if (!!selectedLootTableId) {
+            if (selectedLootTableId !== null) {
               setSelectedLootTableId(null); 
             }
-            if (!!newLootTable) {
+            if (newLootTable !== null) {
               setNewLootTable(null); 
             }
           }}
@@ -102,11 +95,41 @@ export function LootTablesView({ gameId, className = '' }: LootTablesProps) {
           Back to Loot Tables
         </Button>
       <LootTableForm
-        onClose={() => {setSelectedLootTableId(null); setNewLootTable(null); }}
-        onSubmit={async (data: CreateLootTableRequest) => {
-          const response = await createLootTableMutation.mutateAsync(data);
-          setSelectedLootTableId(null);
-          setNewLootTable(null);
+        onClose={() => {
+            if (selectedLootTableId !== null) {
+              setSelectedLootTableId(null); 
+            }
+            if (newLootTable !== null) {
+              setNewLootTable(null); 
+            } }}
+        onSubmit={async (data: EditLootTable) => {
+          if (!data.id){
+            await createLootTableMutation.mutateAsync({
+              name: data.name,
+              items: data.items
+            });
+          }
+          else {
+            if (selectedTable?.name !== data.name){
+              await updateLootTableMutation.mutateAsync({
+                id: data.id,
+                name: data.name
+              });
+            }
+            if (data.itemsChanged) {
+              await updateLootTableContentsMutation.mutateAsync({
+                id: data.id,
+                items: data.items || []
+              });
+              
+            }
+          }
+          if (selectedLootTableId !== null) {
+            setSelectedLootTableId(null); 
+          }
+          if (newLootTable !== null) {
+            setNewLootTable(null); 
+          }
         }}
         isSubmitting={createLootTableMutation.isPending}
         lootTable={selectedTable || undefined}
@@ -170,6 +193,42 @@ export function LootTablesView({ gameId, className = '' }: LootTablesProps) {
             ))
           )}
         </div>
+        
+        {/* Delete Character Confirmation Modal */}
+        {checkDeleteLootTable && (
+          <Modal
+            isOpen={true}
+            onClose={() => { setLootTableToDelete(undefined); setCheckDeleteLootTable(false); }}
+            title="Delete Loot Table?"
+          >
+            <div className="space-y-4">
+              <p className="text-content-primary">
+                Are you sure you want to delete this loot table?
+              </p>
+              <p className="text-sm text-content-secondary">
+                This action cannot be undone. All content within the loot table will be lost.
+              </p>
+  
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => { setLootTableToDelete(undefined); setCheckDeleteLootTable(false); }}
+                  disabled={deleteLootTableMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {if (lootTableToDelete) deleteLootTable(lootTableToDelete); }}
+                  loading={deleteLootTableMutation.isPending}
+                  data-testid="confirm-delete-character-button"
+                >
+                  Delete Loot Table
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        )}
       </div>
 
     </div>

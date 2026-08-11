@@ -1,10 +1,8 @@
-import { useToast } from "@/contexts/ToastContext";
 import { apiClient } from "@/lib/api";
-import type { CreateLootTableRequest } from "@/types/games";
+import type { CreateLootTableRequest, UpdateLootTableContentsRequest, UpdateLootTableRequest } from "@/types/games";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function useLootTableManagement(gameId: number) {
-    const { showError } = useToast();
     const queryClient = useQueryClient();
 
     // Query for all loot tables
@@ -23,17 +21,33 @@ export function useLootTableManagement(gameId: number) {
       }
     });
 
+    const updateLootTableMutation = useMutation({
+      mutationFn: (data: UpdateLootTableRequest) => apiClient.games.updateLootTable(gameId, data.id, data),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['lootTables', gameId]})
+      }
+    });
+
+    const updateLootTableContentsMutation = useMutation({
+      mutationFn: (data: UpdateLootTableContentsRequest) => apiClient.games.setLootTableContents(gameId, data.id, data.items),
+      onSuccess: (d, v) => {
+        queryClient.invalidateQueries({ queryKey: ['lootTableContents', v.id] });
+      }
+    })
+
     const deleteLootTableMutation = useMutation({
       mutationFn: (lootTableId: number) => apiClient.games.deleteLootTable(gameId, lootTableId),
       onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['lootTables', gameId] });
       }
-  });
+    });
 
     return {
         lootTables: lootTablesData || [],
         isLoading,
         createLootTableMutation,
-        deleteLootTableMutation
+        updateLootTableMutation,
+        deleteLootTableMutation,
+        updateLootTableContentsMutation
     }
 }

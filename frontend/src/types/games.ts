@@ -116,8 +116,18 @@ export interface GameLog {
 export interface CreateLootTableRequest {
   name: string;
   items: LootTableContent[] | undefined;
-  file: File | undefined;
 }
+
+export interface UpdateLootTableRequest {
+  id: number;
+  name: string;
+}
+
+export interface UpdateLootTableContentsRequest {
+  id: number;
+  items: LootTableContent[];
+}
+
 export interface LootTable {
   id: number;
   game_id: number;

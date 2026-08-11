@@ -4,11 +4,16 @@ import { ItemForm, type ItemFormData } from './character-updates/ItemForm';
 
 interface AddItemModalProps {
   onAdd: (item: Omit<InventoryItem, 'id'>) => void;
+  onAddRandom: (lootTableId: number) => void;
   onCancel: () => void;
 }
 
-export const AddItemModal: React.FC<AddItemModalProps> = ({ onAdd, onCancel }) => {
+export const AddItemModal: React.FC<AddItemModalProps> = ({ onAdd, onAddRandom, onCancel }) => {
   const handleSubmit = (data: ItemFormData) => {
+    if (data.lootTableId) {
+      onAddRandom(data.lootTableId);
+      return;
+    }
     onAdd({
       name: data.name,
       description: data.description,

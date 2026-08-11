@@ -1728,6 +1728,7 @@ type CharacterServiceInterface interface {
 	ApproveCharacter(ctx context.Context, characterID int32) (*models.Character, error)
 	AssignNPCToUser(ctx context.Context, characterID, assignedUserID, assignedByUserID int32) error
 	SetCharacterData(ctx context.Context, req CharacterDataRequest) error
+	AddToCharacterData(ctx context.Context, req CharacterDataRequest) error
 	GetCharacterData(ctx context.Context, characterID int32) ([]models.CharacterDatum, error)
 	GetCharacterDataByModule(ctx context.Context, characterID int32, moduleType string) ([]models.CharacterDatum, error)
 	GetPublicCharacterData(ctx context.Context, characterID int32) ([]models.CharacterDatum, error)

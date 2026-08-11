@@ -62,7 +62,7 @@ export const ItemForm: React.FC<ItemFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (mode === 'manual' && !name.trim()) return;
 
     switch (mode) {
       case 'manual':
@@ -75,11 +75,11 @@ export const ItemForm: React.FC<ItemFormProps> = ({
           weight: weight || undefined,
         });
         break;
-      case 'loot_table':
+      case 'loot_table': {
         if (!lootTableId || !lootTableContentId || !lootTableContents) return;
-        let item = lootTableContents.find(content => content.id === lootTableContentId);
+        const item = lootTableContents.find(content => content.id === lootTableContentId);
         if (!item) return;
-        let itemData = JSON.parse(item.data) as Omit<ItemFormData, 'lootTableId'>;
+        const itemData = JSON.parse(item.data) as Omit<ItemFormData, 'lootTableId'>;
         onSubmit({
           name: item.name,
           description: itemData.description,
@@ -89,6 +89,7 @@ export const ItemForm: React.FC<ItemFormProps> = ({
           weight: itemData.weight,
         });
         break;
+      }
       case 'loot_table_random':
         if (!lootTableId) return;
         onSubmit({
@@ -103,7 +104,7 @@ export const ItemForm: React.FC<ItemFormProps> = ({
     if (mode === 'loot_table_random' && !lootTableId) return;
   };
 
-  let manualForm = <div>
+  const manualForm = <div>
     <Input
         id="item-name"
         label="Item Name *"
@@ -172,7 +173,7 @@ export const ItemForm: React.FC<ItemFormProps> = ({
       </div>
   </div>
 
-  let lootTableForm = <div>
+  const lootTableForm = <div>
       <Select
         id="item-loot-table"
         label="Loot Table"
@@ -203,7 +204,7 @@ export const ItemForm: React.FC<ItemFormProps> = ({
       </Select>
     </div>
 
-  let lootTableRandomForm = <div>
+  const lootTableRandomForm = <div>
       <Select
         id="item-loot-table"
         label="Loot Table"

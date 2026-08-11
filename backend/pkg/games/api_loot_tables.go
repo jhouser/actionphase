@@ -2,14 +2,17 @@ package games
 
 import (
 	"actionphase/pkg/core"
+	models "actionphase/pkg/db/models"
 	db "actionphase/pkg/db/services"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (h *Handler) GetGameLootTables(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +86,51 @@ func (h *Handler) AddGameLootTable(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(newLootTable)
+}
+
+func (h *Handler) UpdateGameLootTable(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables_update")()
+
+	gameID := ctx.Value("gameID").(int32)
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can see and edit loot tables"), "Loot tables access forbidden")
+		return
+	}
+
+	tableIDStr := chi.URLParam(r, "tableId")
+	tableID, err := strconv.ParseInt(tableIDStr, 10, 32)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid table ID")), "Invalid loot table contents request")
+		return
+	}
+
+	data := &UpdateLootTableRequest{}
+	if err := render.Bind(r, data); err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid update loot table request", "error", err)
+		return
+	}
+
+	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check loot table ownership", "error", err, "table_id", tableID, "game_id", gameID)
+		return
+	}
+	if !isLootTableInGame {
+		h.renderError(ctx, w, r, core.ErrForbidden("loot table does not belong to this game"), "Loot table access forbidden")
+		return
+	}
+
+	lootTable, err := gameService.UpdateLootTable(ctx, int32(tableID), data.Name)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to update loot table", "error", err, "table_id", tableID)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(lootTable)
 }
 
 func (h *Handler) DeleteGameLootTable(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +222,7 @@ func (h *Handler) GetGameLootTableContents(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(response)
 }
 
-func (h *Handler) AddGameLootTableContent(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateGameLootTableContent(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables")()
@@ -192,7 +240,7 @@ func (h *Handler) AddGameLootTableContent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	data := &UpdateLootTableContentRequest{}
+	data := &UpdateLootTableContentsRequest{}
 	if err := render.Bind(r, data); err != nil {
 		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid update loot table content request", "error", err)
 		return
@@ -209,15 +257,22 @@ func (h *Handler) AddGameLootTableContent(w http.ResponseWriter, r *http.Request
 		h.renderError(ctx, w, r, core.ErrForbidden("loot table does not belong to this game"), "Loot table access forbidden")
 		return
 	}
-
-	_, err = gameService.AddLootTableContent(ctx, int32(tableID), data.Name, data.Data)
+	err = gameService.DeleteLootTableContents(ctx, int32(tableID))
 	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to add loot table content", "error", err, "table_id", tableID)
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete loot table contents", "error", err, "table_id", tableID)
 		return
+	}
+
+	for _, item := range data.Items {
+		_, err := gameService.AddLootTableContent(ctx, int32(tableID), item.Name, item.Data)
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to save loot table items", "error", err, "game_id", gameID)
+			return
+		}
 	}
 }
 
-func (h *Handler) DeleteGameLootTableContent(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) SetRandomLootForCharacter(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	defer h.App.ObsLogger.LogOperation(ctx, "api_loot_tables")()
@@ -235,7 +290,28 @@ func (h *Handler) DeleteGameLootTableContent(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	characterIDStr := chi.URLParam(r, "characterId")
+	characterID, err := strconv.ParseInt(characterIDStr, 10, 32)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid character ID")), "Invalid request")
+		return
+	}
+
 	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+
+	// Verify user can edit this character
+	characterService := h.CharacterService
+	user := core.GetAuthenticatedUser(ctx)
+	canEdit, err := characterService.CanUserEditCharacter(ctx, int32(characterID), user.ID)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check character edit permission", "error", err)
+		return
+	}
+
+	if !canEdit {
+		h.renderError(ctx, w, r, core.ErrForbidden("you cannot edit this character"), "Character edit permission denied", "character_id", characterID, "user_id", user.ID)
+		return
+	}
 
 	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
 	if err != nil {
@@ -247,4 +323,41 @@ func (h *Handler) DeleteGameLootTableContent(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	contents, err := gameService.GetGameLootTableContents(ctx, int32(tableID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get loot table contents", "error", err, "table_id", tableID)
+		return
+	}
+
+	character, err := characterService.GetCharacter(ctx, int32(characterID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get character", "error", err, "character_id", characterID)
+		return
+	}
+
+	rnd := rand.Intn(len(contents))
+
+	content := contents[rnd]
+
+	err = characterService.AddToCharacterData(ctx, core.CharacterDataRequest{
+		CharacterID: int32(characterID),
+		ModuleType:  "inventory",
+		FieldName:   "items",
+		FieldValue:  content.Data.String,
+		FieldType:   "json",
+		IsPublic:    false,
+	})
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to add loot to character", "error", err, "character_id", characterID, "loot_table_id", tableID)
+		return
+	}
+
+	gameService.AddGameLog(ctx, models.CreateLogParams{
+		GameID:  gameID,
+		Type:    "INVENTORY_ADD",
+		Message: pgtype.Text{String: fmt.Sprintf("Added %s to Character %s (Rolled: %d)", content.Name, character.Name, rnd+1), Valid: true},
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(content)
 }

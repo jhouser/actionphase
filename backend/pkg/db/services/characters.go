@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -334,6 +335,72 @@ func (cs *CharacterService) SetCharacterData(ctx context.Context, req CharacterD
 		"is_public", req.IsPublic,
 	)
 	return nil
+}
+
+func (cs *CharacterService) AddToCharacterData(ctx context.Context, req CharacterDataRequest) error {
+	existingData, err := cs.GetCharacterData(ctx, req.CharacterID)
+	if err != nil {
+		return fmt.Errorf("failed to get character data: %w", err)
+	}
+
+	for _, module := range existingData {
+		if module.ModuleType == req.ModuleType && module.FieldName == req.FieldName {
+			newData, err := addStructureToArray(module.FieldValue.String, req.FieldValue)
+			if err != nil {
+				return fmt.Errorf("failed to add structure to array: %w", err)
+			}
+			cs.SetCharacterData(ctx, core.CharacterDataRequest{
+				CharacterID: req.CharacterID,
+				ModuleType:  req.ModuleType,
+				FieldName:   req.FieldName,
+				FieldValue:  newData,
+				FieldType:   req.FieldType,
+				IsPublic:    req.IsPublic,
+			})
+			return nil
+		}
+	}
+
+	newData, err := addStructureToArray("[]", req.FieldValue)
+	if err != nil {
+		return fmt.Errorf("failed to add structure to array: %w", err)
+	}
+	cs.SetCharacterData(ctx, core.CharacterDataRequest{
+		CharacterID: req.CharacterID,
+		ModuleType:  req.ModuleType,
+		FieldName:   req.FieldName,
+		FieldValue:  newData,
+		FieldType:   req.FieldType,
+		IsPublic:    req.IsPublic,
+	})
+	return nil
+}
+
+func addStructureToArray(arrayJSON string, newStructureJSON string) (string, error) {
+	// Validate that the new structure is at least well-formed JSON
+	// (RawMessage just stores bytes, so we check validity explicitly)
+	newElement := json.RawMessage(newStructureJSON)
+	if !json.Valid(newElement) {
+		return "", fmt.Errorf("new structure is not valid JSON")
+	}
+
+	// Unmarshal the array into a slice of raw messages, preserving
+	// each element's original bytes/shape untouched
+	var elements []json.RawMessage
+	if err := json.Unmarshal([]byte(arrayJSON), &elements); err != nil {
+		return "", fmt.Errorf("existing array is not valid JSON array: %w", err)
+	}
+
+	// Append the new element
+	elements = append(elements, newElement)
+
+	// Marshal back to a JSON array string
+	result, err := json.Marshal(elements)
+	if err != nil {
+		return "", fmt.Errorf("failed to re-marshal array: %w", err)
+	}
+
+	return string(result), nil
 }
 
 func (cs *CharacterService) GetCharacterData(ctx context.Context, characterID int32) ([]models.CharacterDatum, error) {
