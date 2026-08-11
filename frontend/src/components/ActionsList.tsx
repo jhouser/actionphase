@@ -4,6 +4,7 @@ import { apiClient } from '../lib/api';
 import { Button, Select, Badge } from './ui';
 import type { ActionWithDetails, GamePhase } from '../types/phases';
 import { CreateActionResultForm } from './CreateActionResultForm';
+import { StandaloneResultComposer } from './StandaloneResultComposer';
 import { Modal } from './Modal';
 import { MarkdownPreview } from './MarkdownPreview';
 import CharacterAvatar from './CharacterAvatar';
@@ -20,6 +21,7 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
   const [selectedPhase, setSelectedPhase] = useState<number | null>(null);
   const [expandedActionId, setExpandedActionId] = useState<number | null>(null);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+  const [showStandaloneComposer, setShowStandaloneComposer] = useState(false);
   const queryClient = useQueryClient();
 
   // Get all actions for the game
@@ -113,8 +115,34 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
             <Badge variant="primary">
               {filteredActions.length} {filteredActions.length === 1 ? 'Action' : 'Actions'}
             </Badge>
+            <Button
+              variant="secondary"
+              onClick={() => setShowStandaloneComposer(true)}
+              data-testid="standalone-result-button"
+              data-faro-user-action-name="open-standalone-result-composer"
+            >
+              Send Standalone Result
+            </Button>
           </div>
         </div>
+
+        {/* Compose a result with no parent submission (e.g. actions collected offsite) */}
+        <Modal
+          isOpen={showStandaloneComposer}
+          onClose={() => setShowStandaloneComposer(false)}
+          title="Send Standalone Result"
+        >
+          <div className="px-3 py-2 sm:px-6 sm:py-4">
+            <p className="text-sm text-content-secondary mb-4">
+              Create a result for a player without an action submission on the site.
+              It will be saved as a draft so you can add character updates before publishing.
+            </p>
+            <StandaloneResultComposer
+              gameId={gameId}
+              onSuccess={() => setShowStandaloneComposer(false)}
+            />
+          </div>
+        </Modal>
 
         {/* Publish All Results Button */}
         {displayPhaseId && unpublishedCount > 0 && (

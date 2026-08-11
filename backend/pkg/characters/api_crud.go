@@ -330,6 +330,7 @@ func (h *Handler) GetGameCharacters(w http.ResponseWriter, r *http.Request) {
 			"name":           char.Name,
 			"character_type": char.CharacterType,
 			"status":         char.Status,
+			"is_active":      char.IsActive,
 			"created_at":     char.CreatedAt.Time,
 			"updated_at":     char.UpdatedAt.Time,
 		}

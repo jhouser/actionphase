@@ -33,7 +33,11 @@ interface ActionSubmissionType {
 interface ActionResultType {
   id: number;
   action_submission_id?: number;
+  phase_id: number;
   content: string;
+  character_name?: string | null;
+  username?: string;
+  is_published?: boolean;
 }
 
 /**
@@ -73,6 +77,25 @@ export function AllActionSubmissionsView({ gameId }: AllActionSubmissionsViewPro
     isLoading,
     error,
   } = useAllActionSubmissions(gameId, { phaseId: selectedPhaseId });
+
+  // Results that answer no submission (actions collected offsite) have no
+  // submission card to nest under, so they are listed on their own below.
+  const { data: gameResults } = useQuery({
+    queryKey: ['actionResults', 'game', gameId],
+    queryFn: () => apiClient.phases.getGameResults(gameId).then((res: { data: ActionResultType[] }) => res.data),
+    enabled: !!gameId,
+  });
+
+  const standaloneResults = useMemo(
+    () =>
+      (gameResults || []).filter(
+        result =>
+          !result.action_submission_id &&
+          result.is_published !== false &&
+          (selectedPhaseId === undefined || result.phase_id === selectedPhaseId)
+      ),
+    [gameResults, selectedPhaseId]
+  );
 
   // Infinite scroll handler
   useEffect(() => {
@@ -211,7 +234,53 @@ export function AllActionSubmissionsView({ gameId }: AllActionSubmissionsViewPro
           )}
         </div>
       )}
+
+      {standaloneResults.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold text-content-primary">
+            Results without a submission
+          </h3>
+          {standaloneResults.map(result => (
+            <StandaloneResultCard key={result.id} result={result} />
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * A published result with no parent submission. Rendered on its own because
+ * there is no submission card to nest it under.
+ */
+function StandaloneResultCard({ result }: { result: ActionResultType }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <Card variant="default">
+      <CardHeader>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="w-full text-left cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{isExpanded ? '▼' : '▶'}</span>
+            <span className="font-semibold text-content-primary">
+              {result.character_name || result.username || 'Unknown'}
+            </span>
+            <Badge variant="success" size="sm">Result</Badge>
+          </div>
+        </button>
+      </CardHeader>
+
+      {isExpanded && (
+        <CardBody>
+          <div className="bg-bg-tertiary p-3 rounded-lg border border-border-primary">
+            <MarkdownPreview content={result.content} fullWidth />
+          </div>
+        </CardBody>
+      )}
+    </Card>
   );
 }
 
@@ -220,8 +289,6 @@ export function AllActionSubmissionsView({ gameId }: AllActionSubmissionsViewPro
  */
 function ActionSubmissionCard({ gameId, submission }: { gameId: number; submission: ActionSubmissionType }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [actionResult, setActionResult] = useState<ActionResultType | null>(null);
-  const [loadingResult, setLoadingResult] = useState(false);
 
   const { allGameCharacters, game } = useGameContext();
 
@@ -236,23 +303,29 @@ function ActionSubmissionCard({ gameId, submission }: { gameId: number; submissi
     ? (allGameCharacters.find(c => c.id === submission.character_id)?.avatar_url ?? null)
     : null;
 
-  // Fetch action result if the submission has a result posted
+  // Fetch this submission's results when expanded. A submission may receive
+  // more than one result — the GM can stage a reveal across several — so this
+  // collects every match rather than the first, and renders them in send order.
+  const { data: gameResults, isLoading: loadingResults, error: resultsError } = useQuery({
+    queryKey: ['actionResults', 'game', gameId],
+    queryFn: () => apiClient.phases.getGameResults(gameId).then((res: { data: ActionResultType[] }) => res.data),
+    enabled: isExpanded && submission.status === 'result_posted',
+  });
+
   useEffect(() => {
-    if (isExpanded && submission.status === 'result_posted' && submission.action_result_id && !actionResult && !loadingResult) {
-      setLoadingResult(true);
-      apiClient.phases.getGameResults(gameId)
-        .then((res: { data: ActionResultType[] }) => {
-          const result = res.data.find((r: ActionResultType) => r.action_submission_id === submission.id);
-          setActionResult(result || null);
-        })
-        .catch((err: Error) => {
-          logger.error('Failed to load action result', { error: err, gameId, submissionId: submission.id, actionResultId: submission.action_result_id });
-        })
-        .finally(() => {
-          setLoadingResult(false);
-        });
+    if (resultsError) {
+      logger.error('Failed to load action results', {
+        error: resultsError,
+        gameId,
+        submissionId: submission.id,
+      });
     }
-  }, [isExpanded, submission, gameId, actionResult, loadingResult]);
+  }, [resultsError, gameId, submission.id]);
+
+  const actionResults = useMemo(
+    () => (gameResults || []).filter(r => r.action_submission_id === submission.id),
+    [gameResults, submission.id]
+  );
 
   const getStatusBadge = (status: string) => {
     if (status === 'submitted') {
@@ -319,17 +392,23 @@ function ActionSubmissionCard({ gameId, submission }: { gameId: number; submissi
             </div>
           </div>
 
-          {/* Action Result */}
+          {/* Action Result(s) */}
           {submission.status === 'result_posted' && (
             <div>
-              <h4 className="text-sm font-semibold text-content-primary mb-2">Result:</h4>
-              {loadingResult ? (
+              <h4 className="text-sm font-semibold text-content-primary mb-2">
+                {actionResults.length > 1 ? 'Results:' : 'Result:'}
+              </h4>
+              {loadingResults ? (
                 <div className="flex items-center justify-center py-4">
                   <Spinner size="sm" />
                 </div>
-              ) : actionResult ? (
-                <div className="bg-bg-tertiary p-3 rounded-lg border border-border-primary">
-                  <MarkdownPreview content={actionResult.content} fullWidth sheetItemRefs={sheetItems} />
+              ) : actionResults.length > 0 ? (
+                <div className="space-y-3">
+                  {actionResults.map(result => (
+                    <div key={result.id} className="bg-bg-tertiary p-3 rounded-lg border border-border-primary">
+                      <MarkdownPreview content={result.content} fullWidth sheetItemRefs={sheetItems} />
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="text-sm text-content-secondary italic">
