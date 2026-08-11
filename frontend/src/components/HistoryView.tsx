@@ -109,9 +109,14 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
   });
 
   // Audience uses the same game-wide endpoint as the GM: it admits audience
-  // members and withholds unpublished drafts from them server-side, so an
-  // audience member sees the whole cast's published results, not just their own
+  // members, so a spectator sees the whole cast's results rather than their own
   // (they have no characters, so the per-user endpoint returns nothing).
+  //
+  // Drafts are NOT withheld from audience. Spectators are trusted with the
+  // game's private traffic already, and watching results take shape is part of
+  // what they are here for — see TestPhaseAPI_AudienceSeesUnpublishedResults.
+  // Players are the ones excluded: /results/mine serves only published results,
+  // so a draft never reaches the character it answers.
   const seesAllResults = isGM || isAudience;
 
   const { data: gmActionResults, isLoading: isLoadingGMResults, error: gmResultsError } = useQuery({
