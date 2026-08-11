@@ -5,6 +5,7 @@ import { Button, Spinner, Alert } from './ui';
 import { MarkdownPreview } from './MarkdownPreview';
 import CharacterAvatar from './CharacterAvatar';
 import { UnreadReplyBox } from './UnreadReplyBox';
+import { ParentCommentPreview } from './ParentCommentPreview';
 import { useUnreadItemContext } from '../hooks/useUnreadItemContext';
 import { useReplyToUnread } from '../hooks/useReplyToUnread';
 import type { UnreadInboxItem } from '../types/unreadInbox';
@@ -60,6 +61,19 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
           {context && (
             <>
               <div className="bg-bg-secondary rounded-lg p-3">
+                {context.parentMessage && (
+                  <ParentCommentPreview
+                    content={context.parentMessage.content}
+                    createdAt={context.parentMessage.createdAt}
+                    isDeleted={context.parentMessage.isDeleted}
+                    authorUsername={context.parentMessage.authorUsername}
+                    characterId={context.parentMessage.characterId}
+                    characterName={context.parentMessage.characterName}
+                    characterAvatarUrl={context.parentMessage.characterAvatarUrl}
+                    mentionedCharacters={context.mentionableCharacters}
+                    hideViewInThread
+                  />
+                )}
                 <div className="flex items-start gap-3 mb-2">
                   <CharacterAvatar
                     avatarUrl={context.previewMessage.characterAvatarUrl}
