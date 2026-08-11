@@ -7,6 +7,7 @@ import { Button, Select, Alert } from './ui';
 import { CommentEditor } from './CommentEditor';
 import CharacterAvatar from './CharacterAvatar';
 import { MarkdownPreview } from './MarkdownPreview';
+import { STICKY_BELOW_TABS } from './TabNavigation';
 import type { Character } from '../types/characters';
 import { logger } from '@/services/LoggingService';
 
@@ -387,12 +388,15 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
           Sticky because the whole page scrolls (the thread is not the only
           scroll container), so on a long conversation the title, Back button
           and actions would otherwise scroll out of reach.
-          top-16 (64px) parks it directly beneath the app navbar, which is
-          itself sticky at the top of the viewport; top-0 would slide it behind
-          the navbar. z-10 keeps it above message content passing underneath
-          while staying below the navbar's z-50. */}
+          It parks beneath the app navbar (h-16) plus the game tab bar, which is
+          itself sticky and publishes its height as --game-tabbar-h (0 when there
+          is no tab bar above us). z-10 keeps it above message content passing
+          underneath while staying below the tab bar's z-30 and navbar's z-50. */}
       {conversation && conversation.conversation && (
-        <div className="sticky top-16 z-10 surface-base border-b border-theme-default px-3 py-2">
+        <div
+          className="sticky z-10 surface-base border-b border-theme-default px-3 py-2"
+          style={{ top: STICKY_BELOW_TABS }}
+        >
           <div className="flex items-center gap-2">
             {onBack && (
               <button

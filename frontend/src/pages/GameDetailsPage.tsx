@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -27,7 +27,8 @@ import { LeaveGameConfirmationDialog } from '../components/LeaveGameConfirmation
 import { DeleteGameConfirmationDialog } from '../components/DeleteGameConfirmationDialog';
 import { WithdrawApplicationConfirmationDialog } from '../components/WithdrawApplicationConfirmationDialog';
 import { DeadlineStrip } from '../components/DeadlineStrip';
-import type { CreateDeadlineRequest } from '../types/deadlines';
+import type { CreateDeadlineRequest, UnifiedDeadline } from '../types/deadlines';
+import { getDeadlineTarget } from '../utils/deadlineTarget';
 import { logger } from '@/services/LoggingService';
 
 interface GameDetailsPageProps {
@@ -139,6 +140,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
   const hasSubmittedAction = !!userActionsData?.some(a => a.phase_id === currentPhaseData?.phase?.id);
 
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Custom hooks for tab management
   const { tabs, activeTab, setActiveTab, overflowTabIds } = useGameTabs({
@@ -205,6 +207,29 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
     }
     return `?${params.toString()}`;
   }, [searchParams]);
+
+  // Deadline cards navigate to wherever the deadline is actually acted on:
+  // the polls sub-tab for poll deadlines, the phase's tab for phase deadlines.
+  const availableTabIds = useMemo(() => tabs.map(t => t.id), [tabs]);
+  const getDeadlineHref = useCallback((deadline: UnifiedDeadline) => {
+    const target = getDeadlineTarget(deadline, {
+      currentPhaseType: currentPhaseData?.phase?.phase_type,
+      availableTabIds,
+    });
+    if (!target) return null;
+
+    const params = new URLSearchParams(searchParams);
+    target.clearParams?.forEach(key => params.delete(key));
+    Object.entries(target.params).forEach(([key, value]) => params.set(key, value));
+    return `?${params.toString()}`;
+  }, [searchParams, availableTabIds, currentPhaseData?.phase?.phase_type]);
+
+  const handleDeadlineClick = useCallback((deadline: UnifiedDeadline) => {
+    const href = getDeadlineHref(deadline);
+    if (href) {
+      navigate(href);
+    }
+  }, [getDeadlineHref, navigate]);
 
   const actionLoading = appActionLoading || stateActionLoading;
   const [showEditModal, setShowEditModal] = useState(false);
@@ -522,6 +547,8 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
             isLoading={isLoadingDeadlines}
             isGM={isGM}
             gameState={game.state}
+            onDeadlineClick={handleDeadlineClick}
+            getDeadlineHref={getDeadlineHref}
             onCreateDeadline={handleCreateDeadline}
             onUpdateDeadline={handleUpdateDeadline}
             onDeleteDeadline={handleDeleteDeadline}
@@ -538,6 +565,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
               onTabChange={setActiveTab}
               getTabHref={getTabHref}
               overflowTabIds={overflowTabIds}
+              sticky
             />
 
             {/* Tab Content */}

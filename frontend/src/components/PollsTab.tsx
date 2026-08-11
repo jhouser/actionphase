@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { usePollsByPhase } from '../hooks';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
@@ -21,6 +22,7 @@ export function PollsTab({ gameId, phaseId, isGM, isCurrentPhase, isAudience = f
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [includeExpired, setIncludeExpired] = useState(false);
   const { currentPhaseId } = useGameContext();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
   // Use provided phaseId or fall back to current phase from context
@@ -39,6 +41,54 @@ export function PollsTab({ gameId, phaseId, isGM, isCurrentPhase, isAudience = f
 
   const activePolls = polls.filter(poll => !poll.is_expired);
   const expiredPolls = polls.filter(poll => poll.is_expired);
+
+  // Deep-link from a poll deadline card: scroll to the poll and highlight it.
+  // Mirrors the Common Room's ?comment= handling.
+  const pollIdParam = searchParams.get('poll');
+  const scrollAttemptedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!pollIdParam || isLoading || scrollAttemptedRef.current === pollIdParam) {
+      return;
+    }
+
+    // An expired poll is collapsed behind the toggle, so reveal it before
+    // scrolling — otherwise the anchor isn't in the DOM at all. Derived here
+    // rather than from the render-scope `expiredPolls`, which is a fresh array
+    // identity every render and would churn this effect as a dependency.
+    const targetIsExpired = polls.some(
+      poll => String(poll.id) === pollIdParam && poll.is_expired
+    );
+    if (targetIsExpired && !includeExpired) {
+      setIncludeExpired(true);
+      return; // Re-runs once the expired section renders.
+    }
+
+    scrollAttemptedRef.current = pollIdParam;
+
+    requestAnimationFrame(() => {
+      const element = document.getElementById(`poll-${pollIdParam}`);
+      if (element) {
+        if (typeof element.scrollIntoView === 'function') {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        element.classList.add('ring-2', 'ring-interactive-primary');
+        setTimeout(() => {
+          element.classList.remove('ring-2', 'ring-interactive-primary');
+        }, 5000);
+      }
+
+      // Clear the param so a later re-render (or a browser refresh) doesn't
+      // re-trigger the scroll, matching the comment deep-link behavior. The
+      // functional form reads the params live: a tab switch landing in the same
+      // frame would otherwise be reverted by a stale snapshot.
+      setSearchParams(current => {
+        const newParams = new URLSearchParams(current);
+        newParams.delete('poll');
+        return newParams;
+      }, { replace: true });
+    });
+  }, [pollIdParam, isLoading, polls, includeExpired, setSearchParams]);
 
   if (isLoading) {
     return (

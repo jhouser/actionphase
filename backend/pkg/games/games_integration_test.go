@@ -643,6 +643,7 @@ func setupGameTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				NotificationService:     db.NewNotificationService(testDB.Pool, app.ObsLogger),
 				MessageService:          &dbmessages.MessageService{DB: testDB.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
 				ActionSubmissionService: &dbactions.ActionSubmissionService{DB: testDB.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(testDB.Pool, app.ObsLogger)},
+				GameStatsService:        &db.GameStatsService{DB: testDB.Pool, Logger: app.ObsLogger},
 			}
 
 			// All routes require authentication
@@ -699,6 +700,9 @@ func setupGameTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 
 					// Logs
 					r.Get("/logs", gameHandler.GetGameLogs)
+
+					// Post-game statistics
+					r.Get("/stats", gameHandler.GetGameStats)
 				})
 
 			})
