@@ -244,7 +244,14 @@ CREATE TABLE action_results (
     gm_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     is_published BOOLEAN DEFAULT FALSE,
-    sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    -- Staged reveals: a chain is a linked list, each part delayed relative to
+    -- the one before it. NULL parent = part 1 or an ordinary unstaged result.
+    -- Visibility to the recipient is `is_published AND released_at IS NOT NULL`.
+    parent_result_id INTEGER REFERENCES action_results(id) ON DELETE CASCADE,
+    reveal_delay_minutes INTEGER,
+    released_at TIMESTAMP WITH TIME ZONE
 );
 
 -- Draft character updates tied to action results
