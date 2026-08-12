@@ -10,6 +10,8 @@
 # For detailed help on any command with subcommands, run:
 #   just <command> help
 
+set windows-shell := ["pwsh.exe", "-c"]
+
 # Show available commands
 help:
   @just --list
@@ -34,10 +36,33 @@ claude:
 # (Vite HMR). No host Go/Node needed. See "just dev-help" for the full workflow.
 
 # Compose invocation for the dev stack — reused by every dev recipe below.
-DEV_COMPOSE := "docker compose -f docker-compose.dev.yml"
+DEV_COMPOSE := if os_family() == "windows" { "docker-compose -f docker-compose.dev.yml" } else { "docker compose -f docker-compose.dev.yml" }
 
 # Start the full dev stack (db + backend + frontend). Add 'build' to force a rebuild.
 up build="":
+  @just _up-{{os_family()}} {{build}}
+
+_up-windows build="":
+  #!pwsh.exe
+  if ("{{build}}" -eq "build") {
+    Write-Host "Building"
+    {{DEV_COMPOSE}} up -d --build
+  }
+  else {
+    Write-Host "Running"
+    {{DEV_COMPOSE}} up -d
+  }
+  Write-Host "
+    🚀 Dev stack up:
+      Frontend (Vite):  http://localhost:5173
+      Backend  (API):   http://localhost:3000
+      Delve debugger:   localhost:2345  (attach from IDE)
+      Postgres:         localhost:5432
+
+      Logs:    just dev-logs [backend|frontend|db]
+      Shell:   just sh backend   (run go/npm commands in-container)"
+
+_up-unix build="":
   #!/usr/bin/env bash
   if [ "{{build}}" = "build" ]; then
     {{DEV_COMPOSE}} up -d --build
@@ -70,6 +95,20 @@ dev-logs service="":
 # Restart dev service(s) for config changes or a wedged container (code hot-reloads).
 # Pass a service name (backend|frontend|db) or 'all' to restart the whole stack.
 restart service="backend":
+  @just _restart-{{os_family()}} {{service}}
+  
+_restart-windows service="backend":
+  #!pwsh.exe
+  if ( "{{service}}" -eq "all" ) {
+    {{DEV_COMPOSE}} restart
+    Write-Host "✅ Restarted all services"
+  }
+  else {
+    {{DEV_COMPOSE}} restart {{service}}
+    Write-Host "✅ Restarted {{service}}"
+  }
+  
+_restart-unix service="backend":
   #!/usr/bin/env bash
   if [ "{{service}}" = "all" ]; then
     {{DEV_COMPOSE}} restart
@@ -90,6 +129,30 @@ ps:
 
 # Print the containerized-dev workflow cheatsheet.
 dev-help:
+  @just _dev-help-{{os_family()}}
+
+_dev-help-windows:
+  #!pwsh.exe
+  Write-Host "Containerized dev workflow (no host Go/Node required)
+  ─────────────────────────────────────────────────────
+    just up [build]     Start db + backend + frontend (build to rebuild images)
+    just down           Stop the stack (data preserved in volumes)
+    just ps             Container status
+    just dev-logs [svc] Tail logs (backend|frontend|db; blank = all)
+    just restart [svc]  Restart a service (backend|frontend|db|all)
+    just rebuild [svc]  Rebuild image(s) from scratch after Dockerfile changes
+    just sh [svc]       Shell into a container (backend|frontend|db)
+
+  URLs
+    Frontend  http://localhost:5173   (Vite HMR; proxies /api -> backend)
+    Backend   http://localhost:3000   (Air rebuilds on save)
+    Delve     localhost:2345          (attach IDE debugger — see docs)
+    Postgres  localhost:5432
+
+  Hot reload is automatic: edit a .go or frontend file on the host and the
+  running container picks it up. No manual restart needed for code changes."
+
+_dev-help-unix:
   #!/usr/bin/env bash
   cat <<'EOF'
   Containerized dev workflow (no host Go/Node required)
@@ -118,6 +181,45 @@ dev-help:
 
 # Database operations on the dev stack: up, down, reset, create, setup
 db action="help":
+  @just _db-{{os_family()}} {{action}}
+
+_db-windows action="help":
+  #!pwsh.exe
+  DC='docker compose -f docker-compose.dev.yml'
+  switch ("{{action}}") {
+    "up" { {{DEV_COMPOSE}} up -d db }
+    "down" { {{DEV_COMPOSE}} stop db }
+    "reset" { 
+      {{DEV_COMPOSE}} rm -sf db
+      docker volume rm actionphase-dev_pgdata 2>/dev/null || true
+      {{DEV_COMPOSE}} up -d db
+      Write-Host "✅ Database reset (fresh volume). Run 'just migrate' to apply schema."
+    }
+    "create" {
+      # The 'actionphase' db is created by the container (POSTGRES_DB). This
+      # just adds the test database. Runs psql inside the backend container.
+      Write-Host "Creating actionphase_test database (actionphase is auto-created)..."
+      {{DEV_COMPOSE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -c "CREATE DATABASE actionphase_test;"' 2>/dev/null || echo "  (actionphase_test already exists)"
+      Write-Host "✅ Databases ready"
+    }
+    "setup" {
+      just db up
+      just db create
+      Write-Host "Database setup complete! Migrations auto-run on backend startup."
+    }
+    "help" {
+      Write-Host "Usage: just db [action]
+      
+      Actions:
+        up        Start database container
+        down      Stop database container
+        reset     Reset database (wipe volume + recreate)
+        create    Create the test database (dev db is auto-created)
+        setup     Full database setup (up + create)"
+    }
+  }
+
+_db-unix action="help":
   #!/usr/bin/env bash
   DC='docker compose -f docker-compose.dev.yml'
   case "{{action}}" in
@@ -165,8 +267,8 @@ db action="help":
 
 # All migration/db tooling runs inside the backend container (has migrate, psql,
 # sqlc, and the source mounted). Inside the compose network the db is at db:5432.
-BE := "docker compose -f docker-compose.dev.yml exec -T backend"
-FE := "docker compose -f docker-compose.dev.yml exec -T frontend"
+BE := if os_family() == "windows" { "docker-compose -f docker-compose.dev.yml exec -T backend" } else { "docker compose -f docker-compose.dev.yml exec -T backend" }
+FE := if os_family() == "windows" { "docker-compose -f docker-compose.dev.yml exec -T frontend" } else { "docker compose -f docker-compose.dev.yml exec -T frontend" }
 DEV_DB_URL := "postgres://postgres:example@db:5432/actionphase?sslmode=disable"
 TEST_DB_URL := "postgres://postgres:example@db:5432/actionphase_test?sslmode=disable"
 # Env overrides for the test process. The backend container sets
