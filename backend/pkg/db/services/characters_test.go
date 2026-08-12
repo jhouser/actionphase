@@ -1918,3 +1918,91 @@ func TestCharacterService_AssignNPCToAudience(t *testing.T) {
 		assert.Contains(t, err.Error(), "failed to get character")
 	})
 }
+
+// AddToCharacterData appends an item to a JSON array field, creating the field on
+// first use. It backs the loot-granting path, so a failed write must surface as an
+// error — a silent nil would make the handler report success (and log an
+// INVENTORY_ADD entry) for loot the character never actually received.
+func TestCharacterService_AddToCharacterData(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "character_data", "npc_assignments", "characters", "games", "sessions", "users")
+
+	fixtures := testDB.SetupFixtures(t)
+	characterService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	character, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+		GameID:        fixtures.TestGame.ID,
+		UserID:        core.Int32Ptr(int32(fixtures.TestUser.ID)),
+		Name:          "Loot Holder",
+		CharacterType: "player_character",
+	})
+	require.NoError(t, err)
+
+	req := func(characterID int32, value string) CharacterDataRequest {
+		return CharacterDataRequest{
+			CharacterID: characterID,
+			ModuleType:  "inventory",
+			FieldName:   "items",
+			FieldValue:  value,
+			FieldType:   "json",
+			IsPublic:    false,
+		}
+	}
+
+	t.Run("creates the field and stores a one-element array on first add", func(t *testing.T) {
+		err := characterService.AddToCharacterData(ctx, req(character.ID, `{"name":"Sword"}`))
+		require.NoError(t, err)
+
+		data, err := characterService.GetCharacterData(ctx, character.ID)
+		require.NoError(t, err)
+		require.Len(t, data, 1)
+		assert.JSONEq(t, `[{"name":"Sword"}]`, data[0].FieldValue.String)
+	})
+
+	t.Run("appends to the existing array without dropping earlier items", func(t *testing.T) {
+		err := characterService.AddToCharacterData(ctx, req(character.ID, `{"name":"Shield"}`))
+		require.NoError(t, err)
+
+		data, err := characterService.GetCharacterData(ctx, character.ID)
+		require.NoError(t, err)
+		require.Len(t, data, 1, "should still be a single inventory field, not a duplicate row")
+		assert.JSONEq(t, `[{"name":"Sword"},{"name":"Shield"}]`, data[0].FieldValue.String)
+	})
+
+	// Regression: both SetCharacterData calls used to have their errors discarded,
+	// so this returned nil and the caller believed the write had succeeded.
+	t.Run("propagates the write error when the field does not yet exist", func(t *testing.T) {
+		// A character ID that does not exist violates the character_data FK, so the
+		// underlying write fails. No existing row matches, so this takes the
+		// create-new-field branch.
+		err := characterService.AddToCharacterData(ctx, req(999999, `{"name":"Ghost Item"}`))
+		require.Error(t, err, "a failed write must not be reported as success")
+	})
+
+	t.Run("propagates the write error when appending to an existing field", func(t *testing.T) {
+		// Take the append branch, then make the write fail: the character row is
+		// deleted first, which cascades its data away while we still hold the ID.
+		doomed, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+			GameID:        fixtures.TestGame.ID,
+			UserID:        core.Int32Ptr(int32(fixtures.TestUser.ID)),
+			Name:          "Doomed Holder",
+			CharacterType: "player_character",
+		})
+		require.NoError(t, err)
+
+		require.NoError(t, characterService.AddToCharacterData(ctx, req(doomed.ID, `{"name":"Torch"}`)))
+
+		existing, err := characterService.GetCharacterData(ctx, doomed.ID)
+		require.NoError(t, err)
+		require.Len(t, existing, 1)
+
+		_, err = testDB.Pool.Exec(ctx, "DELETE FROM characters WHERE id = $1", doomed.ID)
+		require.NoError(t, err)
+
+		err = characterService.AddToCharacterData(ctx, req(doomed.ID, `{"name":"Lantern"}`))
+		require.Error(t, err, "a failed write must not be reported as success")
+	})
+}
