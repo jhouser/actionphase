@@ -2,6 +2,7 @@ package games
 
 import (
 	"actionphase/pkg/core"
+	db "actionphase/pkg/db/models"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -94,12 +95,7 @@ func (h *Handler) ListAudienceMembers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_list_audience_members")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid list audience members request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	gameService := h.GameService
 
@@ -136,12 +132,8 @@ func (h *Handler) UpdateAutoAcceptAudience(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_update_auto_accept_audience")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid update auto accept audience request")
-		return
-	}
+	game := ctx.Value("game").(*db.Game)
+	gameID := ctx.Value("gameID").(int32)
 
 	data := &UpdateAutoAcceptAudienceRequest{}
 	if err := render.Bind(r, data); err != nil {
@@ -151,26 +143,16 @@ func (h *Handler) UpdateAutoAcceptAudience(w http.ResponseWriter, r *http.Reques
 
 	// Get authenticated user from context (set by middleware)
 	authUser := core.GetAuthenticatedUser(ctx)
-	if authUser == nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "No authenticated user in context")
-		return
-	}
 
 	// Check if user is GM
 	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrNotFound("game not found"), "Failed to get game", "error", err, "game_id", gameID)
-		return
-	}
-
 	if game.GmUserID != int32(authUser.ID) {
 		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can update this setting"), "Update auto accept audience forbidden")
 		return
 	}
 
 	// Update the setting
-	err = gameService.UpdateGameAutoAcceptAudience(ctx, int32(gameID), data.AutoAcceptAudience)
+	err := gameService.UpdateGameAutoAcceptAudience(ctx, int32(gameID), data.AutoAcceptAudience)
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to update auto-accept audience setting", "error", err, "game_id", gameID)
 		return
@@ -187,12 +169,7 @@ func (h *Handler) ListAudienceNPCs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_list_audience_npcs")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid list audience NPCs request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get audience NPCs
 	npcs, err := h.CharacterService.ListAudienceNPCs(ctx, int32(gameID))
@@ -212,12 +189,7 @@ func (h *Handler) ListAllPrivateConversations(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_list_all_private_conversations")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid list all private conversations request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get authenticated user from context (set by middleware)
 	authUser := core.GetAuthenticatedUser(ctx)
@@ -342,12 +314,7 @@ func (h *Handler) GetAudienceConversationMessages(w http.ResponseWriter, r *http
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_audience_conversation_messages")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get audience conversation messages request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	conversationIDStr := chi.URLParam(r, "conversationId")
 	conversationID, err := strconv.ParseInt(conversationIDStr, 10, 32)
@@ -423,12 +390,7 @@ func (h *Handler) GetConversationParticipants(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_conversation_participants")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get conversation participants request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	authUser := core.GetAuthenticatedUser(ctx)
 	if authUser == nil {
@@ -465,12 +427,7 @@ func (h *Handler) ListAllActionSubmissions(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_list_all_action_submissions")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid list all action submissions request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get authenticated user from context (set by middleware)
 	authUser := core.GetAuthenticatedUser(ctx)

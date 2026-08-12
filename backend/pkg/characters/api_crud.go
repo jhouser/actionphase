@@ -2,6 +2,7 @@ package characters
 
 import (
 	"actionphase/pkg/core"
+	db "actionphase/pkg/db/models"
 	models "actionphase/pkg/db/models"
 	"encoding/json"
 	"fmt"
@@ -17,12 +18,7 @@ func (h *Handler) CreateCharacter(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_create_character")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid create character request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	data := &CreateCharacterRequest{}
 	if err := render.Bind(r, data); err != nil {
@@ -59,14 +55,9 @@ func (h *Handler) CreateCharacter(w http.ResponseWriter, r *http.Request) {
 
 	// Verify user can create characters for this game
 	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game", "error", err, "game_id", gameID)
-		return
-	}
 
 	// Check permissions based on character type
-	isGM := core.IsUserGameMaster(r, authUser.ID, authUser.IsAdmin, *game, h.App.Pool)
+	isGM := ctx.Value("is_gm").(bool)
 
 	if data.CharacterType == "player_character" {
 		// GMs can create player characters for any player
@@ -185,33 +176,31 @@ func (h *Handler) GetCharacter(w http.ResponseWriter, r *http.Request) {
 	var isOwner bool
 	var isAssignedUser bool
 	var userRole string
-	if authUser != nil {
-		isGM = core.IsUserGameMaster(r, authUser.ID, authUser.IsAdmin, *game, h.App.Pool)
-		if character.UserID.Valid {
-			isOwner = character.UserID.Int32 == authUser.ID
-		}
-		if isGM {
-			userRole = "gm"
-		} else {
-			participants, err := gameService.GetGameParticipants(ctx, character.GameID)
-			if err == nil {
-				for _, p := range participants {
-					if p.UserID == authUser.ID {
-						userRole = p.Role
-						break
-					}
+	isGM = core.IsUserGameMaster(r, authUser.ID, authUser.IsAdmin, *game, h.App.Pool)
+	if character.UserID.Valid {
+		isOwner = character.UserID.Int32 == authUser.ID
+	}
+	if isGM {
+		userRole = "gm"
+	} else {
+		participants, err := gameService.GetGameParticipants(ctx, character.GameID)
+		if err == nil {
+			for _, p := range participants {
+				if p.UserID == authUser.ID {
+					userRole = p.Role
+					break
 				}
 			}
-			if userRole == "" {
-				userRole = "player"
-			}
 		}
-		// Check if user is the assigned controller of this NPC
-		if character.CharacterType == "npc" {
-			queries := models.New(h.App.Pool)
-			if assignment, err := queries.GetNPCAssignment(ctx, character.ID); err == nil {
-				isAssignedUser = assignment.AssignedUserID == authUser.ID
-			}
+		if userRole == "" {
+			userRole = "player"
+		}
+	}
+	// Check if user is the assigned controller of this NPC
+	if character.CharacterType == "npc" {
+		queries := models.New(h.App.Pool)
+		if assignment, err := queries.GetNPCAssignment(ctx, character.ID); err == nil {
+			isAssignedUser = assignment.AssignedUserID == authUser.ID
 		}
 	}
 
@@ -261,46 +250,34 @@ func (h *Handler) GetGameCharacters(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game_characters")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get game characters request")
-		return
-	}
-
 	// Get game to check state for filtering
 	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game", "error", err, "game_id", gameID)
-		return
-	}
+	game := ctx.Value("game").(*db.Game)
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get authenticated user to check role (GM, co-GM, audience, or player)
 	authUser := core.GetAuthenticatedUser(ctx)
 	var isGM bool
 	var userRole string
-	if authUser != nil {
-		isGM = core.IsUserGameMaster(r, authUser.ID, authUser.IsAdmin, *game, h.App.Pool)
-		if isGM {
-			userRole = "gm"
+	isGM = ctx.Value("is_gm").(bool)
+	if isGM {
+		userRole = "gm"
+	} else {
+		// Check if user is a participant and get their role
+		participants, err := gameService.GetGameParticipants(ctx, int32(gameID))
+		if err != nil {
+			h.App.ObsLogger.Error(ctx, "Failed to get game participants", "error", err, "game_id", gameID)
+			// Don't fail the request, just assume regular player
+			userRole = "player"
 		} else {
-			// Check if user is a participant and get their role
-			participants, err := gameService.GetGameParticipants(ctx, int32(gameID))
-			if err != nil {
-				h.App.ObsLogger.Error(ctx, "Failed to get game participants", "error", err, "game_id", gameID)
-				// Don't fail the request, just assume regular player
-				userRole = "player"
-			} else {
-				for _, p := range participants {
-					if p.UserID == authUser.ID {
-						userRole = p.Role
-						break
-					}
+			for _, p := range participants {
+				if p.UserID == authUser.ID {
+					userRole = p.Role
+					break
 				}
-				if userRole == "" {
-					userRole = "player" // Default for authenticated users not in participants list
-				}
+			}
+			if userRole == "" {
+				userRole = "player" // Default for authenticated users not in participants list
 			}
 		}
 	}
@@ -324,7 +301,7 @@ func (h *Handler) GetGameCharacters(w http.ResponseWriter, r *http.Request) {
 		if !isGM && userRole != "co_gm" && userRole != "audience" {
 			if char.Status.String == "pending" || char.Status.String == "rejected" {
 				// Skip OTHER players' pending/rejected characters, but show user's own
-				if authUser == nil || !char.UserID.Valid || char.UserID.Int32 != authUser.ID {
+				if !char.UserID.Valid || char.UserID.Int32 != authUser.ID {
 					continue
 				}
 			}
@@ -353,6 +330,7 @@ func (h *Handler) GetGameCharacters(w http.ResponseWriter, r *http.Request) {
 			"name":           char.Name,
 			"character_type": char.CharacterType,
 			"status":         char.Status,
+			"is_active":      char.IsActive,
 			"created_at":     char.CreatedAt.Time,
 			"updated_at":     char.UpdatedAt.Time,
 		}
@@ -390,19 +368,11 @@ func (h *Handler) GetUserControllableCharacters(w http.ResponseWriter, r *http.R
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_user_controllable_characters")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get user controllable characters request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get user ID from token
-	userID, err := h.getUserIDFromToken(r)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized(err.Error()), "Failed to get user from token", "error", err)
-		return
-	}
+	authUser := core.GetAuthenticatedUser(ctx)
+	userID := authUser.ID
 
 	characterService := h.CharacterService
 	characters, err := characterService.GetUserControllableCharacters(ctx, int32(gameID), userID)

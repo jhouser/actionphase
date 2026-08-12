@@ -40,12 +40,7 @@ func (h *Handler) CreateHandout(w http.ResponseWriter, r *http.Request) {
 	defer h.App.ObsLogger.LogOperation(ctx, "api_create_handout")()
 
 	// Get gameID from URL
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid game ID", "error", err)
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Parse request
 	data := &CreateHandoutRequest{}
@@ -63,15 +58,8 @@ func (h *Handler) CreateHandout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user is GM or Co-GM of the game
-	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrNotFound("Handout not found"), "Failed to get game", "error", err)
-		return
-	}
-
-	if errResp := h.verifyUserIsGM(ctx, game, userID); errResp != nil {
-		h.renderError(ctx, w, r, errResp, "Request rejected in create handout")
+	if !ctx.Value("is_gm").(bool) {
+		h.renderError(ctx, w, r, core.ErrForbidden("Only the GM can create handouts"), "Request rejected in create handout")
 		return
 	}
 
@@ -162,12 +150,7 @@ func (h *Handler) ListHandouts(w http.ResponseWriter, r *http.Request) {
 	defer h.App.ObsLogger.LogOperation(ctx, "api_list_handouts")()
 
 	// Get gameID from URL
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid game ID", "error", err)
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get user ID from JWT token
 	userService := h.UserService
@@ -177,16 +160,8 @@ func (h *Handler) ListHandouts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user is GM
-	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrNotFound("Handout not found"), "Failed to get game", "error", err)
-		return
-	}
-
 	// Check if user is GM or Co-GM (they can see draft handouts)
-	isGM := game.GmUserID == userID || core.IsUserCoGM(ctx, h.App.Pool, int32(gameID), userID)
+	isGM := ctx.Value("is_gm").(bool)
 
 	// List handouts
 	handoutService := h.HandoutService

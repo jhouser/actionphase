@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"actionphase/pkg/observability"
 	"actionphase/pkg/validation"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -239,7 +241,7 @@ func (s *ConversationService) SendMessage(ctx context.Context, req SendMessageRe
 		return nil, fmt.Errorf("failed to check participation: %w", err)
 	}
 	if !isParticipant {
-		return nil, fmt.Errorf("user is not a participant in this conversation")
+		return nil, core.ErrNotConversationParticipant
 	}
 
 	tx, err := s.DB.Begin(ctx)
@@ -290,6 +292,25 @@ func (s *ConversationService) SendMessage(ctx context.Context, req SendMessageRe
 
 // GetConversationMessages gets all messages in a conversation
 func (s *ConversationService) GetConversationMessages(ctx context.Context, conversationID int32, userID int32) ([]models.GetConversationMessagesRow, error) {
+	return s.getConversationMessages(ctx, conversationID, userID, pgtype.Int4{})
+}
+
+// GetMessageWithContext returns a single message along with the one immediately
+// preceding it in the conversation, oldest first. Used to preview an unread
+// message with enough context to recall the thread without sending the entire
+// conversation, which GetConversationMessages does unbounded.
+//
+// A messageID belonging to another conversation matches nothing and yields no
+// rows, so this cannot be used to read a conversation the caller isn't in.
+func (s *ConversationService) GetMessageWithContext(ctx context.Context, conversationID int32, messageID int32, userID int32) ([]models.GetConversationMessagesRow, error) {
+	return s.getConversationMessages(ctx, conversationID, userID, pgtype.Int4{Int32: messageID, Valid: true})
+}
+
+// getConversationMessages backs both the full-thread and scoped-context reads.
+// They differ only in contextFor: unset returns the whole conversation, set
+// narrows to that message and its predecessor. Sharing one path keeps the
+// participant check and deleted-content masking identical for both.
+func (s *ConversationService) getConversationMessages(ctx context.Context, conversationID int32, userID int32, contextFor pgtype.Int4) ([]models.GetConversationMessagesRow, error) {
 	// Verify user is a participant
 	isParticipant, err := s.Queries.IsUserInConversation(ctx, models.IsUserInConversationParams{
 		ConversationID: conversationID,
@@ -299,10 +320,13 @@ func (s *ConversationService) GetConversationMessages(ctx context.Context, conve
 		return nil, fmt.Errorf("failed to check participation: %w", err)
 	}
 	if !isParticipant {
-		return nil, fmt.Errorf("user is not a participant in this conversation")
+		return nil, core.ErrNotConversationParticipant
 	}
 
-	messages, err := s.Queries.GetConversationMessages(ctx, conversationID)
+	messages, err := s.Queries.GetConversationMessages(ctx, models.GetConversationMessagesParams{
+		ConversationID: conversationID,
+		ContextFor:     contextFor,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get conversation messages: %w", err)
 	}
@@ -328,22 +352,19 @@ func (s *ConversationService) MarkConversationAsRead(ctx context.Context, conver
 		return fmt.Errorf("failed to check participation: %w", err)
 	}
 	if !isParticipant {
-		return fmt.Errorf("user is not a participant in this conversation")
+		return core.ErrNotConversationParticipant
 	}
 
-	// Get all messages in the conversation (ordered by created_at)
-	messages, err := s.Queries.GetConversationMessages(ctx, conversationID)
+	// Only the newest message id is needed here, so ask for exactly that rather
+	// than reading every message in the conversation and discarding all but one.
+	lastMessageID, err := s.Queries.GetLastConversationMessageID(ctx, conversationID)
 	if err != nil {
+		// No messages in the conversation, so there is nothing to mark as read.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
 		return fmt.Errorf("failed to get messages: %w", err)
 	}
-
-	// If no messages, nothing to mark as read
-	if len(messages) == 0 {
-		return nil
-	}
-
-	// Get the latest message (last in the slice since they're ordered by created_at ASC)
-	lastMessageID := messages[len(messages)-1].ID
 
 	// Mark conversation as read up to the latest message
 	_, err = s.MarkConversationRead(ctx, userID, conversationID, lastMessageID)
@@ -650,6 +671,50 @@ func (s *ConversationService) GetConversation(ctx context.Context, conversationI
 		return nil, err
 	}
 	return &conv, nil
+}
+
+// DeleteConversation permanently removes a conversation that has no messages.
+// This exists so a user who creates a conversation by accident can clean it up;
+// once anything has been said the conversation is history and stays put.
+//
+// Only the creator or the game's GM/co-GM may delete. Participants and read
+// markers are removed by ON DELETE CASCADE.
+func (s *ConversationService) DeleteConversation(ctx context.Context, conversationID int32, userID int32) error {
+	conv, err := s.Queries.GetConversation(ctx, conversationID)
+	if err != nil {
+		// Distinguish "no such conversation" from a genuine DB failure so the
+		// handler can render 404 vs 500, and wrap so the cause survives logging.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return core.ErrConversationNotFound
+		}
+		return fmt.Errorf("failed to get conversation: %w", err)
+	}
+
+	game, err := s.Queries.GetGame(ctx, conv.GameID)
+	if err != nil {
+		return fmt.Errorf("failed to get game: %w", err)
+	}
+
+	isCreator := conv.CreatedByUserID == userID
+	isGM := game.GmUserID == userID || core.IsUserCoGM(ctx, s.DB, conv.GameID, userID)
+	if !isCreator && !isGM {
+		return core.ErrConversationDeleteForbidden
+	}
+
+	// The emptiness check lives inside the DELETE so it cannot race with a
+	// message being sent. Affecting zero rows means the conversation was not
+	// empty (it existed a moment ago, per GetConversation above). Soft-deleted
+	// messages still count: a conversation whose only message was deleted has
+	// history and must not be removable.
+	rows, err := s.Queries.DeleteEmptyConversation(ctx, conversationID)
+	if err != nil {
+		return fmt.Errorf("failed to delete conversation: %w", err)
+	}
+	if rows == 0 {
+		return core.ErrConversationNotEmpty
+	}
+
+	return nil
 }
 
 // GetPrivateMessage retrieves a single private message by ID.

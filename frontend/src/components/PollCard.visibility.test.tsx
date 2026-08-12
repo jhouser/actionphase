@@ -50,6 +50,7 @@ const basePoll: Poll = {
   allow_other_option: false,
   hide_results_from_players: false,
   allow_audience_voting: false,
+  show_running_totals_to_players: false,
   is_deleted: false,
   user_has_voted: false,
   created_at: new Date().toISOString(),
@@ -120,6 +121,61 @@ describe('PollCard - hidden results', () => {
   });
 });
 
+describe('PollCard - running totals', () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    usePollResultsMock.mockClear();
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+  });
+
+  const renderCard = (ui: React.ReactElement) =>
+    render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+
+  it('fetches results for a player on an open poll once they have voted', () => {
+    const poll = { ...basePoll, show_running_totals_to_players: true, user_has_voted: true };
+
+    renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={false} />);
+
+    expect(usePollResultsMock).toHaveBeenCalledWith(poll.id);
+  });
+
+  it('does not fetch results for a player on an open poll without running totals', () => {
+    const poll = { ...basePoll, show_running_totals_to_players: false, user_has_voted: true };
+
+    renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={false} />);
+
+    // The backend would reject this fetch, so the query stays disabled.
+    expect(usePollResultsMock).toHaveBeenCalledWith(null);
+  });
+
+  it('offers a player a results toggle on an open running-totals poll', () => {
+    const poll = { ...basePoll, show_running_totals_to_players: true };
+
+    renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={false} />);
+
+    expect(screen.getByRole('button', { name: /show results/i })).toBeInTheDocument();
+  });
+
+  it('offers no results toggle on an open poll without running totals', () => {
+    const poll = { ...basePoll, show_running_totals_to_players: false };
+
+    renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={false} />);
+
+    expect(screen.queryByRole('button', { name: /show results/i })).not.toBeInTheDocument();
+  });
+
+  it('still lets the player vote while showing them the running totals', () => {
+    const poll = { ...basePoll, show_running_totals_to_players: true };
+
+    renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={false} />);
+
+    expect(screen.getByRole('button', { name: /vote now/i })).toBeInTheDocument();
+  });
+});
+
 describe('PollCard - audience voting', () => {
   let queryClient: QueryClient;
 
@@ -163,5 +219,43 @@ describe('PollCard - audience voting', () => {
     renderCard(<PollCard poll={poll} gameId={100} isGM={false} isAudience={true} />);
 
     expect(screen.getByRole('button', { name: /change vote/i })).toBeInTheDocument();
+  });
+
+  // A completed or cancelled game is an immutable archive. The backend's
+  // DeletePoll handler authorizes on GM alone and never checks game state, so
+  // this button is the only thing standing between a GM and deleting a poll
+  // out of a finished game's history.
+  describe('delete button and game state', () => {
+    it('offers the GM a delete button in a live game', () => {
+      renderCard(
+        <PollCard poll={basePoll} gameId={100} isGM={true} isAudience={false} gameState="in_progress" />
+      );
+
+      expect(screen.getByRole('button', { name: /delete poll/i })).toBeInTheDocument();
+    });
+
+    it('withholds delete once the game is completed', () => {
+      renderCard(
+        <PollCard poll={basePoll} gameId={100} isGM={true} isAudience={false} gameState="completed" />
+      );
+
+      expect(screen.queryByRole('button', { name: /delete poll/i })).not.toBeInTheDocument();
+    });
+
+    it('withholds delete once the game is cancelled', () => {
+      renderCard(
+        <PollCard poll={basePoll} gameId={100} isGM={true} isAudience={false} gameState="cancelled" />
+      );
+
+      expect(screen.queryByRole('button', { name: /delete poll/i })).not.toBeInTheDocument();
+    });
+
+    it('never offers delete to a non-GM', () => {
+      renderCard(
+        <PollCard poll={basePoll} gameId={100} isGM={false} isAudience={false} gameState="in_progress" />
+      );
+
+      expect(screen.queryByRole('button', { name: /delete poll/i })).not.toBeInTheDocument();
+    });
   });
 });

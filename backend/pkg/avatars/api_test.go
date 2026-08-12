@@ -314,3 +314,100 @@ func TestAvatarDelete_NonOwner_403(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 }
+
+// Avatars are narrative content: messages pin the avatar URL they were authored
+// with, so a superseded or removed avatar file must stay resolvable in storage.
+// These tests guard the two ways a file used to get destroyed.
+
+// TestAvatarUpload_RetainsPreviousFile covers replacement. Uploading a new avatar
+// must not delete the old file, or every post that pinned it loses its image.
+func TestAvatarUpload_RetainsPreviousFile(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "characters", "game_participants", "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	storage := newTestStorage()
+	app.Storage = storage
+	router := setupAvatarTestRouter(app, testDB)
+
+	_, _, char, ownerToken, _ := setupAvatarTestData(t, testDB, app)
+
+	// First upload establishes the "old" avatar.
+	body, contentType := buildAvatarUpload(t, "first.jpg", "image/jpeg", smallJPEG())
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/characters/%d/avatar", char.ID), body)
+	req.Header.Set("Authorization", "Bearer "+ownerToken)
+	req.Header.Set("Content-Type", contentType)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	require.Len(t, storage.uploads, 1, "first upload should store one file")
+	var firstPath string
+	for p := range storage.uploads {
+		firstPath = p
+	}
+
+	// Storage paths carry a random suffix (avatars/characters/{id}/{ms}_{rand}.jpg),
+	// so back-to-back uploads land on distinct keys and "was the old file deleted?"
+	// is observable without waiting on the clock.
+	// Second upload supersedes it.
+	body2, contentType2 := buildAvatarUpload(t, "second.jpg", "image/jpeg", smallJPEG())
+	req2 := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/characters/%d/avatar", char.ID), body2)
+	req2.Header.Set("Authorization", "Bearer "+ownerToken)
+	req2.Header.Set("Content-Type", contentType2)
+	rec2 := httptest.NewRecorder()
+	router.ServeHTTP(rec2, req2)
+	require.Equal(t, http.StatusOK, rec2.Code)
+
+	assert.Contains(t, storage.uploads, firstPath,
+		"the superseded avatar file must remain in storage so posts that pinned it still resolve")
+	assert.Len(t, storage.uploads, 2, "both the old and new avatar files should exist")
+}
+
+// TestAvatarDelete_RetainsFile covers explicit removal. "Remove Avatar" clears the
+// character's current avatar but must leave the file, so historical posts keep
+// rendering what they were written with.
+func TestAvatarDelete_RetainsFile(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "characters", "game_participants", "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	storage := newTestStorage()
+	app.Storage = storage
+	router := setupAvatarTestRouter(app, testDB)
+
+	_, _, char, ownerToken, _ := setupAvatarTestData(t, testDB, app)
+
+	body, contentType := buildAvatarUpload(t, "avatar.jpg", "image/jpeg", smallJPEG())
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/characters/%d/avatar", char.ID), body)
+	req.Header.Set("Authorization", "Bearer "+ownerToken)
+	req.Header.Set("Content-Type", contentType)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, storage.uploads, 1)
+
+	var uploadedPath string
+	for p := range storage.uploads {
+		uploadedPath = p
+	}
+
+	delReq := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/characters/%d/avatar", char.ID), nil)
+	delReq.Header.Set("Authorization", "Bearer "+ownerToken)
+	delRec := httptest.NewRecorder()
+	router.ServeHTTP(delRec, delReq)
+	require.Equal(t, http.StatusNoContent, delRec.Code)
+
+	// The character now renders as initials...
+	queries := dbmodels.New(testDB.Pool)
+	updated, err := queries.GetCharacter(context.Background(), char.ID)
+	require.NoError(t, err)
+	assert.False(t, updated.AvatarUrl.Valid && updated.AvatarUrl.String != "",
+		"character's current avatar should be cleared")
+
+	// ...but the file survives for messages that pinned it.
+	assert.Contains(t, storage.uploads, uploadedPath,
+		"removing an avatar must not delete the file: posts that pinned it would lose their image")
+}

@@ -21,12 +21,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_create_post")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid create post request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	data := &CreatePostRequest{}
 	if err := render.Bind(r, data); err != nil {
@@ -41,14 +36,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user is GM or co-GM (only GM/co-GM can create posts)
-	queries := models.New(h.App.Pool)
-	game, err := queries.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game", "error", err, "game_id", gameID)
-		return
-	}
-
-	isGMOrCoGM := game.GmUserID == userID || core.IsUserCoGM(ctx, h.App.Pool, int32(gameID), userID)
+	isGMOrCoGM := ctx.Value("is_gm").(bool)
 
 	if !isGMOrCoGM {
 		h.renderError(ctx, w, r, core.ErrForbidden("Only the Game Master or co-GM can create posts"), "Non-GM/co-GM user attempted to create post", "user_id", userID, "game_id", gameID)
@@ -94,12 +82,7 @@ func (h *Handler) GetGamePosts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game_posts")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get game posts request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Parse optional query parameters
 	phaseIDStr := r.URL.Query().Get("phase_id")
@@ -191,12 +174,7 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_create_comment")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid create comment request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	postIDStr := chi.URLParam(r, "postId")
 	postID, err := strconv.ParseInt(postIDStr, 10, 32)
@@ -266,12 +244,7 @@ func (h *Handler) GetMessage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_message")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get message request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	messageIDStr := chi.URLParam(r, "messageId")
 	messageID, err := strconv.ParseInt(messageIDStr, 10, 32)
@@ -320,12 +293,7 @@ func (h *Handler) GetMessageThreadContext(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_message_thread_context")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get message thread context request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	messageIDStr := chi.URLParam(r, "messageId")
 	messageID, err := strconv.ParseInt(messageIDStr, 10, 32)
@@ -382,12 +350,7 @@ func (h *Handler) GetPostComments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_post_comments")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get post comments request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	postIDStr := chi.URLParam(r, "postId")
 	postID, err := strconv.ParseInt(postIDStr, 10, 32)
@@ -461,12 +424,7 @@ func (h *Handler) GetPostCommentsWithThreads(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_post_comments_with_threads")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get post comments with threads request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	postIDStr := chi.URLParam(r, "postId")
 	postID, err := strconv.ParseInt(postIDStr, 10, 32)
@@ -591,13 +549,6 @@ func (h *Handler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_update_post")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	_, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid update post request")
-		return
-	}
-
 	postIDStr := chi.URLParam(r, "postId")
 	postID, err := strconv.ParseInt(postIDStr, 10, 32)
 	if err != nil {
@@ -668,13 +619,6 @@ func (h *Handler) UpdateComment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_update_comment")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	_, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid update comment request")
-		return
-	}
-
 	commentIDStr := chi.URLParam(r, "commentId")
 	commentID, err := strconv.ParseInt(commentIDStr, 10, 32)
 	if err != nil {
@@ -735,12 +679,7 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_delete_comment")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid delete comment request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	commentIDStr := chi.URLParam(r, "commentId")
 	commentID, err := strconv.ParseInt(commentIDStr, 10, 32)

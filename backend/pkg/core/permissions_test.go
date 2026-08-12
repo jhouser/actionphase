@@ -52,6 +52,32 @@ func TestCanSeeUsernamesInAnonymousGame(t *testing.T) {
 		t.Fatalf("Failed to create normal test game: %v", err)
 	}
 
+	// Anonymous game that has COMPLETED: public archive mode lifts anonymity.
+	completedAnonGame, err := queries.CreateGame(ctx, models.CreateGameParams{
+		Title:       "Completed Anonymous Game",
+		Description: pgtype.Text{String: "Test", Valid: true},
+		GmUserID:    int32(gmUser.ID),
+		IsAnonymous: true,
+		IsPublic:    pgtype.Bool{Bool: true, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("Failed to create completed anonymous test game: %v", err)
+	}
+	completedAnonGame.State = pgtype.Text{String: GameStateCompleted, Valid: true}
+
+	// Anonymous game that was CANCELLED: not public, so anonymity still applies.
+	cancelledAnonGame, err := queries.CreateGame(ctx, models.CreateGameParams{
+		Title:       "Cancelled Anonymous Game",
+		Description: pgtype.Text{String: "Test", Valid: true},
+		GmUserID:    int32(gmUser.ID),
+		IsAnonymous: true,
+		IsPublic:    pgtype.Bool{Bool: true, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("Failed to create cancelled anonymous test game: %v", err)
+	}
+	cancelledAnonGame.State = pgtype.Text{String: GameStateCancelled, Valid: true}
+
 	type participant struct {
 		userID int32
 		role   string
@@ -62,7 +88,7 @@ func TestCanSeeUsernamesInAnonymousGame(t *testing.T) {
 		{int32(playerUser.ID), "player"},
 	}
 	for _, p := range participants {
-		for _, gameRef := range []*models.Game{&anonGame, &normalGame} {
+		for _, gameRef := range []*models.Game{&anonGame, &normalGame, &completedAnonGame, &cancelledAnonGame} {
 			_, err := queries.AddGameParticipant(ctx, models.AddGameParticipantParams{
 				GameID: gameRef.ID,
 				UserID: p.userID,
@@ -92,6 +118,18 @@ func TestCanSeeUsernamesInAnonymousGame(t *testing.T) {
 		{"anon: audience sees username", anonGame, int32(audienceUser.ID), true},
 		{"anon: player cannot see username", anonGame, int32(playerUser.ID), false},
 		{"anon: non-participant cannot see username", anonGame, 99999, false},
+
+		// Completed anonymous game: public archive mode lifts anonymity for
+		// everyone, including players and non-participants.
+		{"completed anon: player sees username", completedAnonGame, int32(playerUser.ID), true},
+		{"completed anon: non-participant sees username", completedAnonGame, 99999, true},
+		{"completed anon: GM sees username", completedAnonGame, int32(gmUser.ID), true},
+		{"completed anon: audience sees username", completedAnonGame, int32(audienceUser.ID), true},
+
+		// Cancelled games are NOT public, so the play-time rule still applies.
+		{"cancelled anon: player cannot see username", cancelledAnonGame, int32(playerUser.ID), false},
+		{"cancelled anon: non-participant cannot see username", cancelledAnonGame, 99999, false},
+		{"cancelled anon: GM sees username", cancelledAnonGame, int32(gmUser.ID), true},
 	}
 
 	for _, tt := range tests {

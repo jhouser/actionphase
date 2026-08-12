@@ -2,6 +2,7 @@ package games
 
 import (
 	"actionphase/pkg/core"
+	db "actionphase/pkg/db/models"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,12 +16,7 @@ func (h *Handler) LeaveGame(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_leave_game")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid leave game request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	// Get user ID from JWT token
 	userService := h.UserService
@@ -36,7 +32,7 @@ func (h *Handler) LeaveGame(w http.ResponseWriter, r *http.Request) {
 	// First, try to remove user from game participants (if they are a participant)
 	// Use RemovePlayer which handles both participant removal and character deactivation
 	participantRemoved := false
-	err = gameService.RemovePlayer(ctx, int32(gameID), userID, userID) // Self-initiated leave
+	err := gameService.RemovePlayer(ctx, gameID, userID, userID) // Self-initiated leave
 	if err != nil {
 		// Log but don't fail - user might not be a participant (might just have an application)
 		h.App.ObsLogger.Debug(ctx, "User not found in participants (might have application instead)", "game_id", gameID, "user_id", userID)
@@ -46,7 +42,7 @@ func (h *Handler) LeaveGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Also check for and withdraw any pending applications
-	application, err := applicationService.GetGameApplicationByUserAndGame(ctx, int32(gameID), userID)
+	application, err := applicationService.GetGameApplicationByUserAndGame(ctx, gameID, userID)
 	if err != nil {
 		// User has no application - that's fine if they were a participant
 		if !participantRemoved {
@@ -78,15 +74,10 @@ func (h *Handler) GetGameParticipants(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game_participants")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get game participants request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	gameService := h.GameService
-	participants, err := gameService.GetGameParticipants(ctx, int32(gameID))
+	participants, err := gameService.GetGameParticipants(ctx, gameID)
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game participants", "error", err, "game_id", gameID)
 		return
@@ -96,7 +87,7 @@ func (h *Handler) GetGameParticipants(w http.ResponseWriter, r *http.Request) {
 	// In anonymous games only GMs, co-GMs, and audience members may know which
 	// participants are former players; regular players and non-participants cannot.
 	redactFormerPlayer := false
-	game, err := gameService.GetGame(ctx, int32(gameID))
+	game, err := gameService.GetGame(ctx, gameID)
 	if err == nil && game.IsAnonymous {
 		viewerID, errResp := core.GetUserIDFromJWT(ctx, h.UserService)
 		if errResp != nil || !core.CanSeeUsernamesInAnonymousGame(ctx, h.App.Pool, *game, viewerID) {
@@ -149,12 +140,8 @@ func (h *Handler) RemovePlayer(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_remove_player")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid remove player request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
+	game := ctx.Value("game").(*db.Game)
 
 	userIDStr := chi.URLParam(r, "userId")
 	targetUserID, err := strconv.ParseInt(userIDStr, 10, 32)
@@ -172,13 +159,7 @@ func (h *Handler) RemovePlayer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	gameService := h.GameService
-
 	// Verify requesting user is the GM
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrNotFound("game not found"), "Failed to get game", "error", err, "game_id", gameID)
-		return
-	}
 
 	if game.GmUserID != requestingUserID {
 		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can remove players"), "Non-GM attempted to remove player", "requesting_user_id", requestingUserID, "game_id", gameID)
@@ -192,7 +173,7 @@ func (h *Handler) RemovePlayer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove player and deactivate their characters
-	err = gameService.RemovePlayer(ctx, int32(gameID), int32(targetUserID), requestingUserID)
+	err = gameService.RemovePlayer(ctx, gameID, int32(targetUserID), requestingUserID)
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to remove player", "error", err, "game_id", gameID, "user_id", targetUserID)
 		return
@@ -208,12 +189,8 @@ func (h *Handler) AddParticipantDirectly(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_add_participant_directly")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid add participant directly request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
+	game := ctx.Value("game").(*db.Game)
 
 	var req struct {
 		UserID int32  `json:"user_id"`
@@ -242,24 +219,18 @@ func (h *Handler) AddParticipantDirectly(w http.ResponseWriter, r *http.Request)
 
 	gameService := h.GameService
 
-	game, err := gameService.GetGame(ctx, int32(gameID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrNotFound("game not found"), "Failed to get game", "error", err, "game_id", gameID)
-		return
-	}
-
 	if game.GmUserID != requestingUserID {
 		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can add participants directly"), "Non-GM attempted to add participant directly", "requesting_user_id", requestingUserID, "game_id", gameID)
 		return
 	}
 
-	_, err = userService.GetUserByID(int(req.UserID))
+	_, err := userService.GetUserByID(int(req.UserID))
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrNotFound("user not found"), "Target user not found", "error", err, "user_id", req.UserID)
 		return
 	}
 
-	participant, err := gameService.AddParticipantWithRole(ctx, int32(gameID), req.UserID, req.Role)
+	participant, err := gameService.AddParticipantWithRole(ctx, gameID, req.UserID, req.Role)
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to add participant directly", "error", err, "game_id", gameID, "user_id", req.UserID, "role", req.Role)
 		return
@@ -277,12 +248,7 @@ func (h *Handler) PromoteToCoGM(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_promote_to_cogm")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid promote to co g m request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	userIDStr := chi.URLParam(r, "userId")
 	targetUserID, err := strconv.ParseInt(userIDStr, 10, 32)
@@ -302,7 +268,7 @@ func (h *Handler) PromoteToCoGM(w http.ResponseWriter, r *http.Request) {
 	gameService := h.GameService
 
 	// Call service method to promote user
-	err = gameService.PromoteToCoGM(ctx, int32(gameID), int32(targetUserID), requestingUserID)
+	err = gameService.PromoteToCoGM(ctx, gameID, int32(targetUserID), requestingUserID)
 	if err != nil {
 		h.App.ObsLogger.Error(ctx, "Failed to promote to co-GM", "error", err, "game_id", gameID, "user_id", targetUserID)
 		// Return 403 for permission errors, 400 for validation errors
@@ -323,12 +289,7 @@ func (h *Handler) DemoteFromCoGM(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_demote_from_cogm")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid demote from co g m request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	userIDStr := chi.URLParam(r, "userId")
 	targetUserID, err := strconv.ParseInt(userIDStr, 10, 32)
@@ -348,7 +309,7 @@ func (h *Handler) DemoteFromCoGM(w http.ResponseWriter, r *http.Request) {
 	gameService := h.GameService
 
 	// Call service method to demote user
-	err = gameService.DemoteFromCoGM(ctx, int32(gameID), int32(targetUserID), requestingUserID)
+	err = gameService.DemoteFromCoGM(ctx, gameID, int32(targetUserID), requestingUserID)
 	if err != nil {
 		h.App.ObsLogger.Error(ctx, "Failed to demote from co-GM", "error", err, "game_id", gameID, "user_id", targetUserID)
 		// Return 403 for permission errors, 400 for validation errors
@@ -369,12 +330,7 @@ func (h *Handler) TransitionPlayerToAudience(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_transition_player_to_audience")()
 
-	gameIDStr := chi.URLParam(r, "id")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid transition player to audience request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	userIDStr := chi.URLParam(r, "userId")
 	targetUserID, err := strconv.ParseInt(userIDStr, 10, 32)
@@ -392,7 +348,7 @@ func (h *Handler) TransitionPlayerToAudience(w http.ResponseWriter, r *http.Requ
 
 	gameService := h.GameService
 
-	err = gameService.TransitionPlayerToAudience(ctx, int32(gameID), int32(targetUserID), requestingUserID)
+	err = gameService.TransitionPlayerToAudience(ctx, gameID, int32(targetUserID), requestingUserID)
 	if err != nil {
 		h.App.ObsLogger.Error(ctx, "Failed to transition player to audience", "error", err, "game_id", gameID, "user_id", targetUserID)
 		if err.Error() == "only the primary GM can transition players to audience" {

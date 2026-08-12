@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 import { TEST_USERS } from './test-users';
 import { LoginPage } from '../pages/LoginPage';
 
@@ -93,14 +93,21 @@ export async function logout(page: Page) {
     await hamburger.click();
     await logoutButton.waitFor({ state: 'visible', timeout: 5000 });
   } else {
-    // Desktop: the dropdown is hover-driven (onMouseEnter/onMouseLeave on the
-    // wrapper div). Hover the trigger to open it, then immediately hover the
-    // Logout button — the mouse stays inside the wrapper the whole time so
-    // onMouseLeave never fires.
+    // Desktop: open the user menu by clicking its button.
+    //
+    // The menu also opens on hover, but hover is a poor fit for a test helper:
+    // it depends on where the pointer already is (re-hovering without leaving
+    // is a no-op, so a retry can't recover), and under parallel load the first
+    // hover can land before React has attached onMouseEnter. Clicking is a
+    // discrete, retriable action with no such dependency.
     const userMenuTrigger = page.getByTestId('user-menu-trigger');
-    await userMenuTrigger.hover();
-    await logoutButton.waitFor({ state: 'visible', timeout: 5000 });
-    await logoutButton.hover();
+    const userMenuButton = userMenuTrigger.locator('button').first();
+    await expect(userMenuButton).toBeVisible({ timeout: 10000 });
+
+    await expect(async () => {
+      await userMenuButton.click();
+      await logoutButton.waitFor({ state: 'visible', timeout: 2000 });
+    }).toPass({ timeout: 20000, intervals: [500] });
   }
 
   // Use Promise.all to handle the logout click and response concurrently

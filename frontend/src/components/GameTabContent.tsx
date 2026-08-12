@@ -3,6 +3,7 @@ import { formatScheduleDay } from '../lib/scheduleFormat';
 import type { Character } from '../types/characters';
 import { GameApplicationsList } from './GameApplicationsList';
 import { PublicApplicantsList } from './PublicApplicantsList';
+import { GameExportPanel } from './GameExportPanel';
 import { PhaseManagement } from './PhaseManagement';
 import { ActionSubmission } from './ActionSubmission';
 import { ActionsList } from './ActionsList';
@@ -17,6 +18,7 @@ import { HandoutsList } from './HandoutsList';
 import type { GameWithDetails, GameParticipant } from '../types/games';
 import type { GamePhase } from '../types/phases';
 import { GameLogsView } from './GameLogsView';
+import { GameStatsView } from './GameStatsView';
 
 // Lazy load PollsTab to match CommonRoom's lazy loading and prevent duplicate chunks
 const PollsTab = lazy(() => import('./PollsTab').then(m => ({ default: m.PollsTab })));
@@ -161,6 +163,15 @@ export function GameTabContent({
         {game.state === 'recruitment' && (
           <div className="mt-6 pt-6 border-t border-border-primary">
             <PublicApplicantsList gameId={gameId} />
+          </div>
+        )}
+
+        {/* Archive download — completed games only, available to any viewer who
+            can read the game (including public archive mode). Lives here rather
+            than above the game because it is an occasional, secondary action. */}
+        {game.state === 'completed' && (
+          <div className="mt-6 pt-6 border-t border-border-primary">
+            <GameExportPanel gameId={gameId} isCompleted />
           </div>
         )}
       </>
@@ -317,6 +328,11 @@ export function GameTabContent({
 
   if (activeTab === 'logs') {
     return <GameLogsView gameId={gameId} />;
+  }
+
+  // Stats Tab (post-game statistics; the view itself handles non-completed games)
+  if (activeTab === 'stats') {
+    return <GameStatsView gameId={gameId} gameState={game.state} />;
   }
 
   // Default fallback

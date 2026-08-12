@@ -33,8 +33,28 @@ export class ConversationsApi extends BaseApiClient {
     return this.client.get<ConversationWithDetails>(`/api/v1/games/${gameId}/conversations/${conversationId}`);
   }
 
+  /**
+   * Deletes a conversation that has no messages in it. Rejected with 409 by the
+   * server if any message exists, or 403 if the caller is not the creator/GM.
+   */
+  async deleteConversation(gameId: number, conversationId: number) {
+    return this.client.delete<{ message: string; id: number }>(`/api/v1/games/${gameId}/conversations/${conversationId}`);
+  }
+
   async getConversationMessages(gameId: number, conversationId: number) {
     return this.client.get<{ messages: PrivateMessage[] }>(`/api/v1/games/${gameId}/conversations/${conversationId}/messages`);
+  }
+
+  /**
+   * Returns just `messageId` and the message before it, rather than the whole
+   * conversation. Used to preview an unread message in the dashboard inbox
+   * without pulling a long thread's full history over the wire.
+   */
+  async getMessageWithContext(gameId: number, conversationId: number, messageId: number) {
+    return this.client.get<{ messages: PrivateMessage[] }>(
+      `/api/v1/games/${gameId}/conversations/${conversationId}/messages`,
+      { params: { context_for: messageId } }
+    );
   }
 
   async sendMessage(gameId: number, conversationId: number, data: SendMessageRequest) {

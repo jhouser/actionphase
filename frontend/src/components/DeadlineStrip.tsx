@@ -11,6 +11,13 @@ export interface DeadlineStripProps {
   isLoading?: boolean;
   isGM?: boolean;
   gameState?: string; // Hide deadlines for completed/cancelled games
+  /** Navigate to where a deadline is acted on. Omit to keep cards non-clickable. */
+  onDeadlineClick?: (deadline: UnifiedDeadline) => void;
+  /**
+   * Resolves a deadline's destination URL, or null when it has none (e.g. a
+   * GM-created free-text deadline). Cards without a destination stay inert.
+   */
+  getDeadlineHref?: (deadline: UnifiedDeadline) => string | null;
   onCreateDeadline: (data: { title: string; description: string; deadline: string }) => Promise<void>;
   onUpdateDeadline: (deadlineId: number, data: { title: string; description: string; deadline: string }) => Promise<void>;
   onDeleteDeadline: (deadlineId: number) => Promise<void>;
@@ -45,6 +52,8 @@ export function DeadlineStrip({
   isLoading = false,
   isGM = false,
   gameState,
+  onDeadlineClick,
+  getDeadlineHref,
   onCreateDeadline,
   onUpdateDeadline,
   onDeleteDeadline,
@@ -95,6 +104,14 @@ export function DeadlineStrip({
   // Show max 3 active deadlines by default
   const visibleActiveDeadlines = showAll ? activeDeadlines : activeDeadlines.slice(0, 3);
   const hasMore = activeDeadlines.length > 3 || expiredDeadlines.length > 0;
+
+  // Only deadlines with a real destination become clickable, so a card never
+  // promises navigation it can't deliver.
+  const clickHandlerFor = (deadline: UnifiedDeadline) => {
+    if (!onDeadlineClick) return undefined;
+    if (getDeadlineHref && getDeadlineHref(deadline) === null) return undefined;
+    return () => onDeadlineClick(deadline);
+  };
 
   const handleEdit = (deadline: UnifiedDeadline) => {
     setSelectedDeadline(deadline);
@@ -205,6 +222,7 @@ export function DeadlineStrip({
                     key={`${deadline.deadline_type}-${deadline.source_id}`}
                     deadline={deadline}
                     isGM={isGM}
+                    onClick={clickHandlerFor(deadline)}
                     onEdit={() => handleEdit(deadline)}
                     onExtend={() => handleExtendClick(deadline.source_id)}
                     onDelete={() => handleDeleteClick(deadline)}
@@ -225,6 +243,7 @@ export function DeadlineStrip({
                       key={`${deadline.deadline_type}-${deadline.source_id}`}
                       deadline={deadline}
                       isGM={isGM}
+                      onClick={clickHandlerFor(deadline)}
                       onDelete={() => handleDeleteClick(deadline)}
                     />
                   ))}

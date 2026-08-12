@@ -3,6 +3,9 @@ package deadlines
 import (
 	"actionphase/pkg/core"
 	db "actionphase/pkg/db/services"
+	dbactions "actionphase/pkg/db/services/actions"
+	dbmessages "actionphase/pkg/db/services/messages"
+	"actionphase/pkg/games"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -21,12 +24,22 @@ func setupDeadlineTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux 
 	tokenAuth := jwtauth.New("HS256", []byte(app.Config.JWT.Secret), nil)
 	userService := &db.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 	r := chi.NewRouter()
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// Games API - deadlines nested under games
-		r.Route("/games", func(r chi.Router) {
+		r.Route("/games/{gameID}", func(r chi.Router) {
 			deadlineHandler := Handler{
 				App:             app,
 				UserService:     &db.UserService{DB: testDB.Pool, Logger: app.ObsLogger},
@@ -38,10 +51,11 @@ func setupDeadlineTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux 
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
+				r.Use(gameHandler.GameMiddleware())
 
 				// Deadline endpoints
-				r.Post("/{gameId}/deadlines", deadlineHandler.CreateDeadline)
-				r.Get("/{gameId}/deadlines", deadlineHandler.GetGameDeadlines)
+				r.Post("/deadlines", deadlineHandler.CreateDeadline)
+				r.Get("/deadlines", deadlineHandler.GetGameDeadlines)
 			})
 		})
 

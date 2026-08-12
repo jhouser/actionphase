@@ -161,21 +161,22 @@ type CharacterDatum struct {
 }
 
 type CommonRoomPoll struct {
-	ID                     int32              `json:"id"`
-	GameID                 int32              `json:"game_id"`
-	PhaseID                pgtype.Int4        `json:"phase_id"`
-	CreatedByUserID        int32              `json:"created_by_user_id"`
-	CreatedByCharacterID   pgtype.Int4        `json:"created_by_character_id"`
-	Question               string             `json:"question"`
-	Description            pgtype.Text        `json:"description"`
-	Deadline               pgtype.Timestamptz `json:"deadline"`
-	ShowIndividualVotes    pgtype.Bool        `json:"show_individual_votes"`
-	AllowOtherOption       pgtype.Bool        `json:"allow_other_option"`
-	HideResultsFromPlayers bool               `json:"hide_results_from_players"`
-	AllowAudienceVoting    bool               `json:"allow_audience_voting"`
-	IsDeleted              pgtype.Bool        `json:"is_deleted"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ID                         int32              `json:"id"`
+	GameID                     int32              `json:"game_id"`
+	PhaseID                    pgtype.Int4        `json:"phase_id"`
+	CreatedByUserID            int32              `json:"created_by_user_id"`
+	CreatedByCharacterID       pgtype.Int4        `json:"created_by_character_id"`
+	Question                   string             `json:"question"`
+	Description                pgtype.Text        `json:"description"`
+	Deadline                   pgtype.Timestamptz `json:"deadline"`
+	ShowIndividualVotes        pgtype.Bool        `json:"show_individual_votes"`
+	AllowOtherOption           pgtype.Bool        `json:"allow_other_option"`
+	HideResultsFromPlayers     bool               `json:"hide_results_from_players"`
+	AllowAudienceVoting        bool               `json:"allow_audience_voting"`
+	ShowRunningTotalsToPlayers bool               `json:"show_running_totals_to_players"`
+	IsDeleted                  pgtype.Bool        `json:"is_deleted"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Conversation struct {
@@ -279,6 +280,23 @@ type GameDeadline struct {
 	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type GameExport struct {
+	ID                 int32              `json:"id"`
+	GameID             int32              `json:"game_id"`
+	RequestedByUserID  pgtype.Int4        `json:"requested_by_user_id"`
+	Status             string             `json:"status"`
+	ContentFingerprint pgtype.Text        `json:"content_fingerprint"`
+	StoragePath        pgtype.Text        `json:"storage_path"`
+	SizeBytes          pgtype.Int8        `json:"size_bytes"`
+	FileCount          pgtype.Int4        `json:"file_count"`
+	ErrorMessage       pgtype.Text        `json:"error_message"`
+	ProgressNote       pgtype.Text        `json:"progress_note"`
+	StartedAt          pgtype.Timestamptz `json:"started_at"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type GameLog struct {
 	ID        int32              `json:"id"`
 	GameID    int32              `json:"game_id"`
@@ -350,25 +368,26 @@ type IpBan struct {
 }
 
 type Message struct {
-	ID                    int32              `json:"id"`
-	GameID                int32              `json:"game_id"`
-	PhaseID               pgtype.Int4        `json:"phase_id"`
-	AuthorID              int32              `json:"author_id"`
-	CharacterID           int32              `json:"character_id"`
-	Content               string             `json:"content"`
-	MessageType           MessageType        `json:"message_type"`
-	ParentID              pgtype.Int4        `json:"parent_id"`
-	ThreadDepth           int32              `json:"thread_depth"`
-	Visibility            MessageVisibility  `json:"visibility"`
-	MentionedCharacterIds []int32            `json:"mentioned_character_ids"`
-	IsEdited              bool               `json:"is_edited"`
-	IsDeleted             bool               `json:"is_deleted"`
-	IsDraft               bool               `json:"is_draft"`
-	CreatedAt             pgtype.Timestamp   `json:"created_at"`
-	DeletedAt             pgtype.Timestamp   `json:"deleted_at"`
-	DeletedByUserID       pgtype.Int4        `json:"deleted_by_user_id"`
-	EditedAt              pgtype.Timestamptz `json:"edited_at"`
-	EditCount             int32              `json:"edit_count"`
+	ID                       int32              `json:"id"`
+	GameID                   int32              `json:"game_id"`
+	PhaseID                  pgtype.Int4        `json:"phase_id"`
+	AuthorID                 int32              `json:"author_id"`
+	CharacterID              int32              `json:"character_id"`
+	Content                  string             `json:"content"`
+	MessageType              MessageType        `json:"message_type"`
+	ParentID                 pgtype.Int4        `json:"parent_id"`
+	ThreadDepth              int32              `json:"thread_depth"`
+	Visibility               MessageVisibility  `json:"visibility"`
+	MentionedCharacterIds    []int32            `json:"mentioned_character_ids"`
+	IsEdited                 bool               `json:"is_edited"`
+	IsDeleted                bool               `json:"is_deleted"`
+	IsDraft                  bool               `json:"is_draft"`
+	CreatedAt                pgtype.Timestamp   `json:"created_at"`
+	DeletedAt                pgtype.Timestamp   `json:"deleted_at"`
+	DeletedByUserID          pgtype.Int4        `json:"deleted_by_user_id"`
+	EditedAt                 pgtype.Timestamptz `json:"edited_at"`
+	EditCount                int32              `json:"edit_count"`
+	CharacterAvatarUrlAtPost pgtype.Text        `json:"character_avatar_url_at_post"`
 }
 
 type MessageReaction struct {

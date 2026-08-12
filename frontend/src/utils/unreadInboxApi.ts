@@ -44,11 +44,20 @@ export async function fetchCommentContext(gameId: number, commentId: number): Pr
 }
 
 /**
- * Fetches the most recent messages in a conversation, for showing PM context
- * in the Unread inbox.
+ * Fetches the message a notification was for plus the one preceding it, for
+ * showing PM context in the Unread inbox. Deliberately does not fetch the whole
+ * conversation — a long-running thread would otherwise send its entire history
+ * over the wire just to preview two messages.
+ *
+ * Returns messages oldest-first, so the preceding message comes before the
+ * notified one.
  */
-export async function fetchPmContext(gameId: number, conversationId: number): Promise<PrivateMessage[]> {
-  const response = await apiClient.conversations.getConversationMessages(gameId, conversationId);
+export async function fetchPmContext(
+  gameId: number,
+  conversationId: number,
+  messageId: number
+): Promise<PrivateMessage[]> {
+  const response = await apiClient.conversations.getMessageWithContext(gameId, conversationId, messageId);
   return response.data.messages;
 }
 

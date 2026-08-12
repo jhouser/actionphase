@@ -73,17 +73,18 @@ func (s *PollService) CreatePollWithOptions(ctx context.Context, req core.Create
 
 	// Create the poll
 	pollParams := db.CreatePollParams{
-		GameID:                 req.GameID,
-		PhaseID:                phaseID,
-		CreatedByUserID:        req.CreatedByUserID,
-		CreatedByCharacterID:   createdByCharacterID,
-		Question:               req.Question,
-		Description:            description,
-		Deadline:               deadline,
-		ShowIndividualVotes:    showIndividualVotes,
-		AllowOtherOption:       allowOtherOption,
-		HideResultsFromPlayers: req.HideResultsFromPlayers,
-		AllowAudienceVoting:    req.AllowAudienceVoting,
+		GameID:                     req.GameID,
+		PhaseID:                    phaseID,
+		CreatedByUserID:            req.CreatedByUserID,
+		CreatedByCharacterID:       createdByCharacterID,
+		Question:                   req.Question,
+		Description:                description,
+		Deadline:                   deadline,
+		ShowIndividualVotes:        showIndividualVotes,
+		AllowOtherOption:           allowOtherOption,
+		HideResultsFromPlayers:     req.HideResultsFromPlayers,
+		AllowAudienceVoting:        req.AllowAudienceVoting,
+		ShowRunningTotalsToPlayers: req.ShowRunningTotalsToPlayers,
 	}
 
 	poll, err := queries.CreatePoll(ctx, pollParams)
@@ -483,14 +484,15 @@ func (s *PollService) UpdatePoll(ctx context.Context, pollID int32, req core.Upd
 	allowOtherOption := pgtype.Bool{Bool: req.AllowOtherOption, Valid: true}
 
 	params := db.UpdatePollParams{
-		ID:                     pollID,
-		Question:               req.Question,
-		Description:            description,
-		Deadline:               deadline,
-		ShowIndividualVotes:    showIndividualVotes,
-		AllowOtherOption:       allowOtherOption,
-		HideResultsFromPlayers: req.HideResultsFromPlayers,
-		AllowAudienceVoting:    req.AllowAudienceVoting,
+		ID:                         pollID,
+		Question:                   req.Question,
+		Description:                description,
+		Deadline:                   deadline,
+		ShowIndividualVotes:        showIndividualVotes,
+		AllowOtherOption:           allowOtherOption,
+		HideResultsFromPlayers:     req.HideResultsFromPlayers,
+		AllowAudienceVoting:        req.AllowAudienceVoting,
+		ShowRunningTotalsToPlayers: req.ShowRunningTotalsToPlayers,
 	}
 
 	poll, err := queries.UpdatePoll(ctx, params)

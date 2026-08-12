@@ -452,3 +452,189 @@ func TestPhaseAPI_PublishActionResult(t *testing.T) {
 		assert.Equal(t, true, results[0]["is_published"])
 	})
 }
+
+// TestPhaseAPI_AudienceSeesUnpublishedResults pins down audience visibility of
+// GM drafts.
+//
+// Audience is a trusted spectator role — it already reads every private message
+// and action submission — so unpublished results are deliberately visible to it
+// too, letting spectators watch results take shape. This is safe because a
+// result can only be drafted against the active phase: CreateActionResult takes
+// its PhaseID from GetActivePhase and refuses outright when no phase is active,
+// so there is no such thing as a draft for a phase that has not started.
+//
+// Players remain excluded — they are subjects of the game, not spectators, and
+// GetUserResults serves them only their own published results.
+func TestPhaseAPI_AudienceSeesUnpublishedResults(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupFullPhaseAPITestRouter(app, testDB)
+
+	gm, player, gmToken, playerToken, game, phase := setupResultsTestState(t, testDB, app)
+
+	audience := testDB.CreateTestUser(t, "audience", "audience@example.com")
+	audienceToken, err := core.CreateTestJWTTokenForUser(app, audience)
+	require.NoError(t, err)
+
+	gameService := &dbsvc.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	_, err = gameService.AddGameParticipant(context.Background(), game.ID, int32(audience.ID), "audience")
+	require.NoError(t, err)
+
+	actionService := &actionsvc.ActionSubmissionService{
+		DB:                  testDB.Pool,
+		Logger:              app.ObsLogger,
+		NotificationService: &dbsvc.NotificationService{DB: testDB.Pool, Logger: app.ObsLogger},
+	}
+
+	published, err := actionService.CreateActionResult(context.Background(), core.CreateActionResultRequest{
+		GameID:      game.ID,
+		PhaseID:     phase.ID,
+		UserID:      int32(player.ID),
+		GMUserID:    int32(gm.ID),
+		Content:     "Published result the audience may read.",
+		IsPublished: true,
+	})
+	require.NoError(t, err)
+
+	_, err = actionService.CreateActionResult(context.Background(), core.CreateActionResultRequest{
+		GameID:      game.ID,
+		PhaseID:     phase.ID,
+		UserID:      int32(player.ID),
+		GMUserID:    int32(gm.ID),
+		Content:     "GM draft still being written.",
+		IsPublished: false,
+	})
+	require.NoError(t, err)
+
+	fetchResults := func(t *testing.T, token string) []map[string]interface{} {
+		t.Helper()
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/results", game.ID), nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		var response []map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		return response
+	}
+
+	contentsOf := func(response []map[string]interface{}) []string {
+		contents := make([]string, 0, len(response))
+		for _, result := range response {
+			contents = append(contents, result["content"].(string))
+		}
+		return contents
+	}
+
+	t.Run("audience sees drafts alongside published results in an in-progress game", func(t *testing.T) {
+		response := fetchResults(t, audienceToken)
+
+		require.Len(t, response, 2, "audience should receive both the published result and the draft")
+		assert.ElementsMatch(t, []string{
+			"Published result the audience may read.",
+			"GM draft still being written.",
+		}, contentsOf(response))
+	})
+
+	t.Run("GM sees both published and unpublished results", func(t *testing.T) {
+		response := fetchResults(t, gmToken)
+
+		assert.Len(t, response, 2, "GM should see the draft alongside the published result")
+	})
+
+	// The player path is a different endpoint entirely (GetUserResults), which
+	// filters to is_published = true. Drafts being visible to spectators must not
+	// mean they leak to the person whose action they answer.
+	t.Run("the player the result is addressed to does not see the draft", func(t *testing.T) {
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/results/mine", game.ID), nil)
+		req.Header.Set("Authorization", "Bearer "+playerToken)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		var response []map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+		require.Len(t, response, 1, "player should receive only the published result")
+		assert.Equal(t, "Published result the audience may read.", response[0]["content"])
+		assert.Equal(t, float64(published.ID), response[0]["id"])
+	})
+
+	t.Run("audience still sees everything once the game is completed", func(t *testing.T) {
+		testDB.SetGameStateDirectly(t, game.ID, "completed")
+
+		response := fetchResults(t, audienceToken)
+
+		assert.Len(t, response, 2, "a completed game is a public archive; nothing is withheld")
+	})
+}
+
+// TestPhaseAPI_UserResultsIncludeCharacterID verifies that a player's own
+// results carry character_id.
+//
+// Regression: GetUserActionResults mapped character_name but never
+// character_id, while the GM-facing GetGameActionResults set both. The frontend
+// resolves a character's avatar by looking its id up in the game's character
+// list, so with the id missing every result in a non-GM's History tab fell back
+// to initials — the same character rendered with its portrait for the GM and as
+// an initials bubble for the player it belonged to.
+func TestPhaseAPI_UserResultsIncludeCharacterID(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupFullPhaseAPITestRouter(app, testDB)
+
+	gm, player, _, playerToken, game, phase := setupResultsTestState(t, testDB, app)
+
+	var characterID int32
+	err := testDB.Pool.QueryRow(context.Background(),
+		`INSERT INTO characters (game_id, user_id, name, character_type, status) VALUES ($1, $2, $3, 'player_character', 'approved') RETURNING id`,
+		game.ID, player.ID, "Vera",
+	).Scan(&characterID)
+	require.NoError(t, err)
+
+	actionService := &actionsvc.ActionSubmissionService{
+		DB:                  testDB.Pool,
+		Logger:              app.ObsLogger,
+		NotificationService: &dbsvc.NotificationService{DB: testDB.Pool, Logger: app.ObsLogger},
+	}
+
+	result, err := actionService.CreateActionResult(context.Background(), core.CreateActionResultRequest{
+		GameID:      game.ID,
+		PhaseID:     phase.ID,
+		UserID:      int32(player.ID),
+		CharacterID: &characterID,
+		GMUserID:    int32(gm.ID),
+		Content:     "Your action succeeds.",
+		IsPublished: true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, actionService.PublishActionResult(context.Background(), result.ID, int32(gm.ID)))
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/results/mine", game.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+playerToken)
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	// Decoded as a raw map so an absent key is distinguishable from a zero value:
+	// character_id is omitempty, and a typed struct would report both as 0.
+	var response []map[string]interface{}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Len(t, response, 1)
+
+	got, present := response[0]["character_id"]
+	require.True(t, present, "character_id must be present so the client can resolve the avatar; got keys %v", response[0])
+	assert.Equal(t, float64(characterID), got)
+	assert.Equal(t, "Vera", response[0]["character_name"])
+}

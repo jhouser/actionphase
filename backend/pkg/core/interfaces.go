@@ -282,6 +282,9 @@ type GameServiceInterface interface {
 
 	// TransitionPlayerToAudience moves a player to audience role
 	TransitionPlayerToAudience(ctx context.Context, gameID, userID, requestingUserID int32) error
+
+	// GetGameLogs retrieves all logs for a given game
+	GetGameLogs(ctx context.Context, gameID int32) ([]models.GameLog, error)
 }
 
 // GameApplicationServiceInterface defines the contract for game application operations.
@@ -1504,7 +1507,12 @@ type CreatePollRequest struct {
 	// AllowAudienceVoting permits audience members to vote; their votes are
 	// attributed anonymously since they may not have characters.
 	AllowAudienceVoting bool
-	Options             []PollOptionInput // List of poll options
+	// ShowRunningTotalsToPlayers lets players see results while voting is still
+	// open. Vote attribution still follows ShowIndividualVotes: tallies only by
+	// default, per-voter detail when that flag is also set. Mutually exclusive
+	// with HideResultsFromPlayers.
+	ShowRunningTotalsToPlayers bool
+	Options                    []PollOptionInput // List of poll options
 }
 
 // PollOptionInput represents a single poll option during creation.
@@ -1515,13 +1523,14 @@ type PollOptionInput struct {
 
 // UpdatePollRequest represents parameters for updating a poll.
 type UpdatePollRequest struct {
-	Question               string
-	Description            *string
-	Deadline               time.Time
-	ShowIndividualVotes    bool
-	AllowOtherOption       bool
-	HideResultsFromPlayers bool
-	AllowAudienceVoting    bool
+	Question                   string
+	Description                *string
+	Deadline                   time.Time
+	ShowIndividualVotes        bool
+	AllowOtherOption           bool
+	HideResultsFromPlayers     bool
+	AllowAudienceVoting        bool
+	ShowRunningTotalsToPlayers bool
 }
 
 // SubmitVoteRequest represents parameters for submitting a vote.
@@ -1739,6 +1748,16 @@ type CharacterServiceInterface interface {
 	AssignNPCToAudience(ctx context.Context, characterID, assignedUserID, assignedByUserID int32) (*models.NpcAssignment, error)
 }
 
+// GameStatsServiceInterface defines the contract for post-game statistics.
+//
+// Kept separate from GameServiceInterface: these are read-only analytics over
+// content other services own, with no bearing on game lifecycle.
+type GameStatsServiceInterface interface {
+	// GetGameStats returns the full statistics payload for a game. Callers are
+	// responsible for authorization; this method applies none.
+	GetGameStats(ctx context.Context, gameID int32) (*GameStats, error)
+}
+
 // UserPreferencesServiceInterface defines the contract for user preferences operations.
 type UserPreferencesServiceInterface interface {
 	GetUserPreferences(ctx context.Context, userID int32) (*PreferencesData, error)
@@ -1753,6 +1772,9 @@ type ConversationServiceInterface interface {
 	GetConversationParticipants(ctx context.Context, conversationID int32) ([]models.GetConversationParticipantsRow, error)
 	SendMessage(ctx context.Context, req SendConversationMessageRequest) (*models.PrivateMessage, error)
 	GetConversationMessages(ctx context.Context, conversationID int32, userID int32) ([]models.GetConversationMessagesRow, error)
+	// GetMessageWithContext returns a single message plus the one preceding it,
+	// for previewing an unread message without reading the whole conversation.
+	GetMessageWithContext(ctx context.Context, conversationID int32, messageID int32, userID int32) ([]models.GetConversationMessagesRow, error)
 	MarkConversationAsRead(ctx context.Context, conversationID int32, userID int32) error
 	AddParticipant(ctx context.Context, conversationID int32, characterID int32) error
 	UpdatePrivateMessage(ctx context.Context, messageID int32, userID int32, content string) (*models.PrivateMessage, error)
@@ -1760,4 +1782,11 @@ type ConversationServiceInterface interface {
 	CanUserAccessConversation(ctx context.Context, conversationID int32, userID int32, isAdmin bool) (bool, error)
 	GetConversation(ctx context.Context, conversationID int32) (*models.Conversation, error)
 	GetPrivateMessage(ctx context.Context, messageID int32) (*models.PrivateMessage, error)
+
+	// DeleteConversation permanently removes a conversation that has never had a
+	// message sent in it. Only the creator or a GM/co-GM of the game may do so.
+	// Returns ErrConversationNotEmpty if any message exists (including
+	// soft-deleted ones) and ErrConversationDeleteForbidden if the user is not
+	// authorized.
+	DeleteConversation(ctx context.Context, conversationID int32, userID int32) error
 }

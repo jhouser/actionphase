@@ -18,12 +18,7 @@ func (h *Handler) MarkPostRead(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_mark_post_read")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid mark post read request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	postIDStr := chi.URLParam(r, "postId")
 	postID, err := strconv.ParseInt(postIDStr, 10, 32)
@@ -72,12 +67,7 @@ func (h *Handler) GetGameReadMarkers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game_read_markers")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get game read markers request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	userID, err := h.getUserIDFromToken(r)
 	if err != nil {
@@ -116,13 +106,7 @@ func (h *Handler) GetPostsUnreadInfo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_posts_unread_info")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get posts unread info request")
-		return
-	}
-
+	gameID := ctx.Value("gameID").(int32)
 	messageService := h.MessageService
 	postsInfo, err := messageService.GetPostsWithUnreadInfo(ctx, int32(gameID))
 	if err != nil {
@@ -155,12 +139,7 @@ func (h *Handler) GetUnreadCommentIDs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_unread_comment_ids")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get unread comment i ds request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	userID, err := h.getUserIDFromToken(r)
 	if err != nil {
@@ -193,12 +172,7 @@ func (h *Handler) ToggleCommentRead(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_toggle_comment_read")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid toggle comment read request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	postIDStr := chi.URLParam(r, "postId")
 	postID, err := strconv.ParseInt(postIDStr, 10, 32)
@@ -245,12 +219,7 @@ func (h *Handler) MarkAllCommentsRead(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_mark_all_comments_read")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid mark all comments read request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	phaseIDStr := chi.URLParam(r, "phaseId")
 	phaseID, err := strconv.ParseInt(phaseIDStr, 10, 32)
@@ -282,12 +251,7 @@ func (h *Handler) GetManualReadCommentIDs(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_get_manual_read_comment_ids")()
 
-	gameIDStr := chi.URLParam(r, "gameId")
-	gameID, err := strconv.ParseInt(gameIDStr, 10, 32)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid game ID")), "Invalid get manual read comment i ds request")
-		return
-	}
+	gameID := ctx.Value("gameID").(int32)
 
 	userID, err := h.getUserIDFromToken(r)
 	if err != nil {

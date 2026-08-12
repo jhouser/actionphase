@@ -23,6 +23,7 @@ interface PrivateMessagesProps {
  */
 function PrivateMessagesInner({ gameId, characters, isAnonymous, allowGroupConversations, currentPhaseType }: PrivateMessagesProps) {
   const [showNewConversationModal, setShowNewConversationModal] = useState(false);
+  const [prefilledParticipantIds, setPrefilledParticipantIds] = useState<number[]>([]);
   const { allGameCharacters } = useGameContext();
   const {
     selectedConversationId,
@@ -32,6 +33,14 @@ function PrivateMessagesInner({ gameId, characters, isAnonymous, allowGroupConve
   } = useConversation();
 
   const [conversationParam, setConversationParam] = useUrlParam<number | null>('conversation', null, {
+    deserialize: (s) => parseInt(s, 10) || null,
+    serialize: (v) => v === null || v === undefined ? '' : String(v),
+    replace: true,
+  });
+
+  // Set by the envelope shortcut on a character sheet/profile: open the New
+  // Conversation form with that character already selected as a participant.
+  const [newConversationWith, setNewConversationWith] = useUrlParam<number | null>('newConversationWith', null, {
     deserialize: (s) => parseInt(s, 10) || null,
     serialize: (v) => v === null || v === undefined ? '' : String(v),
     replace: true,
@@ -58,6 +67,25 @@ function PrivateMessagesInner({ gameId, characters, isAnonymous, allowGroupConve
       selectConversation(conversationParam);
     }
   }, [conversationParam]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Honour the envelope shortcut once, then clear the param so a later refresh
+  // or back-navigation doesn't reopen the form. The selected participant moves
+  // into state first, since clearing the param unmounts nothing but does remove
+  // the value the modal reads.
+  useEffect(() => {
+    if (newConversationWith === null) return;
+    if (isMessagingAllowed) {
+      setPrefilledParticipantIds([newConversationWith]);
+      setShowNewConversationModal(true);
+      setConversationParam(null);
+    }
+    setNewConversationWith(null);
+  }, [newConversationWith, isMessagingAllowed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCloseNewConversationModal = () => {
+    setShowNewConversationModal(false);
+    setPrefilledParticipantIds([]);
+  };
 
   const handleConversationCreated = (conversationId: number) => {
     logger.debug('Conversation created', { conversationId, gameId });
@@ -131,7 +159,11 @@ function PrivateMessagesInner({ gameId, characters, isAnonymous, allowGroupConve
         /* Message Thread (full screen with centered content on desktop) */
         <div className="h-full flex flex-col surface-base">
           {/* Thread - centered with max-width for better readability on desktop */}
-          <div className="flex-1 overflow-hidden">
+          {/* min-h-0 (not overflow-hidden) lets this flex child shrink to its
+              container without establishing a clipping context. overflow-hidden
+              here would become the sticky containing block for the thread
+              header and prevent it from sticking to the viewport. */}
+          <div className="flex-1 min-h-0">
             <div className="h-full max-w-7xl mx-auto">
               <MessageThread
                 gameId={gameId}
@@ -152,7 +184,8 @@ function PrivateMessagesInner({ gameId, characters, isAnonymous, allowGroupConve
           allCharacters={allGameCharacters}
           isAnonymous={isAnonymous}
           allowGroupConversations={allowGroupConversations}
-          onClose={() => setShowNewConversationModal(false)}
+          initialParticipantIds={prefilledParticipantIds}
+          onClose={handleCloseNewConversationModal}
           onConversationCreated={handleConversationCreated}
         />
       )}

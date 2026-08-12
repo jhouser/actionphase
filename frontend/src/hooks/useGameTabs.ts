@@ -43,6 +43,7 @@ const icons = {
   history: createIcon('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'),
   audience: createIcon('M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z'),
   handouts: createIcon('M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'),
+  stats: createIcon('M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'),
 };
 
 export function useGameTabs({
@@ -106,7 +107,8 @@ export function useGameTabs({
       // Actions tab - Visible during action phases to:
       // 1. GM (can see all actions and manage)
       // 2. Regular participants (can submit actions)
-      // Note: Audience members view actions via the Audience tab instead
+      // Note: Audience members view action submissions and results on the
+      // History tab, which serves every role (see HistoryView).
       if (currentPhaseType === 'action' && (isGM || isParticipant)) {
         const label = isGM ? 'Actions' : hasSubmittedAction ? 'Action Submitted ✓' : 'Submit Action';
         tabList.push({ id: 'actions', label, icon: icons.actions });
@@ -143,6 +145,13 @@ export function useGameTabs({
 
       // People tab (combines Characters and Participants) - same as in-progress games
       tabList.push({ id: 'people', label: 'People', badge: participantCount, icon: icons.people });
+
+      // Stats - completed games only. Cancelled games are excluded because the
+      // stats endpoint serves completed games exclusively (a cancelled game is
+      // not a public archive), so the tab would only ever show an error.
+      if (gameState === 'completed') {
+        tabList.push({ id: 'stats', label: 'Stats', icon: icons.stats });
+      }
 
       // Handouts - available to view historical handouts
       tabList.push({ id: 'handouts', label: 'Handouts', icon: icons.handouts });
@@ -181,7 +190,11 @@ export function useGameTabs({
       } else if (currentPhaseType === 'action') {
         // Action phase - different default for GM vs players
         // GM & Players: See Actions tab first
-        // Audience: Go to Audience tab to view action submissions
+        // Audience: Go to Audience tab, which is now private messages only.
+        // Action submissions and results moved to History, so this default no
+        // longer lands a spectator on the action traffic it was chosen for.
+        // Left as-is deliberately: private messages are still a reasonable
+        // landing spot, and changing it is a UX call, not a comment fix.
         if (isAudience && tabs.some(t => t.id === 'audience')) {
           return 'audience';
         }

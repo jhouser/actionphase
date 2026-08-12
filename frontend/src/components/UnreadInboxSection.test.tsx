@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -119,20 +119,37 @@ function setupHandlers() {
         participants: [{ id: 1, conversation_id: 34, user_id: 1, character_id: 7, joined_at: '', username: 'player1' }],
       });
     }),
-    http.get('/api/v1/games/:gameId/conversations/:conversationId/messages', () => {
-      return HttpResponse.json({
-        messages: [
-          {
-            id: 55,
-            conversation_id: 34,
-            sender_character_id: 8,
-            sender_character_name: 'Alex the Rogue',
-            sender_username: 'alex',
-            content: 'Are you coming tonight?',
-            created_at: '2026-01-01T00:00:00Z',
-          },
-        ],
-      });
+    // Mirrors the server: context_for=<id> returns that message plus the one
+    // before it; without it, the whole conversation.
+    http.get('/api/v1/games/:gameId/conversations/:conversationId/messages', ({ request }) => {
+      const contextFor = new URL(request.url).searchParams.get('context_for');
+      const conversation = [
+        {
+          id: 54,
+          conversation_id: 34,
+          sender_character_id: 7,
+          sender_character_name: 'My Character',
+          sender_username: 'player1',
+          content: 'Meeting at the tavern at dusk?',
+          created_at: '2026-01-01T00:00:00Z',
+        },
+        {
+          id: 55,
+          conversation_id: 34,
+          sender_character_id: 8,
+          sender_character_name: 'Alex the Rogue',
+          sender_username: 'alex',
+          content: 'Are you coming tonight?',
+          created_at: '2026-01-01T00:01:00Z',
+        },
+      ];
+
+      if (contextFor) {
+        const index = conversation.findIndex((m) => m.id === Number(contextFor));
+        if (index === -1) return HttpResponse.json({ messages: [] });
+        return HttpResponse.json({ messages: conversation.slice(Math.max(0, index - 1), index + 1) });
+      }
+      return HttpResponse.json({ messages: conversation });
     }),
     http.post('/api/v1/games/:gameId/conversations/:conversationId/messages', () => {
       return HttpResponse.json({ id: 999 });
@@ -302,6 +319,117 @@ describe('UnreadInboxSection', () => {
     // isn't scoped to the replier's own controllable characters.
     await waitFor(() => {
       expect(screen.getAllByText('Jane the Bard').length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe('parent context', () => {
+    it('shows the parent comment above the unread reply so the reader can recall the thread', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<UnreadInboxSection />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Jane replied to your comment')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Jane replied to your comment'));
+
+      // The unread reply itself...
+      await waitFor(() => {
+        expect(screen.getByText("Great idea, let's do that.")).toBeInTheDocument();
+      });
+      // ...and the comment it was replying to, for context.
+      expect(screen.getByText('Original comment')).toBeInTheDocument();
+    });
+
+    it('shows the preceding message as context when expanding a private message', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<UnreadInboxSection />);
+
+      await waitFor(() => {
+        expect(screen.getByText('New message from Alex')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('New message from Alex'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Are you coming tonight?')).toBeInTheDocument();
+      });
+      expect(screen.getByText('Meeting at the tavern at dusk?')).toBeInTheDocument();
+    });
+
+    it('does not show a parent block when the unread message opened the conversation', async () => {
+      const user = userEvent.setup();
+      // Notification points at message 54, the first in the conversation, so
+      // the server has no predecessor to return.
+      server.use(
+        http.get('/api/v1/notifications', () => {
+          return HttpResponse.json({
+            data: [{ ...pmNotification, related_id: 54 }],
+            pagination: { total: 1, limit: 100, offset: 0 },
+          });
+        })
+      );
+
+      renderWithProviders(<UnreadInboxSection />);
+
+      await waitFor(() => {
+        expect(screen.getByText('New message from Alex')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('New message from Alex'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Meeting at the tavern at dusk?')).toBeInTheDocument();
+      });
+      // Nothing to quote, so no expand/collapse control for a parent block.
+      expect(screen.queryByRole('button', { name: 'Expand' })).not.toBeInTheDocument();
+    });
+
+    it('requests only the notified message and its predecessor, not the whole thread', async () => {
+      const user = userEvent.setup();
+      const requestedUrls: string[] = [];
+      const recordRequest = ({ request }: { request: Request }) => {
+        const url = new URL(request.url);
+        if (url.pathname.endsWith('/conversations/34/messages')) {
+          requestedUrls.push(url.search);
+        }
+      };
+      server.events.on('request:start', recordRequest);
+      onTestFinished(() => server.events.removeListener('request:start', recordRequest));
+
+      renderWithProviders(<UnreadInboxSection />);
+
+      await waitFor(() => {
+        expect(screen.getByText('New message from Alex')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('New message from Alex'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Are you coming tonight?')).toBeInTheDocument();
+      });
+
+      // Every message fetch for the preview must be scoped; an unscoped request
+      // would pull the conversation's entire history.
+      expect(requestedUrls.length).toBeGreaterThan(0);
+      expect(requestedUrls.every((search) => search.includes('context_for=55'))).toBe(true);
+    });
+
+    it('keeps the parent collapsed by default and expands it on request', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<UnreadInboxSection />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Jane replied to your comment')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Jane replied to your comment'));
+
+      // Collapsed by default to protect dashboard screen real estate.
+      const expandButton = await screen.findByRole('button', { name: 'Expand' });
+      await user.click(expandButton);
+
+      expect(screen.getByRole('button', { name: 'Collapse' })).toBeInTheDocument();
     });
   });
 });

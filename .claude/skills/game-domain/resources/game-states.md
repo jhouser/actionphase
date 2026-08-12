@@ -5,15 +5,21 @@ Complete reference for game state machine in ActionPhase.
 ## Game States
 
 ```sql
-state CHECK (state IN (
-    'setup',
-    'recruitment',
-    'character_creation',
-    'in_progress',
-    'paused',
-    'completed',
-    'cancelled'
-))
+-- backend/pkg/db/schema.sql — NOTE: no CHECK constraint; values enforced in code
+state VARCHAR(50) DEFAULT 'setup'
+```
+
+Canonical values are the `GameState*` constants in
+`backend/pkg/core/constants.go`:
+
+```go
+GameStateSetup             = "setup"
+GameStateRecruitment       = "recruitment"
+GameStateCharacterCreation = "character_creation"
+GameStateInProgress        = "in_progress"
+GameStatePaused            = "paused"
+GameStateCompleted         = "completed"
+GameStateCancelled         = "cancelled"
 ```
 
 ## State Definitions
@@ -49,13 +55,16 @@ state CHECK (state IN (
 
 ### COMPLETED
 - Game ended normally
-- Archive becomes public
-- Action submissions revealed
+- **PUBLIC ARCHIVE**: `CanUserViewGame` returns true for ANY authenticated user
+  (`backend/pkg/db/services/games.go:1029`)
+- Common room content, action submissions, private conversations, and published
+  results are all readable by non-participants
 - Read-only state
 
 ### CANCELLED
 - Game terminated early
-- Partial archive
+- ⚠️ **NOT public** — cancelled games follow normal permission rules; only
+  participants can view them
 - Marked as cancelled
 
 ## State Transition Rules

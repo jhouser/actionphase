@@ -5,13 +5,12 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"actionphase/pkg/core"
+	db "actionphase/pkg/db/models"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 )
 
@@ -27,11 +26,7 @@ var allowedBannerMimeTypes = map[string]bool{
 func (h *Handler) UploadGameBanner(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	gameID, err := parseBannerGameID(r)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid upload game banner request", "error", err)
-		return
-	}
+	game := ctx.Value("game").(*db.Game)
 
 	userService := h.UserService
 	userID, errResp := core.GetUserIDFromJWT(ctx, userService)
@@ -41,11 +36,6 @@ func (h *Handler) UploadGameBanner(w http.ResponseWriter, r *http.Request) {
 	}
 
 	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, gameID)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrNotFound("Game not found"), "Upload game banner not found")
-		return
-	}
 	if game.GmUserID != userID {
 		h.renderError(ctx, w, r, core.ErrForbidden("Only the GM can update the game banner"), "Upload game banner forbidden")
 		return
@@ -89,7 +79,7 @@ func (h *Handler) UploadGameBanner(w http.ResponseWriter, r *http.Request) {
 	if ext == "" {
 		ext = bannerExtFromMime(contentType)
 	}
-	storagePath := fmt.Sprintf("banners/games/%d/%d%s", gameID, time.Now().Unix(), ext)
+	storagePath := fmt.Sprintf("banners/games/%d/%d%s", game.ID, time.Now().Unix(), ext)
 
 	bannerURL, err := h.App.Storage.Upload(ctx, storagePath, fileData, contentType)
 	if err != nil {
@@ -97,7 +87,7 @@ func (h *Handler) UploadGameBanner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := gameService.UpdateGameBannerURL(ctx, gameID, &bannerURL); err != nil {
+	if err := gameService.UpdateGameBannerURL(ctx, game.ID, &bannerURL); err != nil {
 		_ = h.App.Storage.Delete(ctx, storagePath)
 		h.renderError(ctx, w, r, core.ErrInternalError(fmt.Errorf("failed to save banner URL: %w", err)), "Failed to upload game banner")
 		return
@@ -111,11 +101,7 @@ func (h *Handler) UploadGameBanner(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteGameBanner(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	gameID, err := parseBannerGameID(r)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid delete game banner request", "error", err)
-		return
-	}
+	game := ctx.Value("game").(*db.Game)
 
 	userService := h.UserService
 	userID, errResp := core.GetUserIDFromJWT(ctx, userService)
@@ -125,11 +111,6 @@ func (h *Handler) DeleteGameBanner(w http.ResponseWriter, r *http.Request) {
 	}
 
 	gameService := h.GameService
-	game, err := gameService.GetGame(ctx, gameID)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrNotFound("Game not found"), "Delete game banner not found")
-		return
-	}
 	if game.GmUserID != userID {
 		h.renderError(ctx, w, r, core.ErrForbidden("Only the GM can remove the game banner"), "Delete game banner forbidden")
 		return
@@ -140,21 +121,12 @@ func (h *Handler) DeleteGameBanner(w http.ResponseWriter, r *http.Request) {
 		_ = h.App.Storage.Delete(ctx, oldPath)
 	}
 
-	if err := gameService.UpdateGameBannerURL(ctx, gameID, nil); err != nil {
+	if err := gameService.UpdateGameBannerURL(ctx, game.ID, nil); err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(fmt.Errorf("failed to remove banner: %w", err)), "Failed to delete game banner")
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func parseBannerGameID(r *http.Request) (int32, error) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 32)
-	if err != nil {
-		return 0, fmt.Errorf("invalid game ID")
-	}
-	return int32(id), nil
 }
 
 func readAndValidateBannerSize(file io.Reader) (io.Reader, error) {

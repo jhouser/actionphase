@@ -12,7 +12,11 @@ import (
 
 	"actionphase/pkg/core"
 	dbmodels "actionphase/pkg/db/models"
+	db "actionphase/pkg/db/services"
 	dbsvc "actionphase/pkg/db/services"
+	dbactions "actionphase/pkg/db/services/actions"
+	dbmessages "actionphase/pkg/db/services/messages"
+	"actionphase/pkg/games"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -27,12 +31,23 @@ func setupHandoutTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 	tokenAuth := jwtauth.New("HS256", []byte(app.Config.JWT.Secret), nil)
 	userService := &dbsvc.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
+	gameHandler := games.Handler{
+		App:                     app,
+		UserService:             &db.UserService{DB: app.Pool, Logger: app.ObsLogger},
+		GameService:             &db.GameService{DB: app.Pool, Logger: app.ObsLogger},
+		GameApplicationService:  &db.GameApplicationService{DB: app.Pool, Logger: app.ObsLogger},
+		CharacterService:        &db.CharacterService{DB: app.Pool, Logger: app.ObsLogger},
+		NotificationService:     db.NewNotificationService(app.Pool, app.ObsLogger),
+		MessageService:          &dbmessages.MessageService{DB: app.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
+	}
 	r := chi.NewRouter()
-	r.Route("/api/v1/games", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(jwtauth.Authenticator(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
 		r.Use(core.AdminModeMiddleware)
+		r.Use(gameHandler.GameMiddleware())
 
 		handler := &Handler{
 			App:                 app,
@@ -41,17 +56,17 @@ func setupHandoutTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 			HandoutService:      dbsvc.NewHandoutService(testDB.Pool),
 			NotificationService: dbsvc.NewNotificationService(testDB.Pool, app.ObsLogger),
 		}
-		r.Post("/{gameId}/handouts", handler.CreateHandout)
-		r.Get("/{gameId}/handouts", handler.ListHandouts)
-		r.Get("/{gameId}/handouts/{handoutId}", handler.GetHandout)
-		r.Put("/{gameId}/handouts/{handoutId}", handler.UpdateHandout)
-		r.Delete("/{gameId}/handouts/{handoutId}", handler.DeleteHandout)
-		r.Post("/{gameId}/handouts/{handoutId}/publish", handler.PublishHandout)
-		r.Post("/{gameId}/handouts/{handoutId}/unpublish", handler.UnpublishHandout)
-		r.Post("/{gameId}/handouts/{handoutId}/comments", handler.CreateHandoutComment)
-		r.Get("/{gameId}/handouts/{handoutId}/comments", handler.ListHandoutComments)
-		r.Patch("/{gameId}/handouts/{handoutId}/comments/{commentId}", handler.UpdateHandoutComment)
-		r.Delete("/{gameId}/handouts/{handoutId}/comments/{commentId}", handler.DeleteHandoutComment)
+		r.Post("/handouts", handler.CreateHandout)
+		r.Get("/handouts", handler.ListHandouts)
+		r.Get("/handouts/{handoutId}", handler.GetHandout)
+		r.Put("/handouts/{handoutId}", handler.UpdateHandout)
+		r.Delete("/handouts/{handoutId}", handler.DeleteHandout)
+		r.Post("/handouts/{handoutId}/publish", handler.PublishHandout)
+		r.Post("/handouts/{handoutId}/unpublish", handler.UnpublishHandout)
+		r.Post("/handouts/{handoutId}/comments", handler.CreateHandoutComment)
+		r.Get("/handouts/{handoutId}/comments", handler.ListHandoutComments)
+		r.Patch("/handouts/{handoutId}/comments/{commentId}", handler.UpdateHandoutComment)
+		r.Delete("/handouts/{handoutId}/comments/{commentId}", handler.DeleteHandoutComment)
 	})
 
 	return r
@@ -162,7 +177,7 @@ func TestHandoutAPI_CreateHandout(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
 }
 
@@ -859,7 +874,7 @@ func TestHandoutAPI_AdminMode_CreateHandout(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusUnauthorized, rec.Code, "admin without admin mode header should be rejected")
+		assert.Equal(t, http.StatusForbidden, rec.Code, "admin without admin mode header should be rejected")
 	})
 
 	t.Run("admin with X-Admin-Mode: true can create handout", func(t *testing.T) {
@@ -895,7 +910,7 @@ func TestHandoutAPI_AdminMode_CreateHandout(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusUnauthorized, rec.Code, "non-admin cannot use admin mode header to gain access")
+		assert.Equal(t, http.StatusForbidden, rec.Code, "non-admin cannot use admin mode header to gain access")
 	})
 
 	// Ensure the primary GM still works normally

@@ -15,6 +15,7 @@ import { Button, Badge, Input } from './ui';
 import { useRenameCharacter } from '../hooks/useCharacters';
 import { MarkdownPreview } from './MarkdownPreview';
 import { CommentEditor } from './CommentEditor';
+import { MessageCharacterButton } from './MessageCharacterButton';
 
 interface CharacterSheetProps {
   characterId: number;
@@ -212,7 +213,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
                   characterName={character.name}
                   size="xl"
                   shape={portraitMode ? 'portrait' : 'circle'}
-                  className={portraitMode ? '' : 'w-20 h-20 md:w-32 md:h-32'}
+                  className={portraitMode ? '' : 'w-14 h-14 sm:w-20 sm:h-20 md:w-32 md:h-32'}
                 />
                 {canEdit && (
                   <>
@@ -276,14 +277,20 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 mb-1">
-                  <h2 className="text-lg md:text-2xl font-bold text-content-primary truncate">
+                <div className="flex items-center gap-1 sm:gap-2 mb-1">
+                  {/* Wraps rather than truncates: the header sits at the top of
+                      a modal with nothing positioned against its height, so a
+                      second line costs only vertical space, whereas truncation
+                      loses the name outright ("Detective ..."). break-words
+                      catches a long unbroken name that would otherwise overflow.
+                      Truncates from md: up, where names fit on one line. */}
+                  <h2 className="min-w-0 text-lg md:text-2xl font-bold text-content-primary break-words md:truncate">
                     {character?.name || 'Character Sheet'}
                   </h2>
                   {canEdit && character && (
                     <button
                       onClick={handleStartEditingName}
-                      className="text-content-tertiary hover:text-content-primary transition-colors p-1"
+                      className="text-content-tertiary hover:text-content-primary transition-colors p-1 flex-shrink-0"
                       title="Rename character"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -291,10 +298,16 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
                       </svg>
                     </button>
                   )}
+                  {/* Dismiss the sheet on the way out — it's usually a modal,
+                      and would otherwise sit over the messages page. */}
+                  <MessageCharacterButton character={character} onNavigate={onClose} />
                 </div>
               )}
+              {/* Hidden on mobile: the badges cost a full row of the header
+                  while the character name above them is truncating for want of
+                  that same width. */}
               {character && (
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="hidden sm:flex items-center gap-2 flex-wrap">
                   {/* Hide character type badge only for players in anonymous mode (GMs and audience can see it) */}
                   {!(isAnonymous && userRole === 'player') && (
                     <Badge variant="primary" size="sm">
@@ -517,10 +530,12 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
             {/* Warning message */}
             <div className="bg-semantic-error/10 border border-semantic-error rounded-lg p-4">
               <h3 className="font-semibold text-content-primary mb-2">
-                ⚠️ Confirm Deletion
+                ⚠️ Confirm Removal
               </h3>
               <p className="text-content-secondary text-sm">
-                This will permanently delete the avatar for <strong>{character.name}</strong>.
+                <strong>{character.name}</strong> will show initials instead of an
+                avatar from now on. Existing posts keep the avatar they were
+                written with.
               </p>
             </div>
 

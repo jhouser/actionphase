@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
-import { Button, Select, Badge } from './ui';
+import { Button, Select, Badge, Alert } from './ui';
+import { usePhaseSheetDraftConflicts } from '../hooks/useConflictingSheetDrafts';
 import type { ActionWithDetails, GamePhase } from '../types/phases';
 import { CreateActionResultForm } from './CreateActionResultForm';
+import { StandaloneResultComposer } from './StandaloneResultComposer';
 import { Modal } from './Modal';
 import { MarkdownPreview } from './MarkdownPreview';
 import CharacterAvatar from './CharacterAvatar';
@@ -20,6 +22,7 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
   const [selectedPhase, setSelectedPhase] = useState<number | null>(null);
   const [expandedActionId, setExpandedActionId] = useState<number | null>(null);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+  const [showStandaloneComposer, setShowStandaloneComposer] = useState(false);
   const queryClient = useQueryClient();
 
   // Get all actions for the game
@@ -51,10 +54,21 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
     mutationFn: () => apiClient.phases.publishAllPhaseResults(gameId, displayPhaseId!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['unpublishedResultsCount', gameId, displayPhaseId] });
-      queryClient.invalidateQueries({ queryKey: ['userResults', gameId] });
+      queryClient.invalidateQueries({ queryKey: ['actionResults', 'game', gameId] });
+      queryClient.invalidateQueries({ queryKey: ['actionResults', 'user', gameId] });
+      queryClient.invalidateQueries({ queryKey: ['draftCharacterUpdates'] });
+      queryClient.invalidateQueries({ queryKey: ['draftUpdateCount'] });
+      // Invalidate character data to show published character updates
+      queryClient.invalidateQueries({ queryKey: ['characterData'] });
       setShowPublishConfirm(false);
     }
   });
+
+  // Gated on the dialog being open: an ungated call fans out one draft-count request
+  // per unpublished result on every render of the actions tab, for a warning that only
+  // ever appears inside the confirmation dialog.
+  const { hasConflict: hasPhaseSheetConflict, affectedCharacterCount } =
+    usePhaseSheetDraftConflicts(gameId, displayPhaseId, showPublishConfirm);
 
   const actions = actionsData || [];
   const phases = phasesData || [];
@@ -113,8 +127,34 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
             <Badge variant="primary">
               {filteredActions.length} {filteredActions.length === 1 ? 'Action' : 'Actions'}
             </Badge>
+            <Button
+              variant="secondary"
+              onClick={() => setShowStandaloneComposer(true)}
+              data-testid="standalone-result-button"
+              data-faro-user-action-name="open-standalone-result-composer"
+            >
+              Send Standalone Result
+            </Button>
           </div>
         </div>
+
+        {/* Compose a result with no parent submission (e.g. actions collected offsite) */}
+        <Modal
+          isOpen={showStandaloneComposer}
+          onClose={() => setShowStandaloneComposer(false)}
+          title="Send Standalone Result"
+        >
+          <div className="px-3 py-2 sm:px-6 sm:py-4">
+            <p className="text-sm text-content-secondary mb-4">
+              Create a result for a player without an action submission on the site.
+              It will be saved as a draft so you can add character updates before publishing.
+            </p>
+            <StandaloneResultComposer
+              gameId={gameId}
+              onSuccess={() => setShowStandaloneComposer(false)}
+            />
+          </div>
+        </Modal>
 
         {/* Publish All Results Button */}
         {displayPhaseId && unpublishedCount > 0 && (
@@ -148,9 +188,21 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
           onClose={() => setShowPublishConfirm(false)}
           title="Publish All Results?"
         >
-          <p className="text-sm text-content-secondary mb-6">
+          <p className="text-sm text-content-secondary mb-4">
             This will publish {unpublishedCount} {unpublishedCount === 1 ? 'result' : 'results'} and make {unpublishedCount === 1 ? 'it' : 'them'} visible to players. This action cannot be undone.
           </p>
+          {/* Publishing in bulk applies every conflicting result in one transaction, so
+              a clobber here is guaranteed rather than merely possible. */}
+          {hasPhaseSheetConflict && (
+            <Alert variant="danger" className="mb-4" data-testid="publish-all-sheet-conflict-warning">
+              {affectedCharacterCount === 1
+                ? 'One character has staged sheet updates on more than one of these results.'
+                : `${affectedCharacterCount} characters have staged sheet updates on more than one of these results.`}
+              {' '}Each result stores a complete snapshot of the character sheet, so
+              publishing them together will overwrite one set of changes with another.
+              Consolidate each character&apos;s sheet updates into a single result first.
+            </Alert>
+          )}
           <div className="flex justify-end space-x-3">
             <Button
               variant="ghost"

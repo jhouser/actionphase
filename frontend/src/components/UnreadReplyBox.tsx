@@ -62,6 +62,7 @@ export function UnreadReplyBox({
         rows={3}
         maxLength={10000}
         characters={mentionableCharacters}
+        textareaTestId="unread-reply-textarea"
       />
 
       {error && <Alert variant="danger">{error}</Alert>}
@@ -73,6 +74,7 @@ export function UnreadReplyBox({
           onClick={handleSubmit}
           loading={isSubmitting}
           disabled={!content.trim()}
+          data-testid="unread-reply-send"
         >
           Send
         </Button>
