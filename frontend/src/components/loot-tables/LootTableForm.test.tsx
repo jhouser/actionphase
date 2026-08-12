@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LootTableForm } from './LootTableForm';
 
@@ -97,5 +97,46 @@ describe('LootTableForm validation', () => {
         ]),
       })
     );
+  });
+});
+
+describe('LootTableForm item removal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const addItem = async (name: string) => {
+    fireEvent.click(screen.getByRole('button', { name: /add loot table content/i }));
+    fireEvent.change(await screen.findByLabelText(/item name/i), { target: { value: name } });
+    fireEvent.click(screen.getByRole('button', { name: /^add item$/i }));
+  };
+
+  // Regression: removal read `formData.items` from the render closure instead of
+  // the updater's `p`, so two removals dispatched before a re-render both filtered
+  // the *original* list — the second undid the first. Identity vs index is not the
+  // issue (each item is a distinct object); the stale closure is.
+  it('applies both removals when two are dispatched in one batch', async () => {
+    const { onSubmit } = renderForm();
+
+    fireEvent.change(screen.getByLabelText(/table name/i), {
+      target: { value: 'Batch' },
+    });
+
+    await addItem('Potion');
+    await addItem('Elixir');
+    await addItem('Tonic');
+
+    const removeButtons = screen.getAllByRole('button', { name: /^remove /i });
+    // Both clicks inside one act() batch: with a stale closure the second
+    // overwrites the first and only one item ends up removed.
+    await act(async () => {
+      fireEvent.click(removeButtons[2]);
+      fireEvent.click(removeButtons[1]);
+    });
+
+    fireEvent.click(submitButton());
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const submitted = onSubmit.mock.calls[0][0];
+    expect(submitted.items.map((i: { name: string }) => i.name)).toEqual(['Potion']);
   });
 });

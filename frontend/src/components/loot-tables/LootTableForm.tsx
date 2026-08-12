@@ -165,8 +165,12 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
                       <button
                         type="button"
                         disabled={isSubmitting}
-                        aria-label="Export Loot Table"
-                        onClick={_ => setFormData(p => ({...p, items: formData.items?.filter(i => i !== item), itemsChanged: true }))}
+                        aria-label={`Remove ${item.name}`}
+                        // Filter by position, not identity: imported CSV rows can be
+                        // fully identical (same name and data), and every new item is
+                        // created with id 0, so `i !== item` would remove the wrong
+                        // entry — or several at once.
+                        onClick={_ => setFormData(p => ({...p, items: p.items?.filter((_unused, i) => i !== index), itemsChanged: true }))}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-md text-content-secondary hover:text-content-primary hover:bg-interactive-primary-subtle transition-colors"
                       >
                         <TrashIcon  className="h-5 w-5" />

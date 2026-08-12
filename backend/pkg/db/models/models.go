@@ -310,6 +310,7 @@ type GameLootTable struct {
 	GameID    int32              `json:"game_id"`
 	Name      string             `json:"name"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type GameLootTableContent struct {

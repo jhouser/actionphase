@@ -1288,7 +1288,7 @@ func (gs *GameService) GetGameLogs(ctx context.Context, gameID int32) ([]models.
 	return logs, err
 }
 
-// GetGameLogs - Get game logs
+// AddGameLog - Append a log entry for a game
 func (gs *GameService) AddGameLog(ctx context.Context, arg models.CreateLogParams) (models.GameLog, error) {
 	queries := models.New(gs.DB)
 	log, err := queries.CreateLog(ctx, arg)

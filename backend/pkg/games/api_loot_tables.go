@@ -359,11 +359,17 @@ func (h *Handler) SetRandomLootForCharacter(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	gameService.AddGameLog(ctx, models.CreateLogParams{
+	// The loot is already granted, so a failed log entry must not fail the request —
+	// but it should not vanish silently either, since the game log is the GM's only
+	// record of what was rolled.
+	if _, err := gameService.AddGameLog(ctx, models.CreateLogParams{
 		GameID:  gameID,
 		Type:    "INVENTORY_ADD",
 		Message: pgtype.Text{String: fmt.Sprintf("Added %s to Character %s (Rolled: %d)", content.Name, character.Name, rnd+1), Valid: true},
-	})
+	}); err != nil {
+		h.App.ObsLogger.LogError(ctx, err, "Failed to write loot roll game log",
+			"game_id", gameID, "character_id", characterID, "loot_table_id", tableID)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(content)
