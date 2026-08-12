@@ -222,6 +222,79 @@ func TestGetAndUpdateLootTableContents(t *testing.T) {
 	core.AssertEqual(t, "Magic Ring", contents[0].Name, "Updated loot contents should replace existing items")
 }
 
+// Regression: rolling on a loot table with no contents used to reach
+// rand.Intn(0), which panics ("invalid argument to Intn"). The panic was caught
+// by the recovery middleware and surfaced as an opaque 500. An empty table is
+// reachable through normal use — the create endpoint accepts a table with no
+// items — so this must be a client error with an actionable message, not a 500.
+func TestSetRandomLootForCharacterEmptyTable(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	testDB.CleanupTables(t, "character_data", "characters", "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "character_data", "characters", "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupGameTestRouter(app, testDB)
+	fixtures := testDB.SetupFixtures(t)
+
+	accessToken, err := core.CreateTestJWTTokenForUser(app, fixtures.TestUser)
+	core.AssertNoError(t, err, "Test token creation should succeed")
+
+	characterService := &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
+	npc, err := characterService.CreateCharacter(context.Background(), core.CreateCharacterRequest{
+		GameID:        int32(fixtures.TestGame.ID),
+		CharacterType: "npc",
+		Name:          "Empty Table Recipient",
+	})
+	core.AssertNoError(t, err, "Should create NPC character for loot assignment")
+
+	// Create a loot table with no items at all — the create endpoint permits this.
+	payload := map[string]any{"name": "Empty Cache"}
+	body, err := json.Marshal(payload)
+	core.AssertNoError(t, err, "Should marshal loot table request")
+
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/games/%d/loot-tables", fixtures.TestGame.ID), bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	core.AssertEqual(t, http.StatusOK, w.Code, "Should create the empty loot table")
+
+	var created lootTableResponse
+	err = json.NewDecoder(w.Body).Decode(&created)
+	core.AssertNoError(t, err, "Should decode created loot table response")
+
+	// Confirm the table really has no contents, so the roll below is the empty case.
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/games/%d/loot-tables/%d/contents", fixtures.TestGame.ID, created.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var contents []lootTableContentResponse
+	err = json.NewDecoder(w.Body).Decode(&contents)
+	core.AssertNoError(t, err, "Should decode loot table contents response")
+	core.AssertEqual(t, 0, len(contents), "Loot table should be empty for this test")
+
+	// Roll on the empty table: must be a 4xx client error, never a 500 panic.
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/games/%d/loot-tables/%d/random/%d", fixtures.TestGame.ID, created.ID, npc.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	core.AssertEqual(t, http.StatusBadRequest, w.Code, "Rolling on an empty loot table should return 400, not panic with a 500")
+
+	// The GM needs to know *why* it failed, so the message must name the cause.
+	core.AssertTrue(t, strings.Contains(strings.ToLower(w.Body.String()), "empty"),
+		"Error message should explain that the loot table is empty, got: "+w.Body.String())
+
+	// Nothing should have been granted to the character.
+	characterData, err := characterService.GetCharacterData(context.Background(), npc.ID)
+	core.AssertNoError(t, err, "Should fetch character data after failed loot assignment")
+	core.AssertEqual(t, 0, len(characterData), "No inventory data should be written when the roll fails")
+}
+
 func TestSetRandomLootForCharacter(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()

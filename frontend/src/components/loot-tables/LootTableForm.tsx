@@ -50,8 +50,18 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
   });
   const [isAddingContent, setIsAddingContent] = useState(false);
 
+  // A table with no name is unidentifiable in the picker, and one with no items
+  // cannot be rolled on (the API rejects it), so block both here with an
+  // explanation rather than letting the GM save something unusable.
+  const validationError = !formData.name.trim()
+    ? 'Give the loot table a name.'
+    : (formData.items?.length ?? 0) === 0
+      ? 'Add at least one item — an empty loot table cannot be rolled on.'
+      : null;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (validationError) return;
     onSubmit(formData);
   };
 
@@ -182,6 +192,12 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
         </div>
 
 
+        {validationError && (
+          <p className="mt-4 text-sm text-content-secondary" role="status">
+            {validationError}
+          </p>
+        )}
+
         <div className="flex justify-end space-x-3 mt-6">
           <Button
             type="button"
@@ -193,7 +209,7 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
           <Button
             type="submit"
             variant="primary"
-            disabled={isSubmitting}
+            disabled={isSubmitting || validationError !== null}
             data-faro-user-action-name="create-loot-table"
           >
             {isSubmitting 

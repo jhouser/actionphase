@@ -328,6 +328,14 @@ func (h *Handler) SetRandomLootForCharacter(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// A table with no items is reachable through normal use (the create endpoint
+	// accepts one), and rand.Intn(0) panics. Fail as a client error the GM can act
+	// on rather than letting the recovery middleware turn it into an opaque 500.
+	if len(contents) == 0 {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("loot table is empty: add at least one item before rolling")), "Roll requested on empty loot table", "table_id", tableID, "game_id", gameID)
+		return
+	}
+
 	character, err := characterService.GetCharacter(ctx, int32(characterID))
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get character", "error", err, "character_id", characterID)

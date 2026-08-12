@@ -53,7 +53,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
   const gameContext = useGameContext();
 
-  const { showSuccess } = useToast();
+  const { showSuccess, showError } = useToast();
 
   const addItem = (itemData: Omit<InventoryItem, 'id'>) => {
     const newItem: InventoryItem = {
@@ -65,11 +65,31 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   };
 
   const addRandomItem = (lootTableId: number): void => {
-    apiClient.games.giveRandomLootTableContent(gameContext.gameId, lootTableId, characterId).then((r) => {
-      onItemsChange([...validatedItems, {id: generateId(), ...JSON.parse(r.data.data)}], true);
-      setShowAddItem(false);
-      showSuccess(`Added item ${r.data.name} to character sheet`);
-    });
+    apiClient.games.giveRandomLootTableContent(gameContext.gameId, lootTableId, characterId)
+      .then((r) => {
+        // The item payload is GM-authored JSON stored as free text, so it can be
+        // malformed. Report that rather than throwing inside the success path.
+        let rolledItem: Omit<InventoryItem, 'id'>;
+        try {
+          rolledItem = JSON.parse(r.data.data);
+        } catch {
+          logger.error('Loot item data is not valid JSON', { lootTableId, itemName: r.data.name });
+          showError(`Rolled "${r.data.name}" but its item data is malformed. Check the loot table.`);
+          return;
+        }
+        onItemsChange([...validatedItems, { id: generateId(), ...rolledItem }], true);
+        setShowAddItem(false);
+        showSuccess(`Added item ${r.data.name} to character sheet`);
+      })
+      .catch((error: unknown) => {
+        // Without this the request failed silently: the modal stayed open with no
+        // feedback (e.g. rolling on an empty loot table returns 400).
+        const message =
+          (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+          'Failed to roll for a random item. Please try again.';
+        logger.error('Random loot roll failed', { lootTableId, characterId, error });
+        showError(message);
+      });
   }
 
   const addCurrency = (currencyData: Omit<CurrencyEntry, 'id'>) => {
