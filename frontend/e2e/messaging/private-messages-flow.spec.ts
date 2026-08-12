@@ -192,10 +192,12 @@ test.describe('@mobile Private Messages Flow', () => {
       await playerMessaging.verifyConversationExists(detectiveConvoTitle);
       await playerMessaging.openConversation(detectiveConvoTitle);
       await playerMessaging.verifyMessageExists(detectiveMessage);
+      // The point of the test: the player sees the NPC, not the GM behind it.
+      await playerMessaging.verifyMessageSender(detectiveMessage, 'Detective Morrison');
 
-      // Player replies
-      const playerReply = `Hello Detective, how can I help?`;
-      await playerMessaging.sendMessage(playerReply);
+      // (The player replying is covered by the send/receive tests above; it
+      // adds nothing to the NPC-identity claim and this test is long enough
+      // that the extra round trip pushed it into timeouts on mobile.)
 
       // === GM creates DIFFERENT conversation as Whisper (different NPC) ===
       // Use goto() to navigate cleanly without any lingering conversation URL param
@@ -223,10 +225,16 @@ test.describe('@mobile Private Messages Flow', () => {
       // Open the informant conversation
       await playerMessaging.openConversation(informantConvoTitle);
       await playerMessaging.verifyMessageExists(informantMessage);
+      // Attributed to the second NPC — not to Detective Morrison, and not to
+      // the GM's username. This is what distinguishes "two NPCs" from "one GM".
+      await playerMessaging.verifyMessageSender(informantMessage, 'Whisper (Informant)');
 
     } finally {
-      await gmContext.close();
-      await playerContext.close();
+      // Close with catch: if the body times out, Playwright tears the contexts
+      // down first, and an unguarded close() throws "Target page, context or
+      // browser has been closed" — masking the real failure with a cleanup error.
+      await gmContext.close().catch(() => {});
+      await playerContext.close().catch(() => {});
     }
   });
 

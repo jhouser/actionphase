@@ -218,6 +218,29 @@ export class MessagingPage {
   }
 
   /**
+   * Verify a message is attributed to a specific sender.
+   *
+   * MessageThread renders `sender_character_name || sender_username`, so a
+   * message sent as an NPC falls back to the GM's username if character
+   * attribution breaks. Asserting on the message text alone would not notice —
+   * the text arrives either way — so this pins the displayed sender.
+   *
+   * @param messageContent - Message content identifying the message
+   * @param expectedSender - Character name expected in its sender label
+   */
+  async verifyMessageSender(messageContent: string, expectedSender: string) {
+    const message = this.page
+      .locator('[data-testid="message"]')
+      .filter({ hasText: messageContent })
+      .locator('visible=true')
+      .first();
+    await expect(message).toBeVisible({ timeout: 5000 });
+    await expect(message.locator('[data-testid="message-sender"]').first()).toHaveText(expectedSender, {
+      timeout: 5000,
+    });
+  }
+
+  /**
    * Verify a message does NOT exist
    * @param messageContent - Message content to verify is not visible
    */
