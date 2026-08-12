@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Select } from '../ui';
 import { apiClient } from '@/lib/api';
-import type { LootTableContent } from '@/types/games';
+import type { LootTable, LootTableContent } from '@/types/games';
 
 interface LootTableSelectorProps {
   gameId: number;
+  lootTables: LootTable[];
   /** Also pick a specific item, rather than only a table to roll on. */
   requireItem: boolean;
   lootTableId: number | null;
@@ -23,17 +24,13 @@ interface LootTableSelectorProps {
  */
 export function LootTableSelector({
   gameId,
+  lootTables,
   requireItem,
   lootTableId,
   onLootTableChange,
   onItemChange,
 }: LootTableSelectorProps) {
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
-
-  const { data: lootTables } = useQuery({
-    queryKey: ['lootTables', gameId],
-    queryFn: () => apiClient.games.getLootTables(gameId).then((res) => res.data),
-  });
 
   const { data: lootTableContents } = useQuery({
     queryKey: ['lootTableContents', lootTableId],

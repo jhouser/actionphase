@@ -211,7 +211,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
             <AddItemModal
               onAdd={addItem}
               onAddRandom={addRandomItem}
-              allowLootModes={canRollLoot}
+              allowedLootModes={canRollLoot ? [ 'manual', 'loot_table', 'loot_table_random' ] : [ 'manual' ]}
               onCancel={() => setShowAddItem(false)}
             />
           )}

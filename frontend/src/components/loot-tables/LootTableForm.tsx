@@ -16,7 +16,7 @@ export interface EditLootTable {
   itemsChanged: boolean;
 }
 
-const CSVSeparatorCharacter = ';';
+const CSVSeparatorCharacter = ',';
 
 /**
  * Item fields the CSV deliberately does not round-trip.
@@ -40,7 +40,7 @@ const stripExcludedFields = (row: Record<string, unknown>): Record<string, unkno
  * hands the GM a correctly shaped file instead of asking them to build one.
  */
 const CSV_FORMAT_HELP =
-  `Semicolon-separated (${CSVSeparatorCharacter}), not commas. The first row must be ` +
+  `Comma-separated (${CSVSeparatorCharacter}) list. The first row must be ` +
   `column headers and must include "name"; each row after it is one item. ` +
   `Optional columns: description, quantity, category, value, weight. ` +
   `Descriptions support Markdown; wrap any value containing "${CSVSeparatorCharacter}", ` +
@@ -127,12 +127,12 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
 
     if (!parsed.meta.fields?.includes('name')) {
       return {
-        error: `The CSV needs a "name" column. Columns must be separated by "${CSVSeparatorCharacter}", not commas.`,
+        error: `The CSV needs a "name" column. Columns must be separated by "${CSVSeparatorCharacter}".`,
       };
     }
 
     // A row with more fields than headers means an unquoted value contained the
-    // delimiter — overwhelmingly a description like "Sharp; very sharp". Papaparse
+    // delimiter — overwhelmingly a description like "Sharp, very sharp". Papaparse
     // keeps the first part and stashes the rest in __parsed_extra, so accepting
     // this row would silently truncate the GM's text. Name the row and the fix.
     const raggedRow = parsed.errors.find((e) => e.code === 'TooManyFields');
@@ -362,8 +362,8 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
       </form>
 
       {/*
-        Add Loot Table Content Modal. allowLootModes is intentionally left off:
-        this modal defines the contents of a loot table, so sourcing an item
+        Add Loot Table Content Modal. loot_table_random is intentionally left off:
+        this modal defines the contents of a loot table, so sourcing an item at random
         *from* a loot table makes no sense here, and onAddRandom is unreachable.
       */}
       {isAddingContent && (
@@ -371,6 +371,7 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
           onAdd={addItem}
           onAddRandom={() => {}}
           onCancel={() => {setIsAddingContent(false)}}
+          allowedLootModes={['manual', 'loot_table']}
         />
       )}
     </div>

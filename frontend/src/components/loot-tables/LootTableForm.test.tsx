@@ -126,12 +126,12 @@ describe('LootTableForm CSV import', () => {
   const nameTable = () =>
     fireEvent.change(screen.getByLabelText(/table name/i), { target: { value: 'Imported' } });
 
-  it('explains the CSV format, naming the semicolon delimiter', () => {
+  it('explains the CSV format, naming the comma delimiter', () => {
     renderForm();
     // The delimiter is the one rule that cannot be guessed and fails silently,
     // so it must be stated rather than implied.
     const help = screen.getByRole('tooltip');
-    expect(help).toHaveTextContent(/semicolon-separated/i);
+    expect(help).toHaveTextContent(/Comma-separated/i);
     expect(help).toHaveTextContent(/must include "name"/i);
     expect(help).toHaveTextContent(/replaces all current items/i);
   });
@@ -144,7 +144,7 @@ describe('LootTableForm CSV import', () => {
     const { onSubmit } = renderForm();
     nameTable();
 
-    await importCsv('name;quantity\nIron Sword;1\nHealth Potion;3\n');
+    await importCsv('name,quantity\nIron Sword,1\nHealth Potion,3\n');
 
     expect(screen.queryByText(/import failed/i)).not.toBeInTheDocument();
     fireEvent.click(submitButton());
@@ -157,13 +157,13 @@ describe('LootTableForm CSV import', () => {
   });
 
   // Regression: papaparse does not error on a wrong delimiter — the entire line
-  // becomes a single column — so a comma CSV silently replaced the table with
+  // becomes a single column — so a CSV with another separator silently replaced the table with
   // items whose name was undefined.
-  it('rejects a comma-delimited file rather than importing nameless items', async () => {
+  it('rejects an incorrectly-delimited file rather than importing nameless items', async () => {
     const { onSubmit } = renderForm();
     nameTable();
 
-    await importCsv('name,quantity\nIron Sword,1\n');
+    await importCsv('name;quantity\nIron Sword;1\n');
 
     expect(screen.getByText(/needs a "name" column/i)).toBeInTheDocument();
     // The existing item list must be left alone on a failed import. Assert on
@@ -178,7 +178,7 @@ describe('LootTableForm CSV import', () => {
     renderForm();
     nameTable();
 
-    await importCsv('name;quantity\nIron Sword;1\n;5\n');
+    await importCsv('name,quantity\nIron Sword,1\n;5\n');
 
     expect(screen.getByText(/row 2 has no name/i)).toBeInTheDocument();
   });
@@ -191,7 +191,7 @@ describe('LootTableForm CSV import', () => {
     const { onSubmit } = renderForm();
     nameTable();
 
-    await importCsv('name;quantity;equipped\nIron Sword;1;false\n');
+    await importCsv('name,quantity,equipped\nIron Sword,1,false\n');
 
     fireEvent.click(submitButton());
     const submitted = onSubmit.mock.calls[0][0];
@@ -201,14 +201,14 @@ describe('LootTableForm CSV import', () => {
   });
 
   // Regression: an unquoted value containing the delimiter (a description like
-  // "Sharp; very sharp") splits into an extra field. Papaparse keeps the first
+  // "Sharp, very sharp") splits into an extra field. Papaparse keeps the first
   // part and stashes the rest in __parsed_extra, so the row imported with the
   // description silently truncated to "Sharp".
   it('rejects a row whose unquoted value contains the delimiter', async () => {
     const { onSubmit } = renderForm();
     nameTable();
 
-    await importCsv('name;description\nSword;Sharp; very sharp\n');
+    await importCsv('name,description\nSword,Sharp, very sharp\n');
 
     expect(screen.getByText(/more values than there are columns/i)).toBeInTheDocument();
     // The truncated text must never reach the table.
@@ -219,21 +219,21 @@ describe('LootTableForm CSV import', () => {
     const { onSubmit } = renderForm();
     nameTable();
 
-    await importCsv('name;description\nSword;"Sharp; very sharp"\n');
+    await importCsv('name,description\nSword,"Sharp, very sharp"\n');
 
     expect(screen.queryByText(/import failed/i)).not.toBeInTheDocument();
     fireEvent.click(submitButton());
 
     const data = JSON.parse(onSubmit.mock.calls[0][0].items[0].data);
     // Quotes are CSV syntax, not content — they must not survive into the value.
-    expect(data.description).toBe('Sharp; very sharp');
+    expect(data.description).toBe('Sharp, very sharp');
   });
 
   it('preserves Markdown in descriptions without adding quotes', async () => {
     const { onSubmit } = renderForm();
     nameTable();
 
-    await importCsv('name;description\nSword;**Cursed** blade with _drain_\n');
+    await importCsv('name,description\nSword,**Cursed** blade with _drain_\n');
 
     fireEvent.click(submitButton());
     const data = JSON.parse(onSubmit.mock.calls[0][0].items[0].data);
@@ -244,10 +244,10 @@ describe('LootTableForm CSV import', () => {
     renderForm();
     nameTable();
 
-    await importCsv('name,quantity\nIron Sword,1\n');
+    await importCsv('name;quantity\nIron Sword;1\n');
     expect(screen.getByText(/needs a "name" column/i)).toBeInTheDocument();
 
-    await importCsv('name;quantity\nIron Sword;1\n');
+    await importCsv('name,quantity\nIron Sword,1\n');
     expect(screen.queryByText(/import failed/i)).not.toBeInTheDocument();
   });
 });
@@ -300,9 +300,9 @@ describe('LootTableForm CSV export', () => {
   // on every field would only add noise to a file GMs hand-edit. These two cases
   // are the evidence for leaving the default alone.
   it('quotes a description containing the delimiter but leaves plain text bare', async () => {
-    const captured = await captureExport({ name: 'Sword', description: 'Sharp; very sharp' });
+    const captured = await captureExport({ name: 'Sword', description: 'Sharp, very sharp' });
 
-    expect(captured()).toContain('"Sharp; very sharp"');
+    expect(captured()).toContain('"Sharp, very sharp"');
 
     vi.unstubAllGlobals();
   });

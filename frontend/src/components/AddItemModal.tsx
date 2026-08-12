@@ -1,6 +1,6 @@
 import type { InventoryItem } from '../types/characters';
 import { Modal } from './Modal';
-import { ItemForm, type ItemFormData } from './character-updates/ItemForm';
+import { ItemForm, type ItemFormData, type lootModes } from './character-updates/ItemForm';
 
 interface AddItemModalProps {
   onAdd: (item: Omit<InventoryItem, 'id'>) => void;
@@ -11,11 +11,11 @@ interface AddItemModalProps {
    * onAddRandom. Off by default so contexts that only add plain items — such as
    * defining the contents of a loot table itself — do not offer them.
    */
-  allowLootModes?: boolean;
+  allowedLootModes?: lootModes[];
   onCancel: () => void;
 }
 
-export const AddItemModal: React.FC<AddItemModalProps> = ({ onAdd, onAddRandom, allowLootModes = false, onCancel }) => {
+export const AddItemModal: React.FC<AddItemModalProps> = ({ onAdd, onAddRandom, allowedLootModes = ['manual'], onCancel }) => {
   const handleSubmit = (data: ItemFormData) => {
     if (data.lootTableId) {
       onAddRandom(data.lootTableId);
@@ -39,7 +39,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ onAdd, onAddRandom, 
         onCancel={onCancel}
         submitLabel="Add Item"
         variant="modal"
-        allowLootModes={allowLootModes}
+        allowedLootModes={allowedLootModes}
       />
     </Modal>
   );

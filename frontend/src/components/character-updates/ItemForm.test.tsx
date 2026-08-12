@@ -163,7 +163,7 @@ describe('ItemForm', () => {
     it('offers no mode picker when allowed but outside a game', () => {
       mockGameContext.current = null;
       renderWithQuery(
-        <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       // Loot tables are game-scoped, so the opt-in alone is not enough.
@@ -174,7 +174,7 @@ describe('ItemForm', () => {
       mockGameContext.current = { gameId: 7 };
       mockGetLootTables.mockResolvedValue({ data: [] });
       renderWithQuery(
-        <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument();
@@ -185,7 +185,7 @@ describe('ItemForm', () => {
       const user = userEvent.setup();
       mockGameContext.current = null;
       renderWithQuery(
-        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       await user.type(screen.getByLabelText(/item name/i), 'Rope');
@@ -221,7 +221,7 @@ describe('ItemForm', () => {
       });
 
       renderWithQuery(
-        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table');
@@ -249,7 +249,7 @@ describe('ItemForm', () => {
       mockGetLootTableContents.mockResolvedValue({ data: [] });
 
       renderWithQuery(
-        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table');
@@ -266,7 +266,7 @@ describe('ItemForm', () => {
       });
 
       renderWithQuery(
-        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table');
@@ -297,7 +297,7 @@ describe('ItemForm', () => {
       });
 
       renderWithQuery(
-        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table');
@@ -339,7 +339,7 @@ describe('ItemForm', () => {
       const user = userEvent.setup();
 
       renderWithQuery(
-        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table_random');
@@ -354,7 +354,7 @@ describe('ItemForm', () => {
     it('does not offer an item picker — the item is chosen server-side', async () => {
       const user = userEvent.setup();
       renderWithQuery(
-        <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table_random');
@@ -369,7 +369,7 @@ describe('ItemForm', () => {
       const user = userEvent.setup();
 
       renderWithQuery(
-        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table_random');
@@ -389,7 +389,7 @@ describe('ItemForm', () => {
       });
 
       const { rerender } = renderWithQuery(
-        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes />
+        <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
 
       // Pick a loot mode, then lose the opt-in. `mode` state survives the change,
@@ -399,7 +399,7 @@ describe('ItemForm', () => {
 
       rerender(
         <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-          <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowLootModes={false} />
+          <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual']} />
         </QueryClientProvider>
       );
 

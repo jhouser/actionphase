@@ -1772,10 +1772,15 @@ func TestGameService_LootTableCRUD(t *testing.T) {
 	t.Run("lists the tables belonging to a game", func(t *testing.T) {
 		first, err := gameService.CreateLootTable(ctx, gameID, "Common Drops")
 		core.AssertNoError(t, err, "Should create the first loot table")
+		err = gameService.ReplaceLootTableContents(ctx, first.ID, []core.LootTableItem{
+			{Name: "Original Potion", Data: `{"effect":"heal"}`},
+			{Name: "Original Scroll", Data: `{"spell":"fireball"}`},
+		})
+		core.AssertNoError(t, err, "Should insert first table contents")
 		_, err = gameService.CreateLootTable(ctx, gameID, "Rare Drops")
 		core.AssertNoError(t, err, "Should create the second loot table")
 
-		tables, err := gameService.GetGameLootTables(ctx, gameID)
+		tables, err := gameService.GetGameLootTables(ctx, gameID, false)
 		core.AssertNoError(t, err, "Should list loot tables")
 		core.AssertTrue(t, len(tables) >= 2, "Both created tables should be listed")
 
@@ -1783,6 +1788,10 @@ func TestGameService_LootTableCRUD(t *testing.T) {
 		core.AssertEqual(t, "Common Drops", tables[0].Name, "Tables should be listed oldest first")
 		core.AssertEqual(t, gameID, tables[0].GameID, "Listed tables should belong to the requested game")
 		core.AssertTrue(t, first.ID != 0, "A created table should have an ID")
+
+		tables, err = gameService.GetGameLootTables(ctx, gameID, true)
+		core.AssertNoError(t, err, "Should list loot tables")
+		core.AssertTrue(t, len(tables) == 1, "Only one created table (with contents) should be listed")
 	})
 
 	t.Run("reports whether a table belongs to a game", func(t *testing.T) {
