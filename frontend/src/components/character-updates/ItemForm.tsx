@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Button, Input, Select } from '../ui';
 import { CommentEditor } from '../CommentEditor';
-import { apiClient } from '@/lib/api';
 import { useOptionalGameContext } from '@/contexts/GameContext';
-import { useQuery } from '@tanstack/react-query';
+import { logger } from '@/services/LoggingService';
+import type { LootTableContent } from '@/types/games';
+import { LootTableSelector } from './LootTableSelector';
 
 export interface ItemFormData {
   name: string;
@@ -22,6 +23,13 @@ interface ItemFormProps {
   submitLabel?: string;
   variant?: 'modal' | 'inline';
   submitButtonTestId?: string;
+  /**
+   * Whether to offer the loot-table modes in addition to manual entry. Off by
+   * default: callers that only build plain items — editing an existing item, or
+   * defining the contents of a loot table — should not be able to source an item
+   * from a loot table.
+   */
+  allowLootModes?: boolean;
 }
 
 /**
@@ -35,8 +43,11 @@ export const ItemForm: React.FC<ItemFormProps> = ({
   submitLabel = 'Add Item',
   variant = 'modal',
   submitButtonTestId,
+  allowLootModes = false,
 }) => {
   const gameContext = useOptionalGameContext();
+  // Loot tables are game-scoped, so both a caller opt-in and a game are required.
+  const lootModesEnabled = allowLootModes && !!gameContext?.gameId;
   const [mode, setMode] = useState<'manual' | 'loot_table' | 'loot_table_random'>('manual');
   const [name, setName] = useState(initialValues?.name || '');
   const [description, setDescription] = useState(initialValues?.description || '');
@@ -45,26 +56,16 @@ export const ItemForm: React.FC<ItemFormProps> = ({
   const [value, setValue] = useState<number | ''>(initialValues?.value ?? '');
   const [weight, setWeight] = useState<number | ''>(initialValues?.weight ?? '');
   const [lootTableId, setLootTableId] = useState<number | null>(null);
-  const [lootTableContentId, setLootTableContentId] = useState<number | null>(null);
+  const [selectedLootItem, setSelectedLootItem] = useState<LootTableContent | null>(null);
 
-
-  const { data: lootTables } = useQuery({
-    queryKey: ['lootTables', gameContext?.gameId],
-    queryFn: () => apiClient.games.getLootTables(gameContext!.gameId).then(res => res.data),
-    enabled: !!gameContext?.gameId
-  });
-
-  const { data: lootTableContents } = useQuery({
-    queryKey: ['lootTableContents', lootTableId],
-    queryFn: () => apiClient.games.getLootTableContents(gameContext!.gameId, lootTableId!).then(res => res.data),
-    enabled: !!lootTableId
-  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === 'manual' && !name.trim()) return;
+    // Loot modes hidden => always submit as manual, regardless of any stale mode.
+    const effectiveMode = lootModesEnabled ? mode : 'manual';
+    if (effectiveMode === 'manual' && !name.trim()) return;
 
-    switch (mode) {
+    switch (effectiveMode) {
       case 'manual':
         onSubmit({
           name: name.trim(),
@@ -76,12 +77,17 @@ export const ItemForm: React.FC<ItemFormProps> = ({
         });
         break;
       case 'loot_table': {
-        if (!lootTableId || !lootTableContentId || !lootTableContents) return;
-        const item = lootTableContents.find(content => content.id === lootTableContentId);
-        if (!item) return;
-        const itemData = JSON.parse(item.data) as Omit<ItemFormData, 'lootTableId'>;
+        if (!selectedLootItem) return;
+        let itemData: Omit<ItemFormData, 'lootTableId'>;
+        try {
+          itemData = JSON.parse(selectedLootItem.data);
+        } catch {
+          // GM-authored free text, so it can be malformed; don't throw mid-submit.
+          logger.error('Loot table item data is not valid JSON', { itemName: selectedLootItem.name });
+          return;
+        }
         onSubmit({
-          name: item.name,
+          name: selectedLootItem.name,
           description: itemData.description,
           quantity: 1,
           category: itemData.category,
@@ -99,9 +105,6 @@ export const ItemForm: React.FC<ItemFormProps> = ({
         });
         break;
     }
-
-    if (mode === 'loot_table' && (!lootTableId || !lootTableContentId)) return;
-    if (mode === 'loot_table_random' && !lootTableId) return;
   };
 
   const manualForm = <div>
@@ -173,71 +176,35 @@ export const ItemForm: React.FC<ItemFormProps> = ({
       </div>
   </div>
 
-  const lootTableForm = <div>
-      <Select
-        id="item-loot-table"
-        label="Loot Table"
-        value={lootTableId || ''}
-        onChange={(e) => setLootTableId(parseInt(e.target.value) || null)}
-        required
-      >
-        <option value="">Select a loot table</option>
-        {lootTables?.map((table) => (
-          <option key={table.id} value={table.id}>
-            {table.name}
-          </option>
-        ))}
-      </Select>
-      <Select
-        id="item-loot-table-content"
-        label="Loot Table Content"
-        value={(lootTableContents?.length ?? 0) > 0 ? (lootTableContentId || '') : ''}
-        onChange={(e) => setLootTableContentId(parseInt(e.target.value) || null)}
-        required
-      >
-        <option value="">Select content</option>
-        {lootTableContents?.map((content) => (
-          <option key={content.id} value={content.id}>
-            {content.name}
-          </option>
-        ))}
-      </Select>
-    </div>
-
-  const lootTableRandomForm = <div>
-      <Select
-        id="item-loot-table"
-        label="Loot Table"
-        value={lootTableId || ''}
-        onChange={(e) => setLootTableId(parseInt(e.target.value) || null)}
-        required
-      >
-        <option value="">Select a loot table</option>
-        {lootTables?.map((table) => (
-          <option key={table.id} value={table.id}>
-            {table.name}
-          </option>
-        ))}
-      </Select>
-    </div>
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <Select
-        id="add-item-mode"
-        label="Mode"
-        value={mode}
-        onChange={(e) => setMode(e.target.value as 'manual' | 'loot_table' | 'loot_table_random')}
-        required
-      >
-        <option value="manual">Manual</option>
-        <option value="loot_table">Loot Table</option>
-        <option value="loot_table_random">Loot Table (Random)</option>
-      </Select>
-      
-      {mode === 'manual' && manualForm}
-      {mode === 'loot_table' && lootTableForm}
-      {mode === 'loot_table_random' && lootTableRandomForm}
+      {lootModesEnabled && (
+        <Select
+          id="add-item-mode"
+          label="Mode"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as 'manual' | 'loot_table' | 'loot_table_random')}
+          required
+        >
+          <option value="manual">Manual</option>
+          <option value="loot_table">Loot Table</option>
+          <option value="loot_table_random">Loot Table (Random)</option>
+        </Select>
+      )}
+
+      {(!lootModesEnabled || mode === 'manual') && manualForm}
+      {lootModesEnabled && mode !== 'manual' && (
+        <LootTableSelector
+          gameId={gameContext!.gameId}
+          requireItem={mode === 'loot_table'}
+          lootTableId={lootTableId}
+          onLootTableChange={(id) => {
+            setLootTableId(id);
+            setSelectedLootItem(null);
+          }}
+          onItemChange={setSelectedLootItem}
+        />
+      )}
 
       <div className={`flex justify-end gap-3 ${variant === 'modal' ? 'pt-4' : 'pt-2'}`}>
         <Button

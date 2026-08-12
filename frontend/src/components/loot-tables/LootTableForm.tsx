@@ -219,11 +219,15 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
         </div>
       </form>
 
-      {/* Add Loot Table Content Modal */}
+      {/*
+        Add Loot Table Content Modal. allowLootModes is intentionally left off:
+        this modal defines the contents of a loot table, so sourcing an item
+        *from* a loot table makes no sense here, and onAddRandom is unreachable.
+      */}
       {isAddingContent && (
         <AddItemModal
           onAdd={addItem}
-          onAddRandom={_ => {}}
+          onAddRandom={() => {}}
           onCancel={() => {setIsAddingContent(false)}}
         />
       )}

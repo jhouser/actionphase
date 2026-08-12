@@ -8,7 +8,7 @@ import { Button } from './ui';
 import { generateId } from '../utils/generateId';
 import { logger } from '@/services/LoggingService';
 import { apiClient } from '@/lib/api';
-import { useGameContext } from '@/contexts/GameContext';
+import { useOptionalGameContext } from '@/contexts/GameContext';
 import { useToast } from '@/contexts/ToastContext';
 
 // Defensive helper to ensure all items have ID fields
@@ -51,7 +51,12 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAddCurrency, setShowAddCurrency] = useState(false);
 
-  const gameContext = useGameContext();
+  // Optional: this component also renders outside a GameProvider (e.g. the
+  // character sheet editor). useGameContext() throws there, which took the whole
+  // subtree down. Without a game we simply cannot offer loot rolls — see
+  // canRollLoot below — but everything else in the inventory still works.
+  const gameContext = useOptionalGameContext();
+  const canRollLoot = gameContext !== null;
 
   const { showSuccess, showError } = useToast();
 
@@ -65,6 +70,13 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   };
 
   const addRandomItem = (lootTableId: number): void => {
+    if (!gameContext) {
+      // Defensive: the loot modes are hidden without a game context, so this is
+      // unreachable through the UI.
+      logger.error('Random loot roll attempted with no game context', { characterId });
+      showError('Loot tables are unavailable here.');
+      return;
+    }
     apiClient.games.giveRandomLootTableContent(gameContext.gameId, lootTableId, characterId)
       .then((r) => {
         // The item payload is GM-authored JSON stored as free text, so it can be
@@ -199,6 +211,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
             <AddItemModal
               onAdd={addItem}
               onAddRandom={addRandomItem}
+              allowLootModes={canRollLoot}
               onCancel={() => setShowAddItem(false)}
             />
           )}
