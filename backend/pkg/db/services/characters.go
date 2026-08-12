@@ -349,14 +349,16 @@ func (cs *CharacterService) AddToCharacterData(ctx context.Context, req Characte
 			if err != nil {
 				return fmt.Errorf("failed to add structure to array: %w", err)
 			}
-			cs.SetCharacterData(ctx, core.CharacterDataRequest{
+			if err := cs.SetCharacterData(ctx, core.CharacterDataRequest{
 				CharacterID: req.CharacterID,
 				ModuleType:  req.ModuleType,
 				FieldName:   req.FieldName,
 				FieldValue:  newData,
 				FieldType:   req.FieldType,
 				IsPublic:    req.IsPublic,
-			})
+			}); err != nil {
+				return fmt.Errorf("failed to set character data: %w", err)
+			}
 			return nil
 		}
 	}
@@ -365,14 +367,16 @@ func (cs *CharacterService) AddToCharacterData(ctx context.Context, req Characte
 	if err != nil {
 		return fmt.Errorf("failed to add structure to array: %w", err)
 	}
-	cs.SetCharacterData(ctx, core.CharacterDataRequest{
+	if err := cs.SetCharacterData(ctx, core.CharacterDataRequest{
 		CharacterID: req.CharacterID,
 		ModuleType:  req.ModuleType,
 		FieldName:   req.FieldName,
 		FieldValue:  newData,
 		FieldType:   req.FieldType,
 		IsPublic:    req.IsPublic,
-	})
+	}); err != nil {
+		return fmt.Errorf("failed to set character data: %w", err)
+	}
 	return nil
 }
 

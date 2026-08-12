@@ -3,7 +3,6 @@ package games
 import (
 	"actionphase/pkg/core"
 	models "actionphase/pkg/db/models"
-	db "actionphase/pkg/db/services"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -27,7 +26,7 @@ func (h *Handler) GetGameLootTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 
 	lootTables, err := gameService.GetGameLootTables(ctx, int32(gameID))
 	if err != nil {
@@ -39,11 +38,15 @@ func (h *Handler) GetGameLootTables(w http.ResponseWriter, r *http.Request) {
 	// Initialize as empty slice to ensure JSON encodes as [] not null
 	response := make([]map[string]interface{}, 0)
 	for _, lootTable := range lootTables {
+		// Keep these keys in sync with the model returned by AddGameLootTable —
+		// both are typed as LootTable on the frontend, so a field present in one
+		// and missing from the other is a shape mismatch the types do not catch.
 		lootTableData := map[string]interface{}{
 			"id":         lootTable.ID,
 			"game_id":    lootTable.GameID,
 			"name":       lootTable.Name,
 			"created_at": lootTable.CreatedAt.Time,
+			"updated_at": lootTable.UpdatedAt.Time,
 		}
 		response = append(response, lootTableData)
 	}
@@ -69,7 +72,7 @@ func (h *Handler) AddGameLootTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 	newLootTable, err := gameService.CreateLootTable(ctx, int32(gameID), data.Name)
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to create loot table", "error", err, "game_id", gameID)
@@ -112,7 +115,7 @@ func (h *Handler) UpdateGameLootTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check loot table ownership", "error", err, "table_id", tableID, "game_id", gameID)
@@ -151,7 +154,7 @@ func (h *Handler) DeleteGameLootTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 
 	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
 	if err != nil {
@@ -188,7 +191,7 @@ func (h *Handler) GetGameLootTableContents(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 
 	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
 	if err != nil {
@@ -246,7 +249,7 @@ func (h *Handler) UpdateGameLootTableContent(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 
 	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
 	if err != nil {
@@ -257,18 +260,17 @@ func (h *Handler) UpdateGameLootTableContent(w http.ResponseWriter, r *http.Requ
 		h.renderError(ctx, w, r, core.ErrForbidden("loot table does not belong to this game"), "Loot table access forbidden")
 		return
 	}
-	err = gameService.DeleteLootTableContents(ctx, int32(tableID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete loot table contents", "error", err, "table_id", tableID)
-		return
+	// One transaction: the rewrite deletes every existing item before inserting
+	// the new ones, so a partial failure would otherwise leave the GM's table
+	// empty. This also bumps updated_at, which the child-table writes never touch.
+	items := make([]core.LootTableItem, 0, len(data.Items))
+	for _, item := range data.Items {
+		items = append(items, core.LootTableItem{Name: item.Name, Data: item.Data})
 	}
 
-	for _, item := range data.Items {
-		_, err := gameService.AddLootTableContent(ctx, int32(tableID), item.Name, item.Data)
-		if err != nil {
-			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to save loot table items", "error", err, "game_id", gameID)
-			return
-		}
+	if err := gameService.ReplaceLootTableContents(ctx, int32(tableID), items); err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to save loot table items", "error", err, "table_id", tableID, "game_id", gameID)
+		return
 	}
 }
 
@@ -297,7 +299,7 @@ func (h *Handler) SetRandomLootForCharacter(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 
 	// Verify user can edit this character
 	characterService := h.CharacterService
@@ -329,6 +331,14 @@ func (h *Handler) SetRandomLootForCharacter(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// A table with no items is reachable through normal use (the create endpoint
+	// accepts one), and rand.Intn(0) panics. Fail as a client error the GM can act
+	// on rather than letting the recovery middleware turn it into an opaque 500.
+	if len(contents) == 0 {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("loot table is empty: add at least one item before rolling")), "Roll requested on empty loot table", "table_id", tableID, "game_id", gameID)
+		return
+	}
+
 	character, err := characterService.GetCharacter(ctx, int32(characterID))
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get character", "error", err, "character_id", characterID)
@@ -352,11 +362,17 @@ func (h *Handler) SetRandomLootForCharacter(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	gameService.AddGameLog(ctx, models.CreateLogParams{
+	// The loot is already granted, so a failed log entry must not fail the request —
+	// but it should not vanish silently either, since the game log is the GM's only
+	// record of what was rolled.
+	if _, err := gameService.AddGameLog(ctx, models.CreateLogParams{
 		GameID:  gameID,
 		Type:    "INVENTORY_ADD",
 		Message: pgtype.Text{String: fmt.Sprintf("Added %s to Character %s (Rolled: %d)", content.Name, character.Name, rnd+1), Valid: true},
-	})
+	}); err != nil {
+		h.App.ObsLogger.LogError(ctx, err, "Failed to write loot roll game log",
+			"game_id", gameID, "character_id", characterID, "loot_table_id", tableID)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(content)

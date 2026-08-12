@@ -8,7 +8,7 @@ import { Button } from './ui';
 import { generateId } from '../utils/generateId';
 import { logger } from '@/services/LoggingService';
 import { apiClient } from '@/lib/api';
-import { useGameContext } from '@/contexts/GameContext';
+import { useOptionalGameContext } from '@/contexts/GameContext';
 import { useToast } from '@/contexts/ToastContext';
 
 // Defensive helper to ensure all items have ID fields
@@ -51,9 +51,14 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAddCurrency, setShowAddCurrency] = useState(false);
 
-  const gameContext = useGameContext();
+  // Optional: this component also renders outside a GameProvider (e.g. the
+  // character sheet editor). useGameContext() throws there, which took the whole
+  // subtree down. Without a game we simply cannot offer loot rolls — see
+  // canRollLoot below — but everything else in the inventory still works.
+  const gameContext = useOptionalGameContext();
+  const canRollLoot = gameContext !== null;
 
-  const { showSuccess } = useToast();
+  const { showSuccess, showError } = useToast();
 
   const addItem = (itemData: Omit<InventoryItem, 'id'>) => {
     const newItem: InventoryItem = {
@@ -65,11 +70,38 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   };
 
   const addRandomItem = (lootTableId: number): void => {
-    apiClient.games.giveRandomLootTableContent(gameContext.gameId, lootTableId, characterId).then((r) => {
-      onItemsChange([...validatedItems, {id: generateId(), ...JSON.parse(r.data.data)}], true);
-      setShowAddItem(false);
-      showSuccess(`Added item ${r.data.name} to character sheet`);
-    });
+    if (!gameContext) {
+      // Defensive: the loot modes are hidden without a game context, so this is
+      // unreachable through the UI.
+      logger.error('Random loot roll attempted with no game context', { characterId });
+      showError('Loot tables are unavailable here.');
+      return;
+    }
+    apiClient.games.giveRandomLootTableContent(gameContext.gameId, lootTableId, characterId)
+      .then((r) => {
+        // The item payload is GM-authored JSON stored as free text, so it can be
+        // malformed. Report that rather than throwing inside the success path.
+        let rolledItem: Omit<InventoryItem, 'id'>;
+        try {
+          rolledItem = JSON.parse(r.data.data);
+        } catch {
+          logger.error('Loot item data is not valid JSON', { lootTableId, itemName: r.data.name });
+          showError(`Rolled "${r.data.name}" but its item data is malformed. Check the loot table.`);
+          return;
+        }
+        onItemsChange([...validatedItems, { id: generateId(), ...rolledItem }], true);
+        setShowAddItem(false);
+        showSuccess(`Added item ${r.data.name} to character sheet`);
+      })
+      .catch((error: unknown) => {
+        // Without this the request failed silently: the modal stayed open with no
+        // feedback (e.g. rolling on an empty loot table returns 400).
+        const message =
+          (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+          'Failed to roll for a random item. Please try again.';
+        logger.error('Random loot roll failed', { lootTableId, characterId, error });
+        showError(message);
+      });
   }
 
   const addCurrency = (currencyData: Omit<CurrencyEntry, 'id'>) => {
@@ -179,6 +211,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
             <AddItemModal
               onAdd={addItem}
               onAddRandom={addRandomItem}
+              allowLootModes={canRollLoot}
               onCancel={() => setShowAddItem(false)}
             />
           )}

@@ -169,16 +169,23 @@ CREATE TABLE game_loot_tables (
     id SERIAL PRIMARY KEY,
     game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Game loot tables
+CREATE INDEX idx_game_loot_tables_game_id
+    ON game_loot_tables (game_id, created_at);
+
+-- Items belonging to a loot table
 CREATE TABLE game_loot_table_contents (
     id SERIAL PRIMARY KEY,
     loot_table_id INTEGER NOT NULL REFERENCES game_loot_tables(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     data TEXT
 );
+
+CREATE INDEX idx_game_loot_table_contents_loot_table_id
+    ON game_loot_table_contents (loot_table_id, id);
 
 -- Characters
 CREATE TABLE characters (

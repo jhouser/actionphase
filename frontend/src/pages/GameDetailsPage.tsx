@@ -143,7 +143,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
   const navigate = useNavigate();
 
   // Custom hooks for tab management
-  const { tabs, activeTab, setActiveTab, overflowTabIds } = useGameTabs({
+  const { tabs, activeTab, setActiveTab } = useGameTabs({
     gameState: game?.state,
     isGM,
     participantCount: participants.length,
@@ -564,7 +564,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
               activeTab={activeTab}
               onTabChange={setActiveTab}
               getTabHref={getTabHref}
-              overflowTabIds={overflowTabIds}
+              collapseOverflow
               sticky
             />
 

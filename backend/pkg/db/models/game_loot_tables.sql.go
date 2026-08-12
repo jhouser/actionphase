@@ -14,7 +14,7 @@ INSERT INTO game_loot_tables (
     game_id, name
 ) VALUES (
     $1, $2
-) RETURNING id, game_id, name, created_at
+) RETURNING id, game_id, name, created_at, updated_at
 `
 
 type CreateLootTableParams struct {
@@ -30,6 +30,7 @@ func (q *Queries) CreateLootTable(ctx context.Context, arg CreateLootTableParams
 		&i.GameID,
 		&i.Name,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -45,7 +46,7 @@ func (q *Queries) DeleteLootTable(ctx context.Context, id int32) error {
 
 const getLootTables = `-- name: GetLootTables :many
 SELECT
-    id, game_id, name, created_at
+    id, game_id, name, created_at, updated_at
 FROM game_loot_tables
 WHERE game_id = $1
 ORDER BY created_at ASC
@@ -65,6 +66,7 @@ func (q *Queries) GetLootTables(ctx context.Context, gameID int32) ([]GameLootTa
 			&i.GameID,
 			&i.Name,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -78,7 +80,7 @@ func (q *Queries) GetLootTables(ctx context.Context, gameID int32) ([]GameLootTa
 
 const isLootTableInGame = `-- name: IsLootTableInGame :one
 SELECT
-    EXISTS(SELECT 1 FROM game_loot_tables WHERE game_id = $1 AND id = $2) 
+    EXISTS(SELECT 1 FROM game_loot_tables WHERE game_id = $1 AND id = $2)
     AS is_game_loot_table
 `
 
@@ -87,6 +89,9 @@ type IsLootTableInGameParams struct {
 	ID     int32 `json:"id"`
 }
 
+// Handlers MUST call this before mutating a loot table by ID: the update and
+// delete below are keyed on id alone, so this is what enforces game ownership.
+// Covered by TestLootTableEndpointsRejectCrossGameAccess.
 func (q *Queries) IsLootTableInGame(ctx context.Context, arg IsLootTableInGameParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isLootTableInGame, arg.GameID, arg.ID)
 	var is_game_loot_table bool
@@ -94,11 +99,26 @@ func (q *Queries) IsLootTableInGame(ctx context.Context, arg IsLootTableInGamePa
 	return is_game_loot_table, err
 }
 
+const touchLootTable = `-- name: TouchLootTable :exec
+UPDATE game_loot_tables
+SET updated_at = NOW()
+WHERE id = $1
+`
+
+// Contents live in a child table, so rewriting them leaves the parent row
+// untouched and updated_at stale. Handlers that change contents MUST call this
+// so "Updated" reflects item edits, which are the common operation — renaming is
+// comparatively rare.
+func (q *Queries) TouchLootTable(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, touchLootTable, id)
+	return err
+}
+
 const updateLootTable = `-- name: UpdateLootTable :one
 UPDATE game_loot_tables
-SET name = $2
+SET name = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, game_id, name, created_at
+RETURNING id, game_id, name, created_at, updated_at
 `
 
 type UpdateLootTableParams struct {
@@ -114,6 +134,7 @@ func (q *Queries) UpdateLootTable(ctx context.Context, arg UpdateLootTableParams
 		&i.GameID,
 		&i.Name,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

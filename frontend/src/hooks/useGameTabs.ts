@@ -170,6 +170,10 @@ export function useGameTabs({
       tabList.push({ id: 'info', label: 'Game Info', icon: icons.info });
     }
 
+    // Trailing tabs are ordered least-essential last on purpose: TabNavigation
+    // collapses tabs into "More" from the end of this list backwards, so
+    // position here is what decides survival on a narrow viewport. Reference
+    // material (Loot Tables) outranks the audit trail (Game Logs).
     if (isGM) {
       // Loot Tables tab for GM only (not visible to players or audience)
       tabList.push({ id: 'loot_tables', label: 'Loot Tables', icon: icons.info });
@@ -322,19 +326,9 @@ export function useGameTabs({
     setSearchParams(newParams, { replace: false });
   };
 
-  // Tabs that should appear in the "More" dropdown rather than the main bar.
-  // Only applied for in-progress games where the GM sees the full tab set.
-  const overflowTabIds = useMemo<Set<string> | undefined>(() => {
-    if (gameState === 'in_progress' && isGM) {
-      return new Set(['info', 'logs']);
-    }
-    return undefined;
-  }, [gameState, isGM]);
-
   return {
     tabs,
     activeTab: activeTab === 'default' ? defaultTab : activeTab,
     setActiveTab: handleSetActiveTab,
-    overflowTabIds,
   };
 }

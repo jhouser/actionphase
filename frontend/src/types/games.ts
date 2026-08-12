@@ -132,6 +132,9 @@ export interface LootTable {
   id: number;
   game_id: number;
   name: string;
+  created_at: string;
+  /** Bumped when the table is renamed. Equals created_at until then. */
+  updated_at: string;
 }
 
 export interface LootTableContent {

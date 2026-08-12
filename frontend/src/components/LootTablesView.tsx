@@ -4,12 +4,28 @@ import { LootTableForm, type EditLootTable } from './loot-tables/LootTableForm';
 import { useUrlParam } from '@/hooks/useUrlParam';
 import { PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
+import { formatUTCForDisplay } from '@/utils/timezone';
+import type { LootTable } from '@/types/games';
 
 interface LootTablesProps {
   gameId: number;
   className?: string;
 }
 
+
+/**
+ * Whether a table has been edited since it was created.
+ *
+ * The migration backfilled updated_at from created_at and the insert defaults
+ * both to NOW(), so an untouched table has the two within microseconds of each
+ * other — but not always byte-identical, which rules out a string compare. A
+ * one-second tolerance is far below any real edit interval.
+ */
+function wasUpdated(lootTable: LootTable): boolean {
+  if (!lootTable.updated_at || !lootTable.created_at) return false;
+  const delta = new Date(lootTable.updated_at).getTime() - new Date(lootTable.created_at).getTime();
+  return Number.isFinite(delta) && delta > 1000;
+}
 
 const lootTableParamOptions = {
   deserialize: (s: string) => parseInt(s, 10) || null,
@@ -166,15 +182,38 @@ export function LootTablesView({ gameId, className = '' }: LootTablesProps) {
               <p className="text-sm">Create your first loot table</p>
             </div>
           ) : (
+            // surface-raised + border-theme-default is the site-wide pattern for an
+            // item nested inside a section (see GameStatsView, HistoryView). These
+            // cards previously used surface-base — the same value as the container
+            // behind them — so only a shadow separated them, which is nearly
+            // invisible in dark mode and left the list reading as one block.
             lootTables.map((lootTable) => (
-              <div  className="surface-base rounded-lg shadow-md p-6 md:flex justify-between items-start" key={lootTable.id}>
-                <div className="flex gap-3 flex-grow">
-                  <h3 className="text-xl font-bold text-content-primary mb-4">{lootTable.name}</h3>
+              <div
+                className="surface-raised border border-theme-default rounded-lg p-4 flex flex-wrap gap-3 justify-between items-center"
+                key={lootTable.id}
+              >
+                <div className="flex flex-col gap-1 flex-grow min-w-0">
+                  {/* min-w-0 + break-words so a long name wraps instead of pushing
+                      the action buttons off the card. */}
+                  <h3 className="text-lg font-semibold text-content-primary min-w-0 break-words">
+                    {lootTable.name}
+                  </h3>
+                  <p className="text-xs text-content-tertiary">
+                    Created {formatUTCForDisplay(lootTable.created_at, 'MMM d, yyyy')}
+                    {/* updated_at is set to created_at on insert and only moves when
+                        the table is renamed, so showing both when they match would
+                        just be the same date twice. */}
+                    {wasUpdated(lootTable) && (
+                      <> · Updated {formatUTCForDisplay(lootTable.updated_at, 'MMM d, yyyy')}</>
+                    )}
+                  </p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-3 shrink-0">
+                  {/* Name the table in the label: every row otherwise announces a
+                      bare "Edit"/"Delete", which is ambiguous in a list. */}
                   <button
                     type="button"
-                    aria-label="Edit"
+                    aria-label={`Edit ${lootTable.name}`}
                     onClick={() => setSelectedLootTableId(lootTable.id)}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-md text-content-secondary hover:text-content-primary hover:bg-interactive-primary-subtle transition-colors"
                   >
@@ -182,7 +221,7 @@ export function LootTablesView({ gameId, className = '' }: LootTablesProps) {
                   </button>
                   <button
                     type="button"
-                    aria-label="Delete"
+                    aria-label={`Delete ${lootTable.name}`}
                     onClick={() => deleteLootTable(lootTable.id)}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-md text-content-secondary hover:text-content-primary hover:bg-interactive-primary-subtle transition-colors"
                   >
