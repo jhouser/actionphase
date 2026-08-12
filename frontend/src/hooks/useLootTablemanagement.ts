@@ -30,7 +30,7 @@ export function useLootTableManagement(gameId: number) {
 
     const updateLootTableContentsMutation = useMutation({
       mutationFn: (data: UpdateLootTableContentsRequest) => apiClient.games.setLootTableContents(gameId, data.id, data.items),
-      onSuccess: (d, v) => {
+      onSuccess: (_, v) => {
         queryClient.invalidateQueries({ queryKey: ['lootTableContents', v.id] });
       }
     })
