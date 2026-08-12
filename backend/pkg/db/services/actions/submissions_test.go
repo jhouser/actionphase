@@ -53,7 +53,6 @@ func TestActionSubmissionService_SubmitAction(t *testing.T) {
 			PhaseID: phase.ID,
 			UserID:  int32(user1.ID),
 			Content: "I search the room for clues.",
-			IsDraft: false,
 		}
 
 		action, err := actionService.SubmitAction(context.Background(), req)
@@ -62,26 +61,7 @@ func TestActionSubmissionService_SubmitAction(t *testing.T) {
 		assert.Equal(t, req.PhaseID, action.PhaseID)
 		assert.Equal(t, req.UserID, action.UserID)
 		assert.Equal(t, "I search the room for clues.", action.Content)
-		assert.False(t, action.IsDraft.Bool)
-	})
-
-	t.Run("saves draft action", func(t *testing.T) {
-		user2 := testDB.CreateTestUser(t, "testuser2", "test2@example.com")
-		_, err := gameService.AddGameParticipant(context.Background(), game.ID, int32(user2.ID), "player")
-		require.NoError(t, err)
-
-		req := core.SubmitActionRequest{
-			GameID:  game.ID,
-			PhaseID: phase.ID,
-			UserID:  int32(user2.ID),
-			Content: "Draft action content",
-			IsDraft: true,
-		}
-
-		action, err := actionService.SubmitAction(context.Background(), req)
-		require.NoError(t, err)
-		assert.True(t, action.IsDraft.Bool)
-		assert.False(t, action.SubmittedAt.Valid) // Drafts don't have submission time
+		assert.True(t, action.SubmittedAt.Valid, "submission should be stamped on insert")
 	})
 
 	t.Run("returns error when user is not a participant", func(t *testing.T) {
@@ -92,7 +72,6 @@ func TestActionSubmissionService_SubmitAction(t *testing.T) {
 			PhaseID: phase.ID,
 			UserID:  int32(outsider.ID),
 			Content: "Trying to submit without permission",
-			IsDraft: false,
 		}
 
 		_, err := actionService.SubmitAction(context.Background(), req)
@@ -115,7 +94,6 @@ func TestActionSubmissionService_SubmitAction(t *testing.T) {
 			PhaseID: testPhase.ID,
 			UserID:  int32(user.ID),
 			Content: "Should fail",
-			IsDraft: false,
 		}
 
 		_, err = actionService.SubmitAction(context.Background(), req)
@@ -138,7 +116,6 @@ func TestActionSubmissionService_SubmitAction(t *testing.T) {
 			PhaseID: testPhase.ID,
 			UserID:  int32(user.ID),
 			Content: "Should fail",
-			IsDraft: false,
 		}
 
 		_, err = actionService.SubmitAction(context.Background(), req)
@@ -176,7 +153,6 @@ func TestActionSubmissionService_SubmitAction(t *testing.T) {
 			UserID:      int32(player2.ID),
 			CharacterID: &char1.ID,
 			Content:     "Action with wrong character",
-			IsDraft:     false,
 		}
 
 		_, err = actionService.SubmitAction(context.Background(), req)
@@ -211,7 +187,6 @@ func TestActionSubmissionService_SubmitAction(t *testing.T) {
 			UserID:      int32(player.ID),
 			CharacterID: &charInGame2.ID,
 			Content:     "Cross-game action",
-			IsDraft:     false,
 		}
 
 		_, err = actionService.SubmitAction(context.Background(), req)
@@ -231,7 +206,6 @@ func TestActionSubmissionService_SubmitAction(t *testing.T) {
 			UserID:      int32(player.ID),
 			CharacterID: &nonExistentCharID,
 			Content:     "Action with non-existent character",
-			IsDraft:     false,
 		}
 
 		_, err = actionService.SubmitAction(context.Background(), req)
@@ -272,7 +246,6 @@ func TestActionSubmissionService_SubmitAction_PastDeadlineBlocked(t *testing.T) 
 			PhaseID: phase.ID,
 			UserID:  int32(player.ID),
 			Content: "Before deadline action",
-			IsDraft: false,
 		})
 		require.NoError(t, err)
 	})
@@ -292,7 +265,6 @@ func TestActionSubmissionService_SubmitAction_PastDeadlineBlocked(t *testing.T) 
 			PhaseID: phase.ID,
 			UserID:  int32(latePlayer.ID),
 			Content: "Late submission attempt",
-			IsDraft: false,
 		})
 		require.Error(t, err, "Should block submission after deadline")
 	})
@@ -328,7 +300,6 @@ func TestActionSubmissionService_GetActionSubmission(t *testing.T) {
 		PhaseID: phase.ID,
 		UserID:  int32(user.ID),
 		Content: "Test action",
-		IsDraft: false,
 	}
 	submission, err := actionService.SubmitAction(context.Background(), submitReq)
 	require.NoError(t, err)
@@ -377,7 +348,6 @@ func TestActionSubmissionService_DeleteActionSubmission(t *testing.T) {
 			PhaseID: phase.ID,
 			UserID:  int32(user.ID),
 			Content: "Action to delete",
-			IsDraft: true,
 		}
 		submission, err := actionService.SubmitAction(context.Background(), submitReq)
 		require.NoError(t, err)
@@ -398,7 +368,6 @@ func TestActionSubmissionService_DeleteActionSubmission(t *testing.T) {
 			PhaseID: phase.ID,
 			UserID:  int32(user.ID),
 			Content: "Submission owned by user",
-			IsDraft: true,
 		}
 		submission, err := actionService.SubmitAction(context.Background(), submitReq)
 		require.NoError(t, err)
@@ -425,11 +394,9 @@ func TestActionSubmissionService_DeleteActionSubmission(t *testing.T) {
 			PhaseID: phase.ID,
 			UserID:  int32(user.ID),
 			Content: "Finalized submission",
-			IsDraft: false,
 		}
 		submission, err := actionService.SubmitAction(context.Background(), submitReq)
 		require.NoError(t, err)
-		assert.False(t, submission.IsDraft.Bool)
 
 		err = actionService.DeleteActionSubmission(context.Background(), submission.ID, int32(user.ID))
 		require.NoError(t, err)
@@ -468,13 +435,13 @@ func TestActionSubmissionService_GetSubmissionStats(t *testing.T) {
 		_, err = gameService.AddGameParticipant(context.Background(), game.ID, int32(player2.ID), "player")
 		require.NoError(t, err)
 
-		// Submit one final, one draft
+		// Both players submit. There is no draft state, so every submission
+		// counts toward SubmittedCount.
 		_, err = actionService.SubmitAction(context.Background(), core.SubmitActionRequest{
 			GameID:  game.ID,
 			PhaseID: phase.ID,
 			UserID:  int32(player1.ID),
-			Content: "Final action",
-			IsDraft: false,
+			Content: "Player one's action",
 		})
 		require.NoError(t, err)
 
@@ -482,16 +449,14 @@ func TestActionSubmissionService_GetSubmissionStats(t *testing.T) {
 			GameID:  game.ID,
 			PhaseID: phase.ID,
 			UserID:  int32(player2.ID),
-			Content: "Draft action",
-			IsDraft: true,
+			Content: "Player two's action",
 		})
 		require.NoError(t, err)
 
 		// Get stats
 		stats, err := actionService.GetSubmissionStats(context.Background(), phase.ID)
 		require.NoError(t, err)
-		assert.Equal(t, int32(1), stats.SubmittedCount)
-		assert.Equal(t, int32(1), stats.DraftCount)
+		assert.Equal(t, int32(2), stats.SubmittedCount)
 		assert.Equal(t, int32(2), stats.TotalPlayers)
 	})
 }
@@ -528,7 +493,6 @@ func TestActionSubmissionService_GetUserPhaseSubmission(t *testing.T) {
 			PhaseID: phase.ID,
 			UserID:  int32(player.ID),
 			Content: "My action for this phase",
-			IsDraft: false,
 		})
 		require.NoError(t, err)
 
@@ -538,7 +502,6 @@ func TestActionSubmissionService_GetUserPhaseSubmission(t *testing.T) {
 		require.NotNil(t, result, "Should return submission")
 		assert.Equal(t, submitted.ID, result.ID)
 		assert.Equal(t, "My action for this phase", result.Content)
-		assert.False(t, result.IsDraft.Bool)
 	})
 
 	t.Run("returns nil when user has not submitted", func(t *testing.T) {
@@ -552,27 +515,36 @@ func TestActionSubmissionService_GetUserPhaseSubmission(t *testing.T) {
 		assert.Nil(t, result, "Should return nil when no submission exists")
 	})
 
-	t.Run("returns draft submission", func(t *testing.T) {
-		draftPlayer := testDB.CreateTestUser(t, "draftplayer", "draftplayer@example.com")
-		_, err := gameService.AddGameParticipant(context.Background(), game.ID, int32(draftPlayer.ID), "player")
+	t.Run("editing a submission preserves the original submitted_at", func(t *testing.T) {
+		editPlayer := testDB.CreateTestUser(t, "editplayer", "editplayer@example.com")
+		_, err := gameService.AddGameParticipant(context.Background(), game.ID, int32(editPlayer.ID), "player")
 		require.NoError(t, err)
 
-		// Submit draft
+		first, err := actionService.SubmitAction(context.Background(), core.SubmitActionRequest{
+			GameID:  game.ID,
+			PhaseID: phase.ID,
+			UserID:  int32(editPlayer.ID),
+			Content: "First draft of my action",
+		})
+		require.NoError(t, err)
+		require.True(t, first.SubmittedAt.Valid)
+
+		// Players edit freely until the deadline; an edit must not restamp
+		// submitted_at, which marks when they first submitted.
 		_, err = actionService.SubmitAction(context.Background(), core.SubmitActionRequest{
 			GameID:  game.ID,
 			PhaseID: phase.ID,
-			UserID:  int32(draftPlayer.ID),
-			Content: "Draft action",
-			IsDraft: true,
+			UserID:  int32(editPlayer.ID),
+			Content: "Revised action",
 		})
 		require.NoError(t, err)
 
-		// Get user's draft submission
-		result, err := actionService.GetUserPhaseSubmission(context.Background(), phase.ID, int32(draftPlayer.ID))
+		result, err := actionService.GetUserPhaseSubmission(context.Background(), phase.ID, int32(editPlayer.ID))
 		require.NoError(t, err)
-		require.NotNil(t, result, "Should return draft submission")
-		assert.True(t, result.IsDraft.Bool)
-		assert.False(t, result.SubmittedAt.Valid, "Draft should not have submission time")
+		require.NotNil(t, result, "Should return the edited submission")
+		assert.Equal(t, "Revised action", result.Content)
+		assert.Equal(t, first.SubmittedAt.Time, result.SubmittedAt.Time,
+			"editing must not restamp submitted_at")
 	})
 }
 
@@ -609,7 +581,6 @@ func TestActionSubmissionService_GetPhaseSubmissions(t *testing.T) {
 				PhaseID: phase.ID,
 				UserID:  int32(player.ID),
 				Content: fmt.Sprintf("Action from player %d", i),
-				IsDraft: false,
 			})
 			require.NoError(t, err)
 		}
@@ -618,62 +589,6 @@ func TestActionSubmissionService_GetPhaseSubmissions(t *testing.T) {
 		submissions, err := actionService.GetPhaseSubmissions(context.Background(), phase.ID)
 		require.NoError(t, err)
 		assert.Len(t, submissions, 3, "Should return all 3 submissions")
-	})
-
-	t.Run("includes both draft and final submissions", func(t *testing.T) {
-		game2 := testDB.CreateTestGame(t, int32(gm.ID), "Draft Test Game")
-		phase2, err := phaseService.TransitionToNextPhase(context.Background(), game2.ID, int32(gm.ID), core.TransitionPhaseRequest{
-			PhaseType: "action",
-			Title:     "Draft Phase",
-		})
-		require.NoError(t, err)
-
-		// Create 2 players: one draft, one final
-		player1 := testDB.CreateTestUser(t, "draftsubmitter", "draftsubmitter@example.com")
-		player2 := testDB.CreateTestUser(t, "finalsubmitter", "finalsubmitter@example.com")
-
-		_, err = gameService.AddGameParticipant(context.Background(), game2.ID, int32(player1.ID), "player")
-		require.NoError(t, err)
-		_, err = gameService.AddGameParticipant(context.Background(), game2.ID, int32(player2.ID), "player")
-		require.NoError(t, err)
-
-		// Submit draft
-		_, err = actionService.SubmitAction(context.Background(), core.SubmitActionRequest{
-			GameID:  game2.ID,
-			PhaseID: phase2.ID,
-			UserID:  int32(player1.ID),
-			Content: "Draft action",
-			IsDraft: true,
-		})
-		require.NoError(t, err)
-
-		// Submit final
-		_, err = actionService.SubmitAction(context.Background(), core.SubmitActionRequest{
-			GameID:  game2.ID,
-			PhaseID: phase2.ID,
-			UserID:  int32(player2.ID),
-			Content: "Final action",
-			IsDraft: false,
-		})
-		require.NoError(t, err)
-
-		// Get all submissions
-		submissions, err := actionService.GetPhaseSubmissions(context.Background(), phase2.ID)
-		require.NoError(t, err)
-		assert.Len(t, submissions, 2, "Should return both draft and final submissions")
-
-		// Verify one is draft, one is final
-		drafts := 0
-		finals := 0
-		for _, s := range submissions {
-			if s.IsDraft.Bool {
-				drafts++
-			} else {
-				finals++
-			}
-		}
-		assert.Equal(t, 1, drafts, "Should have 1 draft")
-		assert.Equal(t, 1, finals, "Should have 1 final submission")
 	})
 
 	t.Run("returns empty list when no submissions exist", func(t *testing.T) {

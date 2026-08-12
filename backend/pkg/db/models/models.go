@@ -129,7 +129,6 @@ type ActionSubmission struct {
 	PhaseID     int32              `json:"phase_id"`
 	CharacterID pgtype.Int4        `json:"character_id"`
 	Content     string             `json:"content"`
-	IsDraft     pgtype.Bool        `json:"is_draft"`
 	SubmittedAt pgtype.Timestamptz `json:"submitted_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }

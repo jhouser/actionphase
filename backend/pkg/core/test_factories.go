@@ -776,7 +776,6 @@ type ActionSubmissionBuilder struct {
 	phaseID     int32
 	characterID *int32
 	content     string
-	isDraft     bool
 }
 
 // NewActionSubmission starts building a new action submission with default values
@@ -789,7 +788,6 @@ func (f *TestDataFactory) NewActionSubmission() *ActionSubmissionBuilder {
 		phaseID:     1, // Default phase ID
 		characterID: nil,
 		content:     fmt.Sprintf("Test action submission %d", seq),
-		isDraft:     false,
 	}
 }
 
@@ -840,16 +838,6 @@ func (b *ActionSubmissionBuilder) WithContent(content string) *ActionSubmissionB
 	return b
 }
 
-func (b *ActionSubmissionBuilder) Draft() *ActionSubmissionBuilder {
-	b.isDraft = true
-	return b
-}
-
-func (b *ActionSubmissionBuilder) Final() *ActionSubmissionBuilder {
-	b.isDraft = false
-	return b
-}
-
 // Create persists the action submission to the database and returns the created submission
 func (b *ActionSubmissionBuilder) Create() db.ActionSubmission {
 	params := db.SubmitActionParams{
@@ -857,7 +845,6 @@ func (b *ActionSubmissionBuilder) Create() db.ActionSubmission {
 		UserID:  b.userID,
 		PhaseID: b.phaseID,
 		Content: b.content,
-		IsDraft: pgtype.Bool{Bool: b.isDraft, Valid: true},
 	}
 
 	if b.characterID != nil {
