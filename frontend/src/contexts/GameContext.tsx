@@ -5,9 +5,13 @@ import type { GameWithDetails, GameParticipant } from '../types/games';
 import type { Character } from '../types/characters';
 import { useAuth } from './AuthContext';
 import { useAdminMode } from './AdminModeContext';
+import { computeGamePermissions, resolveUserRole } from '../lib/gamePermissions';
+import type { UserGameRole } from '../lib/gamePermissions';
 import { logger } from '@/services/LoggingService';
 
-export type UserGameRole = 'gm' | 'player' | 'co_gm' | 'audience' | 'none';
+// Re-exported for the many components that already import it from here. The
+// definition lives with the permission rules in lib/gamePermissions.
+export type { UserGameRole } from '../lib/gamePermissions';
 
 interface GameContextValue {
   // Game data
@@ -26,6 +30,7 @@ interface GameContextValue {
   isGM: boolean;
   isParticipant: boolean;
   isInGame: boolean; // True if user has any role (including audience)
+  isAudience: boolean; // Audience-level ACCESS, not identity — see below
   canEditGame: boolean;
 
   // User's characters
@@ -125,50 +130,26 @@ export function GameProvider({ gameId, children }: GameProviderProps) {
     staleTime: 30000,
   });
 
-  // Compute user's role
-  const userRole: UserGameRole = useMemo(() => {
-    if (!currentUserId || !game) return 'none';
+  // Compute user's role (shared with useGamePermissions — see lib/gamePermissions)
+  const userRole: UserGameRole = useMemo(
+    () => resolveUserRole(currentUserId, game?.gm_user_id, participants),
+    [currentUserId, game?.gm_user_id, participants]
+  );
 
-    // Check if user is GM
-    if (game.gm_user_id === currentUserId) {
-      logger.debug('User is GM', { gameId, currentUserId });
-      return 'gm';
-    }
+  const isAdminActingAsGM = adminModeEnabled && !!currentUser?.is_admin;
 
-    // Check participant role
-    const participant = participants?.find(p => p.user_id === currentUserId);
-    if (participant) {
-      logger.debug('User is participant', { gameId, currentUserId, role: participant.role });
-      return participant.role as UserGameRole;
-    }
+  // All permission rules live in lib/gamePermissions so this provider and the
+  // standalone useGamePermissions hook cannot drift apart.
+  const permissions = useMemo(
+    () => computeGamePermissions({ userRole, gameState: game?.state, isAdminActingAsGM }),
+    [userRole, game?.state, isAdminActingAsGM]
+  );
 
-    logger.debug('User has no role in game', { gameId, currentUserId });
-    return 'none';
-  }, [currentUserId, game, participants, gameId]);
-
-  // Compute permission flags
-  const isGM = useMemo(() => {
-    // User is GM if they own the game, are a co-GM, OR if admin mode is enabled
-    const isActualGM = userRole === 'gm' || userRole === 'co_gm';
-    const isAdminAsGM = adminModeEnabled && !!currentUser?.is_admin;
-    return isActualGM || isAdminAsGM;
-  }, [userRole, adminModeEnabled, currentUser?.is_admin]);
-
-  const isParticipant = useMemo((): boolean => {
-    return userRole !== 'none' && userRole !== 'audience';
-  }, [userRole]);
-
-  // Check if user has any role in the game (including audience)
-  const isInGame = useMemo((): boolean => {
-    return userRole !== 'none';
-  }, [userRole]);
-
-  // Only primary GM (not co-GM) can edit game settings
-  const canEditGame = useMemo((): boolean => {
-    const isPrimaryGM = userRole === 'gm';
-    const isAdminAsGM = adminModeEnabled && !!currentUser?.is_admin;
-    return isPrimaryGM || isAdminAsGM;
-  }, [userRole, adminModeEnabled, currentUser?.is_admin]);
+  // NOTE: this context has always exported isGM meaning "has GM authority",
+  // co-GM included — its many consumers gate GM affordances on it. So it maps to
+  // hasGMPowers, not the shared isGM (which is primary-GM identity). canEditGame
+  // stays owner-only, which is the distinction that makes the two differ.
+  const { hasGMPowers: isGM, isParticipant, isInGame, hasAudienceAccess: isAudience, canEditGame } = permissions;
 
   // Character ownership checker
   const isUserCharacter = useMemo(() => {
@@ -203,6 +184,7 @@ export function GameProvider({ gameId, children }: GameProviderProps) {
     isGM,
     isParticipant,
     isInGame,
+    isAudience,
     canEditGame,
     userCharacters: userCharacters || [],
     allGameCharacters: allGameCharacters || [],

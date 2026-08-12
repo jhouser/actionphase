@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-import type { UserGameRole } from '../contexts/GameContext';
+import { useAdminMode } from '../contexts/AdminModeContext';
+import { computeGamePermissions, resolveUserRole } from '../lib/gamePermissions';
+import type { UserGameRole } from '../lib/gamePermissions';
 import type { GameWithDetails, GameParticipant } from '../types/games';
 
 export interface GamePermissions {
@@ -14,9 +16,13 @@ export interface GamePermissions {
 
   // User's role and permissions
   userRole: UserGameRole;
+  /** Primary GM identity only (game.gm_user_id). For GM-level authority use hasGMPowers. */
   isGM: boolean;
   isCoGM: boolean;
+  /** GM or co-GM — the authority level the backend grants to both. */
+  hasGMPowers: boolean;
   isPlayer: boolean;
+  /** Audience-level read ACCESS (hasAudienceAccess), which a completed game grants to everyone. */
   isAudience: boolean;
   isParticipant: boolean;
   canEditGame: boolean;
@@ -37,6 +43,7 @@ export interface GamePermissions {
  */
 export function useGamePermissions(gameId: number): GamePermissions {
   const { currentUser } = useAuth();
+  const { adminModeEnabled } = useAdminMode();
   const currentUserId = currentUser?.id || null;
 
   // Fetch game details
@@ -67,28 +74,22 @@ export function useGamePermissions(gameId: number): GamePermissions {
     staleTime: 30000,
   });
 
-  // Determine user's role
-  let userRole: UserGameRole = 'none';
-  if (currentUserId && game) {
-    if (game.gm_user_id === currentUserId) {
-      userRole = 'gm';
-    } else {
-      const participant = participants?.find(p => p.user_id === currentUserId);
-      if (participant) {
-        userRole = participant.role as UserGameRole;
-      }
-    }
-  }
+  // Role resolution and every permission rule are shared with GameProvider via
+  // lib/gamePermissions, so the two cannot drift apart.
+  const userRole = resolveUserRole(currentUserId, game?.gm_user_id, participants);
+  const isAdminActingAsGM = adminModeEnabled && !!currentUser?.is_admin;
 
-  // Calculate permission flags
-  const isGM = userRole === 'gm';
-  const isCoGM = userRole === 'co_gm';
-  const isPlayer = userRole === 'player';
-  const isAudience = userRole === 'audience';
-  const isParticipant = isPlayer || isCoGM;
-  const canEditGame = isGM;
-  const canManagePhases = isGM || isCoGM;
-  const canViewAllActions = isGM || isCoGM;
+  const {
+    isGM,
+    isCoGM,
+    hasGMPowers,
+    isPlayer,
+    hasAudienceAccess,
+    isParticipant,
+    canEditGame,
+    canManagePhases,
+    canViewAllActions,
+  } = computeGamePermissions({ userRole, gameState: game?.state, isAdminActingAsGM });
 
   return {
     game: game || null,
@@ -97,8 +98,9 @@ export function useGamePermissions(gameId: number): GamePermissions {
     userRole,
     isGM,
     isCoGM,
+    hasGMPowers,
     isPlayer,
-    isAudience,
+    isAudience: hasAudienceAccess,
     isParticipant,
     canEditGame,
     canManagePhases,
