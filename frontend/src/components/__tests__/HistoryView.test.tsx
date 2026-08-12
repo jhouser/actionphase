@@ -426,4 +426,433 @@ describe('HistoryView', () => {
       expect(markAllButton).toBeEnabled();
     });
   });
+
+  // Action submissions and results used to live in a separate Audience tab.
+  // Folding them in here means HistoryView must pick each role's endpoint:
+  // audience members have no characters of their own, so the per-user
+  // endpoints the player path uses return nothing for them, and the GM
+  // endpoint rejects them outright.
+  describe('audience data routing', () => {
+    const renderForAudience = () =>
+      renderWithProviders(
+        <HistoryView
+          gameId={mockGameId}
+          currentPhaseId={mockCurrentPhaseId}
+          isGM={false}
+          isAudience={true}
+        />,
+        { initialRoute: `/?phase=2&subTab=submissions` }
+      );
+
+    it('reads submissions from the audience endpoint, not the GM or per-user one', async () => {
+      const calls: string[] = [];
+      server.use(
+        http.get('/api/v1/games/:gameId/action-submissions/all', ({ request }) => {
+          calls.push('audience');
+          const url = new URL(request.url);
+          expect(url.searchParams.get('phase_id')).toBe('2');
+          return HttpResponse.json({
+            action_submissions: [
+              {
+                id: 91,
+                game_id: mockGameId,
+                user_id: 7,
+                phase_id: 2,
+                content: 'The whole cast can be watched.',
+                character_name: 'Vera',
+                username: 'vera_player',
+                submitted_at: '2025-01-03T13:00:00Z',
+                updated_at: '2025-01-03T13:00:00Z',
+                status: 'submitted',
+              },
+            ],
+            total: 1,
+          });
+        }),
+        http.get('/api/v1/games/:gameId/actions', () => {
+          calls.push('gm');
+          return HttpResponse.json([]);
+        }),
+        http.get('/api/v1/games/:gameId/actions/mine', () => {
+          calls.push('user');
+          return HttpResponse.json([]);
+        }),
+      );
+
+      renderForAudience();
+
+      expect(await screen.findByText('The whole cast can be watched.')).toBeInTheDocument();
+      expect(calls).toContain('audience');
+      expect(calls).not.toContain('gm');
+      expect(calls).not.toContain('user');
+    });
+
+    it('reads results from the game-wide endpoint rather than the per-user one', async () => {
+      const calls: string[] = [];
+      server.use(
+        http.get('/api/v1/games/:gameId/action-submissions/all', () =>
+          HttpResponse.json({ action_submissions: [], total: 0 })
+        ),
+        http.get('/api/v1/games/:gameId/results', () => {
+          calls.push('game');
+          return HttpResponse.json([
+            {
+              id: 500,
+              game_id: mockGameId,
+              user_id: 7,
+              phase_id: 2,
+              gm_user_id: 1,
+              content: 'A result the audience may read.',
+              is_published: true,
+              character_name: 'Vera',
+              sent_at: '2025-01-03T14:00:00Z',
+            },
+          ]);
+        }),
+        http.get('/api/v1/games/:gameId/results/mine', () => {
+          calls.push('mine');
+          return HttpResponse.json([]);
+        }),
+      );
+
+      renderWithProviders(
+        <HistoryView
+          gameId={mockGameId}
+          currentPhaseId={mockCurrentPhaseId}
+          isGM={false}
+          isAudience={true}
+        />,
+        { initialRoute: `/?phase=2&subTab=results` }
+      );
+
+      expect(await screen.findByText('A result the audience may read.')).toBeInTheDocument();
+      expect(calls).toContain('game');
+      expect(calls).not.toContain('mine');
+    });
+
+    // Audience is a trusted spectator role and deliberately sees GM drafts, so
+    // spectators can watch results take shape. The badge matters as much as the
+    // content — an audience member must be able to tell a work in progress from
+    // something the GM has actually sent.
+    it('shows unpublished drafts to audience, marked as drafts', async () => {
+      server.use(
+        http.get('/api/v1/games/:gameId/action-submissions/all', () =>
+          HttpResponse.json({ action_submissions: [], total: 0 })
+        ),
+        http.get('/api/v1/games/:gameId/results', () =>
+          HttpResponse.json([
+            {
+              id: 503,
+              game_id: mockGameId,
+              user_id: 7,
+              phase_id: 2,
+              gm_user_id: 1,
+              content: 'Still being written by the GM.',
+              is_published: false,
+              character_name: 'Vera',
+            },
+          ])
+        ),
+      );
+
+      renderWithProviders(
+        <HistoryView
+          gameId={mockGameId}
+          currentPhaseId={mockCurrentPhaseId}
+          isGM={false}
+          isAudience={true}
+        />,
+        { initialRoute: `/?phase=2&subTab=results` }
+      );
+
+      expect(await screen.findByText('Still being written by the GM.')).toBeInTheDocument();
+      expect(screen.getByText(/draft \(unpublished\)/i)).toBeInTheDocument();
+    });
+
+    // A standalone result answers no submission. History filters results by
+    // phase alone, so these render without special handling — the property the
+    // retired AllActionSubmissionsView needed extra code to preserve.
+    it('renders results that have no parent submission', async () => {
+      server.use(
+        http.get('/api/v1/games/:gameId/action-submissions/all', () =>
+          HttpResponse.json({ action_submissions: [], total: 0 })
+        ),
+        http.get('/api/v1/games/:gameId/results', () =>
+          HttpResponse.json([
+            {
+              id: 501,
+              game_id: mockGameId,
+              user_id: 7,
+              phase_id: 2,
+              gm_user_id: 1,
+              content: 'A raven arrives, unprompted.',
+              is_published: true,
+              character_name: 'Cass',
+              sent_at: '2025-01-03T15:00:00Z',
+            },
+            {
+              id: 502,
+              game_id: mockGameId,
+              user_id: 7,
+              phase_id: 2,
+              gm_user_id: 1,
+              action_submission_id: 91,
+              content: 'And a second, answering the first.',
+              is_published: true,
+              character_name: 'Cass',
+              sent_at: '2025-01-03T16:00:00Z',
+            },
+          ])
+        ),
+      );
+
+      renderWithProviders(
+        <HistoryView
+          gameId={mockGameId}
+          currentPhaseId={mockCurrentPhaseId}
+          isGM={false}
+          isAudience={true}
+        />,
+        { initialRoute: `/?phase=2&subTab=results` }
+      );
+
+      expect(await screen.findByText('A raven arrives, unprompted.')).toBeInTheDocument();
+      expect(screen.getByText('And a second, answering the first.')).toBeInTheDocument();
+    });
+  });
+
+  // Submissions and results for the whole cast now share one phase drill-down,
+  // which can run to dozens of entries. The character filter narrows it, using
+  // OR semantics: selecting two characters shows both, not their intersection
+  // (which would always be empty — a row belongs to exactly one character).
+  describe('character filter', () => {
+    const VERA = 11;
+    const CASS = 12;
+    const RUE = 13;
+
+    // Rue appears only in results, so the chip row can only be complete if it is
+    // built from submissions and results together.
+    const setupFilterHandlers = () => {
+      server.use(
+        http.get('/api/v1/games/:gameId/actions', () =>
+          HttpResponse.json([
+            {
+              id: 201,
+              game_id: mockGameId,
+              phase_id: 2,
+              user_id: 7,
+              character_id: VERA,
+              character_name: 'Vera',
+              content: 'Vera picks the lock.',
+              is_draft: false,
+              submitted_at: '2025-01-03T13:00:00Z',
+            },
+            {
+              id: 202,
+              game_id: mockGameId,
+              phase_id: 2,
+              user_id: 8,
+              character_id: CASS,
+              character_name: 'Cass',
+              content: 'Cass keeps watch.',
+              is_draft: false,
+              submitted_at: '2025-01-03T13:05:00Z',
+            },
+          ])
+        ),
+        http.get('/api/v1/games/:gameId/results', () =>
+          HttpResponse.json([
+            {
+              id: 301,
+              game_id: mockGameId,
+              phase_id: 2,
+              user_id: 7,
+              gm_user_id: 1,
+              character_id: VERA,
+              character_name: 'Vera',
+              content: 'The lock gives way.',
+              is_published: true,
+              sent_at: '2025-01-03T14:00:00Z',
+            },
+            {
+              id: 302,
+              game_id: mockGameId,
+              phase_id: 2,
+              user_id: 9,
+              gm_user_id: 1,
+              character_id: RUE,
+              character_name: 'Rue',
+              content: 'Rue hears footsteps.',
+              is_published: true,
+              sent_at: '2025-01-03T14:05:00Z',
+            },
+          ])
+        )
+      );
+    };
+
+    const renderAsGM = (subTab: 'submissions' | 'results' = 'submissions') =>
+      renderWithProviders(
+        <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={true} />,
+        { initialRoute: `/?phase=2&subTab=${subTab}`, gameId: mockGameId }
+      );
+
+    it('offers a chip for every character in the phase, from submissions and results alike', async () => {
+      setupFilterHandlers();
+      renderAsGM();
+
+      // Rue has no submission at all — only a result — so a chip row derived from
+      // the active tab alone would omit them.
+      expect(await screen.findByRole('button', { name: 'Rue' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Vera' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Cass' })).toBeInTheDocument();
+    });
+
+    it('shows only the selected character once a chip is picked', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      setupFilterHandlers();
+      renderAsGM();
+
+      // Both submissions render before any filter is applied.
+      expect(await screen.findByText('Vera picks the lock.')).toBeInTheDocument();
+      expect(screen.getByText('Cass keeps watch.')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Vera' }));
+
+      expect(screen.getByText('Vera picks the lock.')).toBeInTheDocument();
+      expect(screen.queryByText('Cass keeps watch.')).not.toBeInTheDocument();
+    });
+
+    it('ORs the selection rather than intersecting it', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      setupFilterHandlers();
+      renderAsGM();
+
+      expect(await screen.findByText('Vera picks the lock.')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Vera' }));
+      await user.click(screen.getByRole('button', { name: 'Cass' }));
+
+      // An AND filter would show nothing here: no submission belongs to both.
+      expect(screen.getByText('Vera picks the lock.')).toBeInTheDocument();
+      expect(screen.getByText('Cass keeps watch.')).toBeInTheDocument();
+    });
+
+    it('deselects a chip when it is clicked again', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      setupFilterHandlers();
+      renderAsGM();
+
+      expect(await screen.findByText('Cass keeps watch.')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Vera' }));
+      expect(screen.queryByText('Cass keeps watch.')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Vera' }));
+      expect(screen.getByText('Cass keeps watch.')).toBeInTheDocument();
+    });
+
+    it('restores every row when the filter is cleared', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      setupFilterHandlers();
+      renderAsGM();
+
+      expect(await screen.findByText('Vera picks the lock.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Vera' }));
+      expect(screen.queryByText('Cass keeps watch.')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /clear filters/i }));
+
+      expect(screen.getByText('Vera picks the lock.')).toBeInTheDocument();
+      expect(screen.getByText('Cass keeps watch.')).toBeInTheDocument();
+    });
+
+    // The chip row is deliberately shared across the two sub-tabs: a GM narrowing
+    // to one character wants to follow that character from their submission to
+    // the result answering it, without re-picking the filter on each tab.
+    it('keeps the selection when switching between Submissions and Results', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      setupFilterHandlers();
+      renderAsGM();
+
+      expect(await screen.findByText('Vera picks the lock.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Vera' }));
+
+      await user.click(screen.getByRole('button', { name: 'Results' }));
+
+      // Vera's result survives the filter; Rue's is excluded by it.
+      expect(await screen.findByText('The lock gives way.')).toBeInTheDocument();
+      expect(screen.queryByText('Rue hears footsteps.')).not.toBeInTheDocument();
+    });
+
+    it('explains an empty list caused by the filter rather than by an empty phase', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      setupFilterHandlers();
+      renderAsGM();
+
+      // Rue has no submissions, so filtering to Rue empties the Submissions tab.
+      expect(await screen.findByText('Vera picks the lock.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Rue' }));
+
+      expect(screen.getByText(/no action submissions match the selected characters/i))
+        .toBeInTheDocument();
+    });
+
+    it('applies a filter supplied in the URL', async () => {
+      setupFilterHandlers();
+
+      renderWithProviders(
+        <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={true} />,
+        { initialRoute: `/?phase=2&subTab=submissions&characters=${CASS}`, gameId: mockGameId }
+      );
+
+      expect(await screen.findByText('Cass keeps watch.')).toBeInTheDocument();
+      expect(screen.queryByText('Vera picks the lock.')).not.toBeInTheDocument();
+    });
+
+    // The param is user-editable, so a malformed value must not wipe the view.
+    it('ignores unparseable ids in the URL param', async () => {
+      setupFilterHandlers();
+
+      renderWithProviders(
+        <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={true} />,
+        { initialRoute: `/?phase=2&subTab=submissions&characters=abc,${VERA}`, gameId: mockGameId }
+      );
+
+      // "abc" is dropped; the valid id still filters.
+      expect(await screen.findByText('Vera picks the lock.')).toBeInTheDocument();
+      expect(screen.queryByText('Cass keeps watch.')).not.toBeInTheDocument();
+    });
+
+    it('drops the filter when leaving the phase drill-down', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      setupFilterHandlers();
+      renderAsGM();
+
+      expect(await screen.findByText('Vera picks the lock.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Vera' }));
+      expect(screen.queryByText('Cass keeps watch.')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /back to history/i }));
+
+      // Re-entering the same phase shows everything again: a character id is only
+      // meaningful within the phase it was picked in.
+      await user.click((await screen.findAllByRole('heading', { name: /action phase/i }))[0]);
+
+      expect(await screen.findByText('Vera picks the lock.')).toBeInTheDocument();
+      expect(screen.getByText('Cass keeps watch.')).toBeInTheDocument();
+    });
+
+    it('shows no chip row when the phase has nothing in it', async () => {
+      server.use(
+        http.get('/api/v1/games/:gameId/actions', () => HttpResponse.json([])),
+        http.get('/api/v1/games/:gameId/results', () => HttpResponse.json([]))
+      );
+
+      renderAsGM();
+
+      expect(await screen.findByText(/no action submissions for this phase/i)).toBeInTheDocument();
+      expect(screen.queryByText(/filter by character/i)).not.toBeInTheDocument();
+    });
+  });
 });

@@ -74,6 +74,25 @@ async function setDeadlineDateTime(page: Page, futureDate: Date) {
 }
 
 /**
+ * Reveal every deadline in the widget.
+ *
+ * DeadlineStrip shows only the 3 soonest active deadlines and hides the rest
+ * behind a "View All" toggle. Tests in this file share one fixture game and each
+ * add a deadline, so a deadline created far in the future sorts past position 3
+ * once a few have accumulated and is genuinely absent from the DOM. Expanding
+ * first makes assertions independent of how many deadlines already exist.
+ *
+ * The toggle only renders when there is something to expand, so its absence is
+ * fine — that means everything is already visible.
+ */
+async function expandAllDeadlines(page: Page) {
+  const viewAllButton = page.getByRole('button', { name: /View All \(\d+\)/ }).locator('visible=true').first();
+  if (await viewAllButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await viewAllButton.click();
+  }
+}
+
+/**
  * Helper to get ordinal suffix for date (1st, 2nd, 3rd, 4th, etc.)
  */
 function getOrdinalSuffix(day: number): string {
@@ -276,8 +295,12 @@ test.describe('Deadline Management', () => {
     // Wait for network to be idle after deadline creation
     await page.waitForLoadState('networkidle');
 
-    // Verify deadline appears in the list
-    await expect(page.getByText('Player View Test')).toBeVisible();
+    // Verify deadline appears in the list.
+    // Scope to the visible copy: the widget renders a mobile and a desktop tree,
+    // and re-runs against this shared fixture game can leave several deadlines
+    // with this title, so a bare getByText would be a strict-mode violation.
+    await expandAllDeadlines(page);
+    await expect(page.getByText('Player View Test').locator('visible=true').first()).toBeVisible();
 
     // Login as player
     await loginAs(page, 'PLAYER_4');
@@ -287,7 +310,8 @@ test.describe('Deadline Management', () => {
 
     // Verify player can see the deadline title
     // NOTE: DeadlineCard only shows title/countdown/date, not description
-    await expect(page.getByText('Player View Test')).toBeVisible();
+    await expandAllDeadlines(page);
+    await expect(page.getByText('Player View Test').locator('visible=true').first()).toBeVisible();
 
     // Verify "Add Deadline" button is NOT visible to players (permission boundary)
     await expect(page.getByRole('button', { name: /Add Deadline/i })).not.toBeVisible();
