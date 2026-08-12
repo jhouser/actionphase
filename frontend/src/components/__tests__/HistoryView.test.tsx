@@ -621,6 +621,152 @@ describe('HistoryView', () => {
     });
   });
 
+  // Once a game is COMPLETED it becomes a public archive: the backend serves the
+  // whole cast's submissions and results to any authenticated user (see
+  // CanUserViewGame and GetGameActionResults' "completed" arm). A player looking
+  // back at a finished game should therefore read the same game-wide endpoints an
+  // audience member does, not the per-user ones that only ever return their own
+  // character's rows.
+  describe('completed game grants players archive-level access', () => {
+    const renderAsPlayerInCompletedGame = (subTab: 'submissions' | 'results') =>
+      renderWithProviders(
+        <HistoryView
+          gameId={mockGameId}
+          currentPhaseId={mockCurrentPhaseId}
+          isGM={false}
+          isAudience={false}
+          isGameCompleted={true}
+        />,
+        { initialRoute: `/?phase=2&subTab=${subTab}` }
+      );
+
+    it('shows the whole cast\'s submissions, not only the player\'s own', async () => {
+      const calls: string[] = [];
+      server.use(
+        http.get('/api/v1/games/:gameId/action-submissions/all', ({ request }) => {
+          calls.push('archive');
+          const url = new URL(request.url);
+          expect(url.searchParams.get('phase_id')).toBe('2');
+          return HttpResponse.json({
+            action_submissions: [
+              {
+                id: 91,
+                game_id: mockGameId,
+                user_id: 7,
+                phase_id: 2,
+                content: 'What another character did that phase.',
+                character_name: 'Vera',
+                username: 'vera_player',
+                submitted_at: '2025-01-03T13:00:00Z',
+                updated_at: '2025-01-03T13:00:00Z',
+                status: 'submitted',
+              },
+            ],
+            total: 1,
+          });
+        }),
+        http.get('/api/v1/games/:gameId/actions', () => {
+          calls.push('gm');
+          return HttpResponse.json([]);
+        }),
+        http.get('/api/v1/games/:gameId/actions/mine', () => {
+          calls.push('mine');
+          return HttpResponse.json([]);
+        }),
+      );
+
+      renderAsPlayerInCompletedGame('submissions');
+
+      expect(
+        await screen.findByText('What another character did that phase.')
+      ).toBeInTheDocument();
+      expect(calls).toContain('archive');
+      // The per-user endpoint would have hidden every other character's action.
+      expect(calls).not.toContain('mine');
+      // The GM endpoint rejects non-GMs outright, so it must not be used either.
+      expect(calls).not.toContain('gm');
+    });
+
+    it('shows the whole cast\'s results, not only the player\'s own', async () => {
+      const calls: string[] = [];
+      server.use(
+        http.get('/api/v1/games/:gameId/action-submissions/all', () =>
+          HttpResponse.json({ action_submissions: [], total: 0 })
+        ),
+        http.get('/api/v1/games/:gameId/results', () => {
+          calls.push('game');
+          return HttpResponse.json([
+            {
+              id: 500,
+              game_id: mockGameId,
+              user_id: 7,
+              phase_id: 2,
+              gm_user_id: 1,
+              content: 'What the GM told another character.',
+              is_published: true,
+              character_name: 'Vera',
+              sent_at: '2025-01-03T14:00:00Z',
+            },
+          ]);
+        }),
+        http.get('/api/v1/games/:gameId/results/mine', () => {
+          calls.push('mine');
+          return HttpResponse.json([]);
+        }),
+      );
+
+      renderAsPlayerInCompletedGame('results');
+
+      expect(
+        await screen.findByText('What the GM told another character.')
+      ).toBeInTheDocument();
+      expect(calls).toContain('game');
+      expect(calls).not.toContain('mine');
+    });
+
+    // The archive widening is scoped to completed games. An in-progress game must
+    // keep the player on the per-user endpoints, or a live game would leak the
+    // whole cast's private traffic to every player.
+    it('keeps a player in an in-progress game on their own submissions and results', async () => {
+      const calls: string[] = [];
+      server.use(
+        http.get('/api/v1/games/:gameId/action-submissions/all', () => {
+          calls.push('archive');
+          return HttpResponse.json({ action_submissions: [], total: 0 });
+        }),
+        http.get('/api/v1/games/:gameId/actions/mine', () => {
+          calls.push('mine-actions');
+          return HttpResponse.json([]);
+        }),
+        http.get('/api/v1/games/:gameId/results', () => {
+          calls.push('game-results');
+          return HttpResponse.json([]);
+        }),
+        http.get('/api/v1/games/:gameId/results/mine', () => {
+          calls.push('mine-results');
+          return HttpResponse.json([]);
+        }),
+      );
+
+      renderWithProviders(
+        <HistoryView
+          gameId={mockGameId}
+          currentPhaseId={mockCurrentPhaseId}
+          isGM={false}
+          isAudience={false}
+          isGameCompleted={false}
+        />,
+        { initialRoute: `/?phase=2&subTab=submissions` }
+      );
+
+      expect(await screen.findByText(/no action submissions for this phase/i)).toBeInTheDocument();
+      expect(calls).toContain('mine-actions');
+      expect(calls).toContain('mine-results');
+      expect(calls).not.toContain('archive');
+      expect(calls).not.toContain('game-results');
+    });
+  });
+
   // Submissions and results for the whole cast now share one phase drill-down,
   // which can run to dozens of entries. The character filter narrows it, using
   // OR semantics: selecting two characters shows both, not their intersection

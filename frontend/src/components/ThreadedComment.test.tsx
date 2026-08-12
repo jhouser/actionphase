@@ -16,8 +16,11 @@ vi.mock('../hooks/useScreenshotMode', () => ({
   useScreenshotMode: vi.fn(() => ({ screenshotModeEnabled: false, toggleScreenshotMode: vi.fn() })),
 }));
 
+// The component gates Delete on hasGMPowers, not isGM: the backend admits the
+// co-GM as well (CanUserDeleteComment), so isGM alone would hide a control the
+// API would have honoured.
 vi.mock('../hooks/useGamePermissions', () => ({
-  useGamePermissions: vi.fn(() => ({ isGM: false, isPlayer: true })),
+  useGamePermissions: vi.fn(() => ({ isGM: false, hasGMPowers: false, isPlayer: true })),
 }));
 
 vi.mock('../hooks/useCommentMutations', () => ({
@@ -97,7 +100,7 @@ describe('ThreadedComment — manual read mode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useScreenshotMode).mockReturnValue({ screenshotModeEnabled: false, toggleScreenshotMode: vi.fn() });
-    vi.mocked(useGamePermissions).mockReturnValue({ isGM: false, isPlayer: true } as never);
+    vi.mocked(useGamePermissions).mockReturnValue({ isGM: false, hasGMPowers: false, isPlayer: true } as never);
   });
 
   describe('Screenshot Mode', () => {
@@ -143,13 +146,33 @@ describe('ThreadedComment — manual read mode', () => {
     // Delete also renders for GMs/admins on other people's comments; a visible
     // Delete button would reveal that the screenshotter is the GM.
     it('shows the Delete button for a GM viewing another author\'s comment when disabled', () => {
-      vi.mocked(useGamePermissions).mockReturnValue({ isGM: true, isPlayer: false } as never);
+      vi.mocked(useGamePermissions).mockReturnValue({ isGM: true, hasGMPowers: true, isPlayer: false } as never);
       renderComment({ currentUserId: 12345 });
       expect(screen.getByRole('button', { name: /delete this comment/i })).toBeInTheDocument();
     });
 
+    // CanUserDeleteComment admits the co-GM alongside the primary GM, so the
+    // button must render for them too. Gating on isGM (primary-GM identity)
+    // left the co-GM without a control the API would have accepted.
+    it('shows the Delete button for a co-GM viewing another author\'s comment', () => {
+      vi.mocked(useGamePermissions).mockReturnValue({
+        isGM: false, isCoGM: true, hasGMPowers: true, isPlayer: false,
+      } as never);
+      renderComment({ currentUserId: 12345 });
+      expect(screen.getByRole('button', { name: /delete this comment/i })).toBeInTheDocument();
+    });
+
+    // A plain player has no such authority — the backend would reject it.
+    it('hides the Delete button for a player viewing another author\'s comment', () => {
+      vi.mocked(useGamePermissions).mockReturnValue({
+        isGM: false, isCoGM: false, hasGMPowers: false, isPlayer: true,
+      } as never);
+      renderComment({ currentUserId: 12345 });
+      expect(screen.queryByRole('button', { name: /delete this comment/i })).not.toBeInTheDocument();
+    });
+
     it('hides the Delete button for a GM viewing another author\'s comment when enabled', () => {
-      vi.mocked(useGamePermissions).mockReturnValue({ isGM: true, isPlayer: false } as never);
+      vi.mocked(useGamePermissions).mockReturnValue({ isGM: true, hasGMPowers: true, isPlayer: false } as never);
       vi.mocked(useScreenshotMode).mockReturnValue({ screenshotModeEnabled: true, toggleScreenshotMode: vi.fn() });
       renderComment({ currentUserId: 12345 });
       expect(screen.queryByRole('button', { name: /delete this comment/i })).not.toBeInTheDocument();
