@@ -122,13 +122,17 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
   // (they have no characters, so the per-user endpoint returns nothing). Players
   // in a completed game join them via hasArchiveAccess.
   //
-  // Drafts are NOT withheld from audience. Spectators are trusted with the
-  // game's private traffic already, and watching results take shape is part of
-  // what they are here for — see TestPhaseAPI_AudienceSeesUnpublishedResults.
-  // Players in a LIVE game are the ones excluded: /results/mine serves only
-  // published results, so a draft never reaches the character it answers. Once
-  // the game completes there is nothing left to spoil, and the backend serves
-  // drafts to everyone on this endpoint anyway.
+  // Unpublished results are NOT withheld from audience. Spectators are trusted
+  // with the game's private traffic already, and watching results take shape is
+  // part of what they are here for — see
+  // TestPhaseAPI_AudienceSeesUnpublishedResults. Players in a LIVE game are the
+  // ones excluded: /results/mine serves only published results, so an
+  // unpublished one never reaches the character it answers. Once the game
+  // completes there is nothing left to spoil, and the backend serves them to
+  // everyone on this endpoint anyway.
+  //
+  // (This is about action *results*, which have a real is_published state.
+  // Action submissions have no draft state at all.)
   const seesAllResults = isGM || hasArchiveAccess;
 
   const { data: gmActionResults, isLoading: isLoadingGMResults, error: gmResultsError } = useQuery({
@@ -169,7 +173,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
     queryFn: () =>
       apiClient.games
         .listAllActionSubmissions(gameId, { phaseId: selectedPhaseId ?? undefined, limit: 200 })
-        .then(res => (res.data.action_submissions ?? []) as unknown as ActionWithDetails[]),
+        .then(res => res.data.action_submissions ?? []),
     enabled: !!gameId && hasArchiveAccess && !isGM && hasSelectedPhase,
   });
 
@@ -461,11 +465,6 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                                 <div className="flex justify-between items-start">
                                   <div>
                                     <span className="font-semibold text-content-primary">{submission.character_name}</span>
-                                    {submission.is_draft && (
-                                      <span className="inline-block px-2 py-1 text-xs bg-semantic-warning-subtle text-content-primary rounded ml-2">
-                                        Draft
-                                      </span>
-                                    )}
                                   </div>
                                   {submission.submitted_at && (
                                     <span className="text-xs text-content-tertiary">

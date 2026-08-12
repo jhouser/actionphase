@@ -155,20 +155,15 @@ func TestDashboardService_GetUserDashboard_UrgentGame(t *testing.T) {
 
 	// Create action phase with near deadline (30 minutes from now)
 	deadlineNear := time.Now().Add(30 * time.Minute)
-	phase := factory.NewPhase().
+	factory.NewPhase().
 		InGame(game).
 		ActionPhase().
 		Active().
 		WithDeadline(deadlineNear).
 		Create()
 
-	// Player has not submitted action yet (creates draft)
-	factory.NewActionSubmission().
-		InGame(game).
-		ByUser(player).
-		InPhase(phase).
-		Draft().
-		Create()
+	// Player has not submitted an action for this phase. Submissions have no
+	// draft state, so "pending" is simply the absence of a row.
 
 	// Get dashboard
 	dashboard, err := service.GetUserDashboard(context.Background(), player.ID)
@@ -206,20 +201,15 @@ func TestDashboardService_GetUserDashboard_WarningDeadline(t *testing.T) {
 
 	// Create phase with warning deadline (2 hours from now)
 	deadlineWarning := time.Now().Add(2 * time.Hour)
-	phase := factory.NewPhase().
+	factory.NewPhase().
 		InGame(game).
 		ActionPhase().
 		Active().
 		WithDeadline(deadlineWarning).
 		Create()
 
-	// Player has pending action
-	factory.NewActionSubmission().
-		InGame(game).
-		ByUser(player).
-		InPhase(phase).
-		Draft().
-		Create()
+	// Player has a pending action: submissions have no draft state, so
+	// "pending" is simply the absence of a submission for this phase.
 
 	// Get dashboard
 	dashboard, err := service.GetUserDashboard(context.Background(), player.ID)
@@ -472,13 +462,8 @@ func TestDashboardService_GetUserDashboard_UpcomingDeadlines(t *testing.T) {
 	factory.NewPhase().InGame(game).ActionPhase().WithDeadline(deadline2).Create() // Not active
 	factory.NewPhase().InGame(game2).ActionPhase().Active().WithDeadline(deadline3).Create()
 
-	// Create action submission for phase1
-	factory.NewActionSubmission().
-		InGame(game).
-		ByUser(player).
-		InPhase(phase1).
-		Draft().
-		Create()
+	// No submission for phase1: the player still owes an action there, which
+	// is what HasPendingSubmission reports.
 
 	// Get dashboard
 	dashboard, err := service.GetUserDashboard(context.Background(), player.ID)
@@ -557,15 +542,10 @@ func TestDashboardService_GetUserDashboard_SortingOrder(t *testing.T) {
 	factory.NewPhase().InGame(game1).ActionPhase().Active().
 		WithDeadline(time.Now().Add(48 * time.Hour)).Create()
 
-	// Game 2: Urgent deadline (3 hours) with pending action
-	phase2 := factory.NewPhase().InGame(game2).ActionPhase().Active().
+	// Game 2: Urgent deadline (3 hours) with a pending action — the player has
+	// not submitted for this phase, which is what makes it pending.
+	factory.NewPhase().InGame(game2).ActionPhase().Active().
 		WithDeadline(time.Now().Add(3 * time.Hour)).Create()
-	factory.NewActionSubmission().
-		InGame(game2).
-		ByUser(player).
-		InPhase(phase2).
-		Draft().
-		Create()
 
 	// Game 3: No active phase/deadline
 

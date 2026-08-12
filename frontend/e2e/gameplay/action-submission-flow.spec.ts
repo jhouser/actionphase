@@ -18,8 +18,8 @@ import { assertTextVisible } from '../utils/assertions';
  * - Uses assertion utilities for consistency
  */
 test.describe('@mobile Action Submission Flow', () => {
-  test('Player can edit a draft action for active action phase', async ({ page }) => {
-    // Login as Player 4 who has a draft action
+  test('Player can edit an existing action for active action phase', async ({ page }) => {
+    // Login as Player 4 who has an in-progress action
     await loginAs(page, 'PLAYER_4');
 
     // Use dedicated E2E action submission game (safe to modify)
@@ -32,9 +32,9 @@ test.describe('@mobile Action Submission Flow', () => {
     // Verify Action Submission section is visible
     await assertTextVisible(page, 'Action Submission');
 
-    // Player 4 has a draft action - verify it's displayed
+    // Player 4 has an existing action - verify it's displayed
     await assertTextVisible(page, 'Your Current Action');
-    await assertTextVisible(page, 'This is a draft action that needs to be completed');
+    await assertTextVisible(page, 'This is an in-progress action that needs to be completed');
 
     // Update the action content using POM — include a timestamp to make it unique
     const newActionContent = `I will execute my plan with precision and care. Updated: ${Date.now()}`;

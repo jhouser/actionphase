@@ -4,10 +4,8 @@ import DOMPurify from 'dompurify';
 import CharacterAvatar from './CharacterAvatar';
 import { Badge, Button } from './ui';
 import type { SheetItem } from '../hooks/useCharacterSheetItems';
+import { ALLOWED_COLORS } from './textColors';
 
-const ALLOWED_COLORS = new Set([
-  'red', 'green', 'blue', 'purple', 'orange', 'gold', 'gray', 'teal', 'pink',
-]);
 
 const IMAGE_URL_PATTERN = /\.(png|jpe?g|gif|webp|svg|avif|bmp)(\?.*)?$/i;
 

@@ -47,7 +47,6 @@ func TestActionSubmissionService_GetUserActions(t *testing.T) {
 			PhaseID: phase1.ID,
 			UserID:  int32(player.ID),
 			Content: "Action in phase 1",
-			IsDraft: false,
 		})
 		require.NoError(t, err)
 
@@ -65,7 +64,6 @@ func TestActionSubmissionService_GetUserActions(t *testing.T) {
 			PhaseID: phase2.ID,
 			UserID:  int32(player.ID),
 			Content: "Action in phase 2",
-			IsDraft: false,
 		})
 		require.NoError(t, err)
 
@@ -107,7 +105,6 @@ func TestActionSubmissionService_GetUserActions(t *testing.T) {
 			PhaseID: phase2Game.ID,
 			UserID:  int32(player2.ID),
 			Content: "Action in game 2",
-			IsDraft: false,
 		})
 		require.NoError(t, err)
 
@@ -135,7 +132,6 @@ func TestActionSubmissionService_GetUserActions(t *testing.T) {
 			PhaseID: phase.ID,
 			UserID:  int32(player3.ID),
 			Content: "Draft action",
-			IsDraft: true,
 		})
 		require.NoError(t, err)
 
@@ -178,7 +174,6 @@ func TestActionSubmissionService_GetGameActions(t *testing.T) {
 				PhaseID: phase.ID,
 				UserID:  int32(player.ID),
 				Content: fmt.Sprintf("Action from player %d", i),
-				IsDraft: false,
 			})
 			require.NoError(t, err)
 		}
@@ -207,7 +202,6 @@ func TestActionSubmissionService_GetGameActions(t *testing.T) {
 			PhaseID: phase1.ID,
 			UserID:  int32(player.ID),
 			Content: "Action in phase 1",
-			IsDraft: false,
 		})
 		require.NoError(t, err)
 
@@ -223,7 +217,6 @@ func TestActionSubmissionService_GetGameActions(t *testing.T) {
 			PhaseID: phase2.ID,
 			UserID:  int32(player.ID),
 			Content: "Action in phase 2",
-			IsDraft: false,
 		})
 		require.NoError(t, err)
 
@@ -258,7 +251,6 @@ func TestActionSubmissionService_GetGameActions(t *testing.T) {
 			PhaseID: phase.ID,
 			UserID:  int32(player.ID),
 			Content: "Test action",
-			IsDraft: false,
 		})
 		require.NoError(t, err)
 
@@ -586,7 +578,6 @@ func TestActionSubmissionService_ListAllActionSubmissions(t *testing.T) {
 			PhaseID: phase.ID,
 			UserID:  int32(player.ID),
 			Content: fmt.Sprintf("Action %d", i),
-			IsDraft: false,
 		})
 		require.NoError(t, err)
 	}
@@ -627,7 +618,6 @@ func TestActionSubmissionService_ListAllActionSubmissions(t *testing.T) {
 				PhaseID: phase1.ID,
 				UserID:  int32(p.ID),
 				Content: fmt.Sprintf("Phase 1 Action %d", i),
-				IsDraft: false,
 			})
 			require.NoError(t, err)
 		}
@@ -649,7 +639,6 @@ func TestActionSubmissionService_ListAllActionSubmissions(t *testing.T) {
 				PhaseID: phase2.ID,
 				UserID:  int32(p.ID),
 				Content: fmt.Sprintf("Phase 2 Action %d", i),
-				IsDraft: false,
 			})
 			require.NoError(t, err)
 		}
@@ -684,7 +673,6 @@ func TestActionSubmissionService_ListAllActionSubmissions(t *testing.T) {
 					PhaseID: ph.ID,
 					UserID:  int32(p.ID),
 					Content: fmt.Sprintf("Action P%d U%d", phaseNum, i),
-					IsDraft: false,
 				})
 				require.NoError(t, err)
 			}
@@ -702,6 +690,52 @@ func TestActionSubmissionService_ListAllActionSubmissions(t *testing.T) {
 		submissions, err := actionService.ListAllActionSubmissions(context.Background(), emptyGame.ID, 0, 10, 0)
 		require.NoError(t, err)
 		assert.Empty(t, submissions, "Should return empty slice when no submissions")
+	})
+
+	t.Run("returns one row per submission when a submission has several results", func(t *testing.T) {
+		// Regression: this query used to LEFT JOIN action_results, which fanned
+		// one submission into a row per result (staged reveals produce several).
+		// That inflated the list and desynced LIMIT/OFFSET from
+		// CountAllActionSubmissions, which counts submissions alone.
+		fanGame := testDB.CreateTestGame(t, int32(gm.ID), "Staged Reveals Game")
+		fanPlayer := testDB.CreateTestUser(t, "fanplayer", "fanplayer@example.com")
+		_, err := gameService.AddGameParticipant(context.Background(), fanGame.ID, int32(fanPlayer.ID), "player")
+		require.NoError(t, err)
+
+		fanPhase, err := phaseService.TransitionToNextPhase(context.Background(), fanGame.ID, int32(gm.ID), core.TransitionPhaseRequest{
+			PhaseType: "action",
+			Title:     "Staged Reveal Phase",
+		})
+		require.NoError(t, err)
+
+		submission, err := actionService.SubmitAction(context.Background(), core.SubmitActionRequest{
+			GameID:  fanGame.ID,
+			PhaseID: fanPhase.ID,
+			UserID:  int32(fanPlayer.ID),
+			Content: "I open the sealed door.",
+		})
+		require.NoError(t, err)
+
+		// Three results answering that single submission.
+		for i := 1; i <= 3; i++ {
+			_, err = actionService.CreateActionResult(context.Background(), core.CreateActionResultRequest{
+				GameID:             fanGame.ID,
+				PhaseID:            fanPhase.ID,
+				UserID:             int32(fanPlayer.ID),
+				ActionSubmissionID: &submission.ID,
+				Content:            fmt.Sprintf("Staged reveal %d", i),
+				IsPublished:        true,
+			})
+			require.NoError(t, err)
+		}
+
+		submissions, err := actionService.ListAllActionSubmissions(context.Background(), fanGame.ID, 0, 100, 0)
+		require.NoError(t, err)
+		assert.Len(t, submissions, 1, "one submission must yield one row regardless of result count")
+
+		total, err := actionService.CountAllActionSubmissions(context.Background(), fanGame.ID, 0)
+		require.NoError(t, err)
+		assert.Equal(t, int64(len(submissions)), total, "list length must agree with the pagination count")
 	})
 }
 
@@ -738,7 +772,6 @@ func TestActionSubmissionService_CountAllActionSubmissions(t *testing.T) {
 				PhaseID: phase1.ID,
 				UserID:  int32(player.ID),
 				Content: fmt.Sprintf("Count Action %d", i),
-				IsDraft: false,
 			})
 			require.NoError(t, err)
 		}
@@ -761,7 +794,6 @@ func TestActionSubmissionService_CountAllActionSubmissions(t *testing.T) {
 				PhaseID: phase2.ID,
 				UserID:  int32(player.ID),
 				Content: fmt.Sprintf("Count Action %d", i),
-				IsDraft: false,
 			})
 			require.NoError(t, err)
 		}
@@ -793,7 +825,6 @@ func TestActionSubmissionService_CountAllActionSubmissions(t *testing.T) {
 				PhaseID: phase1.ID,
 				UserID:  int32(p.ID),
 				Content: "Phase 1 action",
-				IsDraft: false,
 			})
 			require.NoError(t, err)
 		}
@@ -816,7 +847,6 @@ func TestActionSubmissionService_CountAllActionSubmissions(t *testing.T) {
 				PhaseID: phase2.ID,
 				UserID:  int32(p.ID),
 				Content: "Phase 2 action",
-				IsDraft: false,
 			})
 			require.NoError(t, err)
 		}
@@ -856,7 +886,6 @@ func TestActionSubmissionService_CountAllActionSubmissions(t *testing.T) {
 					PhaseID: ph.ID,
 					UserID:  int32(p.ID),
 					Content: "Count action",
-					IsDraft: false,
 				})
 				require.NoError(t, err)
 			}

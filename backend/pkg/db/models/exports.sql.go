@@ -69,8 +69,9 @@ type CreateGameExportParams struct {
 // Content queries here intentionally return EVERYTHING a completed game holds:
 // completed games are a public archive readable by any authenticated user
 // (CanUserViewGame), so there is no per-viewer filtering. The only exclusions
-// are drafts (is_draft) and soft-deleted rows (is_deleted / deleted_at), which
-// were never visible to anyone but their author.
+// are draft posts (messages.is_draft) and soft-deleted rows (is_deleted /
+// deleted_at), which were never visible to anyone but their author. Action
+// submissions have no draft state — they are exported in full.
 // =============================================================================
 // JOB LIFECYCLE
 // =============================================================================
@@ -435,7 +436,7 @@ SELECT a.id, a.phase_id, a.user_id, a.content, a.submitted_at,
 FROM action_submissions a
 JOIN users u ON a.user_id = u.id
 LEFT JOIN characters ch ON a.character_id = ch.id
-WHERE a.game_id = $1 AND a.is_draft = FALSE
+WHERE a.game_id = $1
 ORDER BY a.phase_id, a.submitted_at
 `
 
