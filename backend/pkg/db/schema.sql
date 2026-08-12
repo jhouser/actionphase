@@ -228,7 +228,6 @@ CREATE TABLE action_submissions (
     phase_id INTEGER NOT NULL REFERENCES game_phases(id) ON DELETE CASCADE,
     character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
     content TEXT NOT NULL,
-    is_draft BOOLEAN DEFAULT TRUE,
     submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(game_id, user_id, phase_id)

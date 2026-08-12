@@ -336,7 +336,6 @@ describe('HistoryView', () => {
               character_id: avatarCharacter.id,
               character_name: avatarCharacter.name,
               content: 'I scale the north wall under cover of dark.',
-              is_draft: false,
               submitted_at: '2025-01-03T18:00:00Z',
               created_at: '2025-01-03T18:00:00Z',
               updated_at: '2025-01-03T18:00:00Z',
@@ -790,7 +789,6 @@ describe('HistoryView', () => {
               character_id: VERA,
               character_name: 'Vera',
               content: 'Vera picks the lock.',
-              is_draft: false,
               submitted_at: '2025-01-03T13:00:00Z',
             },
             {
@@ -801,7 +799,6 @@ describe('HistoryView', () => {
               character_id: CASS,
               character_name: 'Cass',
               content: 'Cass keeps watch.',
-              is_draft: false,
               submitted_at: '2025-01-03T13:05:00Z',
             },
           ])

@@ -94,38 +94,35 @@ BEGIN
   ) RETURNING id INTO completed_phase_id;
 
   -- Add action submissions from all players
-  INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, is_draft, submitted_at, updated_at)
+  INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, submitted_at, updated_at)
   VALUES (
     game_id,
     p1_id,
     completed_phase_id,
     char1_id,
     'Player 1 investigates the mysterious sounds coming from the basement.',
-    false,
     NOW() - INTERVAL '3 days',
     NOW() - INTERVAL '3 days'
   ) RETURNING id INTO action1_id;
 
-  INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, is_draft, submitted_at, updated_at)
+  INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, submitted_at, updated_at)
   VALUES (
     game_id,
     p2_id,
     completed_phase_id,
     char2_id,
     'Player 2 searches the library for ancient texts about the cult.',
-    false,
     NOW() - INTERVAL '3 days',
     NOW() - INTERVAL '3 days'
   ) RETURNING id INTO action2_id;
 
-  INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, is_draft, submitted_at, updated_at)
+  INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, submitted_at, updated_at)
   VALUES (
     game_id,
     p3_id,
     completed_phase_id,
     char3_id,
     'Player 3 attempts to decode the mysterious symbols on the wall.',
-    false,
     NOW() - INTERVAL '3 days',
     NOW() - INTERVAL '3 days'
   ) RETURNING id INTO action3_id;

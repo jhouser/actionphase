@@ -507,7 +507,6 @@ type PhaseServiceInterface interface {
 //	    PhaseID:   456,
 //	    UserID:    789,
 //	    Content:   richTextContent,
-//	    IsDraft:   false,
 //	})
 //
 //	// GM retrieves all submissions for processing
@@ -855,7 +854,6 @@ type SubmitActionRequest struct {
 	UserID      int32
 	CharacterID *int32      // Optional reference to character
 	Content     interface{} // Rich text content (JSON)
-	IsDraft     bool
 }
 
 // CreateActionResultRequest represents the parameters needed to create action results
@@ -875,7 +873,6 @@ type ActionSubmissionStats struct {
 	PhaseID          int32
 	TotalPlayers     int32
 	SubmittedCount   int32
-	DraftCount       int32
 	SubmissionRate   float64 // Percentage of players who submitted
 	AverageWordCount int32
 	LatestSubmission *time.Time
