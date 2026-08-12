@@ -99,6 +99,21 @@ func (q *Queries) IsLootTableInGame(ctx context.Context, arg IsLootTableInGamePa
 	return is_game_loot_table, err
 }
 
+const touchLootTable = `-- name: TouchLootTable :exec
+UPDATE game_loot_tables
+SET updated_at = NOW()
+WHERE id = $1
+`
+
+// Contents live in a child table, so rewriting them leaves the parent row
+// untouched and updated_at stale. Handlers that change contents MUST call this
+// so "Updated" reflects item edits, which are the common operation — renaming is
+// comparatively rare.
+func (q *Queries) TouchLootTable(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, touchLootTable, id)
+	return err
+}
+
 const updateLootTable = `-- name: UpdateLootTable :one
 UPDATE game_loot_tables
 SET name = $2, updated_at = NOW()

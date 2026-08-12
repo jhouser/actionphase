@@ -312,8 +312,10 @@ type GameServiceInterface interface {
 	// AddLootTableContent appends a single item to a loot table
 	AddLootTableContent(ctx context.Context, lootTableID int32, itemName string, itemData string) (*models.GameLootTableContent, error)
 
-	// DeleteLootTableContents removes every item from a loot table
-	DeleteLootTableContents(ctx context.Context, lootTableID int32) error
+	// ReplaceLootTableContents atomically swaps a loot table's entire item list
+	// and bumps its updated_at. Use this rather than deleting and re-adding:
+	// outside a transaction a mid-rewrite failure destroys the existing items.
+	ReplaceLootTableContents(ctx context.Context, lootTableID int32, items []LootTableItem) error
 }
 
 // GameApplicationServiceInterface defines the contract for game application operations.

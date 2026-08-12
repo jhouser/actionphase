@@ -38,11 +38,15 @@ func (h *Handler) GetGameLootTables(w http.ResponseWriter, r *http.Request) {
 	// Initialize as empty slice to ensure JSON encodes as [] not null
 	response := make([]map[string]interface{}, 0)
 	for _, lootTable := range lootTables {
+		// Keep these keys in sync with the model returned by AddGameLootTable —
+		// both are typed as LootTable on the frontend, so a field present in one
+		// and missing from the other is a shape mismatch the types do not catch.
 		lootTableData := map[string]interface{}{
 			"id":         lootTable.ID,
 			"game_id":    lootTable.GameID,
 			"name":       lootTable.Name,
 			"created_at": lootTable.CreatedAt.Time,
+			"updated_at": lootTable.UpdatedAt.Time,
 		}
 		response = append(response, lootTableData)
 	}
@@ -256,18 +260,17 @@ func (h *Handler) UpdateGameLootTableContent(w http.ResponseWriter, r *http.Requ
 		h.renderError(ctx, w, r, core.ErrForbidden("loot table does not belong to this game"), "Loot table access forbidden")
 		return
 	}
-	err = gameService.DeleteLootTableContents(ctx, int32(tableID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete loot table contents", "error", err, "table_id", tableID)
-		return
+	// One transaction: the rewrite deletes every existing item before inserting
+	// the new ones, so a partial failure would otherwise leave the GM's table
+	// empty. This also bumps updated_at, which the child-table writes never touch.
+	items := make([]core.LootTableItem, 0, len(data.Items))
+	for _, item := range data.Items {
+		items = append(items, core.LootTableItem{Name: item.Name, Data: item.Data})
 	}
 
-	for _, item := range data.Items {
-		_, err := gameService.AddLootTableContent(ctx, int32(tableID), item.Name, item.Data)
-		if err != nil {
-			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to save loot table items", "error", err, "game_id", gameID)
-			return
-		}
+	if err := gameService.ReplaceLootTableContents(ctx, int32(tableID), items); err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to save loot table items", "error", err, "table_id", tableID, "game_id", gameID)
+		return
 	}
 }
 

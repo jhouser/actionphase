@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -1746,5 +1747,81 @@ func TestGameService_RemovePlayer(t *testing.T) {
 		if updatedChar.IsActive {
 			t.Errorf("expected character is_active=false after player removal, got true")
 		}
+	})
+}
+
+// The contents rewrite is a delete followed by re-inserts. Without a transaction
+// a failure partway through the inserts leaves the table empty or half-populated
+// with the GM's original items already gone — silent data loss on what the UI
+// presents as a save. These tests pin that the whole swap is atomic.
+func TestGameService_ReplaceLootTableContents(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+
+	fixtures := testDB.SetupFixtures(t)
+	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	seed := func(t *testing.T, name string) int32 {
+		t.Helper()
+		table, err := gameService.CreateLootTable(ctx, int32(fixtures.TestGame.ID), name)
+		core.AssertNoError(t, err, "Should create loot table")
+		err = gameService.ReplaceLootTableContents(ctx, table.ID, []core.LootTableItem{
+			{Name: "Original Potion", Data: `{"effect":"heal"}`},
+			{Name: "Original Scroll", Data: `{"spell":"fireball"}`},
+		})
+		core.AssertNoError(t, err, "Should seed original contents")
+		return table.ID
+	}
+
+	t.Run("replaces the full item list on success", func(t *testing.T) {
+		tableID := seed(t, "Success Table")
+
+		err := gameService.ReplaceLootTableContents(ctx, tableID, []core.LootTableItem{
+			{Name: "New Sword", Data: `{"damage":10}`},
+		})
+		core.AssertNoError(t, err, "Should replace contents")
+
+		contents, err := gameService.GetGameLootTableContents(ctx, tableID)
+		core.AssertNoError(t, err, "Should read contents back")
+		core.AssertEqual(t, 1, len(contents), "Only the new item should remain")
+		core.AssertEqual(t, "New Sword", contents[0].Name, "The new item should have replaced the originals")
+	})
+
+	t.Run("rolls back and preserves the originals when an insert fails", func(t *testing.T) {
+		tableID := seed(t, "Rollback Table")
+
+		// name is varchar(255); the second item overflows it, so the insert fails
+		// after the delete and after the first item was already written.
+		tooLong := make([]byte, 256)
+		for i := range tooLong {
+			tooLong[i] = 'x'
+		}
+
+		err := gameService.ReplaceLootTableContents(ctx, tableID, []core.LootTableItem{
+			{Name: "Replacement One", Data: `{"ok":true}`},
+			{Name: string(tooLong), Data: `{"ok":false}`},
+		})
+		core.AssertTrue(t, err != nil, "An oversized item name should fail the rewrite")
+
+		// The critical assertion: the original items must survive a failed save.
+		contents, err := gameService.GetGameLootTableContents(ctx, tableID)
+		core.AssertNoError(t, err, "Should read contents back after the failed rewrite")
+		core.AssertEqual(t, 2, len(contents), "The original items must survive a failed rewrite, got "+fmt.Sprint(len(contents)))
+		core.AssertEqual(t, "Original Potion", contents[0].Name, "First original item should be intact")
+		core.AssertEqual(t, "Original Scroll", contents[1].Name, "Second original item should be intact")
+	})
+
+	t.Run("clears every item when given an empty list", func(t *testing.T) {
+		tableID := seed(t, "Clear Table")
+
+		err := gameService.ReplaceLootTableContents(ctx, tableID, []core.LootTableItem{})
+		core.AssertNoError(t, err, "Should accept an empty item list")
+
+		contents, err := gameService.GetGameLootTableContents(ctx, tableID)
+		core.AssertNoError(t, err, "Should read contents back")
+		core.AssertEqual(t, 0, len(contents), "An empty list should clear the table")
 	})
 }

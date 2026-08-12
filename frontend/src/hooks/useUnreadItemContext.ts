@@ -20,7 +20,7 @@ interface PreviewMessage {
 }
 
 /** Same shape as PreviewMessage plus deletion state, which the parent block renders as "[deleted]". */
-export interface ParentPreview extends PreviewMessage {
+interface ParentPreview extends PreviewMessage {
   isDeleted: boolean;
 }
 

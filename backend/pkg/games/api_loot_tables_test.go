@@ -18,6 +18,7 @@ type lootTableResponse struct {
 	GameID    int32  `json:"game_id"`
 	Name      string `json:"name"`
 	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type lootTableContentResponse struct {
@@ -730,4 +731,83 @@ func TestLootTableRequestValidation(t *testing.T) {
 		core.AssertNoError(t, err, "Should decode contents response")
 		core.AssertEqual(t, 1, len(contents), "Original contents should survive a rejected update")
 	})
+}
+
+// Regression: loot table contents live in a child table, so rewriting them left
+// the parent row untouched and updated_at stale. A GM who edited a table's items
+// through the UI saw no "Updated" date, because only renames moved the timestamp
+// — and item edits are the common operation.
+//
+// Also pins that the list endpoint returns updated_at at all: it hand-builds its
+// response map, so a field can silently go missing there while the create
+// endpoint (which returns the model directly) still has it.
+func TestUpdateLootTableContentsBumpsUpdatedAt(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	testDB.CleanupTables(t, "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupGameTestRouter(app, testDB)
+	fixtures := testDB.SetupFixtures(t)
+
+	accessToken, err := core.CreateTestJWTTokenForUser(app, fixtures.TestUser)
+	core.AssertNoError(t, err, "Test token creation should succeed")
+
+	payload := map[string]any{
+		"name":  "Timestamp Table",
+		"items": []map[string]any{{"name": "Potion", "data": "{\"effect\":\"heal\"}"}},
+	}
+	body, err := json.Marshal(payload)
+	core.AssertNoError(t, err, "Should marshal loot table request")
+
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/games/%d/loot-tables", fixtures.TestGame.ID), bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	core.AssertEqual(t, http.StatusOK, w.Code, "Should create loot table")
+
+	var created lootTableResponse
+	err = json.NewDecoder(w.Body).Decode(&created)
+	core.AssertNoError(t, err, "Should decode created loot table")
+
+	// A freshly created table has both timestamps from the same NOW(), which is
+	// what lets the UI hide a redundant "Updated" date.
+	core.AssertEqual(t, created.CreatedAt, created.UpdatedAt,
+		"A newly created loot table should have updated_at equal to created_at")
+
+	// Rewrite the contents — the operation that used to leave updated_at stale.
+	contentsPayload := map[string]any{
+		"items": []map[string]any{
+			{"name": "Potion", "data": "{\"effect\":\"heal\"}"},
+			{"name": "Elixir", "data": "{\"effect\":\"restore\"}"},
+		},
+	}
+	body, err = json.Marshal(contentsPayload)
+	core.AssertNoError(t, err, "Should marshal contents request")
+
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/games/%d/loot-tables/%d/contents", fixtures.TestGame.ID, created.ID), bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	core.AssertEqual(t, http.StatusOK, w.Code, "Should update loot table contents")
+
+	// Read the table back through the list endpoint the UI actually uses.
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/games/%d/loot-tables", fixtures.TestGame.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var listed []lootTableResponse
+	err = json.NewDecoder(w.Body).Decode(&listed)
+	core.AssertNoError(t, err, "Should decode loot table list")
+	core.AssertEqual(t, 1, len(listed), "Should list the one loot table")
+
+	core.AssertTrue(t, listed[0].UpdatedAt != "",
+		"The list endpoint must return updated_at, not omit it from its hand-built response map")
+	core.AssertTrue(t, listed[0].UpdatedAt > listed[0].CreatedAt,
+		"Editing contents should bump updated_at past created_at, got created="+listed[0].CreatedAt+" updated="+listed[0].UpdatedAt)
 }
