@@ -865,3 +865,91 @@ func TestGetCharacter_AudienceAssignedPendingNPC_InProgress(t *testing.T) {
 		core.AssertEqual(t, http.StatusNotFound, w.Code, "Unassigned player should get 404 for pending NPC")
 	})
 }
+
+// TestCharacterAPI_GetGameCharactersIncludesIsActive verifies that the game
+// characters listing reports is_active.
+//
+// Regression: the handler builds its response as a hand-rolled map and simply
+// never set this key, so every character came back with the field absent —
+// indistinguishable from null on the client. The column is fetched (the query
+// is SELECT c.*) and defaults to TRUE, so the data was correct all the way to
+// the point of serialization. Any client filtering on `is_active` therefore saw
+// nothing active and silently dropped every character.
+func TestCharacterAPI_GetGameCharactersIncludesIsActive(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "characters", "game_participants", "games", "sessions", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupCharacterTestRouter(app, testDB)
+	fixtures := testDB.SetupFixtures(t)
+
+	player := testDB.CreateTestUser(t, "activeplayer", "activeplayer@example.com")
+	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	_, err := gameService.AddGameParticipant(context.Background(), fixtures.TestGame.ID, int32(player.ID), "player")
+	core.AssertNoError(t, err, "Adding player to game should succeed")
+
+	testDB.SetGameStateDirectly(t, fixtures.TestGame.ID, "in_progress")
+
+	var activeCharID int32
+	err = testDB.Pool.QueryRow(context.Background(),
+		"INSERT INTO characters (game_id, user_id, name, status, character_type, is_active) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+		fixtures.TestGame.ID, player.ID, "Active Character", "approved", "player_character", true,
+	).Scan(&activeCharID)
+	core.AssertNoError(t, err, "Creating active character should succeed")
+
+	// A character orphaned by removing its player, which is the only thing that
+	// clears is_active (see DeactivatePlayerCharacters).
+	var inactiveCharID int32
+	err = testDB.Pool.QueryRow(context.Background(),
+		"INSERT INTO characters (game_id, user_id, name, status, character_type, is_active) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+		fixtures.TestGame.ID, player.ID, "Departed Player Character", "approved", "player_character", false,
+	).Scan(&inactiveCharID)
+	core.AssertNoError(t, err, "Creating inactive character should succeed")
+
+	gmToken, err := createTestAuthToken(app, fixtures.TestUser)
+	core.AssertNoError(t, err, "GM token creation should succeed")
+
+	req := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(fixtures.TestGame.ID))+"/characters", nil)
+	req.Header.Set("Authorization", "Bearer "+gmToken)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	core.AssertEqual(t, http.StatusOK, w.Code, "GM should successfully get characters")
+
+	// Decoded as raw maps rather than a typed struct: a struct would zero a
+	// missing field, turning the absent key this regression is about into an
+	// indistinguishable false.
+	var response []map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	core.AssertNoError(t, err, "Response should be valid JSON")
+
+	found := map[int32]map[string]interface{}{}
+	for _, char := range response {
+		id, ok := char["id"].(float64)
+		if !ok {
+			t.Fatalf("character entry has no numeric id: %v", char)
+		}
+		found[int32(id)] = char
+	}
+
+	activeChar, ok := found[activeCharID]
+	if !ok {
+		t.Fatalf("active character %d missing from response", activeCharID)
+	}
+	isActive, present := activeChar["is_active"]
+	if !present {
+		t.Errorf("is_active missing from response for active character %d; got keys %v", activeCharID, activeChar)
+	}
+	core.AssertEqual(t, true, isActive, "Active character should report is_active=true")
+
+	inactiveChar, ok := found[inactiveCharID]
+	if !ok {
+		t.Fatalf("inactive character %d missing from response", inactiveCharID)
+	}
+	isInactive, present := inactiveChar["is_active"]
+	if !present {
+		t.Errorf("is_active missing from response for inactive character %d; got keys %v", inactiveCharID, inactiveChar)
+	}
+	core.AssertEqual(t, false, isInactive, "Deactivated character should report is_active=false")
+}

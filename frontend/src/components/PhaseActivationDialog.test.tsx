@@ -297,4 +297,39 @@ describe('PhaseActivationDialog', () => {
       expect(screen.getByText(/2 unpublished results/i)).toBeInTheDocument();
     });
   });
+
+  describe('Sheet draft conflict warning', () => {
+    it('warns when a character has staged sheet updates on several results', () => {
+      renderWithProviders(
+        <PhaseActivationDialog
+          phaseNumber={3}
+          currentPhaseId={1}
+          unpublishedCount={2}
+          isActivating={false}
+          publishAllMutation={makeMutation()}
+          hasSheetDraftConflict
+          onActivate={mockOnActivate}
+          onClose={mockOnClose}
+        />
+      );
+
+      expect(screen.getByTestId('activate-sheet-conflict-warning')).toBeInTheDocument();
+    });
+
+    it('shows no warning when the staged updates do not overlap', () => {
+      renderWithProviders(
+        <PhaseActivationDialog
+          phaseNumber={3}
+          currentPhaseId={1}
+          unpublishedCount={2}
+          isActivating={false}
+          publishAllMutation={makeMutation()}
+          onActivate={mockOnActivate}
+          onClose={mockOnClose}
+        />
+      );
+
+      expect(screen.queryByTestId('activate-sheet-conflict-warning')).not.toBeInTheDocument();
+    });
+  });
 });

@@ -1018,17 +1018,49 @@ describe('GameResultsManager', () => {
         expect(buttons).toHaveLength(2);
       });
 
-      // Expand only the first result
+      // Expand one result and assert the other is unaffected. This view sorts
+      // newest first, so the topmost card is longResult2 (higher id) — hence
+      // clicking index 0 expands that one, not longResult1.
       const expandButtons = screen.getAllByText(/show full content/i);
       await user.click(expandButtons[0]);
 
-      // First should be expanded, second still collapsed
+      // The clicked result expands; the other stays collapsed.
       await waitFor(() => {
-        expect(screen.getByText(longResult1.content)).toBeInTheDocument();
-        expect(screen.queryByText(longResult2.content)).not.toBeInTheDocument();
+        expect(screen.getByText(longResult2.content)).toBeInTheDocument();
+        expect(screen.queryByText(longResult1.content)).not.toBeInTheDocument();
         expect(screen.getByText(/show less/i)).toBeInTheDocument();
-        expect(screen.getByText(/show full content/i)).toBeInTheDocument(); // Second is still collapsed
+        expect(screen.getByText(/show full content/i)).toBeInTheDocument(); // The other is still collapsed
       });
+    });
+  });
+
+  describe('Ordering', () => {
+    // This is the composing view: a GM who just wrote a result needs it at the
+    // top to confirm it landed and to edit it. The endpoint returns oldest-first
+    // so the History tab reads chronologically for every role, so the order is
+    // reversed here — the two views share one query and want opposite orders.
+    it('shows the newest result first, independent of the order the API returns', async () => {
+      const older: ActionResult = {
+        ...mockUnpublishedResult,
+        id: 1,
+        content: 'Older result written first.',
+      };
+      const newer: ActionResult = {
+        ...mockUnpublishedResult,
+        id: 2,
+        content: 'Newer result written second.',
+      };
+      // Ascending, matching what GetGameResults actually sends.
+      setupDefaultHandlers([older, newer]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByText(newer.content)).toBeInTheDocument();
+      });
+
+      const rendered = screen.getAllByText(/result written/i).map(el => el.textContent);
+      expect(rendered).toEqual([newer.content, older.content]);
     });
   });
 
@@ -1140,6 +1172,169 @@ describe('GameResultsManager', () => {
 
       await waitFor(() => {
         expect(screen.getByText('This is an unpublished result for the player')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Conflicting character sheet drafts', () => {
+    // Two unpublished results in the same phase for the SAME character. Each draft
+    // sheet update is a whole-sheet snapshot seeded from published character data,
+    // so publishing both silently overwrites the earlier one.
+    const resultA: ActionResult = {
+      ...mockUnpublishedResult,
+      id: 10,
+      character_id: 500,
+      content: 'You find Item A',
+    };
+    const resultB: ActionResult = {
+      ...mockUnpublishedResult,
+      id: 11,
+      character_id: 500,
+      content: 'You find Item B',
+    };
+    // Same phase, different character — must NOT warn.
+    const otherCharacterResult: ActionResult = {
+      ...mockUnpublishedResult,
+      id: 12,
+      character_id: 501,
+      content: 'A result for someone else',
+    };
+
+    /** Mock per-result draft counts; results absent from the map report zero drafts. */
+    const setupDraftCounts = (counts: Record<number, number>) => {
+      server.use(
+        http.get('/api/v1/games/:gameId/results/:resultId/character-updates/count', ({ params }) => {
+          const resultId = Number(params.resultId);
+          return HttpResponse.json({ count: counts[resultId] ?? 0 });
+        })
+      );
+    };
+
+    it('warns on both results when two unpublished results stage sheet updates for one character', async () => {
+      setupDefaultHandlers([resultA, resultB]);
+      setupDraftCounts({ 10: 1, 11: 1 });
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sheet-conflict-warning-10')).toBeInTheDocument();
+      });
+      expect(screen.getByTestId('sheet-conflict-warning-11')).toBeInTheDocument();
+    });
+
+    it('warns while a sibling draft count is still in flight', async () => {
+      // Regression: a pending sibling count used to read as "no conflict", so a GM who
+      // clicked straight through to Publish before the counts resolved got no warning
+      // and clobbered the sibling's snapshot. Pending must count as a possible conflict,
+      // matching how the local count is already hardened.
+      setupDefaultHandlers([resultA, resultB]);
+      server.use(
+        http.get(
+          '/api/v1/games/:gameId/results/:resultId/character-updates/count',
+          async ({ params }) => {
+            // Result 10 resolves; its sibling 11 never does.
+            if (Number(params.resultId) === 11) {
+              await new Promise(() => {});
+            }
+            return HttpResponse.json({ count: 1 });
+          }
+        )
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sheet-conflict-warning-10')).toBeInTheDocument();
+      });
+    });
+
+    it('does not warn when only one result has staged sheet updates', async () => {
+      setupDefaultHandlers([resultA, resultB]);
+      setupDraftCounts({ 10: 2 });
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      // Wait on the draft-count badge, not the result content: content renders before
+      // the count queries resolve, and an absence assertion passes on the first tick.
+      // The badge only appears once a count has actually settled.
+      await waitFor(() => {
+        expect(screen.getByTestId('draft-update-count-10')).toHaveTextContent('2');
+      });
+
+      expect(screen.queryByTestId('sheet-conflict-warning-10')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('sheet-conflict-warning-11')).not.toBeInTheDocument();
+    });
+
+    it('warns only on the result that has staged updates, not its empty sibling', async () => {
+      // Result 11 has no staged updates, so it can neither overwrite nor be
+      // overwritten — warning there would be noise.
+      setupDefaultHandlers([resultA, resultB]);
+      setupDraftCounts({ 10: 1 });
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      // Result 10's badge proves the counts resolved; only then is 11's lack of a
+      // warning meaningful rather than merely early.
+      await waitFor(() => {
+        expect(screen.getByTestId('draft-update-count-10')).toHaveTextContent('1');
+      });
+
+      expect(screen.queryByTestId('sheet-conflict-warning-11')).not.toBeInTheDocument();
+    });
+
+    it('does not warn when the staged updates target different characters', async () => {
+      setupDefaultHandlers([resultA, otherCharacterResult]);
+      setupDraftCounts({ 10: 1, 12: 1 });
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      // Both counts must have settled before absence proves anything.
+      await waitFor(() => {
+        expect(screen.getByTestId('draft-update-count-10')).toHaveTextContent('1');
+        expect(screen.getByTestId('draft-update-count-12')).toHaveTextContent('1');
+      });
+
+      expect(screen.queryByTestId('sheet-conflict-warning-10')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('sheet-conflict-warning-12')).not.toBeInTheDocument();
+    });
+
+    it('does not warn when the sibling result is already published', async () => {
+      // A published result's drafts have already been applied and deleted, so it
+      // can no longer clobber anything.
+      const publishedSibling: ActionResult = { ...resultB, is_published: true };
+      setupDefaultHandlers([resultA, publishedSibling]);
+      setupDraftCounts({ 10: 1, 11: 1 });
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('draft-update-count-10')).toHaveTextContent('1');
+      });
+
+      expect(screen.queryByTestId('sheet-conflict-warning-10')).not.toBeInTheDocument();
+    });
+
+    it('surfaces the conflict in the publish confirmation dialog', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers([resultA, resultB]);
+      setupDraftCounts({ 10: 1, 11: 1 });
+      server.use(
+        http.get('/api/v1/games/:gameId/results/:resultId/character-updates', () =>
+          HttpResponse.json([])
+        )
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sheet-conflict-warning-10')).toBeInTheDocument();
+      });
+
+      const publishButtons = await screen.findAllByRole('button', { name: /publish result/i });
+      await user.click(publishButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('publish-sheet-conflict-warning')).toBeInTheDocument();
       });
     });
   });

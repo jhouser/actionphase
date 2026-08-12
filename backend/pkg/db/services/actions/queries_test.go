@@ -868,3 +868,139 @@ func TestActionSubmissionService_CountAllActionSubmissions(t *testing.T) {
 		assert.Equal(t, int64(10), count, "Should count all 10 submissions across all phases")
 	})
 }
+
+// TestActionSubmissionService_ResultOrdering pins down the order results come
+// back in.
+//
+// Regression: these queries ordered by sent_at, which CreateActionResult leaves
+// NULL until a result is published. Every draft therefore tied, and Postgres
+// returned them in whatever order the executor produced — a GM who wrote four
+// drafts saw them shuffled, with no stable order between page loads.
+//
+// GetGameResults and GetUserResults both sort ascending, because the History tab
+// renders them through one shared path and reads chronologically for every role.
+// They differ in scope, not order: GM and audience get the whole cast including
+// drafts, players get only their own published rows. When the two disagreed on
+// order, the same phase looked different depending on who was logged in.
+//
+// GetUserPhaseResults stays newest-first: it feeds the GM composing view, where a
+// freshly written draft belongs at the top so the GM can confirm it landed.
+func TestActionSubmissionService_ResultOrdering(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	app := core.NewTestApp(testDB.Pool)
+
+	actionService := &ActionSubmissionService{DB: testDB.Pool, Logger: app.ObsLogger, NotificationService: &db.NotificationService{DB: testDB.Pool, Logger: app.ObsLogger}}
+	phaseService := &phases.PhaseService{DB: testDB.Pool, Logger: app.ObsLogger}
+	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	gm := testDB.CreateTestUser(t, "orderinggm", "orderinggm@example.com")
+	player := testDB.CreateTestUser(t, "orderingplayer", "orderingplayer@example.com")
+	game := testDB.CreateTestGame(t, int32(gm.ID), "Ordering Game")
+
+	_, err := gameService.AddGameParticipant(context.Background(), game.ID, int32(player.ID), "player")
+	require.NoError(t, err)
+
+	phase, err := phaseService.TransitionToNextPhase(context.Background(), game.ID, int32(gm.ID), core.TransitionPhaseRequest{
+		PhaseType: "action",
+		Title:     "Ordering Phase",
+		Deadline:  core.TimePtr(time.Now().Add(72 * time.Hour)),
+	})
+	require.NoError(t, err)
+
+	// Four unpublished drafts, created in a known order. All share sent_at = NULL,
+	// which is exactly the case the old ordering could not resolve.
+	created := make([]int32, 0, 4)
+	for _, content := range []string{"First draft", "Second draft", "Third draft", "Fourth draft"} {
+		result, err := actionService.CreateActionResult(context.Background(), core.CreateActionResultRequest{
+			GameID:      game.ID,
+			PhaseID:     phase.ID,
+			UserID:      int32(player.ID),
+			GMUserID:    int32(gm.ID),
+			Content:     content,
+			IsPublished: false,
+		})
+		require.NoError(t, err)
+		created = append(created, result.ID)
+	}
+
+	// The GM and audience History view. Ascending, matching what a player sees in
+	// the same tab — see the GetUserResults subtest below for the other half.
+	t.Run("GetGameResults returns drafts oldest first", func(t *testing.T) {
+		results, err := actionService.GetGameResults(context.Background(), game.ID)
+		require.NoError(t, err)
+		require.Len(t, results, 4)
+
+		contents := make([]string, 0, len(results))
+		for _, r := range results {
+			contents = append(contents, r.Content)
+			require.False(t, r.SentAt.Valid, "drafts should have no sent_at, the condition that broke ordering")
+		}
+
+		assert.Equal(t, []string{"First draft", "Second draft", "Third draft", "Fourth draft"}, contents)
+	})
+
+	t.Run("GetUserPhaseResults returns drafts newest first", func(t *testing.T) {
+		results, err := actionService.GetUserPhaseResults(context.Background(), phase.ID, int32(player.ID))
+		require.NoError(t, err)
+		require.Len(t, results, 4)
+
+		ids := make([]int32, 0, len(results))
+		for _, r := range results {
+			ids = append(ids, r.ID)
+		}
+
+		assert.Equal(t, []int32{created[3], created[2], created[1], created[0]}, ids)
+	})
+
+	// The player's own view reads the other way: publish the drafts in order and
+	// confirm they come back in the order they were sent, not reversed.
+	t.Run("GetUserResults returns published results oldest first within a phase", func(t *testing.T) {
+		for _, id := range created {
+			require.NoError(t, actionService.PublishActionResult(context.Background(), id, int32(player.ID)))
+		}
+
+		results, err := actionService.GetUserResults(context.Background(), game.ID, int32(player.ID))
+		require.NoError(t, err)
+		require.Len(t, results, 4)
+
+		contents := make([]string, 0, len(results))
+		for _, r := range results {
+			contents = append(contents, r.Content)
+		}
+
+		assert.Equal(t, []string{"First draft", "Second draft", "Third draft", "Fourth draft"}, contents)
+	})
+
+	// The regression this guards: both roles read the same phase in the same tab,
+	// so the two endpoints feeding it must agree on order. Asserting each one's
+	// order separately would still pass if a later change flipped one of them, so
+	// compare them against each other directly. Scope legitimately differs (the GM
+	// list is the whole cast), so intersect on the ids the player can see.
+	t.Run("GM and player see the same order in History", func(t *testing.T) {
+		gmResults, err := actionService.GetGameResults(context.Background(), game.ID)
+		require.NoError(t, err)
+
+		playerResults, err := actionService.GetUserResults(context.Background(), game.ID, int32(player.ID))
+		require.NoError(t, err)
+
+		visibleToPlayer := make(map[int32]bool, len(playerResults))
+		playerOrder := make([]int32, 0, len(playerResults))
+		for _, r := range playerResults {
+			visibleToPlayer[r.ID] = true
+			playerOrder = append(playerOrder, r.ID)
+		}
+
+		gmOrder := make([]int32, 0, len(playerOrder))
+		for _, r := range gmResults {
+			if visibleToPlayer[r.ID] {
+				gmOrder = append(gmOrder, r.ID)
+			}
+		}
+
+		require.NotEmpty(t, playerOrder, "fixture should leave the player some published results")
+		assert.Equal(t, playerOrder, gmOrder,
+			"History renders both through one path, so the endpoints must not disagree on order")
+	})
+}
