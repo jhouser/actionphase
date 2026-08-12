@@ -28,7 +28,8 @@ import (
 // would silently discard text the app displays literally.
 var allowedColors = map[string]bool{
 	"red": true, "green": true, "blue": true, "purple": true, "orange": true,
-	"gold": true, "gray": true, "teal": true, "pink": true,
+	"gold": true, "gray": true, "teal": true, "pink": true, "brown": true,
+	"olive": true, "silver": true,
 }
 
 var (
