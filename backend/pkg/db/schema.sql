@@ -228,7 +228,6 @@ CREATE TABLE action_submissions (
     phase_id INTEGER NOT NULL REFERENCES game_phases(id) ON DELETE CASCADE,
     character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
     content TEXT NOT NULL,
-    is_draft BOOLEAN DEFAULT TRUE,
     submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(game_id, user_id, phase_id)
@@ -245,7 +244,14 @@ CREATE TABLE action_results (
     gm_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     is_published BOOLEAN DEFAULT FALSE,
-    sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    -- Staged reveals: a chain is a linked list, each part delayed relative to
+    -- the one before it. NULL parent = part 1 or an ordinary unstaged result.
+    -- Visibility to the recipient is `is_published AND released_at IS NOT NULL`.
+    parent_result_id INTEGER REFERENCES action_results(id) ON DELETE CASCADE,
+    reveal_delay_minutes INTEGER,
+    released_at TIMESTAMP WITH TIME ZONE
 );
 
 -- Draft character updates tied to action results

@@ -36,9 +36,7 @@ SELECT
   -- Action submission status for current phase
   CASE
     WHEN current_phase.id IS NOT NULL AND current_phase.phase_type = 'action' THEN
-      (SELECT CASE WHEN COUNT(*) = 0 THEN true
-                   WHEN bool_or(is_draft = true) THEN true
-                   ELSE false END
+      (SELECT COUNT(*) = 0
        FROM action_submissions
        WHERE game_id = g.id
          AND user_id = $1
@@ -59,9 +57,7 @@ ORDER BY
     WHEN current_phase.phase_type = 'action'
          AND current_phase.deadline IS NOT NULL
          AND current_phase.deadline < NOW() + INTERVAL '24 hours'
-         AND (SELECT CASE WHEN COUNT(*) = 0 THEN true
-                          WHEN bool_or(is_draft = true) THEN true
-                          ELSE false END
+         AND (SELECT COUNT(*) = 0
               FROM action_submissions
               WHERE game_id = g.id
                 AND user_id = $1
@@ -123,9 +119,7 @@ SELECT
   gp.deadline as end_time,
   CASE
     WHEN gp.phase_type = 'action' AND part.user_id IS NOT NULL THEN
-      (SELECT CASE WHEN COUNT(*) = 0 THEN true
-                   WHEN bool_or(is_draft = true) THEN true
-                   ELSE false END
+      (SELECT COUNT(*) = 0
        FROM action_submissions acts
        WHERE acts.game_id = g.id
          AND acts.user_id = $1

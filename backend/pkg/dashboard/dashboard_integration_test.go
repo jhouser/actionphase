@@ -196,20 +196,15 @@ func TestDashboardAPI_GetUserDashboard_WithUrgentGame(t *testing.T) {
 		Create()
 
 	// Create active phase with near deadline
-	phase := factory.NewPhase().
+	factory.NewPhase().
 		InGame(game).
 		ActionPhase().
 		Active().
 		WithDeadline(time.Now().Add(30 * time.Minute)).
 		Create()
 
-	// Create pending action
-	factory.NewActionSubmission().
-		InGame(game).
-		ByUser(user).
-		InPhase(phase).
-		Draft().
-		Create()
+	// No submission for this phase: submissions have no draft state, so a
+	// pending action is simply the absence of a row.
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenString)

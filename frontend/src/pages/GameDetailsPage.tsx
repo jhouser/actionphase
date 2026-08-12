@@ -49,6 +49,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
     isGM,
     isParticipant,
     isInGame,
+    isAudience,
     canEditGame,
     userRole,
     userCharacters,
@@ -149,7 +150,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
     participantCount: participants.length,
     currentPhaseType: currentPhaseData?.phase?.phase_type,
     isPhaseLoading: isLoadingPhase,
-    isAudience: userRole === 'audience',
+    isAudience,
     isParticipant,
     hasCharacters: userCharacters.length > 0,
     unvotedPollsCount,
@@ -170,7 +171,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
       gameId,
       currentPhase: currentPhaseData?.phase ?? null,
       isGM,
-      isAudience: userRole === 'audience',
+      isAudience,
       isGameCompleted: game?.state === 'completed',
       userRole,
       gameState: game?.state ?? '',
@@ -184,6 +185,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
       gameId,
       currentPhaseData?.phase,
       isGM,
+      isAudience,
       userRole,
       game?.state,
       game?.is_anonymous,
@@ -579,7 +581,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
                 isLoadingPhase={isLoadingPhase}
                 isGM={isGM}
                 isParticipant={isParticipant}
-                isAudience={userRole === 'audience'}
+                isAudience={isAudience}
                 currentUserId={currentUserId}
                 userCharacters={userCharacters}
                 onLeaveGame={handleLeaveGame}

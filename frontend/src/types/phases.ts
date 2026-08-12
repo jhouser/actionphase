@@ -46,7 +46,6 @@ export interface ActionSubmission {
   phase_id: number;
   character_id?: number;
   content: string;
-  is_draft?: boolean;
   submitted_at: string;
   updated_at: string;
 }
@@ -62,8 +61,6 @@ export interface ActionWithDetails extends ActionSubmission {
   phase_type?: string;
   phase_number?: number;
   phase_title?: string;
-  action_result_id?: number;
-  status?: 'draft' | 'submitted' | 'result_posted';
 }
 
 export interface ActionResult {
