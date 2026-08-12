@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useTabOverflow } from '../hooks/useTabOverflow';
 
 /** Height of the global nav in Layout.tsx (h-16). Sticky bars park below it. */
 const NAVBAR_HEIGHT_PX = 64;
@@ -26,8 +27,13 @@ interface TabNavigationProps {
   onTabChange: (tabId: string) => void;
   /** When provided, tabs render as <a> links for right-click / middle-click / Cmd+click support */
   getTabHref?: (tabId: string) => string;
-  /** Tab IDs that should appear in a "More" overflow dropdown instead of the main bar */
-  overflowTabIds?: Set<string>;
+  /**
+   * Collapse tabs that do not fit into a "More" dropdown, measured from the
+   * real rendered width rather than a fixed list. Opt-in because the bar must
+   * render every tab for one frame to measure them, which is wasted work for
+   * callers whose tabs always fit.
+   */
+  collapseOverflow?: boolean;
   /**
    * Pin the bar below the global nav (h-16) so tabs stay reachable while scrolling.
    * Once pinned the bar condenses (smaller padding/type) to limit how much
@@ -47,7 +53,7 @@ export function TabNavigation({
   activeTab,
   onTabChange,
   getTabHref,
-  overflowTabIds,
+  collapseOverflow = false,
   sticky = false,
 }: TabNavigationProps) {
   const [moreOpen, setMoreOpen] = useState(false);
@@ -112,9 +118,23 @@ export function TabNavigation({
     return () => document.removeEventListener('mousedown', handler);
   }, [moreOpen]);
 
-  const mainTabs = overflowTabIds ? tabs.filter(t => !overflowTabIds.has(t.id)) : tabs;
-  const overflowTabs = overflowTabIds ? tabs.filter(t => overflowTabIds.has(t.id)) : [];
+  const { containerRef, moreButtonRef, registerTab, overflowIds, measured } = useTabOverflow({
+    tabs,
+    activeTab,
+    enabled: collapseOverflow,
+  });
+
+  // Overflowing tabs stay mounted and are hidden with CSS instead of being
+  // unmounted: an unmounted tab has no width, so dropping them from the DOM
+  // would erase the measurements that decide whether they should come back when
+  // the viewport widens.
+  const overflowTabs = tabs.filter(t => overflowIds.has(t.id));
   const overflowActive = overflowTabs.some(t => t.id === activeTab);
+
+  // Before the first measurement every tab renders so it can be measured. The
+  // bar is held invisible for that frame — otherwise the full list paints and
+  // then visibly snaps down to the fitted set.
+  const awaitingMeasurement = collapseOverflow && !measured;
 
   const renderTabContent = (tab: Tab, isActive: boolean) => (
     <>
@@ -148,12 +168,25 @@ export function TabNavigation({
 
   const renderTab = (tab: Tab) => {
     const isActive = activeTab === tab.id;
+    const isOverflowing = overflowIds.has(tab.id);
     const sharedProps = {
       role: 'tab' as const,
       className: tabClassName(isActive),
       'aria-selected': isActive,
       'aria-current': isActive ? ('page' as const) : undefined,
+      // Hidden from assistive tech and from pointer events while collapsed —
+      // the dropdown copy is the reachable one, so exposing both would announce
+      // every overflowing tab twice.
+      'aria-hidden': isOverflowing || undefined,
+      inert: isOverflowing || undefined,
+      // `hidden` would remove it from layout and zero its width; visibility
+      // keeps the box measurable while taking it out of view.
+      style: isOverflowing
+        ? ({ visibility: 'hidden', position: 'absolute', pointerEvents: 'none' } as const)
+        : undefined,
       'data-testid': `tab-${tab.id}`,
+      'data-overflowing': isOverflowing || undefined,
+      ref: (el: HTMLElement | null) => registerTab(tab.id, el),
     };
     return getTabHref ? (
       <Link key={tab.id} {...sharedProps} to={getTabHref(tab.id)}>
@@ -212,14 +245,22 @@ export function TabNavigation({
       </div>
 
       {/* Desktop: Horizontal Tab Bar */}
-      <div className="hidden md:flex -mb-px">
-        <nav className="flex overflow-x-auto" role="tablist" aria-label="Tabs">
-          {mainTabs.map(renderTab)}
+      <div
+        className={`hidden md:flex -mb-px ${awaitingMeasurement ? 'invisible' : ''}`}
+      >
+        <nav
+          ref={containerRef}
+          className={`flex ${collapseOverflow ? 'flex-1 min-w-0 relative' : 'overflow-x-auto'}`}
+          role="tablist"
+          aria-label="Tabs"
+        >
+          {tabs.map(renderTab)}
         </nav>
 
         {overflowTabs.length > 0 && (
           <div ref={moreRef} className="relative flex-shrink-0">
             <button
+              ref={moreButtonRef}
               className={`
                 whitespace-nowrap px-4 font-medium text-sm flex items-center gap-2
                 transition-[padding,color,border-color] duration-200
@@ -264,7 +305,7 @@ export function TabNavigation({
                       to={getTabHref(tab.id)}
                       className={itemClass}
                       onClick={() => setMoreOpen(false)}
-                      data-testid={`tab-${tab.id}`}
+                      data-testid={`tab-${tab.id}-overflow`}
                     >
                       {renderTabContent(tab, isActive)}
                     </Link>
@@ -273,7 +314,7 @@ export function TabNavigation({
                       key={tab.id}
                       className={itemClass}
                       onClick={handleClick}
-                      data-testid={`tab-${tab.id}`}
+                      data-testid={`tab-${tab.id}-overflow`}
                     >
                       {renderTabContent(tab, isActive)}
                     </button>

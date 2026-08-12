@@ -279,100 +279,159 @@ describe('TabNavigation', () => {
       { id: 'info', label: 'Game Info' },
       { id: 'logs', label: 'Game Logs' },
     ];
-    const overflowTabIds = new Set(['info', 'logs']);
 
-    it('renders overflow tabs inside More button, not in the main bar', () => {
-      render(
-        <TabNavigation
-          tabs={allTabs}
-          activeTab="tab1"
-          onTabChange={mockOnTabChange}
-          overflowTabIds={overflowTabIds}
-        />
+    // jsdom gives every element a width of 0, so overflow could never trigger on
+    // its own. These helpers install a fake layout: each tab is TAB_WIDTH wide
+    // and the nav is whatever the test says, which is what lets us assert on the
+    // fitting maths rather than on a hard-coded list of ids.
+    const TAB_WIDTH = 100;
+    const MORE_WIDTH = 90;
+
+    /**
+     * @param navWidth Available width for the tab strip, in px.
+     */
+    function stubLayout(navWidth: number) {
+      const original = HTMLElement.prototype.getBoundingClientRect;
+      HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+        const testid = this.getAttribute('data-testid');
+        let width = 0;
+        if (this.getAttribute('role') === 'tablist') {
+          width = navWidth;
+        } else if (testid === 'tab-more') {
+          width = MORE_WIDTH;
+        } else if (testid?.startsWith('tab-')) {
+          width = TAB_WIDTH;
+        }
+        return { width, height: 0, top: 0, left: 0, right: width, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+      };
+      return () => {
+        HTMLElement.prototype.getBoundingClientRect = original;
+      };
+    }
+
+    let restoreLayout: (() => void) | undefined;
+
+    afterEach(() => {
+      restoreLayout?.();
+      restoreLayout = undefined;
+    });
+
+    /** Ids of the tabs actually visible in the bar (not collapsed, not the dropdown copies). */
+    const visibleTabIds = () =>
+      Array.from(document.querySelectorAll('[role="tab"]'))
+        .filter(el => !el.hasAttribute('data-overflowing'))
+        .map(el => el.getAttribute('data-testid')?.replace(/^tab-/, ''));
+
+    it('keeps every tab in the bar when they all fit', () => {
+      restoreLayout = stubLayout(5 * TAB_WIDTH);
+      renderWithRouter(
+        <TabNavigation tabs={allTabs} activeTab="tab1" onTabChange={mockOnTabChange} collapseOverflow />
       );
 
+      expect(visibleTabIds()).toEqual(['tab1', 'tab2', 'tab3', 'info', 'logs']);
+      expect(screen.queryByTestId('tab-more')).not.toBeInTheDocument();
+    });
+
+    it('collapses tabs from the end when the bar is too narrow', () => {
+      // Room for the More button (90) + 3 tabs (300) = 390 of 400.
+      restoreLayout = stubLayout(400);
+      renderWithRouter(
+        <TabNavigation tabs={allTabs} activeTab="tab1" onTabChange={mockOnTabChange} collapseOverflow />
+      );
+
+      expect(visibleTabIds()).toEqual(['tab1', 'tab2', 'tab3']);
       expect(screen.getByTestId('tab-more')).toBeInTheDocument();
-      // Overflow tabs not visible until More is opened
-      expect(screen.queryByTestId('tab-info')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('tab-logs')).not.toBeInTheDocument();
-      // Main tabs still visible
-      expect(screen.getByRole('tab', { name: /First Tab/i })).toBeInTheDocument();
     });
 
-    it('opens the dropdown and shows overflow tabs when More is clicked', async () => {
-      const user = userEvent.setup();
-      render(
-        <TabNavigation
-          tabs={allTabs}
-          activeTab="tab1"
-          onTabChange={mockOnTabChange}
-          overflowTabIds={overflowTabIds}
-        />
+    it('collapses more tabs as the available width shrinks', () => {
+      restoreLayout = stubLayout(300); // More (90) + 2 tabs (200) = 290
+      renderWithRouter(
+        <TabNavigation tabs={allTabs} activeTab="tab1" onTabChange={mockOnTabChange} collapseOverflow />
       );
+
+      expect(visibleTabIds()).toEqual(['tab1', 'tab2']);
+    });
+
+    it('keeps the active tab visible even when its position would collapse it', () => {
+      restoreLayout = stubLayout(300);
+      renderWithRouter(
+        <TabNavigation tabs={allTabs} activeTab="logs" onTabChange={mockOnTabChange} collapseOverflow />
+      );
+
+      // 'logs' is last and would normally collapse first; it is pinned instead,
+      // displacing 'tab2' which would otherwise have fit.
+      const visible = visibleTabIds();
+      expect(visible).toContain('logs');
+      expect(visible).toEqual(['tab1', 'logs']);
+    });
+
+    it('shows collapsed tabs in the More dropdown when opened', async () => {
+      const user = userEvent.setup();
+      restoreLayout = stubLayout(400);
+      renderWithRouter(
+        <TabNavigation tabs={allTabs} activeTab="tab1" onTabChange={mockOnTabChange} collapseOverflow />
+      );
+
+      expect(screen.queryByTestId('tab-info-overflow')).not.toBeInTheDocument();
 
       await user.click(screen.getByTestId('tab-more'));
 
-      expect(screen.getByTestId('tab-info')).toBeInTheDocument();
-      expect(screen.getByTestId('tab-logs')).toBeInTheDocument();
+      expect(screen.getByTestId('tab-info-overflow')).toBeInTheDocument();
+      expect(screen.getByTestId('tab-logs-overflow')).toBeInTheDocument();
     });
 
-    it('calls onTabChange and closes dropdown when an overflow tab is clicked', async () => {
+    it('calls onTabChange and closes dropdown when a collapsed tab is clicked', async () => {
       const user = userEvent.setup();
+      restoreLayout = stubLayout(400);
       render(
-        <TabNavigation
-          tabs={allTabs}
-          activeTab="tab1"
-          onTabChange={mockOnTabChange}
-          overflowTabIds={overflowTabIds}
-        />
+        <TabNavigation tabs={allTabs} activeTab="tab1" onTabChange={mockOnTabChange} collapseOverflow />
       );
 
       await user.click(screen.getByTestId('tab-more'));
-      await user.click(screen.getByTestId('tab-logs'));
+      await user.click(screen.getByTestId('tab-logs-overflow'));
 
       expect(mockOnTabChange).toHaveBeenCalledWith('logs');
-      expect(screen.queryByTestId('tab-logs')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('tab-logs-overflow')).not.toBeInTheDocument();
     });
 
     it('closes dropdown when clicking outside', async () => {
       const user = userEvent.setup();
+      restoreLayout = stubLayout(400);
       render(
-        <TabNavigation
-          tabs={allTabs}
-          activeTab="tab1"
-          onTabChange={mockOnTabChange}
-          overflowTabIds={overflowTabIds}
-        />
+        <TabNavigation tabs={allTabs} activeTab="tab1" onTabChange={mockOnTabChange} collapseOverflow />
       );
 
       await user.click(screen.getByTestId('tab-more'));
-      expect(screen.getByTestId('tab-info')).toBeInTheDocument();
+      expect(screen.getByTestId('tab-info-overflow')).toBeInTheDocument();
 
       await user.click(document.body);
-      expect(screen.queryByTestId('tab-info')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('tab-info-overflow')).not.toBeInTheDocument();
     });
 
-    it('shows More button with active styling when an overflow tab is active', () => {
-      render(
-        <TabNavigation
-          tabs={allTabs}
-          activeTab="logs"
-          onTabChange={mockOnTabChange}
-          overflowTabIds={overflowTabIds}
-        />
+    it('hides collapsed tabs from assistive tech so they are not announced twice', () => {
+      restoreLayout = stubLayout(400);
+      renderWithRouter(
+        <TabNavigation tabs={allTabs} activeTab="tab1" onTabChange={mockOnTabChange} collapseOverflow />
       );
 
-      expect(screen.getByTestId('tab-more').className).toContain('text-interactive-primary');
+      expect(screen.getByTestId('tab-logs')).toHaveAttribute('aria-hidden', 'true');
+      expect(screen.getByTestId('tab-tab1')).not.toHaveAttribute('aria-hidden');
     });
 
-    it('includes overflow tabs in the mobile select dropdown', () => {
-      render(
-        <TabNavigation
-          tabs={allTabs}
-          activeTab="tab1"
-          onTabChange={mockOnTabChange}
-          overflowTabIds={overflowTabIds}
-        />
+    it('does not collapse anything when collapseOverflow is not set', () => {
+      restoreLayout = stubLayout(100); // far too narrow, but opt-in is off
+      renderWithRouter(
+        <TabNavigation tabs={allTabs} activeTab="tab1" onTabChange={mockOnTabChange} />
+      );
+
+      expect(visibleTabIds()).toEqual(['tab1', 'tab2', 'tab3', 'info', 'logs']);
+      expect(screen.queryByTestId('tab-more')).not.toBeInTheDocument();
+    });
+
+    it('includes every tab in the mobile select regardless of collapsing', () => {
+      restoreLayout = stubLayout(300);
+      renderWithRouter(
+        <TabNavigation tabs={allTabs} activeTab="tab1" onTabChange={mockOnTabChange} collapseOverflow />
       );
 
       expect(screen.getByRole('option', { name: 'Game Info' })).toBeInTheDocument();
