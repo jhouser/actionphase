@@ -48,18 +48,19 @@ export function UnreadInboxSection({ notificationsByType, gameId }: UnreadInboxS
   }
 
   return (
-    <div className="surface-base rounded-lg shadow-md border border-theme-default">
+    <div className="surface-base rounded-lg shadow-md border border-theme-default" data-testid="unread-inbox">
       <Button
         variant="ghost"
         onClick={() => setIsCollapsed((prev) => !prev)}
         className="w-full justify-between p-6 font-normal"
         aria-expanded={!isCollapsed}
+        data-testid="unread-inbox-toggle"
       >
         <div className="flex items-center gap-2">
           <Inbox className="w-5 h-5 text-content-tertiary" />
           <h2 className="text-lg font-bold text-content-primary">Inbox</h2>
           {count > 0 && (
-            <Badge variant="primary" size="sm">
+            <Badge variant="primary" size="sm" data-testid="unread-inbox-count">
               {count}
             </Badge>
           )}

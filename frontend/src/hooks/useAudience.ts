@@ -49,37 +49,6 @@ export function useAllPrivateConversations(
 }
 
 /**
- * Hook to fetch all action submissions (infinite scroll for GM/audience)
- */
-export function useAllActionSubmissions(
-  gameId: number,
-  options?: { phaseId?: number }
-) {
-  return useInfiniteQuery({
-    queryKey: ['all-action-submissions', gameId, options],
-    queryFn: async ({ pageParam = 0 }) => {
-      const response = await apiClient.games.listAllActionSubmissions(gameId, {
-        ...options,
-        offset: pageParam as number,
-        limit: 10,
-      });
-      return response.data;
-    },
-    getNextPageParam: (lastPage, pages) => {
-      const loadedCount = pages.reduce(
-        (sum, page) => sum + (page.action_submissions?.length || 0),
-        0
-      );
-      return loadedCount < lastPage.total ? loadedCount : undefined;
-    },
-    initialPageParam: 0,
-    enabled: !!gameId,
-    refetchInterval: 30000, // Refetch every 30 seconds
-    // refetchOnWindowFocus: false is the global default - refetchInterval provides sufficient freshness
-  });
-}
-
-/**
  * Hook to fetch messages for a specific conversation (GM/audience only)
  */
 export function useAudienceConversationMessages(

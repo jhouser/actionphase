@@ -232,4 +232,24 @@ for file in "$SCRIPT_DIR"/e2e/*.sql; do
     fi
 done
 
+# Advance ID sequences past every fixture row, for all workers.
+#
+# Individual fixture files each run setval(seq, MAX(id)+1) after their own
+# inserts. That is only correct for the file that happens to run last: worker N
+# offsets IDs by N*10000, so a low-offset file applied after a high-offset one
+# rewinds the sequence below IDs that already exist. The next game a test
+# creates then collides — "duplicate key value violates unique constraint
+# games_pkey" — as an intermittent 500 that looks like a flaky frontend timeout.
+#
+# Re-syncing here, after every file for this worker, keeps the sequence ahead of
+# whatever has been loaded so far regardless of file or worker ordering.
+echo "  🔢 Re-syncing ID sequences past fixture rows..."
+if ! PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -q -c "
+SELECT setval('games_id_seq',    (SELECT COALESCE(MAX(id), 0) + 1 FROM games));
+SELECT setval('messages_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM messages));
+"; then
+    echo "❌ ERROR: Failed to re-sync ID sequences for worker $WORKER_INDEX"
+    exit 1
+fi
+
 echo "✅ Worker #$WORKER_INDEX E2E fixtures applied successfully!"

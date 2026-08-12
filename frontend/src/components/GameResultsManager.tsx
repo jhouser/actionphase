@@ -8,6 +8,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { MarkdownPreview } from './MarkdownPreview';
 import { CommentEditor } from './CommentEditor';
 import { useDraftUpdateCount } from '../hooks';
+import { useConflictingSheetDrafts } from '../hooks/useConflictingSheetDrafts';
 import { logger } from '@/services/LoggingService';
 import { useToast } from '../contexts/ToastContext';
 
@@ -36,10 +37,18 @@ export function GameResultsManager({ gameId, currentPhase, className = '' }: Gam
     );
   }
 
-  // Filter results to only show those from the current phase (if provided)
-  const allResults = currentPhase?.id
-    ? (results || []).filter(r => r.phase_id === currentPhase.id)
-    : (results || []);
+  // Filter results to only show those from the current phase (if provided).
+  //
+  // Newest first, unlike everywhere else results are shown: this is the composing
+  // view, so a GM who just wrote a result needs it at the top to confirm it landed
+  // and to edit it. GetGameResults returns oldest-first to keep the History tab
+  // chronological for every role, so the order is flipped back here rather than in
+  // SQL — the two views share one endpoint and want opposite orders.
+  //
+  // Sorting a copy: `results` is React Query's cached array and sort() mutates.
+  const allResults = [...(results || [])]
+    .filter(r => !currentPhase?.id || r.phase_id === currentPhase.id)
+    .sort((a, b) => b.id - a.id);
   const unpublishedResults = allResults.filter(r => !r.is_published);
   const publishedResults = allResults.filter(r => r.is_published);
 
@@ -90,6 +99,7 @@ export function GameResultsManager({ gameId, currentPhase, className = '' }: Gam
                   isEditing={editingResultId === result.id}
                   onStartEdit={() => setEditingResultId(result.id)}
                   onCancelEdit={() => setEditingResultId(null)}
+                  phaseResults={allResults}
                 />
               ))}
             </div>
@@ -114,6 +124,7 @@ export function GameResultsManager({ gameId, currentPhase, className = '' }: Gam
                   isEditing={false}
                   onStartEdit={() => {}}
                   onCancelEdit={() => {}}
+                  phaseResults={allResults}
                 />
               ))}
             </div>
@@ -130,9 +141,11 @@ interface ResultCardProps {
   isEditing: boolean;
   onStartEdit: () => void;
   onCancelEdit: () => void;
+  /** All results in this phase, used to detect conflicting sheet drafts on siblings. */
+  phaseResults: ActionResult[];
 }
 
-function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit }: ResultCardProps) {
+function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phaseResults }: ResultCardProps) {
   const [editedContent, setEditedContent] = useState(result.content);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -142,8 +155,21 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit }: Re
   const updateMutation = useUpdateActionResult(gameId);
   const publishMutation = usePublishActionResult(gameId);
   const deleteMutation = useDeleteActionResult(gameId);
-  const { data: draftCount } = useDraftUpdateCount(gameId, result.id);
+  const { data: draftCount, isPending: isDraftCountPending } = useDraftUpdateCount(gameId, result.id);
+  const { hasConflict } = useConflictingSheetDrafts(gameId, result, phaseResults);
   const { showError } = useToast();
+
+  // A clobber needs two competing snapshots, so warn only when THIS result also has
+  // staged updates — a result with none can neither overwrite nor be overwritten.
+  // Published results are excluded too: their drafts are already applied and deleted.
+  //
+  // `draftCount` is undefined while the query is in flight. Treating that as "no
+  // drafts" lets a GM who clicks straight through reach the publish confirmation
+  // without ever seeing the warning, so the unresolved case counts as a possible
+  // conflict and the dialogs below hold their confirm until it settles.
+  const hasStagedOrUnknown = isDraftCountPending || (draftCount ?? 0) > 0;
+  const showSheetConflictWarning =
+    !result.is_published && hasConflict && hasStagedOrUnknown;
 
   // Determine if content should be collapsible (long results)
   const isCollapsible = result.content.length > 200;
@@ -235,7 +261,7 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit }: Re
               >
                 Update Character Sheet
                 {draftCount !== undefined && draftCount > 0 && (
-                  <Badge variant="warning" className="ml-2">{draftCount}</Badge>
+                  <Badge variant="warning" className="ml-2" data-testid={`draft-update-count-${result.id}`}>{draftCount}</Badge>
                 )}
               </Button>
               <Button
@@ -265,6 +291,17 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit }: Re
             </div>
           )}
         </div>
+
+        {/* danger, not warning: the draft card is already a field of yellow (Draft
+            label, update-count badge, section header), so a warning-toned alert blends
+            in — and the consequence here is silent data loss, not caution. */}
+        {showSheetConflictWarning && (
+          <Alert variant="danger" className="mt-3" data-testid={`sheet-conflict-warning-${result.id}`}>
+            Another unpublished result for this character also has staged character
+            sheet updates. Publishing both will overwrite the earlier one — keep all
+            of this phase&apos;s sheet updates in a single result.
+          </Alert>
+        )}
 
         {isEditing ? (
           <div className="space-y-3">
@@ -366,6 +403,7 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit }: Re
           gameId={gameId}
           actionResultId={result.id}
           isPublishing={publishMutation.isPending}
+          hasConflictingSheetDrafts={showSheetConflictWarning}
         />
 
         {/* Delete Confirmation Modal */}

@@ -1,5 +1,5 @@
 import type { UseMutationResult } from '@tanstack/react-query';
-import { Button } from './ui';
+import { Button, Alert } from './ui';
 import type { GamePhase } from '../types/phases';
 import { utcToLocalDateTime } from '../utils/timezone';
 
@@ -10,6 +10,11 @@ interface PhaseActivationDialogProps {
   nearFutureScheduled?: GamePhase[];
   isActivating: boolean;
   publishAllMutation: UseMutationResult<unknown, Error, void, unknown>;
+  /**
+   * True when some character has staged sheet updates on more than one of the
+   * unpublished results. Publishing them together overwrites one set with another.
+   */
+  hasSheetDraftConflict?: boolean;
   onActivate: () => void;
   onClose: () => void;
 }
@@ -21,6 +26,7 @@ export function PhaseActivationDialog({
   nearFutureScheduled = [],
   isActivating,
   publishAllMutation,
+  hasSheetDraftConflict = false,
   onActivate,
   onClose
 }: PhaseActivationDialogProps) {
@@ -81,6 +87,17 @@ export function PhaseActivationDialog({
                 </div>
               </div>
             </div>
+            {/* Publishing in bulk applies every conflicting result at once, making the
+                clobber certain rather than possible. */}
+            {hasSheetDraftConflict && (
+              <Alert variant="danger" className="mb-4" data-testid="activate-sheet-conflict-warning">
+                A character has staged sheet updates on more than one of these results.
+                Each result stores a complete snapshot of the character sheet, so
+                publishing them together will overwrite one set of changes with another.
+                Consider activating without publishing, then consolidating the sheet
+                updates into a single result.
+              </Alert>
+            )}
             <div className="flex flex-col space-y-2">
               <Button
                 variant="success"

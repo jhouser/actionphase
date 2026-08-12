@@ -6,6 +6,11 @@ import { navigateToGameTab } from '../utils/navigation';
 /**
  * Page Object Model for Audience Tab
  *
+ * The Audience tab renders the "All Private Messages" view directly. It used to
+ * carry two sub-tabs ("Private Messages" / "Action Submissions"); action
+ * submissions and results now live on the History tab for every role, so there
+ * is no sub-tab bar and no sub-tab click on the way in.
+ *
  * Encapsulates all audience-related interactions including:
  * - Viewing "All Private Messages" list
  * - Filtering conversations by participants
@@ -26,10 +31,12 @@ export class AudiencePage {
     // Navigate to Audience tab (handles mobile select and desktop tabs)
     await navigateToGameTab(this.page, 'Audience');
 
-    // Click "Private Messages" sub-tab (default is already selected, but ensure we're there)
-    const privateMessagesTab = this.page.getByRole('button', { name: 'Private Messages' });
-    await privateMessagesTab.click();
-    await this.page.waitForLoadState('networkidle');
+    // The private messages view renders immediately — no sub-tab to click.
+    // Wait for its header so we know the tab content mounted before probing rows.
+    // The header is rendered twice (mobile + desktop layouts), so use the shared
+    // helper that filters to the visible copy rather than a bare .first().
+    await assertTextVisible(this.page, 'All Private Messages', { timeout: 10000 });
+
     // Wait for the conversation list to render (React updates after networkidle)
     await this.page.locator('[data-testid="conversation-item"]').first().waitFor({ state: 'visible', timeout: 10000 }).catch(() => {
       // No conversations in this game — that's valid for some tests

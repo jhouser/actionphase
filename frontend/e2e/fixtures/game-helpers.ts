@@ -76,6 +76,9 @@ export const FIXTURE_GAMES = {
   NOTIFICATION_FLOW: 'E2E Test: Notification Flow',                // Game #704 - reply/mention notification tests
   NOTIFICATION_PHASE: 'E2E Test: Notification Phase',              // Game #705 - phase-activation notification test
 
+  // Dashboard unread inbox test (706)
+  UNREAD_INBOX: 'E2E Test: Unread Inbox',                          // Game #706 - unread-inbox.spec.ts (inline reply)
+
   // Player multiple characters test (340-345, worker-specific)
   PLAYER_MULTIPLE_CHARACTERS: 'E2E Test: Player Multiple Characters', // Game #340 - "player-multiple-characters.spec.ts"
 

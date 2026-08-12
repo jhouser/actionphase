@@ -9,6 +9,7 @@ import {
   demoteFromCoGM,
   demoteCurrentCoGM,
 } from '../fixtures/game-helpers';
+import { AudiencePage } from '../pages/AudiencePage';
 import { GameDetailsPage } from '../pages/GameDetailsPage';
 import { MessagingPage } from '../pages/MessagingPage';
 import { PhaseManagementPage } from '../pages/PhaseManagementPage';
@@ -394,10 +395,13 @@ test.describe('Co-GM Management — Functional Capabilities', () => {
     await gamePage.goto(gameId);
 
     await assertTabVisible(page, 'Audience');
-    await navigateToGameTab(page, 'Audience');
 
-    await expect(page.getByRole('button', { name: 'Private Messages' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Action Submissions' })).toBeVisible();
+    // The Audience tab renders the "All Private Messages" view directly. It no
+    // longer has "Private Messages"/"Action Submissions" sub-tabs — action
+    // submissions moved to the History tab for every role (see AudienceView).
+    const audiencePage = new AudiencePage(page);
+    await audiencePage.goToAudience(gameId);
+    await audiencePage.verifyAllPrivateMessagesView();
   });
 
   test('Co-GM can edit Action Results', async ({ page, browser }) => {

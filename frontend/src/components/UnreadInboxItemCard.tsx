@@ -35,12 +35,13 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
   };
 
   return (
-    <div className="border border-theme-default rounded-md">
+    <div className="border border-theme-default rounded-md" data-testid="unread-inbox-item">
       <Button
         variant="ghost"
         onClick={() => setIsExpanded((prev) => !prev)}
         className="w-full justify-start gap-3 p-3 text-left font-normal"
         aria-expanded={isExpanded}
+        data-testid="unread-inbox-item-toggle"
       >
         <span className="text-interactive-primary flex-shrink-0">
           {TYPE_ICON[item.notification.type] ?? <MessageSquare className="w-4 h-4" />}
@@ -60,7 +61,7 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
 
           {context && (
             <>
-              <div className="bg-bg-secondary rounded-lg p-3">
+              <div className="bg-bg-secondary rounded-lg p-3" data-testid="unread-inbox-item-context">
                 {context.parentMessage && (
                   <ParentCommentPreview
                     content={context.parentMessage.content}

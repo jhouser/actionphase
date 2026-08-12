@@ -91,9 +91,28 @@ export class GamesListPage {
       }
     }
 
-    // Submit the form by clicking the submit button
-    const navigationPromise = this.page.waitForURL(/\/games\/\d+/, { timeout: 10000 });
+    // Submit the form.
+    //
+    // Wait on the create response as well as the navigation: under parallel
+    // load the POST can outlast a bare URL wait, and a failed create would
+    // otherwise surface as an opaque navigation timeout rather than the actual
+    // error status.
+    const createResponsePromise = this.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/v1/games' &&
+        response.request().method() === 'POST',
+      { timeout: 20000 }
+    );
+    const navigationPromise = this.page.waitForURL(/\/games\/\d+/, { timeout: 20000 });
     await this.page.getByTestId('create-game-submit').click();
+
+    const createResponse = await createResponsePromise;
+    if (createResponse.status() >= 400) {
+      throw new Error(
+        `createGame failed: POST /api/v1/games returned ${createResponse.status()} — ${await createResponse.text()}`
+      );
+    }
+
     await navigationPromise;
     await this.page.waitForLoadState('networkidle');
 
