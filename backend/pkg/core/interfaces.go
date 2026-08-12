@@ -285,6 +285,35 @@ type GameServiceInterface interface {
 
 	// GetGameLogs retrieves all logs for a given game
 	GetGameLogs(ctx context.Context, gameID int32) ([]models.GameLog, error)
+
+	// AddGameLog appends a log entry for a game
+	AddGameLog(ctx context.Context, arg models.CreateLogParams) (models.GameLog, error)
+
+	// GetGameLootTables retrieves all loot tables belonging to a game
+	GetGameLootTables(ctx context.Context, gameID int32) ([]models.GameLootTable, error)
+
+	// IsLootTableInGame reports whether a loot table belongs to the given game.
+	// Callers MUST check this before mutating a table by ID: the underlying
+	// update/delete queries are keyed on the table ID alone and are not game-scoped.
+	IsLootTableInGame(ctx context.Context, lootTableID, gameID int32) (bool, error)
+
+	// CreateLootTable creates a new named loot table for a game
+	CreateLootTable(ctx context.Context, gameID int32, name string) (*models.GameLootTable, error)
+
+	// UpdateLootTable renames an existing loot table
+	UpdateLootTable(ctx context.Context, lootTableID int32, name string) (*models.GameLootTable, error)
+
+	// DeleteLootTable removes a loot table and (via cascade) its contents
+	DeleteLootTable(ctx context.Context, lootTableID int32) error
+
+	// GetGameLootTableContents retrieves the items in a loot table
+	GetGameLootTableContents(ctx context.Context, lootTableID int32) ([]models.GameLootTableContent, error)
+
+	// AddLootTableContent appends a single item to a loot table
+	AddLootTableContent(ctx context.Context, lootTableID int32, itemName string, itemData string) (*models.GameLootTableContent, error)
+
+	// DeleteLootTableContents removes every item from a loot table
+	DeleteLootTableContents(ctx context.Context, lootTableID int32) error
 }
 
 // GameApplicationServiceInterface defines the contract for game application operations.

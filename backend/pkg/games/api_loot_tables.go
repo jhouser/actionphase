@@ -3,7 +3,6 @@ package games
 import (
 	"actionphase/pkg/core"
 	models "actionphase/pkg/db/models"
-	db "actionphase/pkg/db/services"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -27,7 +26,7 @@ func (h *Handler) GetGameLootTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 
 	lootTables, err := gameService.GetGameLootTables(ctx, int32(gameID))
 	if err != nil {
@@ -69,7 +68,7 @@ func (h *Handler) AddGameLootTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 	newLootTable, err := gameService.CreateLootTable(ctx, int32(gameID), data.Name)
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to create loot table", "error", err, "game_id", gameID)
@@ -112,7 +111,7 @@ func (h *Handler) UpdateGameLootTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check loot table ownership", "error", err, "table_id", tableID, "game_id", gameID)
@@ -151,7 +150,7 @@ func (h *Handler) DeleteGameLootTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 
 	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
 	if err != nil {
@@ -188,7 +187,7 @@ func (h *Handler) GetGameLootTableContents(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 
 	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
 	if err != nil {
@@ -246,7 +245,7 @@ func (h *Handler) UpdateGameLootTableContent(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 
 	isLootTableInGame, err := gameService.IsLootTableInGame(ctx, int32(tableID), int32(gameID))
 	if err != nil {
@@ -297,7 +296,7 @@ func (h *Handler) SetRandomLootForCharacter(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	gameService := &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+	gameService := h.GameService
 
 	// Verify user can edit this character
 	characterService := h.CharacterService
