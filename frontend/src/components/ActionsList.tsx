@@ -53,7 +53,12 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
     mutationFn: () => apiClient.phases.publishAllPhaseResults(gameId, displayPhaseId!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['unpublishedResultsCount', gameId, displayPhaseId] });
-      queryClient.invalidateQueries({ queryKey: ['userResults', gameId] });
+      queryClient.invalidateQueries({ queryKey: ['actionResults', 'game', gameId] });
+      queryClient.invalidateQueries({ queryKey: ['actionResults', 'user', gameId] });
+      queryClient.invalidateQueries({ queryKey: ['draftCharacterUpdates'] });
+      queryClient.invalidateQueries({ queryKey: ['draftUpdateCount'] });
+      // Invalidate character data to show published character updates
+      queryClient.invalidateQueries({ queryKey: ['characterData'] });
       setShowPublishConfirm(false);
     }
   });

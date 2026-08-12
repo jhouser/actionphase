@@ -3,10 +3,20 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
-import { renderWithProviders } from '../../test-utils';
+import { renderWithProviders, createTestQueryClient } from '../../test-utils';
 import { ActionsList } from '../ActionsList';
 import type { GamePhase, ActionWithDetails } from '../../types/phases';
 import { useCharacterSheetItems } from '../../hooks/useCharacterSheetItems';
+import { useGameActionResults } from '../../hooks/useActionResults';
+
+/**
+ * Stands in for the results list rendered next to ActionsList in the GM view,
+ * so tests can observe whether publishing invalidates the results cache.
+ */
+function ResultsQueryProbe({ gameId }: { gameId: number }) {
+  useGameActionResults(gameId);
+  return null;
+}
 
 vi.mock('../../hooks/useCharacterSheetItems', () => ({
   useCharacterSheetItems: vi.fn(() => []),
@@ -962,6 +972,48 @@ describe('ActionsList', () => {
 
       await waitFor(() => {
         expect(publishCalled).toBe(true);
+      });
+    });
+
+    it('refetches action results after publishing so drafts stop showing as unpublished', async () => {
+      const user = userEvent.setup();
+      let gameResultsFetches = 0;
+
+      setupDefaultHandlers(mockActions, [mockActionPhase1], 3);
+      server.use(
+        http.get('/api/v1/games/:gameId/results', () => {
+          gameResultsFetches++;
+          return HttpResponse.json([]);
+        })
+      );
+
+      // Prime the results query so it is cached and observable, mirroring the
+      // results list rendered alongside ActionsList in the real GM view.
+      const queryClient = createTestQueryClient();
+      renderWithProviders(
+        <>
+          <ActionsList gameId={1} currentPhase={mockActionPhase1} />
+          <ResultsQueryProbe gameId={1} />
+        </>,
+        { gameId: 1, queryClient }
+      );
+
+      await waitFor(() => {
+        expect(gameResultsFetches).toBe(1);
+      });
+
+      const publishButton = await screen.findByRole('button', {
+        name: /Publish All Results/i,
+      });
+      await user.click(publishButton);
+
+      const confirmButton = await screen.findByRole('button', {
+        name: /Confirm & Publish/i,
+      });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(gameResultsFetches).toBeGreaterThan(1);
       });
     });
 
