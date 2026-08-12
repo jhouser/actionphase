@@ -178,7 +178,7 @@ describe('LootTableForm CSV import', () => {
     renderForm();
     nameTable();
 
-    await importCsv('name,quantity\nIron Sword,1\n;5\n');
+    await importCsv('name,quantity\nIron Sword,1\n,5\n');
 
     expect(screen.getByText(/row 2 has no name/i)).toBeInTheDocument();
   });

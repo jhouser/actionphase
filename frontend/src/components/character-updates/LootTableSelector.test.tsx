@@ -5,12 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LootTableSelector } from './LootTableSelector';
 import type { LootTableContent } from '@/types/games';
 
-const mockGetLootTables = vi.hoisted(() => vi.fn());
 const mockGetLootTableContents = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api', () => ({
   apiClient: {
     games: {
-      getLootTables: mockGetLootTables,
       getLootTableContents: mockGetLootTableContents,
     },
   },
@@ -40,6 +38,7 @@ function renderSelector(props: Partial<React.ComponentProps<typeof LootTableSele
     <QueryClientProvider client={queryClient}>
       <LootTableSelector
         gameId={7}
+        lootTables={TABLES}
         requireItem={false}
         lootTableId={null}
         onLootTableChange={onLootTableChange}
@@ -57,9 +56,7 @@ const itemSelect = () => screen.getByLabelText(/loot table content/i) as HTMLSel
 
 describe('LootTableSelector', () => {
   beforeEach(() => {
-    mockGetLootTables.mockReset();
     mockGetLootTableContents.mockReset();
-    mockGetLootTables.mockResolvedValue({ data: TABLES });
     mockGetLootTableContents.mockResolvedValue({ data: [POTION] });
   });
 
@@ -69,7 +66,6 @@ describe('LootTableSelector', () => {
 
       await waitFor(() => expect(screen.getByRole('option', { name: 'Common Loot' })).toBeInTheDocument());
       expect(screen.getByRole('option', { name: 'Rare Loot' })).toBeInTheDocument();
-      expect(mockGetLootTables).toHaveBeenCalledWith(7);
     });
 
     it('reports the chosen table id as a number', async () => {

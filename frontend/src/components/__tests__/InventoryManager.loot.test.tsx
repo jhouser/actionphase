@@ -5,6 +5,7 @@ import { InventoryManager } from '../InventoryManager';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { useOptionalGameContext } from '@/contexts/GameContext';
 import { apiClient } from '@/lib/api';
+import { lootModes } from '../character-updates/ItemForm';
 
 // GameContext itself is not exported, so drive the optional hook directly: null
 // stands in for "rendered outside a GameProvider".
@@ -30,14 +31,14 @@ vi.mock('../AddItemModal', () => ({
   AddItemModal: ({
     onAdd,
     onAddRandom,
-    allowLootModes,
+    allowedLootModes,
   }: {
     onAdd: (item: { name: string; quantity: number }) => void;
     onAddRandom: (lootTableId: number) => void;
-    allowLootModes?: boolean;
+    allowedLootModes?: lootModes[];
   }) => (
     <div data-testid="add-item-modal">
-      <span data-testid="loot-modes-allowed">{String(!!allowLootModes)}</span>
+      <span data-testid="loot-modes-allowed">{allowedLootModes?.join(',')}</span>
       <button data-testid="roll-loot" onClick={() => onAddRandom(7)}>
         Roll
       </button>
@@ -107,13 +108,13 @@ describe('InventoryManager loot rolls', () => {
   it('does not offer loot modes when there is no game context', async () => {
     renderWithoutGame();
     await openAddItem();
-    expect(screen.getByTestId('loot-modes-allowed')).toHaveTextContent('false');
+    expect(screen.getByTestId('loot-modes-allowed')).toHaveTextContent('manual');
   });
 
   it('offers loot modes when a game context is present', async () => {
     renderWithGame();
     await openAddItem();
-    expect(screen.getByTestId('loot-modes-allowed')).toHaveTextContent('true');
+    expect(screen.getByTestId('loot-modes-allowed')).toHaveTextContent('manual,loot_table,loot_table_random');
   });
 
   it('adds the rolled item and reports success', async () => {

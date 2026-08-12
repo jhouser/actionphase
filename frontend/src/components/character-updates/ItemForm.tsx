@@ -74,7 +74,7 @@ export const ItemForm: React.FC<ItemFormProps> = ({
         loot_table_random: lootModesEnabled.loot_table_random && (lootTables?.length ?? 0) > 0,
       });
     }
-  }, [ lootTables ])
+  }, [ lootTables ]);
 
   const [mode, setMode] = useState<lootModes>('manual');
   const [name, setName] = useState(initialValues?.name || '');

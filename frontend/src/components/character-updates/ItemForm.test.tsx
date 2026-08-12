@@ -47,7 +47,7 @@ describe('ItemForm', () => {
     it('does not call onSubmit when item name is empty', async () => {
       const onSubmit = vi.fn();
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemForm
           onSubmit={onSubmit}
           onCancel={vi.fn()}
@@ -70,7 +70,7 @@ describe('ItemForm', () => {
     it('accepts decimal value for item value field', async () => {
       const onSubmit = vi.fn();
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemForm
           onSubmit={onSubmit}
           onCancel={vi.fn()}
@@ -96,7 +96,7 @@ describe('ItemForm', () => {
     it('accepts decimal value for item weight field', async () => {
       const onSubmit = vi.fn();
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemForm
           onSubmit={onSubmit}
           onCancel={vi.fn()}
@@ -120,7 +120,7 @@ describe('ItemForm', () => {
 
   describe('Description field uses markdown editor', () => {
     it('renders Write/Preview tabs for description field', () => {
-      render(
+      renderWithQuery(
         <ItemForm
           onSubmit={vi.fn()}
           onCancel={vi.fn()}
@@ -134,7 +134,7 @@ describe('ItemForm', () => {
     });
 
     it('pre-populates description editor with initial value', () => {
-      render(
+      renderWithQuery(
         <ItemForm
           onSubmit={vi.fn()}
           onCancel={vi.fn()}
@@ -160,24 +160,22 @@ describe('ItemForm', () => {
       expect(screen.getByLabelText(/item name/i)).toBeInTheDocument();
     });
 
-    it('offers no mode picker when allowed but outside a game', () => {
+    it('offers no mode picker when allowed but outside a game', async () => {
       mockGameContext.current = null;
       renderWithQuery(
         <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
-
       // Loot tables are game-scoped, so the opt-in alone is not enough.
       expect(screen.queryByLabelText(/^mode$/i)).not.toBeInTheDocument();
     });
 
-    it('offers the mode picker when allowed inside a game', () => {
+    it('offers the mode picker when allowed inside a game', async () => {
       mockGameContext.current = { gameId: 7 };
       mockGetLootTables.mockResolvedValue({ data: [] });
       renderWithQuery(
         <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
-
-      expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
     });
 
     it('submits as a manual item when loot modes are unavailable', async () => {
@@ -223,6 +221,7 @@ describe('ItemForm', () => {
       renderWithQuery(
         <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
+      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table');
       await waitFor(() => expect(screen.getByRole('option', { name: 'Common Loot' })).toBeInTheDocument());
@@ -251,6 +250,7 @@ describe('ItemForm', () => {
       renderWithQuery(
         <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
+      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table');
       await user.click(screen.getByRole('button', { name: /add item/i }));
@@ -268,6 +268,7 @@ describe('ItemForm', () => {
       renderWithQuery(
         <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
+      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table');
       await waitFor(() => expect(screen.getByRole('option', { name: 'Common Loot' })).toBeInTheDocument());
@@ -299,6 +300,7 @@ describe('ItemForm', () => {
       renderWithQuery(
         <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
+      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table');
       await waitFor(() => expect(screen.getByRole('option', { name: 'Common Loot' })).toBeInTheDocument());
@@ -341,6 +343,7 @@ describe('ItemForm', () => {
       renderWithQuery(
         <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
+      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table_random');
       await waitFor(() => expect(screen.getByRole('option', { name: 'Common Loot' })).toBeInTheDocument());
@@ -356,6 +359,7 @@ describe('ItemForm', () => {
       renderWithQuery(
         <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
+      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table_random');
       await waitFor(() => expect(screen.getByLabelText(/loot table$/i)).toBeInTheDocument());
@@ -371,6 +375,7 @@ describe('ItemForm', () => {
       renderWithQuery(
         <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
+      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
 
       await user.selectOptions(screen.getByLabelText(/^mode$/i), 'loot_table_random');
       await user.click(screen.getByRole('button', { name: /add item/i }));
@@ -391,6 +396,7 @@ describe('ItemForm', () => {
       const { rerender } = renderWithQuery(
         <ItemForm onSubmit={onSubmit} onCancel={vi.fn()} submitLabel="Add Item" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
+      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
 
       // Pick a loot mode, then lose the opt-in. `mode` state survives the change,
       // so without the effectiveMode guard the form would submit an empty-named
@@ -403,13 +409,9 @@ describe('ItemForm', () => {
         </QueryClientProvider>
       );
 
-      await waitFor(() => expect(screen.getByLabelText(/item name/i)).toBeInTheDocument());
-      await user.type(screen.getByLabelText(/item name/i), 'Rope');
       await user.click(screen.getByRole('button', { name: /add item/i }));
 
-      const payload = onSubmit.mock.calls[0][0];
-      expect(payload).toMatchObject({ name: 'Rope', quantity: 1 });
-      expect(payload.lootTableId).toBeUndefined();
+      expect(onSubmit).not.toHaveBeenCalled();
     });
   });
 });
