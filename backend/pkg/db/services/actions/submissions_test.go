@@ -591,7 +591,6 @@ func TestActionSubmissionService_GetPhaseSubmissions(t *testing.T) {
 		assert.Len(t, submissions, 3, "Should return all 3 submissions")
 	})
 
-
 	t.Run("returns empty list when no submissions exist", func(t *testing.T) {
 		emptyGame := testDB.CreateTestGame(t, int32(gm.ID), "Empty Game")
 		emptyPhase, err := phaseService.TransitionToNextPhase(context.Background(), emptyGame.ID, int32(gm.ID), core.TransitionPhaseRequest{
