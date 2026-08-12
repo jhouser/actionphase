@@ -639,3 +639,95 @@ func TestSetRandomLootForCharacterAuthorization(t *testing.T) {
 		core.AssertEqual(t, 0, len(data), "No loot should be granted on a cross-game roll")
 	})
 }
+
+// The `validate:"required"` struct tags on the loot request types are not executed
+// by anything (Bind is the only hook, and most Bind methods in this codebase return
+// a bare nil — see .claude/planning/request-validation.md). Without explicit checks
+// the API happily stores unnamed loot tables and items with empty data, and that
+// data string is what the frontend JSON.parses when granting the item.
+func TestLootTableRequestValidation(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	testDB.CleanupTables(t, "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupGameTestRouter(app, testDB)
+	fixtures := testDB.SetupFixtures(t)
+
+	accessToken, err := core.CreateTestJWTTokenForUser(app, fixtures.TestUser)
+	core.AssertNoError(t, err, "Test token creation should succeed")
+
+	base := fmt.Sprintf("/api/v1/games/%d/loot-tables", fixtures.TestGame.ID)
+
+	post := func(t *testing.T, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	rejected := []struct {
+		name string
+		body string
+	}{
+		{"blank table name", `{"name":"","items":[{"name":"x","data":"{}"}]}`},
+		{"whitespace-only table name", `{"name":"   ","items":[{"name":"x","data":"{}"}]}`},
+		{"omitted table name", `{"items":[{"name":"x","data":"{}"}]}`},
+		{"blank item name", `{"name":"T","items":[{"name":"","data":"{}"}]}`},
+		{"blank item data", `{"name":"T","items":[{"name":"x","data":""}]}`},
+		{"item data that is not JSON", `{"name":"T","items":[{"name":"x","data":"not json"}]}`},
+	}
+
+	for _, tc := range rejected {
+		t.Run("create rejects "+tc.name, func(t *testing.T) {
+			w := post(t, base, tc.body)
+			core.AssertEqual(t, http.StatusBadRequest, w.Code,
+				"should be rejected with 400, got "+w.Body.String())
+		})
+	}
+
+	t.Run("create still accepts a valid request", func(t *testing.T) {
+		w := post(t, base, `{"name":"Valid Table","items":[{"name":"Sword","data":"{\"name\":\"Sword\"}"}]}`)
+		core.AssertEqual(t, http.StatusOK, w.Code, "valid request should succeed, got "+w.Body.String())
+	})
+
+	t.Run("a table with no items is still allowed at the API layer", func(t *testing.T) {
+		// Deliberate: the roll endpoint rejects empty tables (see
+		// TestSetRandomLootForCharacterEmptyTable) and the UI blocks creating one,
+		// but a GM may legitimately save a table and fill it in later.
+		w := post(t, base, `{"name":"Empty For Now"}`)
+		core.AssertEqual(t, http.StatusOK, w.Code, "a named table with no items should be allowed")
+	})
+
+	t.Run("contents update rejects invalid items", func(t *testing.T) {
+		w := post(t, base, `{"name":"Contents Target","items":[{"name":"x","data":"{}"}]}`)
+		core.AssertEqual(t, http.StatusOK, w.Code, "setup table should be created")
+
+		var created lootTableResponse
+		err := json.NewDecoder(w.Body).Decode(&created)
+		core.AssertNoError(t, err, "Should decode created loot table response")
+
+		contentsPath := fmt.Sprintf("%s/%d/contents", base, created.ID)
+		w = post(t, contentsPath, `{"items":[{"name":"","data":"{}"}]}`)
+		core.AssertEqual(t, http.StatusBadRequest, w.Code,
+			"blank item name should be rejected, got "+w.Body.String())
+
+		// The existing contents must survive a rejected update: the handler deletes
+		// all contents before re-inserting, so a validation failure that slipped
+		// through would wipe the table.
+		req := httptest.NewRequest(http.MethodGet, contentsPath, nil)
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		var contents []lootTableContentResponse
+		err = json.NewDecoder(w.Body).Decode(&contents)
+		core.AssertNoError(t, err, "Should decode contents response")
+		core.AssertEqual(t, 1, len(contents), "Original contents should survive a rejected update")
+	})
+}
