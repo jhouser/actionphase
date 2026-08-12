@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
-import { Button, Select, Badge } from './ui';
+import { Button, Select, Badge, Alert } from './ui';
+import { usePhaseSheetDraftConflicts } from '../hooks/useConflictingSheetDrafts';
 import type { ActionWithDetails, GamePhase } from '../types/phases';
 import { CreateActionResultForm } from './CreateActionResultForm';
 import { StandaloneResultComposer } from './StandaloneResultComposer';
@@ -62,6 +63,12 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
       setShowPublishConfirm(false);
     }
   });
+
+  // Gated on the dialog being open: an ungated call fans out one draft-count request
+  // per unpublished result on every render of the actions tab, for a warning that only
+  // ever appears inside the confirmation dialog.
+  const { hasConflict: hasPhaseSheetConflict, affectedCharacterCount } =
+    usePhaseSheetDraftConflicts(gameId, displayPhaseId, showPublishConfirm);
 
   const actions = actionsData || [];
   const phases = phasesData || [];
@@ -181,9 +188,21 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
           onClose={() => setShowPublishConfirm(false)}
           title="Publish All Results?"
         >
-          <p className="text-sm text-content-secondary mb-6">
+          <p className="text-sm text-content-secondary mb-4">
             This will publish {unpublishedCount} {unpublishedCount === 1 ? 'result' : 'results'} and make {unpublishedCount === 1 ? 'it' : 'them'} visible to players. This action cannot be undone.
           </p>
+          {/* Publishing in bulk applies every conflicting result in one transaction, so
+              a clobber here is guaranteed rather than merely possible. */}
+          {hasPhaseSheetConflict && (
+            <Alert variant="danger" className="mb-4" data-testid="publish-all-sheet-conflict-warning">
+              {affectedCharacterCount === 1
+                ? 'One character has staged sheet updates on more than one of these results.'
+                : `${affectedCharacterCount} characters have staged sheet updates on more than one of these results.`}
+              {' '}Each result stores a complete snapshot of the character sheet, so
+              publishing them together will overwrite one set of changes with another.
+              Consolidate each character&apos;s sheet updates into a single result first.
+            </Alert>
+          )}
           <div className="flex justify-end space-x-3">
             <Button
               variant="ghost"

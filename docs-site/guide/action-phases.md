@@ -65,3 +65,13 @@ If you attempt to activate a new phase while draft results exist, a prompt will 
 Before publishing a result, you can prepare character sheet changes as part of that result. Click the character sheet edit button on the result card to open the **Update Character Sheet** modal.
 
 The modal lets you edit the character's Abilities and Inventory sections directly. Changes are saved as drafts and applied to the character sheet automatically when you publish the result.
+
+### Keep each character's sheet updates in ONE result per phase
+
+You can send a player several results in a single phase — for example, a first result now and a follow-up after a cliffhanger. When you do, **stage all of that character's sheet updates on exactly one of those results.**
+
+Each result stores a *complete snapshot* of the character sheet, not a list of individual changes. The editor starts from the character's currently published sheet, which does not include updates still sitting unpublished on another result. So if you add "Item A" to a draft update on the first result, then open the second result's editor and add "Item B", the second snapshot contains only Item B. Publishing both applies them in order and the second overwrites the first — Item A disappears with no error.
+
+The interface warns you when this situation arises: a warning appears on any draft result whose character already has staged sheet updates on another unpublished result, and again in the publish confirmation dialog — including the bulk "Publish All" and phase-activation dialogs. If you see it, consolidate the sheet changes into a single result before publishing.
+
+If you have already published both results, re-open the character sheet editor on a new result and re-add the missing entries by hand.

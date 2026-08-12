@@ -4,6 +4,7 @@ import { PhaseActivationDialog } from './PhaseActivationDialog';
 import { DeletePhaseDialog } from './DeletePhaseDialog';
 import { DraftPostSection } from './DraftPostSection';
 import { usePhaseActivation } from '../hooks/usePhaseActivation';
+import { usePhaseSheetDraftConflicts } from '../hooks/useConflictingSheetDrafts';
 import { MarkdownPreview } from './MarkdownPreview';
 import { Button, DateTimeInput } from './ui';
 import {
@@ -64,6 +65,16 @@ export function PhaseCard({
 
   // Use the activation hook for unpublished results logic
   const { unpublishedCount, publishAllMutation } = usePhaseActivation(
+    gameId,
+    currentPhaseId,
+    showActivateConfirm
+  );
+
+  // Detects characters whose sheet updates are split across several unpublished
+  // results, which bulk publishing would clobber. Gated on the dialog being open like
+  // usePhaseActivation above: every phase card receives the same currentPhaseId, so an
+  // ungated call repeats identical work once per phase in the game.
+  const { hasConflict: hasSheetDraftConflict } = usePhaseSheetDraftConflicts(
     gameId,
     currentPhaseId,
     showActivateConfirm
@@ -335,6 +346,7 @@ export function PhaseCard({
           nearFutureScheduled={nearFutureScheduled}
           isActivating={isActivating}
           publishAllMutation={publishAllMutation}
+          hasSheetDraftConflict={hasSheetDraftConflict}
           onActivate={onActivate}
           onClose={() => setShowActivateConfirm(false)}
         />

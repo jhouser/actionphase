@@ -1176,6 +1176,169 @@ describe('GameResultsManager', () => {
     });
   });
 
+  describe('Conflicting character sheet drafts', () => {
+    // Two unpublished results in the same phase for the SAME character. Each draft
+    // sheet update is a whole-sheet snapshot seeded from published character data,
+    // so publishing both silently overwrites the earlier one.
+    const resultA: ActionResult = {
+      ...mockUnpublishedResult,
+      id: 10,
+      character_id: 500,
+      content: 'You find Item A',
+    };
+    const resultB: ActionResult = {
+      ...mockUnpublishedResult,
+      id: 11,
+      character_id: 500,
+      content: 'You find Item B',
+    };
+    // Same phase, different character — must NOT warn.
+    const otherCharacterResult: ActionResult = {
+      ...mockUnpublishedResult,
+      id: 12,
+      character_id: 501,
+      content: 'A result for someone else',
+    };
+
+    /** Mock per-result draft counts; results absent from the map report zero drafts. */
+    const setupDraftCounts = (counts: Record<number, number>) => {
+      server.use(
+        http.get('/api/v1/games/:gameId/results/:resultId/character-updates/count', ({ params }) => {
+          const resultId = Number(params.resultId);
+          return HttpResponse.json({ count: counts[resultId] ?? 0 });
+        })
+      );
+    };
+
+    it('warns on both results when two unpublished results stage sheet updates for one character', async () => {
+      setupDefaultHandlers([resultA, resultB]);
+      setupDraftCounts({ 10: 1, 11: 1 });
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sheet-conflict-warning-10')).toBeInTheDocument();
+      });
+      expect(screen.getByTestId('sheet-conflict-warning-11')).toBeInTheDocument();
+    });
+
+    it('warns while a sibling draft count is still in flight', async () => {
+      // Regression: a pending sibling count used to read as "no conflict", so a GM who
+      // clicked straight through to Publish before the counts resolved got no warning
+      // and clobbered the sibling's snapshot. Pending must count as a possible conflict,
+      // matching how the local count is already hardened.
+      setupDefaultHandlers([resultA, resultB]);
+      server.use(
+        http.get(
+          '/api/v1/games/:gameId/results/:resultId/character-updates/count',
+          async ({ params }) => {
+            // Result 10 resolves; its sibling 11 never does.
+            if (Number(params.resultId) === 11) {
+              await new Promise(() => {});
+            }
+            return HttpResponse.json({ count: 1 });
+          }
+        )
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sheet-conflict-warning-10')).toBeInTheDocument();
+      });
+    });
+
+    it('does not warn when only one result has staged sheet updates', async () => {
+      setupDefaultHandlers([resultA, resultB]);
+      setupDraftCounts({ 10: 2 });
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      // Wait on the draft-count badge, not the result content: content renders before
+      // the count queries resolve, and an absence assertion passes on the first tick.
+      // The badge only appears once a count has actually settled.
+      await waitFor(() => {
+        expect(screen.getByTestId('draft-update-count-10')).toHaveTextContent('2');
+      });
+
+      expect(screen.queryByTestId('sheet-conflict-warning-10')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('sheet-conflict-warning-11')).not.toBeInTheDocument();
+    });
+
+    it('warns only on the result that has staged updates, not its empty sibling', async () => {
+      // Result 11 has no staged updates, so it can neither overwrite nor be
+      // overwritten — warning there would be noise.
+      setupDefaultHandlers([resultA, resultB]);
+      setupDraftCounts({ 10: 1 });
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      // Result 10's badge proves the counts resolved; only then is 11's lack of a
+      // warning meaningful rather than merely early.
+      await waitFor(() => {
+        expect(screen.getByTestId('draft-update-count-10')).toHaveTextContent('1');
+      });
+
+      expect(screen.queryByTestId('sheet-conflict-warning-11')).not.toBeInTheDocument();
+    });
+
+    it('does not warn when the staged updates target different characters', async () => {
+      setupDefaultHandlers([resultA, otherCharacterResult]);
+      setupDraftCounts({ 10: 1, 12: 1 });
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      // Both counts must have settled before absence proves anything.
+      await waitFor(() => {
+        expect(screen.getByTestId('draft-update-count-10')).toHaveTextContent('1');
+        expect(screen.getByTestId('draft-update-count-12')).toHaveTextContent('1');
+      });
+
+      expect(screen.queryByTestId('sheet-conflict-warning-10')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('sheet-conflict-warning-12')).not.toBeInTheDocument();
+    });
+
+    it('does not warn when the sibling result is already published', async () => {
+      // A published result's drafts have already been applied and deleted, so it
+      // can no longer clobber anything.
+      const publishedSibling: ActionResult = { ...resultB, is_published: true };
+      setupDefaultHandlers([resultA, publishedSibling]);
+      setupDraftCounts({ 10: 1, 11: 1 });
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('draft-update-count-10')).toHaveTextContent('1');
+      });
+
+      expect(screen.queryByTestId('sheet-conflict-warning-10')).not.toBeInTheDocument();
+    });
+
+    it('surfaces the conflict in the publish confirmation dialog', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers([resultA, resultB]);
+      setupDraftCounts({ 10: 1, 11: 1 });
+      server.use(
+        http.get('/api/v1/games/:gameId/results/:resultId/character-updates', () =>
+          HttpResponse.json([])
+        )
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sheet-conflict-warning-10')).toBeInTheDocument();
+      });
+
+      const publishButtons = await screen.findAllByRole('button', { name: /publish result/i });
+      await user.click(publishButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('publish-sheet-conflict-warning')).toBeInTheDocument();
+      });
+    });
+  });
+
   describe('Integration', () => {
     it('handles complete edit workflow', async () => {
       const user = userEvent.setup();

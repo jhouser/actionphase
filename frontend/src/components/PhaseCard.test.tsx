@@ -16,6 +16,11 @@ vi.mock('./DraftPostSection', () => ({
   DraftPostSection: () => null,
 }));
 
+// Also API-backed; PhaseActivationDialog.test.tsx covers the conflict warning itself.
+vi.mock('../hooks/useConflictingSheetDrafts', () => ({
+  usePhaseSheetDraftConflicts: () => ({ affectedCharacterCount: 0, hasConflict: false }),
+}));
+
 const basePhase: GamePhase = {
   id: 1,
   game_id: 100,

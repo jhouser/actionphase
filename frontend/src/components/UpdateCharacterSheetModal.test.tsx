@@ -255,6 +255,335 @@ describe('UpdateCharacterSheetModal', () => {
     });
   });
 
+  describe('Redundant staged updates', () => {
+    /** Records which draft rows get created vs deleted during a test. */
+    function trackDraftWrites() {
+      const created: string[] = [];
+      const deleted: number[] = [];
+      server.use(
+        http.post(
+          'http://localhost:3000/api/v1/games/:gameId/results/:resultId/character-updates',
+          async ({ request }) => {
+            const body = (await request.json()) as { module_type: string; field_value: string };
+            created.push(body.field_value);
+            return HttpResponse.json({ id: 101, ...body });
+          },
+        ),
+        http.delete(
+          'http://localhost:3000/api/v1/games/:gameId/results/:resultId/character-updates/:draftId',
+          ({ params }) => {
+            deleted.push(Number(params.draftId));
+            return new HttpResponse(null, { status: 204 });
+          },
+        ),
+      );
+      return { created, deleted };
+    }
+
+    it('deletes the staged row when an edit lands back on the published sheet', async () => {
+      // Published inventory holds the Healing Potion; a draft row currently stages an
+      // extra Magic Sword. Removing the sword returns the sheet to published state, so
+      // the row should be deleted rather than re-saved as a no-op.
+      setupHandlers({
+        characterData: CHAR_DATA_ITEMS,
+        drafts: [{ ...DRAFT_ITEMS[0], field_value: JSON.stringify([ITEM, ITEM_DRAFT]) }],
+      });
+      const { created, deleted } = trackDraftWrites();
+
+      renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} />);
+      await waitForLoaded();
+
+      fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
+      expect(await screen.findByText('Magic Sword')).toBeInTheDocument();
+
+      // Remove the staged item, returning the list to exactly the published contents.
+      const removeButtons = screen.getAllByRole('button', { name: '🗑' });
+      fireEvent.click(removeButtons[removeButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(deleted).toEqual([100]);
+      }, { timeout: 3000 });
+      expect(created).toHaveLength(0);
+    });
+
+    it('still stages a genuine removal of a pre-existing item', async () => {
+      // Removing an item the character actually has is a real update — it must be
+      // staged, not treated as a no-op.
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: [] });
+      const { created, deleted } = trackDraftWrites();
+
+      renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} />);
+      await waitForLoaded();
+
+      fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
+      expect(await screen.findByText('Healing Potion')).toBeInTheDocument();
+
+      const removeButtons = screen.getAllByRole('button', { name: '🗑' });
+      fireEvent.click(removeButtons[removeButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(created).toEqual(['[]']);
+      }, { timeout: 3000 });
+      expect(deleted).toHaveLength(0);
+    });
+  });
+
+  describe('Per-field debouncing', () => {
+    /** Records the (module_type, field_name) of every draft row written. */
+    function trackCreatedRows() {
+      const rows: string[] = [];
+      server.use(
+        http.post(
+          'http://localhost:3000/api/v1/games/:gameId/results/:resultId/character-updates',
+          async ({ request }) => {
+            const body = (await request.json()) as { module_type: string; field_name: string };
+            rows.push(`${body.module_type}:${body.field_name}`);
+            return HttpResponse.json({ id: 101, ...body });
+          },
+        ),
+      );
+      return rows;
+    }
+
+    it('saves both modules when two sections are edited inside one debounce window', async () => {
+      // Regression: the editor used to share ONE timer and ONE pending-args ref across
+      // every field. Editing abilities and then inventory within the 800ms window
+      // cancelled the abilities timer and overwrote its args, so that edit was silently
+      // dropped — the GM saw "Saved" and lost the change. Drafts are stored one row per
+      // (module_type, field_name), so the two edits target different rows and both must
+      // survive.
+      setupHandlers({
+        characterData: [...CHAR_DATA_ABILITIES, ...CHAR_DATA_ITEMS],
+        drafts: null,
+      });
+      const rows = trackCreatedRows();
+
+      renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} />);
+      await waitForLoaded();
+
+      // Edit abilities, then immediately switch tabs and edit inventory. No waiting
+      // between them: both edits land inside the same debounce window, which is the
+      // condition that used to drop the first one.
+      fireEvent.click(screen.getByRole('button', { name: 'Remove ability' }));
+
+      fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
+      expect(await screen.findByText('Healing Potion')).toBeInTheDocument();
+      const removeItemButtons = screen.getAllByRole('button', { name: '🗑' });
+      fireEvent.click(removeItemButtons[removeItemButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(rows).toHaveLength(2);
+      }, { timeout: 3000 });
+
+      // Both rows written, regardless of the order the timers fired in.
+      expect([...rows].sort()).toEqual(['abilities:abilities', 'inventory:items']);
+    });
+
+    it('collapses repeated edits to one field into a single save', async () => {
+      // The per-field split must not cost us the debounce itself: three rapid edits to
+      // the same module are still one row and should produce one write, not three.
+      // Three items, so three successive removals are three edits to one field.
+      setupHandlers({
+        characterData: [
+          {
+            ...CHAR_DATA_ITEMS[0],
+            field_value: JSON.stringify([
+              ITEM,
+              { id: 'item-3', name: 'Rope', quantity: 1 },
+              { id: 'item-4', name: 'Torch', quantity: 1 },
+            ]),
+          },
+        ],
+        drafts: null,
+      });
+      const rows = trackCreatedRows();
+
+      renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} />);
+      await waitForLoaded();
+
+      fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
+      expect(await screen.findByText('Healing Potion')).toBeInTheDocument();
+
+      // Remove all three in quick succession — one field, one row, one write.
+      fireEvent.click(screen.getAllByRole('button', { name: '🗑' })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: '🗑' })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: '🗑' })[0]);
+
+      await waitFor(() => {
+        expect(rows).toEqual(['inventory:items']);
+      }, { timeout: 3000 });
+    });
+
+    it('flushes a pending edit from every module when the modal is closed', async () => {
+      // handleClose flushes the debounce buffers. With per-field maps that means
+      // flushing ALL of them — a loop that fired only one would resurrect the original
+      // data-loss bug at the moment the GM clicks Done.
+      setupHandlers({
+        characterData: [...CHAR_DATA_ABILITIES, ...CHAR_DATA_ITEMS],
+        drafts: null,
+      });
+      const rows = trackCreatedRows();
+      const onClose = vi.fn();
+
+      renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />);
+      await waitForLoaded();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove ability' }));
+
+      fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
+      expect(await screen.findByText('Healing Potion')).toBeInTheDocument();
+      const removeItemButtons = screen.getAllByRole('button', { name: '🗑' });
+      fireEvent.click(removeItemButtons[removeItemButtons.length - 1]);
+
+      // Close while both edits are still inside the debounce window.
+      fireEvent.click(screen.getByRole('button', { name: /done/i }));
+
+      expect(onClose).toHaveBeenCalled();
+      await waitFor(() => {
+        expect([...rows].sort()).toEqual(['abilities:abilities', 'inventory:items']);
+      }, { timeout: 3000 });
+    });
+  });
+
+  describe('Discarding staged updates', () => {
+    it('offers no discard action when nothing is staged', async () => {
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: [] });
+
+      renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} />);
+      await waitForLoaded();
+
+      expect(screen.queryByTestId('discard-sheet-drafts')).not.toBeInTheDocument();
+    });
+
+    it('deletes every staged draft row and reverts the editor to published data', async () => {
+      // The staged draft replaces the published Healing Potion with a Magic Sword.
+      // Discarding must delete the row AND restore the published item in the editor.
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: DRAFT_ITEMS });
+      const deleted: number[] = [];
+      server.use(
+        http.delete(
+          'http://localhost:3000/api/v1/games/:gameId/results/:resultId/character-updates/:draftId',
+          ({ params }) => {
+            deleted.push(Number(params.draftId));
+            return new HttpResponse(null, { status: 204 });
+          },
+        ),
+      );
+
+      renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} />);
+      await waitForLoaded();
+
+      fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
+      expect(await screen.findByText('Magic Sword')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('discard-sheet-drafts'));
+      fireEvent.click(screen.getByTestId('confirm-discard-sheet-drafts'));
+
+      await waitFor(() => {
+        expect(deleted).toEqual([100]);
+      });
+
+      // Editor now shows the published sheet, not the discarded draft.
+      await waitFor(() => {
+        expect(screen.getByText('Healing Potion')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Magic Sword')).not.toBeInTheDocument();
+    });
+
+    it('keeps the staged updates when the confirmation is dismissed', async () => {
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: DRAFT_ITEMS });
+      let deleteCalled = false;
+      server.use(
+        http.delete(
+          'http://localhost:3000/api/v1/games/:gameId/results/:resultId/character-updates/:draftId',
+          () => {
+            deleteCalled = true;
+            return new HttpResponse(null, { status: 204 });
+          },
+        ),
+      );
+
+      renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} />);
+      await waitForLoaded();
+
+      fireEvent.click(screen.getByTestId('discard-sheet-drafts'));
+      fireEvent.click(screen.getByRole('button', { name: /^keep$/i }));
+
+      expect(deleteCalled).toBe(false);
+      expect(screen.getByTestId('discard-sheet-drafts')).toBeInTheDocument();
+    });
+
+    it('surfaces an error and keeps drafts when the delete fails', async () => {
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: DRAFT_ITEMS });
+      server.use(
+        http.delete(
+          'http://localhost:3000/api/v1/games/:gameId/results/:resultId/character-updates/:draftId',
+          () => new HttpResponse(null, { status: 500 }),
+        ),
+      );
+
+      renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} />);
+      await waitForLoaded();
+
+      fireEvent.click(screen.getByTestId('discard-sheet-drafts'));
+      fireEvent.click(screen.getByTestId('confirm-discard-sheet-drafts'));
+
+      expect(
+        await screen.findByText(/may not have been discarded/i)
+      ).toBeInTheDocument();
+    });
+
+    it('re-seeds the editor from surviving rows when a delete fails partway through', async () => {
+      // Regression: deletes run sequentially, so a mid-loop failure leaves rows behind.
+      // handleDiscard used to return before re-seeding and left initialized.current set,
+      // so the refetch onSettled triggered could not correct the editor either — it kept
+      // showing the discarded values while the row still existed server-side, and the
+      // next edit would write a snapshot built on that phantom state.
+      //
+      // The refetched row differs from the seeded one so that only a genuine re-seed can
+      // produce it: asserting on the originally-seeded value would pass either way.
+      const SURVIVING_ITEM = { ...ITEM_DRAFT, name: 'Surviving Sword' };
+      let fetchCount = 0;
+      server.use(
+        http.get('http://localhost:3000/api/v1/characters/:id/data', () =>
+          HttpResponse.json(CHAR_DATA_ITEMS),
+        ),
+        http.get(
+          'http://localhost:3000/api/v1/games/:gameId/results/:resultId/character-updates',
+          () => {
+            // First read seeds the editor; the read after the failed discard reports
+            // what actually survived server-side.
+            fetchCount += 1;
+            const value = fetchCount === 1 ? [ITEM_DRAFT] : [SURVIVING_ITEM];
+            return HttpResponse.json([
+              { ...DRAFT_ITEMS[0], field_value: JSON.stringify(value) },
+            ]);
+          },
+        ),
+        http.delete(
+          'http://localhost:3000/api/v1/games/:gameId/results/:resultId/character-updates/:draftId',
+          () => new HttpResponse(null, { status: 500 }),
+        ),
+      );
+
+      renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} />);
+      await waitForLoaded();
+
+      fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
+      expect(await screen.findByText('Magic Sword')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('discard-sheet-drafts'));
+      fireEvent.click(screen.getByTestId('confirm-discard-sheet-drafts'));
+
+      await screen.findByText(/may not have been discarded/i);
+
+      // The row survived, so the editor must show what is actually staged — neither the
+      // pre-discard snapshot nor the published sheet it failed to revert to.
+      expect(await screen.findByText('Surviving Sword')).toBeInTheDocument();
+      expect(screen.queryByText('Healing Potion')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Done button', () => {
     it('calls onClose when Done is clicked', async () => {
       const onClose = vi.fn();

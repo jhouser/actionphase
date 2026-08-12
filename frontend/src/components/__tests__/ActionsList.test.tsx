@@ -1017,6 +1017,117 @@ describe('ActionsList', () => {
       });
     });
 
+    // Minimal ActionResult shape for the results endpoint; only the fields the
+    // conflict detector reads (id, character_id, user_id, phase_id, is_published)
+    // matter here.
+    const baseResult = {
+      game_id: 1,
+      user_id: 100,
+      phase_id: 1,
+      gm_user_id: 1,
+      content: 'A result',
+      sent_at: '2025-01-15T10:00:00Z',
+    };
+
+    it('warns in the confirm dialog when one character has updates on several results', async () => {
+      // Two unpublished results for character 500, both staging sheet updates:
+      // publishing them together applies one snapshot over the other.
+      const user = userEvent.setup();
+      setupDefaultHandlers(mockActions, [mockActionPhase1], 2);
+      server.use(
+        http.get('/api/v1/games/:gameId/results', () =>
+          HttpResponse.json([
+            { ...baseResult, id: 20, character_id: 500, is_published: false },
+            { ...baseResult, id: 21, character_id: 500, is_published: false },
+          ])
+        ),
+        http.get('/api/v1/games/:gameId/results/:resultId/character-updates/count', () =>
+          HttpResponse.json({ count: 1 })
+        )
+      );
+
+      renderWithProviders(
+        <ActionsList gameId={1} currentPhase={mockActionPhase1} />,
+        { gameId: 1 }
+      );
+
+      const publishButton = await screen.findByRole('button', {
+        name: /Publish All Results/i,
+      });
+      await user.click(publishButton);
+
+      expect(
+        await screen.findByTestId('publish-all-sheet-conflict-warning')
+      ).toBeInTheDocument();
+    });
+
+    it('warns while the draft counts are still in flight', async () => {
+      // Regression: the phase-wide hook used to read a pending count as "no drafts", so
+      // a GM who opened Publish All before the counts resolved saw no warning — on the
+      // very path where the clobber is guaranteed, since bulk publish applies every
+      // conflicting result in one transaction. Pending must count as possibly-staged,
+      // matching the per-result hook.
+      const user = userEvent.setup();
+      setupDefaultHandlers(mockActions, [mockActionPhase1], 2);
+      server.use(
+        http.get('/api/v1/games/:gameId/results', () =>
+          HttpResponse.json([
+            { ...baseResult, id: 20, character_id: 500, is_published: false },
+            { ...baseResult, id: 21, character_id: 500, is_published: false },
+          ])
+        ),
+        http.get('/api/v1/games/:gameId/results/:resultId/character-updates/count', async () => {
+          await new Promise(() => {}); // never resolves
+          return HttpResponse.json({ count: 1 });
+        })
+      );
+
+      renderWithProviders(
+        <ActionsList gameId={1} currentPhase={mockActionPhase1} />,
+        { gameId: 1 }
+      );
+
+      const publishButton = await screen.findByRole('button', {
+        name: /Publish All Results/i,
+      });
+      await user.click(publishButton);
+
+      expect(
+        await screen.findByTestId('publish-all-sheet-conflict-warning')
+      ).toBeInTheDocument();
+    });
+
+    it('shows no conflict warning when each character has updates on one result', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers(mockActions, [mockActionPhase1], 2);
+      server.use(
+        http.get('/api/v1/games/:gameId/results', () =>
+          HttpResponse.json([
+            { ...baseResult, id: 20, character_id: 500, is_published: false },
+            { ...baseResult, id: 21, character_id: 501, is_published: false },
+          ])
+        ),
+        http.get('/api/v1/games/:gameId/results/:resultId/character-updates/count', () =>
+          HttpResponse.json({ count: 1 })
+        )
+      );
+
+      renderWithProviders(
+        <ActionsList gameId={1} currentPhase={mockActionPhase1} />,
+        { gameId: 1 }
+      );
+
+      const publishButton = await screen.findByRole('button', {
+        name: /Publish All Results/i,
+      });
+      await user.click(publishButton);
+
+      expect(await screen.findByText(/Publish All Results\?/i)).toBeInTheDocument();
+      expect(
+        screen.queryByTestId('publish-all-sheet-conflict-warning')
+      ).not.toBeInTheDocument();
+    });
+
     it('shows loading state while publishing', async () => {
       const user = userEvent.setup();
       let resolvePublish: () => void;
