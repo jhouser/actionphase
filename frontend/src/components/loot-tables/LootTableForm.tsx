@@ -81,14 +81,14 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
   const [isAddingContent, setIsAddingContent] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
-  // A table with no name is unidentifiable in the picker, and one with no items
-  // cannot be rolled on (the API rejects it), so block both here with an
-  // explanation rather than letting the GM save something unusable.
-  const validationError = !formData.name.trim()
-    ? 'Give the loot table a name.'
-    : (formData.items?.length ?? 0) === 0
-      ? 'Add at least one item — an empty loot table cannot be rolled on.'
-      : null;
+  // A table with no name is unidentifiable in the picker, so that stays blocked.
+  //
+  // Empty tables are allowed on purpose: GMs build a table before they have
+  // decided its contents, and importing a CSV into a saved table is a normal
+  // flow. Rolling on an empty table is already handled in depth — the API
+  // returns 400 and InventoryManager surfaces that as an error toast — so
+  // blocking creation here only got in the way of authoring.
+  const validationError = !formData.name.trim() ? 'Give the loot table a name.' : null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

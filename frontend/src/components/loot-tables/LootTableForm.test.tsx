@@ -52,10 +52,11 @@ describe('LootTableForm validation', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  // Regression: an empty loot table could be saved, and rolling on it made the
-  // backend panic on rand.Intn(0). The API now rejects it with a 400; the form
-  // should stop the GM from creating one in the first place.
-  it('blocks submission when the table is named but has no items', () => {
+  // Empty tables are allowed by design: GMs create a table before deciding its
+  // contents, and importing a CSV into a saved table is a normal flow. Rolling
+  // on an empty table is defended separately (API 400 -> error toast), so the
+  // form must not block authoring one.
+  it('allows submission when the table is named but has no items', () => {
     const { onSubmit } = renderForm();
 
     fireEvent.change(screen.getByLabelText(/table name/i), {
@@ -63,12 +64,14 @@ describe('LootTableForm validation', () => {
     });
 
     expect(
-      screen.getByText(/add at least one item — an empty loot table cannot be rolled on/i)
-    ).toBeInTheDocument();
-    expect(submitButton()).toBeDisabled();
+      screen.queryByText(/an empty loot table cannot be rolled on/i)
+    ).not.toBeInTheDocument();
+    expect(submitButton()).toBeEnabled();
 
     fireEvent.click(submitButton());
-    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Treasure Chest' })
+    );
   });
 
   it('enables submission once the table has a name and an item', async () => {
@@ -163,8 +166,11 @@ describe('LootTableForm CSV import', () => {
     await importCsv('name,quantity\nIron Sword,1\n');
 
     expect(screen.getByText(/needs a "name" column/i)).toBeInTheDocument();
-    // The existing (empty) item list must be left alone on a failed import.
-    expect(submitButton()).toBeDisabled();
+    // The existing item list must be left alone on a failed import. Assert on
+    // the list itself rather than the submit button — an empty table is now a
+    // legitimate thing to save, so the button stays enabled either way. Each
+    // item renders a "Remove <name>" control, so none means nothing imported.
+    expect(screen.queryByRole('button', { name: /^remove /i })).not.toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { InventoryManager } from '../InventoryManager';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { useOptionalGameContext } from '@/contexts/GameContext';
@@ -27,9 +28,11 @@ vi.mock('@/lib/api', () => ({
 // directly. `allowLootModes` is surfaced as text so we can assert on it.
 vi.mock('../AddItemModal', () => ({
   AddItemModal: ({
+    onAdd,
     onAddRandom,
     allowLootModes,
   }: {
+    onAdd: (item: { name: string; quantity: number }) => void;
     onAddRandom: (lootTableId: number) => void;
     allowLootModes?: boolean;
   }) => (
@@ -37,6 +40,9 @@ vi.mock('../AddItemModal', () => ({
       <span data-testid="loot-modes-allowed">{String(!!allowLootModes)}</span>
       <button data-testid="roll-loot" onClick={() => onAddRandom(7)}>
         Roll
+      </button>
+      <button data-testid="add-manual" onClick={() => onAdd({ name: 'Manual Item', quantity: 2 })}>
+        Add
       </button>
     </div>
   ),
@@ -76,10 +82,15 @@ const renderWithoutGame = () => {
   return renderInventory();
 };
 
+// userEvent rather than a raw .click(): a bare DOM click dispatches outside
+// React's act() scope, so the resulting state update warns and — worse — may be
+// asserted on before it flushes.
 const openAddItem = async () => {
-  screen.getByRole('button', { name: /^add item$/i }).click();
+  await userEvent.click(screen.getByRole('button', { name: /^add item$/i }));
   return screen.findByTestId('add-item-modal');
 };
+
+const clickTestId = (testId: string) => userEvent.click(screen.getByTestId(testId));
 
 describe('InventoryManager loot rolls', () => {
   beforeEach(() => {
@@ -112,7 +123,7 @@ describe('InventoryManager loot rolls', () => {
 
     const { onItemsChange } = renderWithGame();
     await openAddItem();
-    screen.getByTestId('roll-loot').click();
+    await clickTestId('roll-loot');
 
     await waitFor(() => expect(onItemsChange).toHaveBeenCalledTimes(1));
     const [items, reloadOnly] = onItemsChange.mock.calls[0];
@@ -133,7 +144,7 @@ describe('InventoryManager loot rolls', () => {
 
     const { onItemsChange } = renderWithGame();
     await openAddItem();
-    screen.getByTestId('roll-loot').click();
+    await clickTestId('roll-loot');
 
     expect(await screen.findByText(/loot table is empty/i)).toBeInTheDocument();
     expect(onItemsChange).not.toHaveBeenCalled();
@@ -146,9 +157,87 @@ describe('InventoryManager loot rolls', () => {
 
     const { onItemsChange } = renderWithGame();
     await openAddItem();
-    screen.getByTestId('roll-loot').click();
+    await clickTestId('roll-loot');
 
     expect(await screen.findByText(/malformed/i)).toBeInTheDocument();
     expect(onItemsChange).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a generic message when the error carries no server text', async () => {
+    vi.mocked(apiClient.games.giveRandomLootTableContent).mockRejectedValue(
+      new Error('Network down')
+    );
+
+    renderWithGame();
+    await openAddItem();
+    await clickTestId('roll-loot');
+
+    // A network failure has no response body to quote, so the user still needs
+    // something actionable rather than a blank toast.
+    expect(await screen.findByText(/failed to roll/i)).toBeInTheDocument();
+  });
+
+  it('keeps the modal open when a roll fails so the GM can retry', async () => {
+    vi.mocked(apiClient.games.giveRandomLootTableContent).mockRejectedValue({
+      response: { data: { error: 'loot table is empty' } },
+    });
+
+    renderWithGame();
+    await openAddItem();
+    await clickTestId('roll-loot');
+
+    await screen.findByText(/loot table is empty/i);
+    // Only a successful roll dismisses the modal; closing it on failure would
+    // discard the GM's table choice.
+    expect(screen.getByTestId('add-item-modal')).toBeInTheDocument();
+  });
+
+  it('closes the modal after a successful roll', async () => {
+    vi.mocked(apiClient.games.giveRandomLootTableContent).mockResolvedValue({
+      data: { id: 1, name: 'Gold Ring', data: '{"name":"Gold Ring","quantity":1}' },
+    } as Awaited<ReturnType<typeof apiClient.games.giveRandomLootTableContent>>);
+
+    renderWithGame();
+    await openAddItem();
+    await clickTestId('roll-loot');
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('add-item-modal')).not.toBeInTheDocument()
+    );
+  });
+
+  it('adds a manual item locally without reloading', async () => {
+    const { onItemsChange } = renderWithGame();
+    await openAddItem();
+    await clickTestId('add-manual');
+
+    await waitFor(() => expect(onItemsChange).toHaveBeenCalledTimes(1));
+    const [items, reloadOnly] = onItemsChange.mock.calls[0];
+    expect(items[0]).toMatchObject({ name: 'Manual Item', quantity: 2 });
+    expect(items[0].id).toEqual(expect.any(String));
+    // Unlike a roll, nothing was persisted server-side, so the caller keeps its
+    // own state rather than refetching.
+    expect(reloadOnly).toBe(false);
+    expect(screen.queryByTestId('add-item-modal')).not.toBeInTheDocument();
+  });
+
+  it('hides the add control from viewers who cannot edit', () => {
+    vi.mocked(useOptionalGameContext).mockReturnValue({
+      gameId: 42,
+    } as ReturnType<typeof useOptionalGameContext>);
+    render(
+      <ToastProvider>
+        <InventoryManager
+          characterId={5}
+          items={[]}
+          currency={[]}
+          canEdit={false}
+          onItemsChange={vi.fn()}
+          onCurrencyChange={vi.fn()}
+        />
+      </ToastProvider>
+    );
+
+    expect(screen.queryByRole('button', { name: /^add item$/i })).not.toBeInTheDocument();
   });
 });
