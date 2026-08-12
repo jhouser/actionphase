@@ -26,9 +26,12 @@ func (h *Handler) GetGameLootTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//only the presence of the parameter is checked, it can be any value
+	excludeEmpty := r.URL.Query().Has("exclude-empty")
+
 	gameService := h.GameService
 
-	lootTables, err := gameService.GetGameLootTables(ctx, int32(gameID))
+	lootTables, err := gameService.GetGameLootTables(ctx, int32(gameID), excludeEmpty)
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get game loot tables", "error", err, "game_id", gameID)
 		return

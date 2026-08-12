@@ -238,8 +238,8 @@ export class GamesApi extends BaseApiClient {
     return this.client.get<GameLog[]>(`/api/v1/games/${id}/logs`);
   }
 
-  async getLootTables(gameId: number) {
-    return this.client.get<LootTable[]>(`/api/v1/games/${gameId}/loot-tables`);
+  async getLootTables(gameId: number, excludeEmpty: boolean = false) {
+    return this.client.get<LootTable[]>(`/api/v1/games/${gameId}/loot-tables${(excludeEmpty ? '?exclude-empty=true': '')}`);
   }
 
   async createLootTable(gameId: number, data: CreateLootTableRequest) {

@@ -290,7 +290,7 @@ type GameServiceInterface interface {
 	AddGameLog(ctx context.Context, arg models.CreateLogParams) (models.GameLog, error)
 
 	// GetGameLootTables retrieves all loot tables belonging to a game
-	GetGameLootTables(ctx context.Context, gameID int32) ([]models.GameLootTable, error)
+	GetGameLootTables(ctx context.Context, gameID int32, excludeEmpty bool) ([]models.GameLootTable, error)
 
 	// IsLootTableInGame reports whether a loot table belongs to the given game.
 	// Callers MUST check this before mutating a table by ID: the underlying

@@ -78,6 +78,41 @@ func (q *Queries) GetLootTables(ctx context.Context, gameID int32) ([]GameLootTa
 	return items, nil
 }
 
+const getNonEmptyLootTables = `-- name: GetNonEmptyLootTables :many
+SELECT
+    id, game_id, name, created_at, updated_at
+FROM game_loot_tables t
+WHERE game_id = $1 AND EXISTS(SELECT id FROM game_loot_table_contents WHERE loot_table_id = t.id LIMIT 1)
+ORDER BY created_at ASC
+`
+
+// Non-empty Loot Tables query to filter out invalid tables while assigning items
+func (q *Queries) GetNonEmptyLootTables(ctx context.Context, gameID int32) ([]GameLootTable, error) {
+	rows, err := q.db.Query(ctx, getNonEmptyLootTables, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GameLootTable
+	for rows.Next() {
+		var i GameLootTable
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const isLootTableInGame = `-- name: IsLootTableInGame :one
 SELECT
     EXISTS(SELECT 1 FROM game_loot_tables WHERE game_id = $1 AND id = $2)

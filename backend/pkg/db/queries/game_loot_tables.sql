@@ -12,6 +12,14 @@ FROM game_loot_tables
 WHERE game_id = $1
 ORDER BY created_at ASC;
 
+-- Non-empty Loot Tables query to filter out invalid tables while assigning items
+-- name: GetNonEmptyLootTables :many
+SELECT
+    id, game_id, name, created_at, updated_at
+FROM game_loot_tables t
+WHERE game_id = $1 AND EXISTS(SELECT id FROM game_loot_table_contents WHERE loot_table_id = t.id LIMIT 1)
+ORDER BY created_at ASC;
+
 -- Handlers MUST call this before mutating a loot table by ID: the update and
 -- delete below are keyed on id alone, so this is what enforces game ownership.
 -- Covered by TestLootTableEndpointsRejectCrossGameAccess.

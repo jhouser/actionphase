@@ -223,6 +223,77 @@ func TestGetAndUpdateLootTableContents(t *testing.T) {
 	core.AssertEqual(t, "Magic Ring", contents[0].Name, "Updated loot contents should replace existing items")
 }
 
+func TestGetLootTablesFilterEmptyTable(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	testDB.CleanupTables(t, "character_data", "characters", "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "character_data", "characters", "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupGameTestRouter(app, testDB)
+	fixtures := testDB.SetupFixtures(t)
+
+	accessToken, err := core.CreateTestJWTTokenForUser(app, fixtures.TestUser)
+	core.AssertNoError(t, err, "Test token creation should succeed")
+
+	// Create a loot table with no items at all — the create endpoint permits this.
+	payload := map[string]any{"name": "Empty Cache"}
+	body, err := json.Marshal(payload)
+	core.AssertNoError(t, err, "Should marshal loot table request")
+
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/games/%d/loot-tables", fixtures.TestGame.ID), bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	core.AssertEqual(t, http.StatusOK, w.Code, "Should create the empty loot table")
+
+	var created lootTableResponse
+	err = json.NewDecoder(w.Body).Decode(&created)
+	core.AssertNoError(t, err, "Should decode created loot table response")
+
+	// Try to get loot tables filtering out empty tables. Should return no loot tables.
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/games/%d/loot-tables?exclude-empty=true", fixtures.TestGame.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var emptyTables []lootTableResponse
+	err = json.NewDecoder(w.Body).Decode(&emptyTables)
+	core.AssertNoError(t, err, "Should decode empty loot tables response")
+	core.AssertEqual(t, 0, len(emptyTables), "Should not return empty tables")
+
+	// Now we add one item and try the request again. It should return the previously created loot table.
+	updatePayload := map[string]any{
+		"items": []map[string]any{
+			{"name": "Magic Ring", "data": "{\"power\":\"+1\"}"},
+		},
+	}
+	body, err = json.Marshal(updatePayload)
+	core.AssertNoError(t, err, "Should marshal loot contents update request")
+
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/games/%d/loot-tables/%d/contents", fixtures.TestGame.ID, created.ID), bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	core.AssertEqual(t, http.StatusOK, w.Code, "Should update loot table contents successfully")
+
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/games/%d/loot-tables", fixtures.TestGame.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var tables []lootTableResponse
+	err = json.NewDecoder(w.Body).Decode(&tables)
+	core.AssertNoError(t, err, "Should decode loot tables response")
+	core.AssertEqual(t, 1, len(tables), "Should return one loot table")
+	core.AssertEqual(t, created.ID, tables[0].ID, "Loot table ID should match created table")
+}
+
 // Regression: rolling on a loot table with no contents used to reach
 // rand.Intn(0), which panics ("invalid argument to Intn"). The panic was caught
 // by the recovery middleware and surfaced as an opaque 500. An empty table is

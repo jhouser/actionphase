@@ -1296,8 +1296,12 @@ func (gs *GameService) AddGameLog(ctx context.Context, arg models.CreateLogParam
 }
 
 // GetGameLootTables - Get game loot tables
-func (gs *GameService) GetGameLootTables(ctx context.Context, gameID int32) ([]models.GameLootTable, error) {
+func (gs *GameService) GetGameLootTables(ctx context.Context, gameID int32, excludeEmpty bool) ([]models.GameLootTable, error) {
 	queries := models.New(gs.DB)
+	if excludeEmpty {
+		lootTables, err := queries.GetNonEmptyLootTables(ctx, gameID)
+		return lootTables, err
+	}
 	lootTables, err := queries.GetLootTables(ctx, gameID)
 	return lootTables, err
 }

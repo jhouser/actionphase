@@ -798,7 +798,11 @@ type GetPhaseResultsRow struct {
 	CharacterName      pgtype.Text        `json:"character_name"`
 }
 
-// See GetGameResults: sent_at is NULL for drafts, so it cannot order them.
+// Newest first. sent_at cannot order these: it is NULL until a result is
+// published, so drafts would all tie. Note this disagrees with GetGameResults,
+// which sorts ascending for the History tab — this query currently has no
+// callers, so there is nothing to be consistent with. Match GetGameResults if it
+// ever gets wired to a read path, or delete it.
 func (q *Queries) GetPhaseResults(ctx context.Context, phaseID int32) ([]GetPhaseResultsRow, error) {
 	rows, err := q.db.Query(ctx, getPhaseResults, phaseID)
 	if err != nil {
