@@ -19,9 +19,21 @@ interface PreviewMessage {
   characterAvatarUrl: string | null;
 }
 
+/** Same shape as PreviewMessage plus deletion state, which the parent block renders as "[deleted]". */
+interface ParentPreview extends PreviewMessage {
+  isDeleted: boolean;
+}
+
 interface CommentItemContext {
   kind: 'comment';
   previewMessage: PreviewMessage;
+  /**
+   * The message being replied to, shown collapsed above the unread item to
+   * refresh the reader's memory. Null when the unread comment is itself a
+   * top-level reply to a post that couldn't be fetched. Costs no extra network
+   * call — fetchCommentContext already walks one level up.
+   */
+  parentMessage: ParentPreview | null;
   rootPostId: number;
   controllableCharacters: Character[];
   /** Every character in the game, for the @-mention list (matches Common Room scope). */
@@ -34,6 +46,13 @@ interface CommentItemContext {
 interface PmItemContext {
   kind: 'private_message';
   previewMessage: PreviewMessage;
+  /**
+   * The message immediately preceding the unread one in the conversation.
+   * Null when the unread message opened the conversation. Costs no extra
+   * network call — fetchPmContext returns the notified message and its
+   * predecessor in a single scoped request.
+   */
+  parentMessage: ParentPreview | null;
   controllableCharacters: Character[];
   /** Characters participating in this conversation, for the @-mention list (matches MessageThread scope). */
   mentionableCharacters: Character[];
@@ -97,6 +116,17 @@ export function useUnreadItemContext(item: UnreadInboxItem, enabled: boolean) {
             characterName: comment.character_name,
             characterAvatarUrl: comment.character_avatar_url ?? null,
           },
+          parentMessage: parent
+            ? {
+                content: parent.content,
+                createdAt: parent.created_at,
+                authorUsername: parent.author_username,
+                characterId: parent.character_id,
+                characterName: parent.character_name,
+                characterAvatarUrl: parent.character_avatar_url ?? null,
+                isDeleted: parent.is_deleted,
+              }
+            : null,
           rootPostId,
           controllableCharacters,
           mentionableCharacters,
@@ -106,13 +136,20 @@ export function useUnreadItemContext(item: UnreadInboxItem, enabled: boolean) {
       }
 
       const [messages, mentionableCharacters, participantCharacterIds] = await Promise.all([
-        fetchPmContext(item.gameId, item.conversationId),
+        fetchPmContext(item.gameId, item.conversationId, item.messageId),
         fetchAllGameCharacters(item.gameId),
         fetchConversationParticipantCharacterIds(item.gameId, item.conversationId),
       ]);
-      // Prefer the specific message this notification was for; fall back to the
-      // most recent message if it can't be found (e.g. it was deleted).
-      const lastMessage = messages.find((m) => m.id === item.messageId) ?? messages[messages.length - 1];
+      // The server returns the notified message last, preceded by at most one
+      // message. If the target is missing the response is empty rather than a
+      // full thread (the query is scoped to it), so there is no meaningful
+      // fallback row — the card renders blank and messages[-1] stays undefined.
+      const messageIndex = messages.findIndex((m) => m.id === item.messageId);
+      const lastMessageIndex = messageIndex === -1 ? messages.length - 1 : messageIndex;
+      const lastMessage = messages[lastMessageIndex];
+      // The message immediately before it in the thread is the conversational
+      // context the reader most likely needs; absent when this opened the thread.
+      const precedingMessage = lastMessageIndex > 0 ? messages[lastMessageIndex - 1] : null;
       const participantSet = new Set(participantCharacterIds);
       // Matches MessageThread's participantCharacters scoping: the reply-as
       // picker only offers characters already in this conversation, not every
@@ -132,6 +169,17 @@ export function useUnreadItemContext(item: UnreadInboxItem, enabled: boolean) {
           characterName: lastMessage?.sender_character_name ?? null,
           characterAvatarUrl: lastMessage?.sender_avatar_url ?? null,
         },
+        parentMessage: precedingMessage
+          ? {
+              content: precedingMessage.content,
+              createdAt: precedingMessage.created_at,
+              authorUsername: precedingMessage.sender_username ?? null,
+              characterId: precedingMessage.sender_character_id ?? null,
+              characterName: precedingMessage.sender_character_name ?? null,
+              characterAvatarUrl: precedingMessage.sender_avatar_url ?? null,
+              isDeleted: precedingMessage.is_deleted ?? false,
+            }
+          : null,
         controllableCharacters: participantControllableCharacters,
         mentionableCharacters: mentionableCharacters.filter((c) => participantSet.has(c.id)),
         defaultCharacterId: pickDefaultCharacterId(participantControllableCharacters, preferredCharacterId),

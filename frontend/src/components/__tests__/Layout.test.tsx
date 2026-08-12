@@ -80,6 +80,24 @@ describe('Layout', () => {
       expect(screen.getByRole('button', { name: 'Logout' })).toBeInTheDocument()
     })
 
+    it('should open the user menu on click, not only on hover', async () => {
+      // The trigger used to have no onClick at all, so the menu was reachable
+      // only by hovering — unusable by keyboard and by touch on desktop widths.
+      renderLayout(<div>Content</div>, '/dashboard')
+
+      const userButton = screen.getByRole('button', { name: /testuser/i })
+      expect(screen.queryByRole('button', { name: 'Logout' })).not.toBeInTheDocument()
+      expect(userButton).toHaveAttribute('aria-expanded', 'false')
+
+      // click() alone, without userEvent's synthetic pointer movement: the
+      // wrapper still closes on mouseleave, which userEvent.click emits around
+      // the click and which would immediately undo the open in jsdom.
+      fireEvent.click(userButton)
+
+      expect(screen.getByRole('button', { name: 'Logout' })).toBeInTheDocument()
+      expect(userButton).toHaveAttribute('aria-expanded', 'true')
+    })
+
     it('should highlight active dashboard link', () => {
       renderLayout(<div>Content</div>, '/dashboard')
 

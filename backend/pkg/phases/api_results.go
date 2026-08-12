@@ -138,6 +138,14 @@ func (h *Handler) GetUserActionResults(w http.ResponseWriter, r *http.Request) {
 			resultResp.SentAt = &result.SentAt.Time
 		}
 
+		// The client resolves a character's avatar by looking this id up in the
+		// game's character list, so omitting it leaves every result showing an
+		// initials fallback instead of the portrait.
+		if result.CharacterID.Valid {
+			charID := result.CharacterID.Int32
+			resultResp.CharacterID = &charID
+		}
+
 		if result.CharacterName.Valid {
 			resultResp.CharacterName = result.CharacterName.String
 		}
@@ -185,9 +193,14 @@ func (h *Handler) GetGameActionResults(w http.ResponseWriter, r *http.Request) {
 	// Check if user is audience member
 	isAudience := core.IsUserAudience(ctx, h.App.Pool, int32(gameID), int32(authUser.ID))
 
-	// Allow access if: GM, audience, or game is completed (public archive)
+	// Allow access if: GM, audience, or the game is completed.
+	//
+	// The completed branch deliberately has no membership check — a completed game
+	// is a public archive readable by any authenticated user, matching how exports
+	// and game stats treat it. It is broader than the other two arms, which are
+	// scoped to a role: this one admits non-participants.
 	if !canManage && !isAudience && game.State.String != "completed" {
-		h.renderError(ctx, w, r, core.ErrForbidden("only the GM, audience, or participants of completed games can view all action results"), "Get game action results forbidden")
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM, audience, or any user of a completed game can view all action results"), "Get game action results forbidden")
 		return
 	}
 
@@ -198,8 +211,24 @@ func (h *Handler) GetGameActionResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to response format
-	// GMs, audience, and completed game viewers all see published and unpublished results
+	// Convert to response format.
+	//
+	// No is_published filter: every caller admitted above sees drafts as well as
+	// published results. That is deliberate for each of the three, but for
+	// different reasons, so changing one arm does not license changing another:
+	//
+	//   - GM: authors the drafts.
+	//   - Audience: a trusted spectator role that already sees every private
+	//     message and submission. Drafts are safe here because a result can only
+	//     be written against the active phase (CreateActionResult takes its phase
+	//     from GetActivePhase), so a draft is current-phase content rather than a
+	//     future reveal.
+	//   - Completed game: the archive is public, and this arm admits any
+	//     authenticated user, not just participants. Unpublished drafts the GM
+	//     never sent are therefore readable by anyone once a game completes.
+	//
+	// Contrast GetUserActionResults, which serves players and filters to
+	// is_published = true in SQL (see GetUserResults).
 	var response []ActionResultWithDetailsResponse
 	for _, result := range results {
 		resultResp := ActionResultWithDetailsResponse{

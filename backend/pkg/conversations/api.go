@@ -327,11 +327,38 @@ func (h *Handler) GetConversationMessages(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	messages, err := conversationService.GetConversationMessages(ctx, int32(conversationID), userID)
-	if err != nil {
-		h.App.Logger.Error("Failed to get conversation messages", "error", err, "conversation_id", conversationID, "user_id", userID)
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get conversation messages", "error", err)
-		return
+	// context_for=<messageID> returns just that message and the one before it,
+	// for previewing an unread message without reading the whole conversation.
+	// Omitted, the endpoint returns the full thread as before.
+	var messages []models.GetConversationMessagesRow
+	if contextForStr := r.URL.Query().Get("context_for"); contextForStr != "" {
+		contextForID, parseErr := strconv.ParseInt(contextForStr, 10, 32)
+		if parseErr != nil {
+			h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid context_for message ID")), "Invalid get conversation messages request")
+			return
+		}
+
+		messages, err = conversationService.GetMessageWithContext(ctx, int32(conversationID), int32(contextForID), userID)
+		if err != nil {
+			if errors.Is(err, core.ErrNotConversationParticipant) {
+				h.renderError(ctx, w, r, core.ErrForbidden("you don't have access to this conversation"), "Get conversation messages forbidden")
+				return
+			}
+			h.App.Logger.Error("Failed to get message context", "error", err, "conversation_id", conversationID, "message_id", contextForID, "user_id", userID)
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get conversation messages", "error", err)
+			return
+		}
+	} else {
+		messages, err = conversationService.GetConversationMessages(ctx, int32(conversationID), userID)
+		if err != nil {
+			if errors.Is(err, core.ErrNotConversationParticipant) {
+				h.renderError(ctx, w, r, core.ErrForbidden("you don't have access to this conversation"), "Get conversation messages forbidden")
+				return
+			}
+			h.App.Logger.Error("Failed to get conversation messages", "error", err, "conversation_id", conversationID, "user_id", userID)
+			h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get conversation messages", "error", err)
+			return
+		}
 	}
 
 	// Ensure we return an empty array instead of null
@@ -467,6 +494,10 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		Content:           data.Content,
 	})
 	if err != nil {
+		if errors.Is(err, core.ErrNotConversationParticipant) {
+			h.renderError(ctx, w, r, core.ErrForbidden("you don't have access to this conversation"), "Send message forbidden")
+			return
+		}
 		h.App.Logger.Error("Failed to send message", "error", err, "conversation_id", conversationID, "user_id", userID)
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to send message", "error", err)
 		return
@@ -501,6 +532,10 @@ func (h *Handler) MarkAsRead(w http.ResponseWriter, r *http.Request) {
 
 	conversationService := h.ConversationService
 	if err := conversationService.MarkConversationAsRead(ctx, int32(conversationID), userID); err != nil {
+		if errors.Is(err, core.ErrNotConversationParticipant) {
+			h.renderError(ctx, w, r, core.ErrForbidden("you don't have access to this conversation"), "Mark as read forbidden")
+			return
+		}
 		h.App.Logger.Error("Failed to mark conversation as read", "error", err, "conversation_id", conversationID, "user_id", userID)
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to mark as read", "error", err)
 		return

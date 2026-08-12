@@ -5,6 +5,7 @@ import { Button, Spinner, Alert } from './ui';
 import { MarkdownPreview } from './MarkdownPreview';
 import CharacterAvatar from './CharacterAvatar';
 import { UnreadReplyBox } from './UnreadReplyBox';
+import { ParentCommentPreview } from './ParentCommentPreview';
 import { useUnreadItemContext } from '../hooks/useUnreadItemContext';
 import { useReplyToUnread } from '../hooks/useReplyToUnread';
 import type { UnreadInboxItem } from '../types/unreadInbox';
@@ -34,12 +35,13 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
   };
 
   return (
-    <div className="border border-theme-default rounded-md">
+    <div className="border border-theme-default rounded-md" data-testid="unread-inbox-item">
       <Button
         variant="ghost"
         onClick={() => setIsExpanded((prev) => !prev)}
         className="w-full justify-start gap-3 p-3 text-left font-normal"
         aria-expanded={isExpanded}
+        data-testid="unread-inbox-item-toggle"
       >
         <span className="text-interactive-primary flex-shrink-0">
           {TYPE_ICON[item.notification.type] ?? <MessageSquare className="w-4 h-4" />}
@@ -59,7 +61,20 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
 
           {context && (
             <>
-              <div className="bg-bg-secondary rounded-lg p-3">
+              <div className="bg-bg-secondary rounded-lg p-3" data-testid="unread-inbox-item-context">
+                {context.parentMessage && (
+                  <ParentCommentPreview
+                    content={context.parentMessage.content}
+                    createdAt={context.parentMessage.createdAt}
+                    isDeleted={context.parentMessage.isDeleted}
+                    authorUsername={context.parentMessage.authorUsername}
+                    characterId={context.parentMessage.characterId}
+                    characterName={context.parentMessage.characterName}
+                    characterAvatarUrl={context.parentMessage.characterAvatarUrl}
+                    mentionedCharacters={context.mentionableCharacters}
+                    hideViewInThread
+                  />
+                )}
                 <div className="flex items-start gap-3 mb-2">
                   <CharacterAvatar
                     avatarUrl={context.previewMessage.characterAvatarUrl}

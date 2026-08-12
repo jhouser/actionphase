@@ -107,7 +107,8 @@ export function useGameTabs({
       // Actions tab - Visible during action phases to:
       // 1. GM (can see all actions and manage)
       // 2. Regular participants (can submit actions)
-      // Note: Audience members view actions via the Audience tab instead
+      // Note: Audience members view action submissions and results on the
+      // History tab, which serves every role (see HistoryView).
       if (currentPhaseType === 'action' && (isGM || isParticipant)) {
         const label = isGM ? 'Actions' : hasSubmittedAction ? 'Action Submitted ✓' : 'Submit Action';
         tabList.push({ id: 'actions', label, icon: icons.actions });
@@ -189,7 +190,11 @@ export function useGameTabs({
       } else if (currentPhaseType === 'action') {
         // Action phase - different default for GM vs players
         // GM & Players: See Actions tab first
-        // Audience: Go to Audience tab to view action submissions
+        // Audience: Go to Audience tab, which is now private messages only.
+        // Action submissions and results moved to History, so this default no
+        // longer lands a spectator on the action traffic it was chosen for.
+        // Left as-is deliberately: private messages are still a reasonable
+        // landing spot, and changing it is a UX call, not a comment fix.
         if (isAudience && tabs.some(t => t.id === 'audience')) {
           return 'audience';
         }

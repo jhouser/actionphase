@@ -1,58 +1,18 @@
-import { useState } from 'react';
 import { AllPrivateMessagesView } from './AllPrivateMessagesView';
-import { AllActionSubmissionsView } from './AllActionSubmissionsView';
 
 interface AudienceViewProps {
   gameId: number;
 }
 
-type AudienceTab = 'messages' | 'actions';
-
 /**
- * Main Audience View component with sub-tabs for different content types
+ * Audience view for private message traffic.
+ *
+ * Action submissions and results used to live here on a second sub-tab, which
+ * duplicated the History tab's phase drill-down against a different set of
+ * endpoints. They are now served from History for every role (see HistoryView),
+ * leaving this view to the one thing History does not organise by phase:
+ * private messages, which read by conversation.
  */
 export function AudienceView({ gameId }: AudienceViewProps) {
-  const [activeTab, setActiveTab] = useState<AudienceTab>('messages');
-
-  return (
-    <div className="space-y-6">
-      {/* Sub-tab Navigation */}
-      <div className="border-b border-border-primary">
-        <nav className="-mb-px flex space-x-8" aria-label="Audience View Tabs">
-          <button
-            onClick={() => setActiveTab('messages')}
-            className={`
-              whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
-              ${
-                activeTab === 'messages'
-                    ? 'border-interactive-primary text-interactive-primary'
-                    : 'border-transparent text-content-secondary hover:text-content-primary'
-              }
-            `}
-          >
-            Private Messages
-          </button>
-          <button
-            onClick={() => setActiveTab('actions')}
-            className={`
-              whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
-              ${
-                activeTab === 'actions'
-                    ? 'border-interactive-primary text-interactive-primary'
-                    : 'border-transparent text-content-secondary hover:text-content-primary'
-              }
-            `}
-          >
-            Action Submissions
-          </button>
-        </nav>
-      </div>
-
-      {/* Tab Content */}
-      <div>
-        {activeTab === 'messages' && <AllPrivateMessagesView gameId={gameId} />}
-        {activeTab === 'actions' && <AllActionSubmissionsView gameId={gameId} />}
-      </div>
-    </div>
-  );
+  return <AllPrivateMessagesView gameId={gameId} />;
 }

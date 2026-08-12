@@ -241,7 +241,7 @@ func (s *ConversationService) SendMessage(ctx context.Context, req SendMessageRe
 		return nil, fmt.Errorf("failed to check participation: %w", err)
 	}
 	if !isParticipant {
-		return nil, fmt.Errorf("user is not a participant in this conversation")
+		return nil, core.ErrNotConversationParticipant
 	}
 
 	tx, err := s.DB.Begin(ctx)
@@ -292,6 +292,25 @@ func (s *ConversationService) SendMessage(ctx context.Context, req SendMessageRe
 
 // GetConversationMessages gets all messages in a conversation
 func (s *ConversationService) GetConversationMessages(ctx context.Context, conversationID int32, userID int32) ([]models.GetConversationMessagesRow, error) {
+	return s.getConversationMessages(ctx, conversationID, userID, pgtype.Int4{})
+}
+
+// GetMessageWithContext returns a single message along with the one immediately
+// preceding it in the conversation, oldest first. Used to preview an unread
+// message with enough context to recall the thread without sending the entire
+// conversation, which GetConversationMessages does unbounded.
+//
+// A messageID belonging to another conversation matches nothing and yields no
+// rows, so this cannot be used to read a conversation the caller isn't in.
+func (s *ConversationService) GetMessageWithContext(ctx context.Context, conversationID int32, messageID int32, userID int32) ([]models.GetConversationMessagesRow, error) {
+	return s.getConversationMessages(ctx, conversationID, userID, pgtype.Int4{Int32: messageID, Valid: true})
+}
+
+// getConversationMessages backs both the full-thread and scoped-context reads.
+// They differ only in contextFor: unset returns the whole conversation, set
+// narrows to that message and its predecessor. Sharing one path keeps the
+// participant check and deleted-content masking identical for both.
+func (s *ConversationService) getConversationMessages(ctx context.Context, conversationID int32, userID int32, contextFor pgtype.Int4) ([]models.GetConversationMessagesRow, error) {
 	// Verify user is a participant
 	isParticipant, err := s.Queries.IsUserInConversation(ctx, models.IsUserInConversationParams{
 		ConversationID: conversationID,
@@ -301,10 +320,13 @@ func (s *ConversationService) GetConversationMessages(ctx context.Context, conve
 		return nil, fmt.Errorf("failed to check participation: %w", err)
 	}
 	if !isParticipant {
-		return nil, fmt.Errorf("user is not a participant in this conversation")
+		return nil, core.ErrNotConversationParticipant
 	}
 
-	messages, err := s.Queries.GetConversationMessages(ctx, conversationID)
+	messages, err := s.Queries.GetConversationMessages(ctx, models.GetConversationMessagesParams{
+		ConversationID: conversationID,
+		ContextFor:     contextFor,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get conversation messages: %w", err)
 	}
@@ -330,22 +352,19 @@ func (s *ConversationService) MarkConversationAsRead(ctx context.Context, conver
 		return fmt.Errorf("failed to check participation: %w", err)
 	}
 	if !isParticipant {
-		return fmt.Errorf("user is not a participant in this conversation")
+		return core.ErrNotConversationParticipant
 	}
 
-	// Get all messages in the conversation (ordered by created_at)
-	messages, err := s.Queries.GetConversationMessages(ctx, conversationID)
+	// Only the newest message id is needed here, so ask for exactly that rather
+	// than reading every message in the conversation and discarding all but one.
+	lastMessageID, err := s.Queries.GetLastConversationMessageID(ctx, conversationID)
 	if err != nil {
+		// No messages in the conversation, so there is nothing to mark as read.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
 		return fmt.Errorf("failed to get messages: %w", err)
 	}
-
-	// If no messages, nothing to mark as read
-	if len(messages) == 0 {
-		return nil
-	}
-
-	// Get the latest message (last in the slice since they're ordered by created_at ASC)
-	lastMessageID := messages[len(messages)-1].ID
 
 	// Mark conversation as read up to the latest message
 	_, err = s.MarkConversationRead(ctx, userID, conversationID, lastMessageID)
