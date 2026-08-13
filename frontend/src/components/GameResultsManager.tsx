@@ -316,8 +316,11 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
   return (
     <div className={`border rounded-lg overflow-hidden ${result.is_published ? 'border-semantic-success bg-semantic-success-subtle' : 'border-semantic-warning bg-semantic-warning-subtle'}`}>
       <div className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-3">
+        {/* items-start, not items-center: the left block grows tall when a part
+            carries a delay selector, and centering against it left the button
+            row floating mid-card. The buttons anchor to the top edge instead. */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-center space-x-3 min-w-0">
             <div className="flex-shrink-0">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center ${result.is_published ? 'bg-semantic-success-subtle' : 'bg-semantic-warning-subtle'}`}>
                 <svg className={`w-5 h-5 ${result.is_published ? 'text-semantic-success' : 'text-semantic-warning'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -345,7 +348,7 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
               </div>
               {isStagedPart && (
                 <div
-                  className="flex items-center space-x-2 mt-1"
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1"
                   data-testid={`staged-status-${result.id}`}
                 >
                   <Badge variant="primary">
@@ -403,8 +406,14 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
               )}
             </div>
           </div>
-          {!result.is_published && !isEditing && (
-            <div className="flex gap-2">
+          {/* One group for every button in this header, not one per condition.
+              As separate children of a justify-between row they were spread
+              apart by whatever space was left over; grouped, they sit together
+              and the only gap is the intentional one between left and right.
+              flex-wrap keeps a long row wrapping as whole buttons. */}
+          <div className="flex flex-wrap justify-end items-start gap-2 flex-shrink-0">
+            {!result.is_published && !isEditing && (
+              <>
               {/* Delete and Publish belong to the chain as a whole, so they
                   live on the head. Character-sheet updates go on the TAIL
                   instead — they apply at publish, and the reward belongs to the
@@ -422,8 +431,11 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
                   )}
                 </Button>
               )}
+              {/* secondary, not primary: Publish is the call to action on this
+                  card, and two blue buttons in one row read as two equally
+                  weighted choices. Edit is an ordinary affordance. */}
               <Button
-                variant="primary"
+                variant="secondary"
                 size="sm"
                 onClick={onStartEdit}
               >
@@ -437,7 +449,7 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
                   data-testid={`add-staged-part-${result.id}`}
                   data-faro-user-action-name="add-staged-result-part"
                 >
-                  + Add a timed follow-up
+                  + Follow-up
                 </Button>
               )}
               {showLifecycleControls && (
@@ -466,19 +478,20 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
                       : 'Publish Result'}
                 </Button>
               )}
-            </div>
-          )}
-          {isPendingPart && (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => setIsCancelPartConfirmOpen(true)}
-              disabled={cancelPartMutation.isPending}
-              data-testid={`cancel-staged-part-${result.id}`}
-            >
-              {cancelPartMutation.isPending ? 'Cancelling...' : 'Cancel This Part'}
-            </Button>
-          )}
+              </>
+            )}
+            {isPendingPart && (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setIsCancelPartConfirmOpen(true)}
+                disabled={cancelPartMutation.isPending}
+                data-testid={`cancel-staged-part-${result.id}`}
+              >
+                {cancelPartMutation.isPending ? 'Cancelling...' : 'Cancel Part'}
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* danger, not warning: the draft card is already a field of yellow (Draft
