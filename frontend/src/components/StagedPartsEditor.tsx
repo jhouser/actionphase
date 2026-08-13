@@ -108,6 +108,7 @@ export const StagedPartsEditor: React.FC<StagedPartsEditorProps> = ({
             </label>
             <CommentEditor
               id={`staged-part-content-${partNumber}`}
+              textareaTestId={`staged-part-content-${partNumber}`}
               value={part.content}
               onChange={value => updatePart(index, { content: value })}
               rows={4}

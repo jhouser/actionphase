@@ -107,6 +107,7 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
         </label>
         <CommentEditor
           id="content"
+          textareaTestId="result-content"
           value={content}
           onChange={setContent}
           rows={4}
