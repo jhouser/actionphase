@@ -107,6 +107,9 @@ type ActionResult struct {
 	Content            string             `json:"content"`
 	IsPublished        pgtype.Bool        `json:"is_published"`
 	SentAt             pgtype.Timestamptz `json:"sent_at"`
+	ParentResultID     pgtype.Int4        `json:"parent_result_id"`
+	RevealDelayMinutes pgtype.Int4        `json:"reveal_delay_minutes"`
+	ReleasedAt         pgtype.Timestamptz `json:"released_at"`
 }
 
 type ActionResultCharacterUpdate struct {

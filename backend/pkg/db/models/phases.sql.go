@@ -156,6 +156,28 @@ func (q *Queries) CountAllActionSubmissions(ctx context.Context, arg CountAllAct
 	return count, err
 }
 
+const countChainLength = `-- name: CountChainLength :one
+WITH RECURSIVE ancestors AS (
+    SELECT anchor.id, anchor.parent_result_id
+    FROM action_results anchor
+    WHERE anchor.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_result_id
+    FROM action_results p
+    JOIN ancestors a ON a.parent_result_id = p.id
+)
+SELECT COUNT(*) AS length FROM ancestors
+`
+
+// Number of parts already in the chain ending at $1, used to enforce the
+// max-chain-length invariant before appending another part.
+func (q *Queries) CountChainLength(ctx context.Context, id int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countChainLength, id)
+	var length int64
+	err := row.Scan(&length)
+	return length, err
+}
+
 const countMessagesByPhase = `-- name: CountMessagesByPhase :one
 SELECT COUNT(*)
 FROM messages
@@ -203,9 +225,11 @@ func (q *Queries) CountThreadsByPhase(ctx context.Context, phaseID pgtype.Int4) 
 }
 
 const createActionResult = `-- name: CreateActionResult :one
-INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8 THEN NOW() ELSE NULL END)
-RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at
+INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, released_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+        CASE WHEN $8 THEN NOW() ELSE NULL END,
+        CASE WHEN $8 THEN NOW() ELSE NULL END)
+RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes, released_at
 `
 
 type CreateActionResultParams struct {
@@ -219,6 +243,16 @@ type CreateActionResultParams struct {
 	IsPublished        pgtype.Bool `json:"is_published"`
 }
 
+// released_at tracks sent_at exactly: a result created already-published is
+// visible immediately, and a draft is visible to nobody until publish sets both.
+//
+// This is load-bearing, not decorative. GetUserResults gates on
+// `released_at IS NOT NULL`, so a published row created without it would be
+// permanently invisible to its recipient — the same failure the migration's
+// backfill fixed for historical rows.
+//
+// Creating a *staged* chain does not go through here; see CreateStagedResultPart,
+// which leaves released_at NULL for the release worker to set.
 func (q *Queries) CreateActionResult(ctx context.Context, arg CreateActionResultParams) (ActionResult, error) {
 	row := q.db.QueryRow(ctx, createActionResult,
 		arg.GameID,
@@ -242,6 +276,9 @@ func (q *Queries) CreateActionResult(ctx context.Context, arg CreateActionResult
 		&i.Content,
 		&i.IsPublished,
 		&i.SentAt,
+		&i.ParentResultID,
+		&i.RevealDelayMinutes,
+		&i.ReleasedAt,
 	)
 	return i, err
 }
@@ -420,7 +457,7 @@ func (q *Queries) DeletePhase(ctx context.Context, id int32) error {
 }
 
 const getActionResult = `-- name: GetActionResult :one
-SELECT id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at FROM action_results WHERE id = $1
+SELECT id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes, released_at FROM action_results WHERE id = $1
 `
 
 func (q *Queries) GetActionResult(ctx context.Context, id int32) (ActionResult, error) {
@@ -437,6 +474,9 @@ func (q *Queries) GetActionResult(ctx context.Context, id int32) (ActionResult, 
 		&i.Content,
 		&i.IsPublished,
 		&i.SentAt,
+		&i.ParentResultID,
+		&i.RevealDelayMinutes,
+		&i.ReleasedAt,
 	)
 	return i, err
 }
@@ -499,6 +539,78 @@ func (q *Queries) GetActivePhaseActivatedAt(ctx context.Context, gameID int32) (
 	var activated_at pgtype.Timestamptz
 	err := row.Scan(&activated_at)
 	return activated_at, err
+}
+
+const getDueStagedParts = `-- name: GetDueStagedParts :many
+
+SELECT r.id, r.game_id, r.user_id, r.phase_id, r.character_id, r.gm_user_id,
+       r.parent_result_id, r.reveal_delay_minutes
+FROM action_results r
+JOIN action_results parent ON r.parent_result_id = parent.id
+WHERE r.is_published = TRUE
+  AND r.released_at IS NULL
+  AND parent.released_at IS NOT NULL
+  AND parent.released_at + make_interval(mins => r.reveal_delay_minutes) <= NOW()
+ORDER BY r.id
+`
+
+type GetDueStagedPartsRow struct {
+	ID                 int32       `json:"id"`
+	GameID             int32       `json:"game_id"`
+	UserID             int32       `json:"user_id"`
+	PhaseID            int32       `json:"phase_id"`
+	CharacterID        pgtype.Int4 `json:"character_id"`
+	GmUserID           int32       `json:"gm_user_id"`
+	ParentResultID     pgtype.Int4 `json:"parent_result_id"`
+	RevealDelayMinutes pgtype.Int4 `json:"reveal_delay_minutes"`
+}
+
+// Staged result reveals -----------------------------------------------------
+//
+// A chain is a linked list: each part points at its predecessor via
+// parent_result_id, and reveal_delay_minutes is measured from the moment that
+// predecessor became visible. See .claude/planning/staged-result-reveals.md.
+// Parts whose wait has elapsed and which the release worker should now reveal.
+//
+// Due-ness is computed entirely in SQL from the parent's release time, which is
+// what makes this restart-safe: a part due while the process was down simply
+// comes back on the next tick, and there is no in-memory timer to lose or
+// double-fire.
+//
+// Deliberately does NOT join game_phases or games. A chain owns its own clock —
+// phase advancement and game completion do not force, delay, or cancel a
+// release. Adding a phase or state filter here would break that; see "Chain
+// Independence" in the planning doc.
+// Oldest chains first, and parents before children within a chain: id ordering
+// means a chain inserted in part order releases in part order even if several
+// parts come due in the same tick.
+func (q *Queries) GetDueStagedParts(ctx context.Context) ([]GetDueStagedPartsRow, error) {
+	rows, err := q.db.Query(ctx, getDueStagedParts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDueStagedPartsRow
+	for rows.Next() {
+		var i GetDueStagedPartsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameID,
+			&i.UserID,
+			&i.PhaseID,
+			&i.CharacterID,
+			&i.GmUserID,
+			&i.ParentResultID,
+			&i.RevealDelayMinutes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getGameActions = `-- name: GetGameActions :many
@@ -600,7 +712,7 @@ func (q *Queries) GetGamePhases(ctx context.Context, gameID int32) ([]GamePhase,
 }
 
 const getGameResults = `-- name: GetGameResults :many
-SELECT results.id, results.game_id, results.user_id, results.phase_id, results.character_id, results.action_submission_id, results.gm_user_id, results.content, results.is_published, results.sent_at, u.username, gp.phase_type, gp.phase_number,
+SELECT results.id, results.game_id, results.user_id, results.phase_id, results.character_id, results.action_submission_id, results.gm_user_id, results.content, results.is_published, results.sent_at, results.parent_result_id, results.reveal_delay_minutes, results.released_at, u.username, gp.phase_type, gp.phase_number,
        c.name as character_name
 FROM action_results results
 JOIN users u ON results.user_id = u.id
@@ -621,6 +733,9 @@ type GetGameResultsRow struct {
 	Content            string             `json:"content"`
 	IsPublished        pgtype.Bool        `json:"is_published"`
 	SentAt             pgtype.Timestamptz `json:"sent_at"`
+	ParentResultID     pgtype.Int4        `json:"parent_result_id"`
+	RevealDelayMinutes pgtype.Int4        `json:"reveal_delay_minutes"`
+	ReleasedAt         pgtype.Timestamptz `json:"released_at"`
 	Username           string             `json:"username"`
 	PhaseType          string             `json:"phase_type"`
 	PhaseNumber        int32              `json:"phase_number"`
@@ -660,6 +775,9 @@ func (q *Queries) GetGameResults(ctx context.Context, gameID int32) ([]GetGameRe
 			&i.Content,
 			&i.IsPublished,
 			&i.SentAt,
+			&i.ParentResultID,
+			&i.RevealDelayMinutes,
+			&i.ReleasedAt,
 			&i.Username,
 			&i.PhaseType,
 			&i.PhaseNumber,
@@ -767,7 +885,7 @@ func (q *Queries) GetPhaseActions(ctx context.Context, phaseID int32) ([]GetPhas
 }
 
 const getPhaseResults = `-- name: GetPhaseResults :many
-SELECT results.id, results.game_id, results.user_id, results.phase_id, results.character_id, results.action_submission_id, results.gm_user_id, results.content, results.is_published, results.sent_at, u.username, gm.username as gm_username,
+SELECT results.id, results.game_id, results.user_id, results.phase_id, results.character_id, results.action_submission_id, results.gm_user_id, results.content, results.is_published, results.sent_at, results.parent_result_id, results.reveal_delay_minutes, results.released_at, u.username, gm.username as gm_username,
        c.name as character_name
 FROM action_results results
 JOIN users u ON results.user_id = u.id
@@ -788,6 +906,9 @@ type GetPhaseResultsRow struct {
 	Content            string             `json:"content"`
 	IsPublished        pgtype.Bool        `json:"is_published"`
 	SentAt             pgtype.Timestamptz `json:"sent_at"`
+	ParentResultID     pgtype.Int4        `json:"parent_result_id"`
+	RevealDelayMinutes pgtype.Int4        `json:"reveal_delay_minutes"`
+	ReleasedAt         pgtype.Timestamptz `json:"released_at"`
 	Username           string             `json:"username"`
 	GmUsername         string             `json:"gm_username"`
 	CharacterName      pgtype.Text        `json:"character_name"`
@@ -818,6 +939,9 @@ func (q *Queries) GetPhaseResults(ctx context.Context, phaseID int32) ([]GetPhas
 			&i.Content,
 			&i.IsPublished,
 			&i.SentAt,
+			&i.ParentResultID,
+			&i.RevealDelayMinutes,
+			&i.ReleasedAt,
 			&i.Username,
 			&i.GmUsername,
 			&i.CharacterName,
@@ -935,6 +1059,92 @@ func (q *Queries) GetPhaseTransitions(ctx context.Context, gameID int32) ([]GetP
 			&i.ToPhaseType,
 			&i.ToPhaseNumber,
 			&i.InitiatedByUsername,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getResultChain = `-- name: GetResultChain :many
+WITH RECURSIVE head AS (
+    -- Climb from the given result to the chain head.
+    SELECT anchor.id, anchor.parent_result_id
+    FROM action_results anchor
+    WHERE anchor.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_result_id
+    FROM action_results p
+    JOIN head h ON h.parent_result_id = p.id
+),
+chain AS (
+    -- Descend from the head, numbering as we go.
+    SELECT r.id, r.game_id, r.user_id, r.phase_id, r.character_id, r.action_submission_id, r.gm_user_id, r.content, r.is_published, r.sent_at, r.parent_result_id, r.reveal_delay_minutes, r.released_at, 1 AS part_number
+    FROM action_results r
+    WHERE r.id = (SELECT id FROM head WHERE parent_result_id IS NULL)
+    UNION ALL
+    SELECT child.id, child.game_id, child.user_id, child.phase_id, child.character_id, child.action_submission_id, child.gm_user_id, child.content, child.is_published, child.sent_at, child.parent_result_id, child.reveal_delay_minutes, child.released_at, c.part_number + 1
+    FROM action_results child
+    JOIN chain c ON child.parent_result_id = c.id
+)
+SELECT c.id, c.game_id, c.user_id, c.phase_id, c.character_id, c.action_submission_id, c.gm_user_id, c.content, c.is_published, c.sent_at, c.parent_result_id, c.reveal_delay_minutes, c.released_at, c.part_number, (SELECT COUNT(*) FROM chain) AS part_count
+FROM chain c
+ORDER BY c.part_number
+`
+
+type GetResultChainRow struct {
+	ID                 int32              `json:"id"`
+	GameID             int32              `json:"game_id"`
+	UserID             int32              `json:"user_id"`
+	PhaseID            int32              `json:"phase_id"`
+	CharacterID        pgtype.Int4        `json:"character_id"`
+	ActionSubmissionID pgtype.Int4        `json:"action_submission_id"`
+	GmUserID           int32              `json:"gm_user_id"`
+	Content            string             `json:"content"`
+	IsPublished        pgtype.Bool        `json:"is_published"`
+	SentAt             pgtype.Timestamptz `json:"sent_at"`
+	ParentResultID     pgtype.Int4        `json:"parent_result_id"`
+	RevealDelayMinutes pgtype.Int4        `json:"reveal_delay_minutes"`
+	ReleasedAt         pgtype.Timestamptz `json:"released_at"`
+	PartNumber         int32              `json:"part_number"`
+	PartCount          int64              `json:"part_count"`
+}
+
+// The whole chain containing a given result, with 1-based part indices, walked
+// from the head. Used for "Part 2 of 3" labelling and for the GM's schedule
+// view.
+//
+// Takes any member of the chain: the anchor CTE climbs to the head first, so
+// callers do not need to know whether they hold the head.
+func (q *Queries) GetResultChain(ctx context.Context, id int32) ([]GetResultChainRow, error) {
+	rows, err := q.db.Query(ctx, getResultChain, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetResultChainRow
+	for rows.Next() {
+		var i GetResultChainRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameID,
+			&i.UserID,
+			&i.PhaseID,
+			&i.CharacterID,
+			&i.ActionSubmissionID,
+			&i.GmUserID,
+			&i.Content,
+			&i.IsPublished,
+			&i.SentAt,
+			&i.ParentResultID,
+			&i.RevealDelayMinutes,
+			&i.ReleasedAt,
+			&i.PartNumber,
+			&i.PartCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1178,7 +1388,7 @@ func (q *Queries) GetUserActions(ctx context.Context, arg GetUserActionsParams) 
 }
 
 const getUserPhaseResults = `-- name: GetUserPhaseResults :many
-SELECT id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at FROM action_results
+SELECT id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes, released_at FROM action_results
 WHERE phase_id = $1 AND user_id = $2
 ORDER BY id DESC
 `
@@ -1209,6 +1419,9 @@ func (q *Queries) GetUserPhaseResults(ctx context.Context, arg GetUserPhaseResul
 			&i.Content,
 			&i.IsPublished,
 			&i.SentAt,
+			&i.ParentResultID,
+			&i.RevealDelayMinutes,
+			&i.ReleasedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1247,13 +1460,27 @@ func (q *Queries) GetUserPhaseSubmission(ctx context.Context, arg GetUserPhaseSu
 }
 
 const getUserResults = `-- name: GetUserResults :many
-SELECT results.id, results.game_id, results.user_id, results.phase_id, results.character_id, results.action_submission_id, results.gm_user_id, results.content, results.is_published, results.sent_at, gp.phase_type, gp.phase_number, u.username as gm_username,
+SELECT results.id, results.game_id, results.user_id, results.phase_id, results.character_id, results.action_submission_id, results.gm_user_id, results.content, results.is_published, results.sent_at, results.parent_result_id, results.reveal_delay_minutes, results.released_at, gp.phase_type, gp.phase_number, u.username as gm_username,
        c.name as character_name
 FROM action_results results
 JOIN game_phases gp ON results.phase_id = gp.id
 JOIN users u ON results.gm_user_id = u.id
 LEFT JOIN characters c ON results.character_id = c.id
 WHERE results.game_id = $1 AND results.user_id = $2 AND results.is_published = true
+  -- Staged reveals: a part of a multi-part result is invisible to its recipient
+  -- until the release worker sets released_at. This is THE gate the feature
+  -- rests on — if an unreleased part's content reaches the client, a player with
+  -- devtools defeats the whole thing.
+  --
+  -- Ordinary unstaged results and every pre-feature row have released_at set at
+  -- publish time (and were backfilled by migration 20260812214302), so this
+  -- clause is a no-op for everything except pending staged parts.
+  --
+  -- This is the ONLY read path that gates on released_at besides the archive
+  -- export. GM and audience deliberately see unreleased parts — see the
+  -- "Who sees unreleased parts" table in
+  -- .claude/planning/staged-result-reveals.md.
+  AND results.released_at IS NOT NULL
 ORDER BY gp.phase_number DESC, results.sent_at, results.id
 `
 
@@ -1273,6 +1500,9 @@ type GetUserResultsRow struct {
 	Content            string             `json:"content"`
 	IsPublished        pgtype.Bool        `json:"is_published"`
 	SentAt             pgtype.Timestamptz `json:"sent_at"`
+	ParentResultID     pgtype.Int4        `json:"parent_result_id"`
+	RevealDelayMinutes pgtype.Int4        `json:"reveal_delay_minutes"`
+	ReleasedAt         pgtype.Timestamptz `json:"released_at"`
 	PhaseType          string             `json:"phase_type"`
 	PhaseNumber        int32              `json:"phase_number"`
 	GmUsername         string             `json:"gm_username"`
@@ -1303,6 +1533,9 @@ func (q *Queries) GetUserResults(ctx context.Context, arg GetUserResultsParams) 
 			&i.Content,
 			&i.IsPublished,
 			&i.SentAt,
+			&i.ParentResultID,
+			&i.RevealDelayMinutes,
+			&i.ReleasedAt,
 			&i.PhaseType,
 			&i.PhaseNumber,
 			&i.GmUsername,
@@ -1404,11 +1637,17 @@ func (q *Queries) ListAllActionSubmissions(ctx context.Context, arg ListAllActio
 
 const publishActionResult = `-- name: PublishActionResult :one
 UPDATE action_results
-SET is_published = true, sent_at = NOW()
+SET is_published = true,
+    sent_at = NOW(),
+    released_at = CASE WHEN parent_result_id IS NULL THEN NOW() ELSE released_at END
 WHERE id = $1
-RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at
+RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes, released_at
 `
 
+// Publishing a chain head (or an ordinary single result) makes it visible at
+// once. A non-head staged part keeps released_at NULL so the release worker
+// reveals it when its delay elapses — that is the whole feature, so the
+// parent_result_id check here is load-bearing.
 func (q *Queries) PublishActionResult(ctx context.Context, id int32) (ActionResult, error) {
 	row := q.db.QueryRow(ctx, publishActionResult, id)
 	var i ActionResult
@@ -1423,19 +1662,58 @@ func (q *Queries) PublishActionResult(ctx context.Context, id int32) (ActionResu
 		&i.Content,
 		&i.IsPublished,
 		&i.SentAt,
+		&i.ParentResultID,
+		&i.RevealDelayMinutes,
+		&i.ReleasedAt,
 	)
 	return i, err
 }
 
 const publishAllPhaseResults = `-- name: PublishAllPhaseResults :exec
 UPDATE action_results
-SET is_published = true, sent_at = COALESCE(sent_at, NOW())
+SET is_published = true,
+    sent_at = COALESCE(sent_at, NOW()),
+    released_at = CASE WHEN parent_result_id IS NULL THEN COALESCE(released_at, NOW()) ELSE released_at END
 WHERE phase_id = $1 AND is_published = false
 `
 
+// Same head-only release rule as PublishActionResult. Bulk-publishing ten
+// chains starts ten independent timers from this instant; the delays are
+// per-chain, so parts fire on their own schedules from here.
 func (q *Queries) PublishAllPhaseResults(ctx context.Context, phaseID int32) error {
 	_, err := q.db.Exec(ctx, publishAllPhaseResults, phaseID)
 	return err
+}
+
+const releaseStagedPart = `-- name: ReleaseStagedPart :one
+UPDATE action_results
+SET released_at = NOW()
+WHERE id = $1 AND released_at IS NULL
+RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes, released_at
+`
+
+// Reveal one part. Guarded on released_at IS NULL so a double-tick or a
+// concurrent worker cannot re-release (and re-notify) an already-visible part;
+// the second caller gets no row back.
+func (q *Queries) ReleaseStagedPart(ctx context.Context, id int32) (ActionResult, error) {
+	row := q.db.QueryRow(ctx, releaseStagedPart, id)
+	var i ActionResult
+	err := row.Scan(
+		&i.ID,
+		&i.GameID,
+		&i.UserID,
+		&i.PhaseID,
+		&i.CharacterID,
+		&i.ActionSubmissionID,
+		&i.GmUserID,
+		&i.Content,
+		&i.IsPublished,
+		&i.SentAt,
+		&i.ParentResultID,
+		&i.RevealDelayMinutes,
+		&i.ReleasedAt,
+	)
+	return i, err
 }
 
 const submitAction = `-- name: SubmitAction :one
@@ -1486,7 +1764,7 @@ const updateActionResult = `-- name: UpdateActionResult :one
 UPDATE action_results
 SET content = $2
 WHERE id = $1 AND is_published = false
-RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at
+RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes, released_at
 `
 
 type UpdateActionResultParams struct {
@@ -1508,6 +1786,9 @@ func (q *Queries) UpdateActionResult(ctx context.Context, arg UpdateActionResult
 		&i.Content,
 		&i.IsPublished,
 		&i.SentAt,
+		&i.ParentResultID,
+		&i.RevealDelayMinutes,
+		&i.ReleasedAt,
 	)
 	return i, err
 }

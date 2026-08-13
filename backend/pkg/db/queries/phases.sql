@@ -124,8 +124,20 @@ DELETE FROM action_submissions
 WHERE game_id = $1 AND user_id = $2 AND phase_id = $3;
 
 -- name: CreateActionResult :one
-INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8 THEN NOW() ELSE NULL END)
+-- released_at tracks sent_at exactly: a result created already-published is
+-- visible immediately, and a draft is visible to nobody until publish sets both.
+--
+-- This is load-bearing, not decorative. GetUserResults gates on
+-- `released_at IS NOT NULL`, so a published row created without it would be
+-- permanently invisible to its recipient — the same failure the migration's
+-- backfill fixed for historical rows.
+--
+-- Creating a *staged* chain does not go through here; see CreateStagedResultPart,
+-- which leaves released_at NULL for the release worker to set.
+INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, released_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+        CASE WHEN $8 THEN NOW() ELSE NULL END,
+        CASE WHEN $8 THEN NOW() ELSE NULL END)
 RETURNING *;
 
 -- name: GetUserResults :many
@@ -136,6 +148,20 @@ JOIN game_phases gp ON results.phase_id = gp.id
 JOIN users u ON results.gm_user_id = u.id
 LEFT JOIN characters c ON results.character_id = c.id
 WHERE results.game_id = $1 AND results.user_id = $2 AND results.is_published = true
+  -- Staged reveals: a part of a multi-part result is invisible to its recipient
+  -- until the release worker sets released_at. This is THE gate the feature
+  -- rests on — if an unreleased part's content reaches the client, a player with
+  -- devtools defeats the whole thing.
+  --
+  -- Ordinary unstaged results and every pre-feature row have released_at set at
+  -- publish time (and were backfilled by migration 20260812214302), so this
+  -- clause is a no-op for everything except pending staged parts.
+  --
+  -- This is the ONLY read path that gates on released_at besides the archive
+  -- export. GM and audience deliberately see unreleased parts — see the
+  -- "Who sees unreleased parts" table in
+  -- .claude/planning/staged-result-reveals.md.
+  AND results.released_at IS NOT NULL
 -- Ascending within a phase, unlike the GM-facing queries: a player reading a
 -- reveal delivered in several parts wants them in the order the GM sent them.
 -- Only published rows are returned here, so sent_at is always populated; id is
@@ -220,15 +246,111 @@ WHERE phase_id = $1 AND user_id = $2
 ORDER BY id DESC;
 
 -- name: PublishActionResult :one
+-- Publishing a chain head (or an ordinary single result) makes it visible at
+-- once. A non-head staged part keeps released_at NULL so the release worker
+-- reveals it when its delay elapses — that is the whole feature, so the
+-- parent_result_id check here is load-bearing.
 UPDATE action_results
-SET is_published = true, sent_at = NOW()
+SET is_published = true,
+    sent_at = NOW(),
+    released_at = CASE WHEN parent_result_id IS NULL THEN NOW() ELSE released_at END
 WHERE id = $1
 RETURNING *;
 
 -- name: PublishAllPhaseResults :exec
+-- Same head-only release rule as PublishActionResult. Bulk-publishing ten
+-- chains starts ten independent timers from this instant; the delays are
+-- per-chain, so parts fire on their own schedules from here.
 UPDATE action_results
-SET is_published = true, sent_at = COALESCE(sent_at, NOW())
+SET is_published = true,
+    sent_at = COALESCE(sent_at, NOW()),
+    released_at = CASE WHEN parent_result_id IS NULL THEN COALESCE(released_at, NOW()) ELSE released_at END
 WHERE phase_id = $1 AND is_published = false;
+
+-- Staged result reveals -----------------------------------------------------
+--
+-- A chain is a linked list: each part points at its predecessor via
+-- parent_result_id, and reveal_delay_minutes is measured from the moment that
+-- predecessor became visible. See .claude/planning/staged-result-reveals.md.
+
+-- name: GetDueStagedParts :many
+-- Parts whose wait has elapsed and which the release worker should now reveal.
+--
+-- Due-ness is computed entirely in SQL from the parent's release time, which is
+-- what makes this restart-safe: a part due while the process was down simply
+-- comes back on the next tick, and there is no in-memory timer to lose or
+-- double-fire.
+--
+-- Deliberately does NOT join game_phases or games. A chain owns its own clock —
+-- phase advancement and game completion do not force, delay, or cancel a
+-- release. Adding a phase or state filter here would break that; see "Chain
+-- Independence" in the planning doc.
+SELECT r.id, r.game_id, r.user_id, r.phase_id, r.character_id, r.gm_user_id,
+       r.parent_result_id, r.reveal_delay_minutes
+FROM action_results r
+JOIN action_results parent ON r.parent_result_id = parent.id
+WHERE r.is_published = TRUE
+  AND r.released_at IS NULL
+  AND parent.released_at IS NOT NULL
+  AND parent.released_at + make_interval(mins => r.reveal_delay_minutes) <= NOW()
+-- Oldest chains first, and parents before children within a chain: id ordering
+-- means a chain inserted in part order releases in part order even if several
+-- parts come due in the same tick.
+ORDER BY r.id;
+
+-- name: ReleaseStagedPart :one
+-- Reveal one part. Guarded on released_at IS NULL so a double-tick or a
+-- concurrent worker cannot re-release (and re-notify) an already-visible part;
+-- the second caller gets no row back.
+UPDATE action_results
+SET released_at = NOW()
+WHERE id = $1 AND released_at IS NULL
+RETURNING *;
+
+-- name: GetResultChain :many
+-- The whole chain containing a given result, with 1-based part indices, walked
+-- from the head. Used for "Part 2 of 3" labelling and for the GM's schedule
+-- view.
+--
+-- Takes any member of the chain: the anchor CTE climbs to the head first, so
+-- callers do not need to know whether they hold the head.
+WITH RECURSIVE head AS (
+    -- Climb from the given result to the chain head.
+    SELECT anchor.id, anchor.parent_result_id
+    FROM action_results anchor
+    WHERE anchor.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_result_id
+    FROM action_results p
+    JOIN head h ON h.parent_result_id = p.id
+),
+chain AS (
+    -- Descend from the head, numbering as we go.
+    SELECT r.*, 1 AS part_number
+    FROM action_results r
+    WHERE r.id = (SELECT id FROM head WHERE parent_result_id IS NULL)
+    UNION ALL
+    SELECT child.*, c.part_number + 1
+    FROM action_results child
+    JOIN chain c ON child.parent_result_id = c.id
+)
+SELECT c.*, (SELECT COUNT(*) FROM chain) AS part_count
+FROM chain c
+ORDER BY c.part_number;
+
+-- name: CountChainLength :one
+-- Number of parts already in the chain ending at $1, used to enforce the
+-- max-chain-length invariant before appending another part.
+WITH RECURSIVE ancestors AS (
+    SELECT anchor.id, anchor.parent_result_id
+    FROM action_results anchor
+    WHERE anchor.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_result_id
+    FROM action_results p
+    JOIN ancestors a ON a.parent_result_id = p.id
+)
+SELECT COUNT(*) AS length FROM ancestors;
 
 -- name: GetUnpublishedResultsCount :one
 SELECT COUNT(*) as count

@@ -378,6 +378,16 @@ JOIN users u ON r.user_id = u.id
 JOIN users gm ON r.gm_user_id = gm.id
 LEFT JOIN characters ch ON r.character_id = ch.id
 WHERE r.game_id = $1 AND r.is_published = TRUE
+  -- Staged reveals: exclude parts the release worker has not released. A
+  -- pending part never reached the player, so it is not part of what happened
+  -- in the game. Applied uniformly with the other read paths rather than as a
+  -- special case — see .claude/planning/staged-result-reveals.md.
+  --
+  -- Note this can strand a part permanently if a GM completes a game with a
+  -- reveal still pending: there is deliberately no force-release on completion
+  -- (completion is already behind a super-confirm gate). Such a part is
+  -- excluded from the archive, which is the correct outcome — it was never seen.
+  AND r.released_at IS NOT NULL
 ORDER BY r.phase_id, r.sent_at
 `
 
