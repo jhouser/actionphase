@@ -551,6 +551,37 @@ type ActionSubmissionServiceInterface interface {
 	// PublishAllPhaseResults publishes all unpublished results for a phase
 	PublishAllPhaseResults(ctx context.Context, phaseID int32) error
 
+	// Staged result reveals ---------------------------------------------
+	//
+	// A staged result is one narrative beat split across several parts
+	// separated by timers, so the player reads "the sword swings toward your
+	// head..." and waits before learning whether it connects. See
+	// .claude/planning/staged-result-reveals.md.
+
+	// CreateStagedResultChain creates a whole chain in one transaction:
+	// parts[0] becomes an ordinary head result, and each later part is linked
+	// to its predecessor with a delay measured from that predecessor's
+	// release. All-or-nothing — a partially written chain would leave parts
+	// that can never release.
+	CreateStagedResultChain(ctx context.Context, req CreateStagedResultChainRequest) ([]models.ActionResult, error)
+
+	// ReleaseDueStagedParts reveals every part whose wait has elapsed and
+	// notifies its recipient. Driven by the release worker on a ticker;
+	// returns how many parts it examined and how many it actually released,
+	// which differ when a concurrent tick wins the guarded update.
+	ReleaseDueStagedParts(ctx context.Context) (examined int, released int, err error)
+
+	// CancelPendingPart deletes a part that has not yet been released,
+	// taking any parts scheduled after it along via ON DELETE CASCADE.
+	// Returns an error if the part is already visible to the player —
+	// unreading it is not possible.
+	CancelPendingPart(ctx context.Context, resultID int32) error
+
+	// GetResultChain returns every part of the chain containing resultID,
+	// ordered from the head, with 1-based part numbers. Accepts any member of
+	// the chain, not just the head.
+	GetResultChain(ctx context.Context, resultID int32) ([]models.GetResultChainRow, error)
+
 	// GetUnpublishedResultsCount returns the count of unpublished results for a phase
 	GetUnpublishedResultsCount(ctx context.Context, phaseID int32) (int64, error)
 
@@ -867,6 +898,57 @@ type CreateActionResultRequest struct {
 	Content            interface{} // Rich text content (JSON)
 	IsPublished        bool
 }
+
+// StagedResultPart is one beat of a staged result chain.
+type StagedResultPart struct {
+	Content interface{} // Rich text content (JSON)
+
+	// DelayMinutes is how long to wait after the *previous* part becomes
+	// visible before revealing this one. Ignored for the first part, which
+	// has nothing to wait for; required and 1..1440 for every later part.
+	DelayMinutes int32
+}
+
+// CreateStagedResultChainRequest describes a whole chain to create atomically.
+//
+// The recipient fields live here rather than on each part because a chain
+// cannot change recipient midway — a constraint the service enforces by
+// construction rather than by validating N copies of the same values.
+type CreateStagedResultChainRequest struct {
+	GameID             int32
+	PhaseID            int32
+	UserID             int32
+	CharacterID        *int32 // Optional reference to character
+	ActionSubmissionID *int32 // Optional reference to the submission being answered
+	GMUserID           int32  // The GM creating the chain
+
+	// Parts in reveal order, head first. Must contain at least 2 entries — a
+	// one-part "chain" is just an ordinary result and belongs in
+	// CreateActionResult. Capped at MaxStagedChainLength.
+	Parts []StagedResultPart
+
+	// IsPublished publishes the chain immediately on creation: the head
+	// becomes visible at once and the timers start running from that moment.
+	// When false the whole chain is a draft, and the clock does not start
+	// until the GM publishes the head through the normal publish path.
+	IsPublished bool
+}
+
+// Staged result chain bounds. The delay bounds are duplicated as CHECK
+// constraints in migration 20260812214302; these give a decent error message
+// before the database gives a blunt one.
+const (
+	// MaxStagedChainLength caps parts per chain, so an authoring mistake
+	// cannot schedule a reveal indefinitely far into the future.
+	MaxStagedChainLength = 10
+
+	// MinStagedDelayMinutes matches the release worker's tick interval —
+	// a shorter delay could not be honored accurately anyway.
+	MinStagedDelayMinutes = 1
+
+	// MaxStagedDelayMinutes (24h) bounds how long a chain can straddle.
+	MaxStagedDelayMinutes = 1440
+)
 
 // ActionSubmissionStats provides statistics about action submissions for a phase
 type ActionSubmissionStats struct {

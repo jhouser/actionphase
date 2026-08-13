@@ -140,6 +140,29 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
         CASE WHEN $8 THEN NOW() ELSE NULL END)
 RETURNING *;
 
+-- name: CreateStagedResultPart :one
+-- Append a non-head part to a chain. The head itself is an ordinary result and
+-- goes through CreateActionResult; only parts 2..N come through here.
+--
+-- released_at is deliberately absent from the column list, so it defaults to
+-- NULL: a staged part is invisible to its recipient until the release worker
+-- sets it, even once is_published is TRUE. That NULL is the entire feature.
+-- Contrast CreateActionResult, which sets released_at alongside sent_at.
+--
+-- sent_at still follows is_published, matching every other write path, so
+-- "when did the GM send this" and "when did the player get to see it" stay
+-- separate facts. For a staged part they genuinely differ.
+--
+-- parent_result_id and reveal_delay_minutes are both non-NULL here by
+-- construction, which is what action_results_delay_requires_parent demands.
+-- Chain length, recipient consistency, and acyclicity are enforced in the
+-- service layer, since a CHECK constraint cannot walk the chain.
+INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+        CASE WHEN $8 THEN NOW() ELSE NULL END,
+        $9, $10)
+RETURNING *;
+
 -- name: GetUserResults :many
 SELECT results.*, gp.phase_type, gp.phase_number, u.username as gm_username,
        c.name as character_name
@@ -240,6 +263,15 @@ WHERE id = $1 AND user_id = $2;
 SELECT * FROM action_results WHERE id = $1;
 
 -- name: GetUserPhaseResults :many
+-- ⚠️ Despite the name, this is NOT a player-facing read. It returns drafts and
+-- unreleased staged parts, and it has no non-test callers today — it feeds the
+-- GM composing view, which is why it sorts newest-first.
+--
+-- If you wire this to anything a player sees, add
+-- `AND is_published = true AND released_at IS NOT NULL` first, or use
+-- GetUserResults, which is the gated player path. Returning an unreleased
+-- staged part here would hand the player the content of a reveal that has not
+-- happened yet.
 SELECT * FROM action_results
 WHERE phase_id = $1 AND user_id = $2
 -- See GetGameResults: sent_at is NULL for drafts, so it cannot order them.
@@ -371,6 +403,20 @@ RETURNING *;
 -- name: DeleteActionResult :exec
 DELETE FROM action_results
 WHERE id = $1 AND is_published = false;
+
+-- name: DeleteStagedPart :exec
+-- Cancel a staged part that has not yet been revealed.
+--
+-- Guarded on released_at rather than is_published, which is the distinction
+-- DeleteActionResult cannot make: a scheduled part is *published* but not yet
+-- *released*, so DeleteActionResult's `is_published = false` matches nothing
+-- and would silently delete zero rows.
+--
+-- ON DELETE CASCADE removes the parts scheduled after this one. A part whose
+-- parent is gone has no release time to measure its delay from and would never
+-- fire, so cascading is safer than orphaning.
+DELETE FROM action_results
+WHERE id = $1 AND released_at IS NULL AND parent_result_id IS NOT NULL;
 
 -- name: GetSubmissionStatsForPhase :one
 SELECT

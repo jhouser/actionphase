@@ -219,10 +219,16 @@ func (h *Handler) GetGameActionResults(w http.ResponseWriter, r *http.Request) {
 	//
 	//   - GM: authors the drafts.
 	//   - Audience: a trusted spectator role that already sees every private
-	//     message and submission. Drafts are safe here because a result can only
-	//     be written against the active phase (CreateActionResult takes its phase
-	//     from GetActivePhase), so a draft is current-phase content rather than a
-	//     future reveal.
+	//     message and submission, so it sees unpublished and unreleased content
+	//     here too. This is an explicit decision about who the role is for, not
+	//     an inference about what drafts happen to contain.
+	//
+	//     It used to be justified on the grounds that a result can only be
+	//     written against the active phase, making a draft "current-phase content
+	//     rather than a future reveal". Staged reveals broke that premise: a
+	//     pending part is precisely a future reveal, scheduled minutes or hours
+	//     out. The conclusion is unchanged — audience still sees everything — but
+	//     do not reach for the old argument to justify widening anything else.
 	//   - Completed game: the archive is public, and this arm admits any
 	//     authenticated user, not just participants. Unpublished drafts the GM
 	//     never sent are therefore readable by anyone once a game completes.

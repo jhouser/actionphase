@@ -367,6 +367,75 @@ func (q *Queries) CreatePhaseTransition(ctx context.Context, arg CreatePhaseTran
 	return i, err
 }
 
+const createStagedResultPart = `-- name: CreateStagedResultPart :one
+INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+        CASE WHEN $8 THEN NOW() ELSE NULL END,
+        $9, $10)
+RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes, released_at
+`
+
+type CreateStagedResultPartParams struct {
+	GameID             int32       `json:"game_id"`
+	UserID             int32       `json:"user_id"`
+	PhaseID            int32       `json:"phase_id"`
+	CharacterID        pgtype.Int4 `json:"character_id"`
+	ActionSubmissionID pgtype.Int4 `json:"action_submission_id"`
+	GmUserID           int32       `json:"gm_user_id"`
+	Content            string      `json:"content"`
+	IsPublished        pgtype.Bool `json:"is_published"`
+	ParentResultID     pgtype.Int4 `json:"parent_result_id"`
+	RevealDelayMinutes pgtype.Int4 `json:"reveal_delay_minutes"`
+}
+
+// Append a non-head part to a chain. The head itself is an ordinary result and
+// goes through CreateActionResult; only parts 2..N come through here.
+//
+// released_at is deliberately absent from the column list, so it defaults to
+// NULL: a staged part is invisible to its recipient until the release worker
+// sets it, even once is_published is TRUE. That NULL is the entire feature.
+// Contrast CreateActionResult, which sets released_at alongside sent_at.
+//
+// sent_at still follows is_published, matching every other write path, so
+// "when did the GM send this" and "when did the player get to see it" stay
+// separate facts. For a staged part they genuinely differ.
+//
+// parent_result_id and reveal_delay_minutes are both non-NULL here by
+// construction, which is what action_results_delay_requires_parent demands.
+// Chain length, recipient consistency, and acyclicity are enforced in the
+// service layer, since a CHECK constraint cannot walk the chain.
+func (q *Queries) CreateStagedResultPart(ctx context.Context, arg CreateStagedResultPartParams) (ActionResult, error) {
+	row := q.db.QueryRow(ctx, createStagedResultPart,
+		arg.GameID,
+		arg.UserID,
+		arg.PhaseID,
+		arg.CharacterID,
+		arg.ActionSubmissionID,
+		arg.GmUserID,
+		arg.Content,
+		arg.IsPublished,
+		arg.ParentResultID,
+		arg.RevealDelayMinutes,
+	)
+	var i ActionResult
+	err := row.Scan(
+		&i.ID,
+		&i.GameID,
+		&i.UserID,
+		&i.PhaseID,
+		&i.CharacterID,
+		&i.ActionSubmissionID,
+		&i.GmUserID,
+		&i.Content,
+		&i.IsPublished,
+		&i.SentAt,
+		&i.ParentResultID,
+		&i.RevealDelayMinutes,
+		&i.ReleasedAt,
+	)
+	return i, err
+}
+
 const deactivateAllGamePhases = `-- name: DeactivateAllGamePhases :exec
 UPDATE game_phases
 SET is_active = false
@@ -453,6 +522,26 @@ DELETE FROM game_phases WHERE id = $1
 
 func (q *Queries) DeletePhase(ctx context.Context, id int32) error {
 	_, err := q.db.Exec(ctx, deletePhase, id)
+	return err
+}
+
+const deleteStagedPart = `-- name: DeleteStagedPart :exec
+DELETE FROM action_results
+WHERE id = $1 AND released_at IS NULL AND parent_result_id IS NOT NULL
+`
+
+// Cancel a staged part that has not yet been revealed.
+//
+// Guarded on released_at rather than is_published, which is the distinction
+// DeleteActionResult cannot make: a scheduled part is *published* but not yet
+// *released*, so DeleteActionResult's `is_published = false` matches nothing
+// and would silently delete zero rows.
+//
+// ON DELETE CASCADE removes the parts scheduled after this one. A part whose
+// parent is gone has no release time to measure its delay from and would never
+// fire, so cascading is safer than orphaning.
+func (q *Queries) DeleteStagedPart(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteStagedPart, id)
 	return err
 }
 
@@ -1398,6 +1487,15 @@ type GetUserPhaseResultsParams struct {
 	UserID  int32 `json:"user_id"`
 }
 
+// ⚠️ Despite the name, this is NOT a player-facing read. It returns drafts and
+// unreleased staged parts, and it has no non-test callers today — it feeds the
+// GM composing view, which is why it sorts newest-first.
+//
+// If you wire this to anything a player sees, add
+// `AND is_published = true AND released_at IS NOT NULL` first, or use
+// GetUserResults, which is the gated player path. Returning an unreleased
+// staged part here would hand the player the content of a reveal that has not
+// happened yet.
 // See GetGameResults: sent_at is NULL for drafts, so it cannot order them.
 func (q *Queries) GetUserPhaseResults(ctx context.Context, arg GetUserPhaseResultsParams) ([]ActionResult, error) {
 	rows, err := q.db.Query(ctx, getUserPhaseResults, arg.PhaseID, arg.UserID)
