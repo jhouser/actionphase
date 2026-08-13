@@ -27,6 +27,24 @@ describe('HelpTooltip', () => {
     });
   });
 
+  describe('Alignment', () => {
+    it('anchors the panel to the left edge by default', () => {
+      render(<HelpTooltip text="Some help text" />);
+
+      expect(screen.getByRole('tooltip').className).toContain('left-0');
+    });
+
+    // An icon near the right edge of its container needs a right-anchored panel;
+    // the left-anchored default overflows the container there.
+    it('anchors the panel to the right edge when align="right"', () => {
+      render(<HelpTooltip text="Some help text" align="right" />);
+
+      const tooltip = screen.getByRole('tooltip');
+      expect(tooltip.className).toContain('right-0');
+      expect(tooltip.className).not.toContain('left-0');
+    });
+  });
+
   describe('Checkbox integration', () => {
     it('renders tooltip alongside the checkbox label when helpText is provided', () => {
       render(
