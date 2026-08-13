@@ -246,10 +246,10 @@ type CreateActionResultParams struct {
 // released_at tracks sent_at exactly: a result created already-published is
 // visible immediately, and a draft is visible to nobody until publish sets both.
 //
-// This is load-bearing, not decorative. GetUserResults gates on
-// `released_at IS NOT NULL`, so a published row created without it would be
-// permanently invisible to its recipient — the same failure the migration's
-// backfill fixed for historical rows.
+// This is load-bearing, not decorative. GetUserResults blanks the content of
+// any row whose released_at is NULL, so a published row created without it
+// would reach its recipient as an empty string — the same failure the
+// migration's backfill fixed for historical rows.
 //
 // Creating a *staged* chain does not go through here; see CreateStagedResultPart,
 // which leaves released_at NULL for the release worker to set.

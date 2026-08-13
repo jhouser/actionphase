@@ -290,6 +290,40 @@ func TestReleaseDueStagedParts(t *testing.T) {
 		assert.True(t, env.getResult(t, chain[2].ID).ReleasedAt.Valid, "part 3 should now be visible")
 	})
 
+	// Ordering must hold no matter how stale the chain is. The test above
+	// backdates the head by 16m, less than part 3's own 30m delay, so it never
+	// distinguishes "waiting for my parent" from "my own timer hasn't elapsed".
+	// This backdates far past every delay in the chain, so only the parent rule
+	// can hold part 3 back.
+	//
+	// Worth knowing when reading ReleaseDueStagedParts: the explicit
+	// `AND parent.released_at IS NOT NULL` is belt-and-braces, not the load-
+	// bearing clause. An unreleased parent makes
+	// `parent.released_at + interval <= NOW()` evaluate to NULL, which WHERE
+	// treats as false — so the row is excluded by the arithmetic alone.
+	// Deleting the explicit clause leaves behaviour unchanged (verified by
+	// mutation), which is why no test can fail on its removal. Keep it anyway:
+	// it states the intent that the NULL semantics only imply.
+	t.Run("a part waits for its parent even when its own delay has long elapsed", func(t *testing.T) {
+		env := setupStagedTest(t)
+
+		chain, err := env.actionService.CreateStagedResultChain(ctx, env.chainRequest(0, 15, 30))
+		require.NoError(t, err)
+
+		// 500 minutes: far beyond part 2's 15m and part 3's 30m combined, so
+		// every delay in the chain has "elapsed" by wall clock.
+		env.backdateRelease(t, chain[0].ID, 500)
+
+		_, released, err := env.actionService.ReleaseDueStagedParts(ctx)
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, released,
+			"only part 2 may release: part 3's parent is still unreleased, however old the head is")
+		assert.True(t, env.getResult(t, chain[1].ID).ReleasedAt.Valid, "part 2 was due")
+		assert.False(t, env.getResult(t, chain[2].ID).ReleasedAt.Valid,
+			"part 3 must wait for part 2 to release, not merely for time to pass")
+	})
+
 	t.Run("a second tick does not re-release an already-released part", func(t *testing.T) {
 		env := setupStagedTest(t)
 

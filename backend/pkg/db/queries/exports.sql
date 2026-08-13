@@ -300,16 +300,24 @@ JOIN users u ON r.user_id = u.id
 JOIN users gm ON r.gm_user_id = gm.id
 LEFT JOIN characters ch ON r.character_id = ch.id
 WHERE r.game_id = $1 AND r.is_published = TRUE
-  -- Staged reveals: exclude parts the release worker has not released. A
-  -- pending part never reached the player, so it is not part of what happened
-  -- in the game. Applied uniformly with the other read paths rather than as a
-  -- special case — see .claude/planning/staged-result-reveals.md.
+  -- Staged reveals: deliberately NOT gated on released_at. An export is an
+  -- archive of a completed game, and it must contain what that game's archive
+  -- shows on the site.
   --
-  -- Note this can strand a part permanently if a GM completes a game with a
-  -- reveal still pending: there is deliberately no force-release on completion
-  -- (completion is already behind a super-confirm gate). Such a part is
-  -- excluded from the archive, which is the correct outcome — it was never seen.
-  AND r.released_at IS NOT NULL
+  -- Its true peer is GetGameResults, which serves the History view for a
+  -- completed game — readable by ANY authenticated user, and never gated on
+  -- released_at. So a pending part is already fully visible on the site to
+  -- anyone who opens the completed game. Gating it here made the export
+  -- strictly narrower than the page it archives, for no gain: the suspense
+  -- cannot be preserved when the content is one tab away.
+  --
+  -- The gate also permanently deleted content. A completed game never changes
+  -- state, so a part still pending at completion will never release — excluding
+  -- it does not defer that text, it drops it from the archive forever.
+  --
+  -- The read path that IS gated is GetUserResults (the recipient mid-game),
+  -- which blanks unreleased content. That is where the feature lives. An
+  -- export is not that path: nothing about a finished game is still a surprise.
 ORDER BY r.phase_id, r.sent_at;
 
 -- name: ListExportHandouts :many
