@@ -73,9 +73,10 @@ export class PhasesApi extends BaseApiClient {
     return this.client.post<ActionResult>(`/api/v1/games/${gameId}/results`, data);
   }
 
-  // Creates a whole staged chain in one atomic request. There is deliberately
-  // no append-to-existing-chain endpoint: building a chain across several
-  // requests would leave partial chains behind whenever one failed.
+  // Creates a whole staged chain in one atomic request, for a GM who has the
+  // entire scene ready. To build one up over several sittings instead, see
+  // appendStagedPart — that path links each new part to an existing tail, so it
+  // cannot leave a partial chain behind either.
   //
   // parts[0] is the head and must have delay_minutes: 0. Every later part's
   // delay is measured from the moment its predecessor was revealed, not from
@@ -91,6 +92,25 @@ export class PhasesApi extends BaseApiClient {
     }
   ) {
     return this.client.post<ActionResult[]>(`/api/v1/games/${gameId}/results/staged`, data);
+  }
+
+  // Adds one part to the end of a draft chain, so a GM can write a staged
+  // result over several sittings rather than composing it all up front.
+  //
+  // resultId may be any member of the chain — the server resolves the tail. An
+  // ordinary unstaged draft is a chain of one, so this is also how a plain
+  // draft becomes staged. Draft chains only: appending to a published chain
+  // answers 409, since it would extend a scene the player is already reading.
+  async appendStagedPart(gameId: number, resultId: number, data: StagedResultPart) {
+    return this.client.post<ActionResult>(`/api/v1/games/${gameId}/results/${resultId}/parts`, data);
+  }
+
+  // Retimes a part that has not yet been revealed, covering drafts and
+  // published-but-pending parts alike. Answers 409 once the part has released.
+  async updateStagedPartDelay(gameId: number, resultId: number, delayMinutes: number) {
+    return this.client.put<ActionResult>(`/api/v1/games/${gameId}/results/${resultId}/delay`, {
+      delay_minutes: delayMinutes,
+    });
   }
 
   // Cancels a part that has not yet been revealed. Only pending parts can be

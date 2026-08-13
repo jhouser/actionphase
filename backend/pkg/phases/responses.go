@@ -122,6 +122,18 @@ type ActionResultWithDetailsResponse struct {
 	PartCount  int32      `json:"part_count,omitempty"`
 	ReleasedAt *time.Time `json:"released_at,omitempty"`
 	UnlocksAt  *time.Time `json:"unlocks_at,omitempty"`
+
+	// ParentResultID is the part this one follows. Nil on a chain head and on
+	// any unstaged result. Returned by the edit endpoints so a client can place
+	// a newly appended part in the chain without re-fetching the whole list.
+	ParentResultID *int32 `json:"parent_result_id,omitempty"`
+
+	// RevealDelayMinutes is the configured wait, as distinct from UnlocksAt's
+	// resolved wall-clock time. The GM's editor needs the configured value to
+	// populate its delay selector; UnlocksAt cannot supply it, since it is NULL
+	// until the parent releases and is anyway a timestamp rather than a
+	// duration. Nil on a chain head and on any unstaged result.
+	RevealDelayMinutes *int32 `json:"reveal_delay_minutes,omitempty"`
 }
 
 func (rd *ActionResultWithDetailsResponse) Render(w http.ResponseWriter, r *http.Request) error {

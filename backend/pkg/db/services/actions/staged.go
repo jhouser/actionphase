@@ -159,6 +159,21 @@ func (as *ActionSubmissionService) ReleaseDueStagedParts(ctx context.Context) (i
 				return fmt.Errorf("failed to release staged part: %w", err)
 			}
 
+			// Sheet updates staged on this part apply now, as it becomes
+			// readable — not when the chain was published. A chain's drafts
+			// live on its final part, so the reward lands with the beat that
+			// earns it: publishing the chain must not hand the player their
+			// loot while they are still reading whether they survived.
+			//
+			// Inside the same transaction as the release, so a part is never
+			// visible with its updates unapplied.
+			if err := as.publishDraftUpdates(ctx, txQueries, part.ID); err != nil {
+				return fmt.Errorf("failed to publish draft character updates: %w", err)
+			}
+			if err := txQueries.DeletePublishedDrafts(ctx, part.ID); err != nil {
+				return fmt.Errorf("failed to delete published drafts: %w", err)
+			}
+
 			released++
 			as.notifyStagedRelease(ctx, result)
 			return nil
@@ -259,6 +274,139 @@ func (as *ActionSubmissionService) CancelPendingPart(ctx context.Context, result
 
 	as.Logger.Info(ctx, "Pending staged part cancelled", "result_id", resultID)
 	return nil
+}
+
+// AppendStagedPart adds one part to the tail of the draft chain containing
+// anchorID.
+//
+// This is the "write the result over time" path. A GM rarely has the whole
+// scene ready when they start drafting, so a chain is built up part by part and
+// only then published. An ordinary single draft is a chain of one, so the same
+// code turns it into a staged chain without a distinct conversion step.
+//
+// Recipient fields are copied from the tail rather than taken from the caller,
+// which preserves the invariant CreateStagedResultChain gets by construction: a
+// chain cannot change recipient midway.
+func (as *ActionSubmissionService) AppendStagedPart(ctx context.Context, anchorID int32, part core.StagedResultPart) (*models.ActionResult, error) {
+	content := fmt.Sprintf("%v", part.Content)
+	if err := validation.ValidateActionResult(content); err != nil {
+		return nil, fmt.Errorf("%w: %w", core.ErrInvalidStagedChain, err)
+	}
+
+	// An appended part is never the head, so it always carries a real delay.
+	if part.DelayMinutes < core.MinStagedDelayMinutes || part.DelayMinutes > core.MaxStagedDelayMinutes {
+		return nil, fmt.Errorf("%w: delay must be between %d and %d minutes, got %d",
+			core.ErrInvalidStagedChain, core.MinStagedDelayMinutes, core.MaxStagedDelayMinutes, part.DelayMinutes)
+	}
+
+	var created models.ActionResult
+
+	// One transaction so the length check cannot be overtaken by a concurrent
+	// append between reading the tail and writing past it.
+	err := pgx.BeginFunc(ctx, as.DB, func(tx pgx.Tx) error {
+		queries := models.New(tx)
+
+		tail, err := queries.GetChainTailForAppend(ctx, anchorID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("action result not found")
+			}
+			return fmt.Errorf("failed to get chain tail: %w", err)
+		}
+
+		// The whole chain must be finished before it goes out. Appending to a
+		// published chain would extend a scene the player is already reading,
+		// and for a chain mid-release there is no coherent answer to where the
+		// new part belongs.
+		if tail.AnyPublished {
+			return fmt.Errorf("%w: chain is already published; parts can only be added while it is a draft", core.ErrCannotEditChain)
+		}
+
+		if tail.PartCount >= core.MaxStagedChainLength {
+			return fmt.Errorf("%w: may have at most %d parts, chain already has %d",
+				core.ErrInvalidStagedChain, core.MaxStagedChainLength, tail.PartCount)
+		}
+
+		created, err = queries.CreateStagedResultPart(ctx, models.CreateStagedResultPartParams{
+			GameID:             tail.GameID,
+			UserID:             tail.UserID,
+			PhaseID:            tail.PhaseID,
+			CharacterID:        tail.CharacterID,
+			ActionSubmissionID: tail.ActionSubmissionID,
+			GmUserID:           tail.GmUserID,
+			Content:            content,
+			// Guaranteed false by the AnyPublished check above; stated
+			// explicitly rather than copied from the tail so the draft
+			// invariant is visible at the write itself.
+			IsPublished:        pgtype.Bool{Bool: false, Valid: true},
+			ParentResultID:     pgtype.Int4{Int32: tail.ID, Valid: true},
+			RevealDelayMinutes: pgtype.Int4{Int32: part.DelayMinutes, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to append staged part: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	as.Logger.Info(ctx, "Staged part appended",
+		"result_id", created.ID,
+		"parent_id", created.ParentResultID.Int32,
+		"delay_minutes", part.DelayMinutes,
+	)
+
+	return &created, nil
+}
+
+// UpdateStagedPartDelay retimes a part that has not yet been released.
+//
+// Covers drafts and pending parts alike: the guard is released_at, not
+// is_published, because a GM's most common reason to retime is that a scene is
+// already running and the players need longer. Nothing is rescheduled here —
+// GetDueStagedParts derives due-ness from the parent's release time on every
+// tick, so the next tick simply sees a different answer.
+func (as *ActionSubmissionService) UpdateStagedPartDelay(ctx context.Context, resultID int32, delayMinutes int32) (*models.ActionResult, error) {
+	if delayMinutes < core.MinStagedDelayMinutes || delayMinutes > core.MaxStagedDelayMinutes {
+		return nil, fmt.Errorf("%w: delay must be between %d and %d minutes, got %d",
+			core.ErrInvalidStagedChain, core.MinStagedDelayMinutes, core.MaxStagedDelayMinutes, delayMinutes)
+	}
+
+	queries := models.New(as.DB)
+
+	updated, err := queries.UpdateStagedPartDelay(ctx, models.UpdateStagedPartDelayParams{
+		ID:                 resultID,
+		RevealDelayMinutes: pgtype.Int4{Int32: delayMinutes, Valid: true},
+	})
+	if err != nil {
+		// The guarded UPDATE matches nothing for a released part, a head, or a
+		// missing row. Re-read to say which, so the GM gets an actionable
+		// message instead of a bare "not found" for a part they can see.
+		if errors.Is(err, pgx.ErrNoRows) {
+			existing, getErr := queries.GetActionResult(ctx, resultID)
+			if getErr != nil {
+				return nil, fmt.Errorf("action result not found")
+			}
+			if existing.ReleasedAt.Valid {
+				return nil, fmt.Errorf("%w: part has already been released", core.ErrCannotEditChain)
+			}
+			if !existing.ParentResultID.Valid {
+				return nil, fmt.Errorf("%w: result %d is a chain head and has no delay", core.ErrCannotEditChain, resultID)
+			}
+			return nil, fmt.Errorf("action result not found")
+		}
+		return nil, fmt.Errorf("failed to update staged part delay: %w", err)
+	}
+
+	as.Logger.Info(ctx, "Staged part retimed",
+		"result_id", resultID,
+		"delay_minutes", delayMinutes,
+		"published", updated.IsPublished.Bool,
+	)
+
+	return &updated, nil
 }
 
 // GetResultChain returns every part of the chain containing resultID, head

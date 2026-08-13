@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { useGameActionResults, useUpdateActionResult, usePublishActionResult, useDeleteActionResult, useCancelPendingStagedPart } from '../hooks/useActionResults';
+import { useGameActionResults, useUpdateActionResult, usePublishActionResult, useDeleteActionResult, useCancelPendingStagedPart, useAppendStagedPart, useUpdateStagedPartDelay } from '../hooks/useActionResults';
 import type { ActionResult, GamePhase } from '../types/phases';
-import { Button, Badge, Alert } from './ui';
+import { Button, Badge, Alert, Select } from './ui';
+import { AppendStagedPartForm } from './AppendStagedPartForm';
+import { DELAY_PRESETS, formatDelayLabel, isPresetDelay } from '../lib/stagedDelays';
 import { UpdateCharacterSheetModal } from './UpdateCharacterSheetModal';
 import { PublishResultConfirmationDialog } from './PublishResultConfirmationDialog';
 import { ConfirmModal } from './ConfirmModal';
@@ -157,6 +159,9 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
   const publishMutation = usePublishActionResult(gameId);
   const deleteMutation = useDeleteActionResult(gameId);
   const cancelPartMutation = useCancelPendingStagedPart(gameId);
+  const appendPartMutation = useAppendStagedPart(gameId);
+  const updateDelayMutation = useUpdateStagedPartDelay(gameId);
+  const [isAppendingPart, setIsAppendingPart] = useState(false);
   const { data: draftCount, isPending: isDraftCountPending } = useDraftUpdateCount(gameId, result.id);
   const { hasConflict } = useConflictingSheetDrafts(gameId, result, phaseResults);
   const { showError } = useToast();
@@ -184,7 +189,56 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
   // unpublished chain is deleted through the ordinary Delete control, and a
   // released part cannot be recalled.
   const isStagedPart = result.part_count !== undefined && result.part_count > 1;
-  const isPendingPart = isStagedPart && result.is_published && !result.released_at;
+  // Cancel removes an unreleased part and cascades the parts behind it. Guarded
+  // on release, not publication, matching DeleteStagedPart's SQL: a draft
+  // follower is equally removable, and it is the *only* removal control such a
+  // part gets, since Delete is a chain-head action (see showLifecycleControls).
+  const isPendingPart = isStagedPart && result.part_number !== 1 && !result.released_at;
+
+  // A chain member that is not the head. Its lifecycle belongs to the chain,
+  // not to itself: it is published with the head, released by the worker, and
+  // removed with Cancel rather than Delete.
+  const isFollowerPart = isStagedPart && result.part_number !== 1;
+
+  // A follow-up can be added only while the whole chain is still a draft: the
+  // chain must be complete before it goes out, since appending afterwards would
+  // extend a scene the player has already started reading. The server enforces
+  // this too (409); this just avoids offering a control that would fail.
+  //
+  // Offered on the chain TAIL only — the part the new one will actually follow.
+  // A new part always lands at the end, so a button on part 1 of a 3-part chain
+  // would read as "add a follow-up to this part" while silently appending after
+  // part 3. An unstaged draft is a chain of one and is therefore its own tail,
+  // which is how a GM stages a result they saved earlier.
+  const isChainTail = !isStagedPart || result.part_number === result.part_count;
+  const canAppendPart = !result.is_published && isChainTail;
+
+  // Publishing is a chain-level action — PublishActionResult publishes the
+  // whole chain — so a follower must not carry its own Publish button. Offering
+  // one per part implies each can go out separately, which is exactly what the
+  // feature prevents. The same goes for Delete: removing a middle part is
+  // Cancel's job (it cascades correctly); Delete on a follower would strand or
+  // silently cascade the parts behind it.
+  const showLifecycleControls = !result.is_published && !isFollowerPart;
+
+  // Character-sheet updates go on the chain TAIL, not the head, for two reasons.
+  //
+  // Narrative: drafts apply when the chain is published, so hanging them off an
+  // early part would grant the reward as the scene opens — the player sees the
+  // loot before reading whether they survived to earn it. The tail is the beat
+  // the outcome belongs to.
+  //
+  // Structural: every part of a chain shares one recipient, so sheet drafts on
+  // two parts are precisely the clobber useConflictingSheetDrafts warns about
+  // ("all sheet updates for a character in a phase belong in exactly ONE
+  // result"). One control per chain makes that impossible rather than merely
+  // discouraged.
+  const showSheetUpdateControl = !result.is_published && isChainTail;
+
+  // Retiming is guarded on release, not publication: the most common reason to
+  // change a delay is that the scene is already running and the players need
+  // longer. A head has no parent to wait for, so it has no delay to edit.
+  const canEditDelay = isStagedPart && !result.released_at && result.part_number !== 1;
 
   const handleCancelPart = async () => {
     try {
@@ -192,6 +246,25 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
     } catch (error) {
       logger.error('Failed to cancel pending staged part', { error, resultId: result.id, gameId });
       showError('Failed to cancel this part. Please try again.');
+    }
+  };
+
+  const handleAppendPart = async (part: { content: string; delay_minutes: number }) => {
+    try {
+      await appendPartMutation.mutateAsync({ resultId: result.id, part });
+      setIsAppendingPart(false);
+    } catch (error) {
+      logger.error('Failed to append staged part', { error, resultId: result.id, gameId });
+      showError('Failed to add this part. Please try again.');
+    }
+  };
+
+  const handleDelayChange = async (delayMinutes: number) => {
+    try {
+      await updateDelayMutation.mutateAsync({ resultId: result.id, delayMinutes });
+    } catch (error) {
+      logger.error('Failed to update staged part delay', { error, resultId: result.id, gameId });
+      showError('Failed to change this timer. Please try again.');
     }
   };
 
@@ -291,22 +364,64 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
                       Reveals after the previous part
                     </span>
                   )}
+                  {/* Retiming stays available on a published pending part, not
+                      just a draft: the usual reason to move a timer is that the
+                      scene is live and the players need longer. A custom delay
+                      that is not one of the presets is shown as its own option
+                      so the selector never misrepresents the stored value. */}
+                  {canEditDelay && (
+                    <Select
+                      aria-label={`Delay before part ${result.part_number}`}
+                      selectSize="sm"
+                      value={String(result.reveal_delay_minutes ?? '')}
+                      onChange={e => handleDelayChange(Number(e.target.value))}
+                      disabled={updateDelayMutation.isPending}
+                      data-testid={`edit-staged-delay-${result.id}`}
+                    >
+                      {/* An empty placeholder when the delay is unknown, so a
+                          missing field reads as "unknown" instead of quietly
+                          rendering the first preset as though it were the real
+                          setting. The server always sends it; this exists so
+                          the failure is visible if that ever regresses. */}
+                      {result.reveal_delay_minutes === undefined && (
+                        <option value="">Delay unavailable</option>
+                      )}
+                      {result.reveal_delay_minutes !== undefined
+                        && !isPresetDelay(result.reveal_delay_minutes) && (
+                        <option value={result.reveal_delay_minutes}>
+                          {formatDelayLabel(result.reveal_delay_minutes)}
+                        </option>
+                      )}
+                      {DELAY_PRESETS.map(minutes => (
+                        <option key={minutes} value={minutes}>
+                          {formatDelayLabel(minutes)}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
                 </div>
               )}
             </div>
           </div>
           {!result.is_published && !isEditing && (
             <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setIsModalOpen(true)}
-              >
-                Update Character Sheet
-                {draftCount !== undefined && draftCount > 0 && (
-                  <Badge variant="warning" className="ml-2" data-testid={`draft-update-count-${result.id}`}>{draftCount}</Badge>
-                )}
-              </Button>
+              {/* Delete and Publish belong to the chain as a whole, so they
+                  live on the head. Character-sheet updates go on the TAIL
+                  instead — they apply at publish, and the reward belongs to the
+                  beat that earns it. Every part keeps Edit, since its text is
+                  its own. */}
+              {showSheetUpdateControl && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsModalOpen(true)}
+                >
+                  Update Character Sheet
+                  {draftCount !== undefined && draftCount > 0 && (
+                    <Badge variant="warning" className="ml-2" data-testid={`draft-update-count-${result.id}`}>{draftCount}</Badge>
+                  )}
+                </Button>
+              )}
               <Button
                 variant="primary"
                 size="sm"
@@ -314,23 +429,43 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
               >
                 Edit
               </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => setIsDeleteConfirmOpen(true)}
-                disabled={deleteMutation.isPending}
-                data-testid={`delete-result-${result.id}`}
-              >
-                Delete
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setIsPublishDialogOpen(true)}
-                disabled={publishMutation.isPending}
-              >
-                {publishMutation.isPending ? 'Publishing...' : 'Publish Result'}
-              </Button>
+              {canAppendPart && !isAppendingPart && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsAppendingPart(true)}
+                  data-testid={`add-staged-part-${result.id}`}
+                  data-faro-user-action-name="add-staged-result-part"
+                >
+                  + Add a timed follow-up
+                </Button>
+              )}
+              {showLifecycleControls && (
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setIsDeleteConfirmOpen(true)}
+                  disabled={deleteMutation.isPending}
+                  data-testid={`delete-result-${result.id}`}
+                >
+                  Delete
+                </Button>
+              )}
+              {showLifecycleControls && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setIsPublishDialogOpen(true)}
+                  disabled={publishMutation.isPending}
+                  data-testid={`publish-result-${result.id}`}
+                >
+                  {publishMutation.isPending
+                    ? 'Publishing...'
+                    : isStagedPart
+                      ? `Publish Chain (${result.part_count} parts)`
+                      : 'Publish Result'}
+                </Button>
+              )}
             </div>
           )}
           {isPendingPart && (
@@ -401,6 +536,24 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
                 fullWidth
               />
             </div>
+            {/* Below the content, so the GM writes the follow-up while reading
+                the beat it follows.
+
+                part_count is the whole chain's length on every member, so
+                +1 names the appended part correctly no matter which card the
+                GM clicked — the server always appends to the tail, not after
+                the anchor. It is absent on an unstaged draft, which is a chain
+                of one, making the next part number 2. */}
+            {isAppendingPart && (
+              <AppendStagedPartForm
+                resultId={result.id}
+                nextPartNumber={(result.part_count ?? 1) + 1}
+                onSubmit={handleAppendPart}
+                onCancel={() => setIsAppendingPart(false)}
+                isPending={appendPartMutation.isPending}
+                isError={appendPartMutation.isError}
+              />
+            )}
             {isCollapsible && (
               <button
                 onClick={() => setIsExpanded(!isExpanded)}

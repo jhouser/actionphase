@@ -630,6 +630,88 @@ func (q *Queries) GetActivePhaseActivatedAt(ctx context.Context, gameID int32) (
 	return activated_at, err
 }
 
+const getChainTailForAppend = `-- name: GetChainTailForAppend :one
+WITH RECURSIVE head AS (
+    SELECT anchor.id, anchor.parent_result_id
+    FROM action_results anchor
+    WHERE anchor.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_result_id
+    FROM action_results p
+    JOIN head h ON h.parent_result_id = p.id
+),
+chain AS (
+    SELECT r.id, r.game_id, r.user_id, r.phase_id, r.character_id, r.action_submission_id, r.gm_user_id, r.content, r.is_published, r.sent_at, r.parent_result_id, r.reveal_delay_minutes, r.released_at, 1 AS part_number
+    FROM action_results r
+    WHERE r.id = (SELECT id FROM head WHERE parent_result_id IS NULL)
+    UNION ALL
+    SELECT child.id, child.game_id, child.user_id, child.phase_id, child.character_id, child.action_submission_id, child.gm_user_id, child.content, child.is_published, child.sent_at, child.parent_result_id, child.reveal_delay_minutes, child.released_at, c.part_number + 1
+    FROM action_results child
+    JOIN chain c ON child.parent_result_id = c.id
+)
+SELECT c.id, c.game_id, c.user_id, c.phase_id, c.character_id, c.action_submission_id, c.gm_user_id, c.content, c.is_published, c.sent_at, c.parent_result_id, c.reveal_delay_minutes, c.released_at, c.part_number,
+       (SELECT COUNT(*) FROM chain) AS part_count,
+       (SELECT bool_or(is_published) FROM chain) AS any_published
+FROM chain c
+ORDER BY c.part_number DESC
+LIMIT 1
+`
+
+type GetChainTailForAppendRow struct {
+	ID                 int32              `json:"id"`
+	GameID             int32              `json:"game_id"`
+	UserID             int32              `json:"user_id"`
+	PhaseID            int32              `json:"phase_id"`
+	CharacterID        pgtype.Int4        `json:"character_id"`
+	ActionSubmissionID pgtype.Int4        `json:"action_submission_id"`
+	GmUserID           int32              `json:"gm_user_id"`
+	Content            string             `json:"content"`
+	IsPublished        pgtype.Bool        `json:"is_published"`
+	SentAt             pgtype.Timestamptz `json:"sent_at"`
+	ParentResultID     pgtype.Int4        `json:"parent_result_id"`
+	RevealDelayMinutes pgtype.Int4        `json:"reveal_delay_minutes"`
+	ReleasedAt         pgtype.Timestamptz `json:"released_at"`
+	PartNumber         int32              `json:"part_number"`
+	PartCount          int64              `json:"part_count"`
+	AnyPublished       bool               `json:"any_published"`
+}
+
+// The last part of the chain containing $1, plus whether any part of that chain
+// is published, for appending a new part to a draft chain.
+//
+// Returns the tail rather than requiring the caller to hold it, so a GM editing
+// any part of a chain can append to it. A result with no parent and no children
+// is a chain of one and comes back as its own tail — which is how an ordinary
+// draft becomes a staged chain without a separate conversion path.
+//
+// any_published is computed over the whole chain, not just the tail: parts are
+// published together, but checking every part means a partially published chain
+// (which should not exist) fails closed rather than silently accepting an
+// append.
+func (q *Queries) GetChainTailForAppend(ctx context.Context, id int32) (GetChainTailForAppendRow, error) {
+	row := q.db.QueryRow(ctx, getChainTailForAppend, id)
+	var i GetChainTailForAppendRow
+	err := row.Scan(
+		&i.ID,
+		&i.GameID,
+		&i.UserID,
+		&i.PhaseID,
+		&i.CharacterID,
+		&i.ActionSubmissionID,
+		&i.GmUserID,
+		&i.Content,
+		&i.IsPublished,
+		&i.SentAt,
+		&i.ParentResultID,
+		&i.RevealDelayMinutes,
+		&i.ReleasedAt,
+		&i.PartNumber,
+		&i.PartCount,
+		&i.AnyPublished,
+	)
+	return i, err
+}
+
 const getDueStagedParts = `-- name: GetDueStagedParts :many
 
 SELECT r.id, r.game_id, r.user_id, r.phase_id, r.character_id, r.gm_user_id,
@@ -1834,12 +1916,31 @@ func (q *Queries) ListAllActionSubmissions(ctx context.Context, arg ListAllActio
 	return items, nil
 }
 
-const publishActionResult = `-- name: PublishActionResult :one
+const publishActionResult = `-- name: PublishActionResult :many
+WITH RECURSIVE anchor AS (
+    -- Climb to the head, so publishing from any member publishes the chain.
+    SELECT a.id, a.parent_result_id
+    FROM action_results a
+    WHERE a.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_result_id
+    FROM action_results p
+    JOIN anchor n ON n.parent_result_id = p.id
+),
+chain AS (
+    SELECT r.id
+    FROM action_results r
+    WHERE r.id = (SELECT id FROM anchor WHERE parent_result_id IS NULL)
+    UNION ALL
+    SELECT child.id
+    FROM action_results child
+    JOIN chain c ON child.parent_result_id = c.id
+)
 UPDATE action_results
 SET is_published = true,
-    sent_at = NOW(),
-    released_at = CASE WHEN parent_result_id IS NULL THEN NOW() ELSE released_at END
-WHERE id = $1
+    sent_at = COALESCE(sent_at, NOW()),
+    released_at = CASE WHEN parent_result_id IS NULL THEN COALESCE(released_at, NOW()) ELSE released_at END
+WHERE id IN (SELECT id FROM chain)
 RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes, released_at
 `
 
@@ -1847,25 +1948,52 @@ RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm
 // once. A non-head staged part keeps released_at NULL so the release worker
 // reveals it when its delay elapses — that is the whole feature, so the
 // parent_result_id check here is load-bearing.
-func (q *Queries) PublishActionResult(ctx context.Context, id int32) (ActionResult, error) {
-	row := q.db.QueryRow(ctx, publishActionResult, id)
-	var i ActionResult
-	err := row.Scan(
-		&i.ID,
-		&i.GameID,
-		&i.UserID,
-		&i.PhaseID,
-		&i.CharacterID,
-		&i.ActionSubmissionID,
-		&i.GmUserID,
-		&i.Content,
-		&i.IsPublished,
-		&i.SentAt,
-		&i.ParentResultID,
-		&i.RevealDelayMinutes,
-		&i.ReleasedAt,
-	)
-	return i, err
+//
+// Publishes the WHOLE chain, not just the row named. A chain built up part by
+// part (AppendStagedPart) has followers that are still drafts at publish time,
+// and GetDueStagedParts only considers is_published rows — so publishing the
+// head alone would strand every follower permanently, with no repair path short
+// of manual SQL. Publishing one row was sufficient only while chains were
+// created whole and published together.
+//
+// The descend CTE walks from the named row's chain head down through every
+// follower, so this behaves identically for an ordinary single result: a row
+// with no parent and no children is a chain of one.
+// Returns every published row, head first. The service hands the caller back
+// the row it named; the rest are returned so a caller can see what else went
+// out with it.
+func (q *Queries) PublishActionResult(ctx context.Context, id int32) ([]ActionResult, error) {
+	rows, err := q.db.Query(ctx, publishActionResult, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ActionResult
+	for rows.Next() {
+		var i ActionResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameID,
+			&i.UserID,
+			&i.PhaseID,
+			&i.CharacterID,
+			&i.ActionSubmissionID,
+			&i.GmUserID,
+			&i.Content,
+			&i.IsPublished,
+			&i.SentAt,
+			&i.ParentResultID,
+			&i.RevealDelayMinutes,
+			&i.ReleasedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const publishAllPhaseResults = `-- name: PublishAllPhaseResults :exec
@@ -2067,6 +2195,56 @@ func (q *Queries) UpdatePhaseDeadline(ctx context.Context, arg UpdatePhaseDeadli
 		&i.IsPublished,
 		&i.ActivatedAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateStagedPartDelay = `-- name: UpdateStagedPartDelay :one
+UPDATE action_results
+SET reveal_delay_minutes = $2
+WHERE id = $1 AND released_at IS NULL AND parent_result_id IS NOT NULL
+RETURNING id, game_id, user_id, phase_id, character_id, action_submission_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes, released_at
+`
+
+type UpdateStagedPartDelayParams struct {
+	ID                 int32       `json:"id"`
+	RevealDelayMinutes pgtype.Int4 `json:"reveal_delay_minutes"`
+}
+
+// Retime a staged part that has not yet been revealed.
+//
+// Guarded on released_at rather than is_published, for the same reason as
+// DeleteStagedPart: a pending part is *published* but not yet *released*, so an
+// `is_published = false` guard would match nothing and silently retime zero
+// rows. This guard admits drafts and pending parts alike and refuses a part the
+// player has already read — which is the rule "editable until it releases".
+//
+// parent_result_id IS NOT NULL excludes the chain head, which has no parent to
+// measure a delay from; action_results_delay_requires_parent would reject a
+// delay on it anyway, but failing here gives the caller a row count instead of
+// a constraint violation.
+//
+// No rescheduling is needed after this. GetDueStagedParts recomputes due-ness
+// from parent.released_at + reveal_delay_minutes on every tick, so the new
+// delay is honoured on the next tick. Backdating a pending part below the
+// elapsed time therefore releases it on that tick, which is intended.
+func (q *Queries) UpdateStagedPartDelay(ctx context.Context, arg UpdateStagedPartDelayParams) (ActionResult, error) {
+	row := q.db.QueryRow(ctx, updateStagedPartDelay, arg.ID, arg.RevealDelayMinutes)
+	var i ActionResult
+	err := row.Scan(
+		&i.ID,
+		&i.GameID,
+		&i.UserID,
+		&i.PhaseID,
+		&i.CharacterID,
+		&i.ActionSubmissionID,
+		&i.GmUserID,
+		&i.Content,
+		&i.IsPublished,
+		&i.SentAt,
+		&i.ParentResultID,
+		&i.RevealDelayMinutes,
+		&i.ReleasedAt,
 	)
 	return i, err
 }

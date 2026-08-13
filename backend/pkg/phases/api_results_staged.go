@@ -1,12 +1,14 @@
 package phases
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 
 	"actionphase/pkg/core"
+	models "actionphase/pkg/db/models"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -16,8 +18,12 @@ import (
 //
 // The chain is created atomically by the service: a partially-written chain
 // would contain parts whose parent does not exist, and those parts could never
-// become due. There is deliberately no endpoint for appending to an existing
-// chain, which would reintroduce that hazard one request at a time.
+// become due.
+//
+// A chain can also be built up one part at a time while it is still a draft;
+// see AppendStagedPart. That path is safe for the same reason this one is
+// atomic — it always links the new part to an existing tail, so it cannot
+// produce a part whose parent is missing.
 func (h *Handler) CreateStagedResultChain(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer h.App.ObsLogger.LogOperation(ctx, "api_create_staged_result_chain")()
@@ -133,6 +139,185 @@ func (h *Handler) CreateStagedResultChain(w http.ResponseWriter, r *http.Request
 
 	render.Status(r, http.StatusCreated)
 	render.JSON(w, r, response)
+}
+
+// AppendStagedPart adds one part to the end of a draft chain (GM only).
+//
+// This is what lets a GM write a staged result over several sittings rather
+// than having to compose the whole thing before saving anything. The result ID
+// in the URL may be any member of the chain — the service resolves the tail —
+// and an ordinary unstaged draft is a chain of one, so this is also how a plain
+// draft becomes a staged chain.
+//
+// Draft chains only. Once published, the chain is fixed: appending would extend
+// a scene the player has already started reading.
+func (h *Handler) AppendStagedPart(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	defer h.App.ObsLogger.LogOperation(ctx, "api_append_staged_part")()
+
+	gameID := ctx.Value("gameID").(int32)
+
+	resultID, err := stagedPartIDFromURL(r)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid append staged part request")
+		return
+	}
+
+	data := &AppendStagedPartRequest{}
+	if err := render.Bind(r, data); err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid append staged part request", "error", err)
+		return
+	}
+
+	if !h.requireStagedChainManager(ctx, w, r, gameID, "only the GM can add a result part") {
+		return
+	}
+
+	appended, err := h.ActionSubmissionService.AppendStagedPart(ctx, resultID, core.StagedResultPart{
+		Content:      data.Content,
+		DelayMinutes: data.DelayMinutes,
+	})
+	if err != nil {
+		h.renderStagedEditError(ctx, w, r, err, "Failed to append staged part")
+		return
+	}
+
+	render.Status(r, http.StatusCreated)
+	render.JSON(w, r, stagedPartResponse(*appended))
+}
+
+// UpdateStagedPartDelay retimes a staged part that has not yet been released
+// (GM only).
+//
+// Works on drafts and on published-but-pending parts alike: the common case is
+// a scene already running where the players need longer than the GM first
+// guessed. Refused once the part has released, since the player has read it.
+func (h *Handler) UpdateStagedPartDelay(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	defer h.App.ObsLogger.LogOperation(ctx, "api_update_staged_part_delay")()
+
+	gameID := ctx.Value("gameID").(int32)
+
+	resultID, err := stagedPartIDFromURL(r)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid update staged part delay request")
+		return
+	}
+
+	data := &UpdateStagedPartDelayRequest{}
+	if err := render.Bind(r, data); err != nil {
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid update staged part delay request", "error", err)
+		return
+	}
+
+	if !h.requireStagedChainManager(ctx, w, r, gameID, "only the GM can retime a result part") {
+		return
+	}
+
+	updated, err := h.ActionSubmissionService.UpdateStagedPartDelay(ctx, resultID, data.DelayMinutes)
+	if err != nil {
+		h.renderStagedEditError(ctx, w, r, err, "Failed to update staged part delay")
+		return
+	}
+
+	render.JSON(w, r, stagedPartResponse(*updated))
+}
+
+// stagedPartIDFromURL parses the {resultId} path parameter.
+func stagedPartIDFromURL(r *http.Request) (int32, error) {
+	resultID, err := strconv.ParseInt(chi.URLParam(r, "resultId"), 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("invalid result ID")
+	}
+	return int32(resultID), nil
+}
+
+// requireStagedChainManager answers the GM check, rendering the failure itself.
+// Returns false when the caller has already been answered.
+func (h *Handler) requireStagedChainManager(ctx context.Context, w http.ResponseWriter, r *http.Request, gameID int32, forbiddenMsg string) bool {
+	authUser := core.GetAuthenticatedUser(ctx)
+	if authUser == nil {
+		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "No authenticated user in context")
+		return false
+	}
+
+	canManage, err := h.PhaseService.CanUserManagePhases(ctx, gameID, int32(authUser.ID))
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check phase management permission", "error", err)
+		return false
+	}
+
+	if !canManage {
+		h.renderError(ctx, w, r, core.ErrForbidden(forbiddenMsg), forbiddenMsg)
+		return false
+	}
+
+	return true
+}
+
+// renderStagedEditError maps the service's sentinels onto status codes.
+//
+// The two are deliberately different: a malformed request (delay out of range,
+// chain too long) is 400 and the GM can fix it by changing what they sent,
+// while a well-formed request that the world has moved past (already published,
+// already released) is 409 and no amount of editing the request will help.
+func (h *Handler) renderStagedEditError(ctx context.Context, w http.ResponseWriter, r *http.Request, err error, logMsg string) {
+	switch {
+	case errors.Is(err, core.ErrInvalidStagedChain):
+		h.renderError(ctx, w, r, core.ErrBadRequest(err), logMsg, "error", err)
+	case errors.Is(err, core.ErrCannotEditChain):
+		h.renderError(ctx, w, r, core.ErrConflict(err.Error()), logMsg, "error", err)
+	case err != nil && err.Error() == "action result not found":
+		h.renderError(ctx, w, r, core.ErrNotFound("action result not found"), logMsg, "error", err)
+	default:
+		h.renderError(ctx, w, r, core.ErrInternalError(err), logMsg, "error", err)
+	}
+}
+
+// stagedPartResponse shapes a single part for the GM-facing edit endpoints.
+//
+// Content is echoed back in full, including for unreleased parts. The GM wrote
+// it, and the withholding rule governs the player's read path, not this one.
+func stagedPartResponse(result models.ActionResult) ActionResultWithDetailsResponse {
+	resp := ActionResultWithDetailsResponse{
+		ID:          result.ID,
+		GameID:      result.GameID,
+		UserID:      result.UserID,
+		PhaseID:     result.PhaseID,
+		GMUserID:    result.GmUserID,
+		Content:     result.Content,
+		IsPublished: result.IsPublished.Bool,
+	}
+
+	if result.CharacterID.Valid {
+		charID := result.CharacterID.Int32
+		resp.CharacterID = &charID
+	}
+
+	if result.ActionSubmissionID.Valid {
+		submissionID := result.ActionSubmissionID.Int32
+		resp.ActionSubmissionID = &submissionID
+	}
+
+	if result.SentAt.Valid {
+		resp.SentAt = &result.SentAt.Time
+	}
+
+	if result.ReleasedAt.Valid {
+		resp.ReleasedAt = &result.ReleasedAt.Time
+	}
+
+	if result.ParentResultID.Valid {
+		parentID := result.ParentResultID.Int32
+		resp.ParentResultID = &parentID
+	}
+
+	if result.RevealDelayMinutes.Valid {
+		delay := result.RevealDelayMinutes.Int32
+		resp.RevealDelayMinutes = &delay
+	}
+
+	return resp
 }
 
 // CancelPendingStagedPart cancels a staged part that has not yet been released (GM only).

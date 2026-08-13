@@ -366,16 +366,49 @@ WHERE phase_id = $1 AND user_id = $2
 -- See GetGameResults: sent_at is NULL for drafts, so it cannot order them.
 ORDER BY id DESC;
 
--- name: PublishActionResult :one
+-- name: PublishActionResult :many
 -- Publishing a chain head (or an ordinary single result) makes it visible at
 -- once. A non-head staged part keeps released_at NULL so the release worker
 -- reveals it when its delay elapses — that is the whole feature, so the
 -- parent_result_id check here is load-bearing.
+--
+-- Publishes the WHOLE chain, not just the row named. A chain built up part by
+-- part (AppendStagedPart) has followers that are still drafts at publish time,
+-- and GetDueStagedParts only considers is_published rows — so publishing the
+-- head alone would strand every follower permanently, with no repair path short
+-- of manual SQL. Publishing one row was sufficient only while chains were
+-- created whole and published together.
+--
+-- The descend CTE walks from the named row's chain head down through every
+-- follower, so this behaves identically for an ordinary single result: a row
+-- with no parent and no children is a chain of one.
+WITH RECURSIVE anchor AS (
+    -- Climb to the head, so publishing from any member publishes the chain.
+    SELECT a.id, a.parent_result_id
+    FROM action_results a
+    WHERE a.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_result_id
+    FROM action_results p
+    JOIN anchor n ON n.parent_result_id = p.id
+),
+chain AS (
+    SELECT r.id
+    FROM action_results r
+    WHERE r.id = (SELECT id FROM anchor WHERE parent_result_id IS NULL)
+    UNION ALL
+    SELECT child.id
+    FROM action_results child
+    JOIN chain c ON child.parent_result_id = c.id
+)
 UPDATE action_results
 SET is_published = true,
-    sent_at = NOW(),
-    released_at = CASE WHEN parent_result_id IS NULL THEN NOW() ELSE released_at END
-WHERE id = $1
+    sent_at = COALESCE(sent_at, NOW()),
+    released_at = CASE WHEN parent_result_id IS NULL THEN COALESCE(released_at, NOW()) ELSE released_at END
+WHERE id IN (SELECT id FROM chain)
+-- Returns every published row, head first. The service hands the caller back
+-- the row it named; the rest are returned so a caller can see what else went
+-- out with it.
 RETURNING *;
 
 -- name: PublishAllPhaseResults :exec
@@ -492,6 +525,67 @@ RETURNING *;
 -- name: DeleteActionResult :exec
 DELETE FROM action_results
 WHERE id = $1 AND is_published = false;
+
+-- name: UpdateStagedPartDelay :one
+-- Retime a staged part that has not yet been revealed.
+--
+-- Guarded on released_at rather than is_published, for the same reason as
+-- DeleteStagedPart: a pending part is *published* but not yet *released*, so an
+-- `is_published = false` guard would match nothing and silently retime zero
+-- rows. This guard admits drafts and pending parts alike and refuses a part the
+-- player has already read — which is the rule "editable until it releases".
+--
+-- parent_result_id IS NOT NULL excludes the chain head, which has no parent to
+-- measure a delay from; action_results_delay_requires_parent would reject a
+-- delay on it anyway, but failing here gives the caller a row count instead of
+-- a constraint violation.
+--
+-- No rescheduling is needed after this. GetDueStagedParts recomputes due-ness
+-- from parent.released_at + reveal_delay_minutes on every tick, so the new
+-- delay is honoured on the next tick. Backdating a pending part below the
+-- elapsed time therefore releases it on that tick, which is intended.
+UPDATE action_results
+SET reveal_delay_minutes = $2
+WHERE id = $1 AND released_at IS NULL AND parent_result_id IS NOT NULL
+RETURNING *;
+
+-- name: GetChainTailForAppend :one
+-- The last part of the chain containing $1, plus whether any part of that chain
+-- is published, for appending a new part to a draft chain.
+--
+-- Returns the tail rather than requiring the caller to hold it, so a GM editing
+-- any part of a chain can append to it. A result with no parent and no children
+-- is a chain of one and comes back as its own tail — which is how an ordinary
+-- draft becomes a staged chain without a separate conversion path.
+--
+-- any_published is computed over the whole chain, not just the tail: parts are
+-- published together, but checking every part means a partially published chain
+-- (which should not exist) fails closed rather than silently accepting an
+-- append.
+WITH RECURSIVE head AS (
+    SELECT anchor.id, anchor.parent_result_id
+    FROM action_results anchor
+    WHERE anchor.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_result_id
+    FROM action_results p
+    JOIN head h ON h.parent_result_id = p.id
+),
+chain AS (
+    SELECT r.*, 1 AS part_number
+    FROM action_results r
+    WHERE r.id = (SELECT id FROM head WHERE parent_result_id IS NULL)
+    UNION ALL
+    SELECT child.*, c.part_number + 1
+    FROM action_results child
+    JOIN chain c ON child.parent_result_id = c.id
+)
+SELECT c.*,
+       (SELECT COUNT(*) FROM chain) AS part_count,
+       (SELECT bool_or(is_published) FROM chain) AS any_published
+FROM chain c
+ORDER BY c.part_number DESC
+LIMIT 1;
 
 -- name: DeleteStagedPart :exec
 -- Cancel a staged part that has not yet been revealed.

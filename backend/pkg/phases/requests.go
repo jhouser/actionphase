@@ -91,6 +91,31 @@ func (r *CreateStagedResultChainRequest) Bind(req *http.Request) error {
 	return nil
 }
 
+// AppendStagedPartRequest represents the request to add one part to the end of
+// a draft chain.
+//
+// Recipient fields are absent by design: the appended part inherits them from
+// the chain it joins, which is what keeps a chain from changing recipient
+// midway. The URL's result ID identifies the chain, and it may be any member.
+type AppendStagedPartRequest struct {
+	Content      string `json:"content" validate:"required"`
+	DelayMinutes int32  `json:"delay_minutes" validate:"required"`
+}
+
+func (r *AppendStagedPartRequest) Bind(req *http.Request) error {
+	return nil
+}
+
+// UpdateStagedPartDelayRequest represents the request to retime an unreleased
+// staged part.
+type UpdateStagedPartDelayRequest struct {
+	DelayMinutes int32 `json:"delay_minutes" validate:"required"`
+}
+
+func (r *UpdateStagedPartDelayRequest) Bind(req *http.Request) error {
+	return nil
+}
+
 // CreateDraftCharacterUpdateRequest represents the request to create a draft character update
 type CreateDraftCharacterUpdateRequest struct {
 	CharacterID int32  `json:"character_id" validate:"required"`

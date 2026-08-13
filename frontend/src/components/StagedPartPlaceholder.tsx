@@ -17,6 +17,15 @@ interface StagedPartPlaceholderProps {
   onExpired?: () => void;
 }
 
+/**
+ * How often to re-ask the server once the countdown has expired.
+ *
+ * Kept in the same order of magnitude as the backend's release interval
+ * (DefaultReleaseInterval, one minute) so a player waits at most a few seconds
+ * past the actual release, without polling once per second for a whole minute.
+ */
+const EXPIRED_POLL_INTERVAL_MS = 5000;
+
 function formatRemaining(ms: number): string {
   const totalSeconds = Math.ceil(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
@@ -37,6 +46,11 @@ function formatRemaining(ms: number): string {
  * a minute, so a countdown that has expired can precede the actual release by
  * up to ~60s; that window shows "Unlocking…" rather than a negative timer,
  * and `onExpired` asks the caller to refetch.
+ *
+ * That refetch REPEATS while the countdown sits at zero, on a slower cadence
+ * than the display tick. A single fire would land inside the worker's lag
+ * almost every time, come back still locked, and never ask again — leaving the
+ * player on "Unlocking…" until they reloaded the page by hand.
  */
 export const StagedPartPlaceholder: React.FC<StagedPartPlaceholderProps> = ({
   partNumber,
@@ -55,16 +69,24 @@ export const StagedPartPlaceholder: React.FC<StagedPartPlaceholderProps> = ({
     }
 
     const target = new Date(unlocksAt).getTime();
-    let firedExpired = false;
+    let lastPolledAt = 0;
 
     const tick = () => {
       const remaining = target - Date.now();
       setRemainingMs(remaining);
-      // Fire once. Without the guard this would refetch every second for as
-      // long as the server lags behind the countdown.
-      if (remaining <= 0 && !firedExpired) {
-        firedExpired = true;
-        onExpired?.();
+
+      // Poll while expired, not once at the moment of expiry. The worker
+      // releases within ~60s of the deadline, so the first ask usually finds
+      // the part still locked and we have to ask again. Throttled well below
+      // the 1s display tick to keep this from becoming a hot loop against the
+      // API; once the server does release, the part stops being locked and
+      // this component unmounts, ending the polling on its own.
+      if (remaining <= 0) {
+        const now = Date.now();
+        if (now - lastPolledAt >= EXPIRED_POLL_INTERVAL_MS) {
+          lastPolledAt = now;
+          onExpired?.();
+        }
       }
     };
 

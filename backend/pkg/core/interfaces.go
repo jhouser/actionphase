@@ -571,6 +571,25 @@ type ActionSubmissionServiceInterface interface {
 	// which differ when a concurrent tick wins the guarded update.
 	ReleaseDueStagedParts(ctx context.Context) (examined int, released int, err error)
 
+	// AppendStagedPart adds one part to the end of the draft chain containing
+	// anchorID, accepting any member of that chain rather than only its tail.
+	// A single unstaged draft is a chain of one, so this is also how an
+	// ordinary draft becomes a staged chain — no separate conversion step.
+	//
+	// Rejects a chain any part of which is published. The whole chain must be
+	// complete before the GM publishes it: appending after publication would
+	// extend a scene the player is already reading.
+	AppendStagedPart(ctx context.Context, anchorID int32, part StagedResultPart) (*models.ActionResult, error)
+
+	// UpdateStagedPartDelay retimes a part that has not yet been released,
+	// covering both drafts and published-but-pending parts. The release worker
+	// recomputes due-ness from the parent's release time on every tick, so the
+	// new delay takes effect on the next tick with nothing to reschedule.
+	//
+	// Refuses a released part (unreading it is not possible) and a chain head
+	// (which has no parent to measure a delay from).
+	UpdateStagedPartDelay(ctx context.Context, resultID int32, delayMinutes int32) (*models.ActionResult, error)
+
 	// CancelPendingPart deletes a part that has not yet been released,
 	// taking any parts scheduled after it along via ON DELETE CASCADE.
 	// Returns an error if the part is already visible to the player —

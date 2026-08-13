@@ -268,6 +268,8 @@ func (h *Handler) Start() {
 				// delete above, which is guarded on is_published = false and so
 				// matches nothing for a published-but-unreleased part.
 				r.Delete("/results/{resultId}/pending", phaseHandler.CancelPendingStagedPart)
+				r.Post("/results/{resultId}/parts", phaseHandler.AppendStagedPart)
+				r.Put("/results/{resultId}/delay", phaseHandler.UpdateStagedPartDelay)
 				r.Post("/results/{resultId}/publish", phaseHandler.PublishActionResult)
 				r.Post("/phases/{phaseId}/results/publish", phaseHandler.PublishAllPhaseResults)
 				r.Get("/phases/{phaseId}/results/unpublished-count", phaseHandler.GetUnpublishedResultsCount)

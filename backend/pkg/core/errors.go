@@ -21,3 +21,12 @@ var ErrInvalidStagedChain = errors.New("invalid staged result chain")
 // because it has already been released or is a chain head. Both are states a
 // GM can reach by racing the release worker, so they are not server faults.
 var ErrCannotCancelPart = errors.New("cannot cancel staged part")
+
+// ErrCannotEditChain is returned when a staged chain cannot be edited in the
+// way asked: appending to a chain that is already published, or retiming a part
+// that has already been released.
+//
+// Like ErrCannotCancelPart these are reachable by racing the release worker
+// rather than by sending a malformed request, so handlers answer 409 rather
+// than 400 — the request was well formed, the world moved.
+var ErrCannotEditChain = errors.New("cannot edit staged chain")

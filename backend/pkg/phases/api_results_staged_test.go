@@ -32,6 +32,26 @@ func stagedChainBody(userID int, delays ...int32) map[string]interface{} {
 	}
 }
 
+// createDraftResult posts an ordinary single unstaged draft — the state a GM is
+// in when they have written the opening beat and nothing else. Appending to one
+// of these is what converts it into a staged chain.
+func createDraftResult(t *testing.T, router http.Handler, gameID int32, token string, userID int, content string) *httptest.ResponseRecorder {
+	t.Helper()
+	bodyJSON, err := json.Marshal(map[string]interface{}{
+		"user_id": userID,
+		"content": content,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/games/%d/results", gameID), bytes.NewBuffer(bodyJSON))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
 func postStagedChain(t *testing.T, router http.Handler, gameID int32, token string, body map[string]interface{}) *httptest.ResponseRecorder {
 	t.Helper()
 	bodyJSON, err := json.Marshal(body)
@@ -220,5 +240,257 @@ func TestPhaseAPI_CancelPendingStagedPart(t *testing.T) {
 		router.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+}
+
+// TestPhaseAPI_AppendStagedPart tests POST /api/v1/games/{gameId}/results/{resultId}/parts
+func TestPhaseAPI_AppendStagedPart(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupFullPhaseAPITestRouter(app, testDB)
+
+	_, player, gmToken, playerToken, game, _ := setupResultsTestState(t, testDB, app)
+
+	// createDraftChain posts an unpublished chain and returns its part IDs.
+	createDraftChain := func(t *testing.T, delays ...int32) []int32 {
+		t.Helper()
+		rec := postStagedChain(t, router, game.ID, gmToken, stagedChainBody(player.ID, delays...))
+		require.Equal(t, http.StatusCreated, rec.Code)
+
+		var response []map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+		ids := make([]int32, 0, len(response))
+		for _, part := range response {
+			ids = append(ids, int32(part["id"].(float64)))
+		}
+		return ids
+	}
+
+	appendPart := func(t *testing.T, resultID int32, token string, body map[string]interface{}) *httptest.ResponseRecorder {
+		t.Helper()
+		bodyJSON, err := json.Marshal(body)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest("POST",
+			fmt.Sprintf("/api/v1/games/%d/results/%d/parts", game.ID, resultID), bytes.NewBuffer(bodyJSON))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	t.Run("GM appends to a draft chain and gets the new part back", func(t *testing.T) {
+		ids := createDraftChain(t, 0, 15)
+
+		rec := appendPart(t, ids[0], gmToken, map[string]interface{}{
+			"content":       "The payoff.",
+			"delay_minutes": 30,
+		})
+		require.Equal(t, http.StatusCreated, rec.Code, "body: %s", rec.Body.String())
+
+		var part map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &part))
+
+		assert.Equal(t, "The payoff.", part["content"])
+		assert.Equal(t, float64(30), part["reveal_delay_minutes"],
+			"the GM's editor reads this back to populate its delay selector")
+		assert.Equal(t, false, part["is_published"])
+		assert.Nil(t, part["released_at"])
+
+		// Anchored on the head, but it must land after the current tail.
+		assert.Equal(t, float64(ids[1]), part["parent_result_id"],
+			"a part appended via the head still follows the tail")
+	})
+
+	t.Run("appending to an unstaged draft turns it into a chain", func(t *testing.T) {
+		// The headline case: a GM saved a plain draft and comes back later.
+		rec := createDraftResult(t, router, game.ID, gmToken, player.ID, "The sword swings...")
+		require.Equal(t, http.StatusCreated, rec.Code, "body: %s", rec.Body.String())
+
+		var draft map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &draft))
+		draftID := int32(draft["id"].(float64))
+
+		rec = appendPart(t, draftID, gmToken, map[string]interface{}{
+			"content":       "...and misses!",
+			"delay_minutes": 15,
+		})
+		require.Equal(t, http.StatusCreated, rec.Code, "body: %s", rec.Body.String())
+
+		var part map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &part))
+		assert.Equal(t, float64(draftID), part["parent_result_id"])
+	})
+
+	t.Run("appending to a published chain is 409, not 400", func(t *testing.T) {
+		body := stagedChainBody(player.ID, 0, 15)
+		body["is_published"] = true
+		rec := postStagedChain(t, router, game.ID, gmToken, body)
+		require.Equal(t, http.StatusCreated, rec.Code)
+
+		var response []map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		headID := int32(response[0]["id"].(float64))
+
+		rec = appendPart(t, headID, gmToken, map[string]interface{}{
+			"content":       "Too late.",
+			"delay_minutes": 5,
+		})
+		// The request is well formed; the chain has simply moved on. Rewriting
+		// the body cannot help, which is what distinguishes 409 from 400.
+		assert.Equal(t, http.StatusConflict, rec.Code, "body: %s", rec.Body.String())
+	})
+
+	t.Run("non-GM player cannot append a part", func(t *testing.T) {
+		ids := createDraftChain(t, 0, 15)
+
+		rec := appendPart(t, ids[0], playerToken, map[string]interface{}{
+			"content":       "Not mine to write.",
+			"delay_minutes": 15,
+		})
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+	})
+
+	t.Run("a delay out of range is 400", func(t *testing.T) {
+		ids := createDraftChain(t, 0, 15)
+
+		for _, delay := range []int32{0, core.MaxStagedDelayMinutes + 1} {
+			rec := appendPart(t, ids[0], gmToken, map[string]interface{}{
+				"content":       "Bad timing.",
+				"delay_minutes": delay,
+			})
+			assert.Equal(t, http.StatusBadRequest, rec.Code, "delay %d must be rejected", delay)
+		}
+	})
+
+	t.Run("appending to a nonexistent result is 404", func(t *testing.T) {
+		rec := appendPart(t, 999999, gmToken, map[string]interface{}{
+			"content":       "Nowhere to go.",
+			"delay_minutes": 15,
+		})
+		assert.Equal(t, http.StatusNotFound, rec.Code, "body: %s", rec.Body.String())
+	})
+}
+
+// TestPhaseAPI_UpdateStagedPartDelay tests PUT /api/v1/games/{gameId}/results/{resultId}/delay
+func TestPhaseAPI_UpdateStagedPartDelay(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupFullPhaseAPITestRouter(app, testDB)
+
+	_, player, gmToken, playerToken, game, _ := setupResultsTestState(t, testDB, app)
+
+	createChain := func(t *testing.T, published bool, delays ...int32) []int32 {
+		t.Helper()
+		body := stagedChainBody(player.ID, delays...)
+		body["is_published"] = published
+
+		rec := postStagedChain(t, router, game.ID, gmToken, body)
+		require.Equal(t, http.StatusCreated, rec.Code)
+
+		var response []map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+		ids := make([]int32, 0, len(response))
+		for _, part := range response {
+			ids = append(ids, int32(part["id"].(float64)))
+		}
+		return ids
+	}
+
+	setDelay := func(t *testing.T, resultID int32, token string, delay int32) *httptest.ResponseRecorder {
+		t.Helper()
+		bodyJSON, err := json.Marshal(map[string]interface{}{"delay_minutes": delay})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest("PUT",
+			fmt.Sprintf("/api/v1/games/%d/results/%d/delay", game.ID, resultID), bytes.NewBuffer(bodyJSON))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	t.Run("GM retimes a draft part", func(t *testing.T) {
+		ids := createChain(t, false, 0, 15)
+
+		rec := setDelay(t, ids[1], gmToken, 45)
+		require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+		var part map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &part))
+		assert.Equal(t, float64(45), part["reveal_delay_minutes"])
+
+		// And it actually persisted, not merely echoed.
+		stored, err := models.New(testDB.Pool).GetActionResult(context.Background(), ids[1])
+		require.NoError(t, err)
+		assert.Equal(t, int32(45), stored.RevealDelayMinutes.Int32)
+	})
+
+	t.Run("GM retimes a published pending part", func(t *testing.T) {
+		// The live-scene case: the countdown is on the player's screen and the
+		// GM needs more time.
+		ids := createChain(t, true, 0, 15)
+
+		rec := setDelay(t, ids[1], gmToken, 60)
+		require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+		stored, err := models.New(testDB.Pool).GetActionResult(context.Background(), ids[1])
+		require.NoError(t, err)
+		assert.Equal(t, int32(60), stored.RevealDelayMinutes.Int32)
+		assert.False(t, stored.ReleasedAt.Valid, "retiming must not release the part")
+	})
+
+	t.Run("retiming a released part is 409", func(t *testing.T) {
+		ids := createChain(t, true, 0, 15)
+
+		// The head released on publish, so it stands in for any released part.
+		rec := setDelay(t, ids[0], gmToken, 60)
+		assert.Equal(t, http.StatusConflict, rec.Code, "body: %s", rec.Body.String())
+	})
+
+	t.Run("retiming an unreleased chain head is 409", func(t *testing.T) {
+		ids := createChain(t, false, 0, 15)
+
+		// A head has no parent to measure a delay from.
+		rec := setDelay(t, ids[0], gmToken, 60)
+		assert.Equal(t, http.StatusConflict, rec.Code, "body: %s", rec.Body.String())
+	})
+
+	t.Run("non-GM player cannot retime a part", func(t *testing.T) {
+		ids := createChain(t, false, 0, 15)
+
+		rec := setDelay(t, ids[1], playerToken, 60)
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+
+		// And the schedule survives the attempt.
+		stored, err := models.New(testDB.Pool).GetActionResult(context.Background(), ids[1])
+		require.NoError(t, err)
+		assert.Equal(t, int32(15), stored.RevealDelayMinutes.Int32)
+	})
+
+	t.Run("a delay out of range is 400", func(t *testing.T) {
+		ids := createChain(t, false, 0, 15)
+
+		for _, delay := range []int32{0, core.MaxStagedDelayMinutes + 1} {
+			rec := setDelay(t, ids[1], gmToken, delay)
+			assert.Equal(t, http.StatusBadRequest, rec.Code, "delay %d must be rejected", delay)
+		}
+	})
+
+	t.Run("retiming a nonexistent result is 404", func(t *testing.T) {
+		rec := setDelay(t, 999999, gmToken, 60)
+		assert.Equal(t, http.StatusNotFound, rec.Code, "body: %s", rec.Body.String())
 	})
 }

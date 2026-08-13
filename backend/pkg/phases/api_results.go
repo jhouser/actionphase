@@ -24,7 +24,7 @@ import (
 // All four fields are omitempty on the response, so an ordinary single-part
 // result — where part_number is NULL because it never entered the chain CTE —
 // serializes exactly as it did before staged reveals existed.
-func applyStagedFields(resp *ActionResultWithDetailsResponse, partNumber pgtype.Int4, partCount pgtype.Int8, releasedAt, unlocksAt pgtype.Timestamptz) {
+func applyStagedFields(resp *ActionResultWithDetailsResponse, partNumber pgtype.Int4, partCount pgtype.Int8, releasedAt, unlocksAt pgtype.Timestamptz, revealDelayMinutes pgtype.Int4) {
 	if partNumber.Valid {
 		n := partNumber.Int32
 		resp.PartNumber = &n
@@ -43,6 +43,17 @@ func applyStagedFields(resp *ActionResultWithDetailsResponse, partNumber pgtype.
 	// Parts further down the chain have no knowable unlock time yet.
 	if unlocksAt.Valid {
 		resp.UnlocksAt = &unlocksAt.Time
+	}
+	// The configured wait, which the GM's delay selector needs to show what the
+	// timer currently is. Distinct from UnlocksAt: that is a resolved timestamp
+	// and is absent until the parent releases, so it cannot stand in for this.
+	//
+	// Load-bearing for the GM edit path. Without it the selector receives
+	// undefined, matches no option, and silently displays the first preset — so
+	// a 30-minute delay reads as 1 minute with nothing to indicate it is wrong.
+	if revealDelayMinutes.Valid {
+		delay := revealDelayMinutes.Int32
+		resp.RevealDelayMinutes = &delay
 	}
 }
 
@@ -189,7 +200,7 @@ func (h *Handler) GetUserActionResults(w http.ResponseWriter, r *http.Request) {
 		// can render a placeholder counting down to the reveal. ReleasedAt being
 		// nil is how the client identifies a locked part — it must not infer
 		// lockedness from the content being empty.
-		applyStagedFields(&resultResp, result.PartNumber, result.PartCount, result.ReleasedAt, result.UnlocksAt)
+		applyStagedFields(&resultResp, result.PartNumber, result.PartCount, result.ReleasedAt, result.UnlocksAt, result.RevealDelayMinutes)
 
 		response = append(response, resultResp)
 	}
@@ -316,7 +327,7 @@ func (h *Handler) GetGameActionResults(w http.ResponseWriter, r *http.Request) {
 		// audience see the same part numbering and schedule. What differs is
 		// upstream in SQL: this query never blanks content, because both roles
 		// are entitled to read a part before it releases.
-		applyStagedFields(&resultResp, result.PartNumber, result.PartCount, result.ReleasedAt, result.UnlocksAt)
+		applyStagedFields(&resultResp, result.PartNumber, result.PartCount, result.ReleasedAt, result.UnlocksAt, result.RevealDelayMinutes)
 
 		response = append(response, resultResp)
 	}
