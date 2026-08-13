@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -1747,4 +1748,213 @@ func TestGameService_RemovePlayer(t *testing.T) {
 			t.Errorf("expected character is_active=false after player removal, got true")
 		}
 	})
+}
+
+// The contents rewrite is a delete followed by re-inserts. Without a transaction
+// a failure partway through the inserts leaves the table empty or half-populated
+// with the GM's original items already gone — silent data loss on what the UI
+// presents as a save. These tests pin that the whole swap is atomic.
+// TestGameService_LootTableCRUD covers the loot table service methods directly.
+// The HTTP handler tests exercise these paths through a mock service, so without
+// this the real implementations are never executed — they read as covered while
+// a broken query would ship unnoticed.
+func TestGameService_LootTableCRUD(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+
+	fixtures := testDB.SetupFixtures(t)
+	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+	gameID := int32(fixtures.TestGame.ID)
+
+	t.Run("lists the tables belonging to a game", func(t *testing.T) {
+		first, err := gameService.CreateLootTable(ctx, gameID, "Common Drops")
+		core.AssertNoError(t, err, "Should create the first loot table")
+		err = gameService.ReplaceLootTableContents(ctx, first.ID, []core.LootTableItem{
+			{Name: "Original Potion", Data: `{"effect":"heal"}`},
+			{Name: "Original Scroll", Data: `{"spell":"fireball"}`},
+		})
+		core.AssertNoError(t, err, "Should insert first table contents")
+		_, err = gameService.CreateLootTable(ctx, gameID, "Rare Drops")
+		core.AssertNoError(t, err, "Should create the second loot table")
+
+		tables, err := gameService.GetGameLootTables(ctx, gameID, false)
+		core.AssertNoError(t, err, "Should list loot tables")
+		core.AssertTrue(t, len(tables) >= 2, "Both created tables should be listed")
+
+		// Ordered by created_at, so the first one created comes back first.
+		core.AssertEqual(t, "Common Drops", tables[0].Name, "Tables should be listed oldest first")
+		core.AssertEqual(t, gameID, tables[0].GameID, "Listed tables should belong to the requested game")
+		core.AssertTrue(t, first.ID != 0, "A created table should have an ID")
+
+		tables, err = gameService.GetGameLootTables(ctx, gameID, true)
+		core.AssertNoError(t, err, "Should list loot tables")
+		core.AssertTrue(t, len(tables) == 1, "Only one created table (with contents) should be listed")
+	})
+
+	t.Run("reports whether a table belongs to a game", func(t *testing.T) {
+		table, err := gameService.CreateLootTable(ctx, gameID, "Ownership Table")
+		core.AssertNoError(t, err, "Should create loot table")
+
+		// This is the check that gates every loot table mutation — the update and
+		// delete queries are keyed on id alone, so a wrong answer here is a
+		// cross-game write.
+		owned, err := gameService.IsLootTableInGame(ctx, table.ID, gameID)
+		core.AssertNoError(t, err, "Should check ownership")
+		core.AssertTrue(t, owned, "A table created in this game must report as belonging to it")
+
+		otherGame := testDB.CreateTestGame(t, int32(fixtures.TestUser.ID), "Other Game")
+		foreign, err := gameService.IsLootTableInGame(ctx, table.ID, int32(otherGame.ID))
+		core.AssertNoError(t, err, "Should check ownership against another game")
+		core.AssertTrue(t, !foreign, "A table must not report as belonging to a different game")
+	})
+
+	t.Run("renames a table and bumps its updated_at", func(t *testing.T) {
+		table, err := gameService.CreateLootTable(ctx, gameID, "Original Name")
+		core.AssertNoError(t, err, "Should create loot table")
+
+		renamed, err := gameService.UpdateLootTable(ctx, table.ID, "Renamed Table")
+		core.AssertNoError(t, err, "Should rename loot table")
+		core.AssertEqual(t, "Renamed Table", renamed.Name, "The new name should be returned")
+		core.AssertEqual(t, table.ID, renamed.ID, "Renaming must not change the ID")
+		core.AssertTrue(t,
+			renamed.UpdatedAt.Time.After(table.UpdatedAt.Time),
+			"A rename should move updated_at forward")
+	})
+
+	t.Run("adds an item and reads it back", func(t *testing.T) {
+		table, err := gameService.CreateLootTable(ctx, gameID, "Contents Table")
+		core.AssertNoError(t, err, "Should create loot table")
+
+		added, err := gameService.AddLootTableContent(ctx, table.ID, "Health Potion", `{"value":50}`)
+		core.AssertNoError(t, err, "Should add loot table content")
+		core.AssertEqual(t, "Health Potion", added.Name, "The item name should round-trip")
+
+		contents, err := gameService.GetGameLootTableContents(ctx, table.ID)
+		core.AssertNoError(t, err, "Should read contents")
+		core.AssertEqual(t, 1, len(contents), "The added item should be the only one")
+		core.AssertEqual(t, `{"value":50}`, contents[0].Data.String, "The GM-authored JSON should be stored verbatim")
+	})
+
+	t.Run("deletes a table and its contents", func(t *testing.T) {
+		table, err := gameService.CreateLootTable(ctx, gameID, "Doomed Table")
+		core.AssertNoError(t, err, "Should create loot table")
+		_, err = gameService.AddLootTableContent(ctx, table.ID, "Doomed Item", `{}`)
+		core.AssertNoError(t, err, "Should add content")
+
+		err = gameService.DeleteLootTable(ctx, table.ID)
+		core.AssertNoError(t, err, "Should delete loot table")
+
+		owned, err := gameService.IsLootTableInGame(ctx, table.ID, gameID)
+		core.AssertNoError(t, err, "Should check the deleted table")
+		core.AssertTrue(t, !owned, "A deleted table must no longer belong to the game")
+
+		// The contents FK cascades, so they go with it.
+		contents, err := gameService.GetGameLootTableContents(ctx, table.ID)
+		core.AssertNoError(t, err, "Reading a deleted table's contents should not error")
+		core.AssertEqual(t, 0, len(contents), "Deleting a table must remove its contents")
+	})
+}
+
+func TestGameService_ReplaceLootTableContents(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "game_loot_table_contents", "game_loot_tables", "games", "sessions", "users")
+
+	fixtures := testDB.SetupFixtures(t)
+	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	seed := func(t *testing.T, name string) int32 {
+		t.Helper()
+		table, err := gameService.CreateLootTable(ctx, int32(fixtures.TestGame.ID), name)
+		core.AssertNoError(t, err, "Should create loot table")
+		err = gameService.ReplaceLootTableContents(ctx, table.ID, []core.LootTableItem{
+			{Name: "Original Potion", Data: `{"effect":"heal"}`},
+			{Name: "Original Scroll", Data: `{"spell":"fireball"}`},
+		})
+		core.AssertNoError(t, err, "Should seed original contents")
+		return table.ID
+	}
+
+	t.Run("replaces the full item list on success", func(t *testing.T) {
+		tableID := seed(t, "Success Table")
+
+		err := gameService.ReplaceLootTableContents(ctx, tableID, []core.LootTableItem{
+			{Name: "New Sword", Data: `{"damage":10}`},
+		})
+		core.AssertNoError(t, err, "Should replace contents")
+
+		contents, err := gameService.GetGameLootTableContents(ctx, tableID)
+		core.AssertNoError(t, err, "Should read contents back")
+		core.AssertEqual(t, 1, len(contents), "Only the new item should remain")
+		core.AssertEqual(t, "New Sword", contents[0].Name, "The new item should have replaced the originals")
+	})
+
+	t.Run("rolls back and preserves the originals when an insert fails", func(t *testing.T) {
+		tableID := seed(t, "Rollback Table")
+
+		// name is varchar(255); the second item overflows it, so the insert fails
+		// after the delete and after the first item was already written.
+		tooLong := make([]byte, 256)
+		for i := range tooLong {
+			tooLong[i] = 'x'
+		}
+
+		err := gameService.ReplaceLootTableContents(ctx, tableID, []core.LootTableItem{
+			{Name: "Replacement One", Data: `{"ok":true}`},
+			{Name: string(tooLong), Data: `{"ok":false}`},
+		})
+		core.AssertTrue(t, err != nil, "An oversized item name should fail the rewrite")
+
+		// The critical assertion: the original items must survive a failed save.
+		contents, err := gameService.GetGameLootTableContents(ctx, tableID)
+		core.AssertNoError(t, err, "Should read contents back after the failed rewrite")
+		core.AssertEqual(t, 2, len(contents), "The original items must survive a failed rewrite, got "+fmt.Sprint(len(contents)))
+		core.AssertEqual(t, "Original Potion", contents[0].Name, "First original item should be intact")
+		core.AssertEqual(t, "Original Scroll", contents[1].Name, "Second original item should be intact")
+	})
+
+	t.Run("clears every item when given an empty list", func(t *testing.T) {
+		tableID := seed(t, "Clear Table")
+
+		err := gameService.ReplaceLootTableContents(ctx, tableID, []core.LootTableItem{})
+		core.AssertNoError(t, err, "Should accept an empty item list")
+
+		contents, err := gameService.GetGameLootTableContents(ctx, tableID)
+		core.AssertNoError(t, err, "Should read contents back")
+		core.AssertEqual(t, 0, len(contents), "An empty list should clear the table")
+	})
+
+	// The failure branches below are unreachable through the happy path but are
+	// exactly where silent data loss would hide, so drive them with a cancelled
+	// context: every statement in the transaction refuses to run, which is the
+	// same shape as a dropped connection mid-rewrite.
+	t.Run("returns an error when the transaction cannot be started", func(t *testing.T) {
+		tableID := seed(t, "Begin Failure Table")
+
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+
+		err := gameService.ReplaceLootTableContents(cancelled, tableID, []core.LootTableItem{
+			{Name: "Never Written", Data: `{"ok":true}`},
+		})
+		core.AssertTrue(t, err != nil, "A cancelled context must fail the rewrite rather than report success")
+
+		// The originals must be untouched — nothing ran at all.
+		contents, err := gameService.GetGameLootTableContents(ctx, tableID)
+		core.AssertNoError(t, err, "Should read contents back")
+		core.AssertEqual(t, 2, len(contents), "A failed begin must leave the existing items alone")
+	})
+
+	// The remaining branches — a failing DeleteLootTableContents, TouchLootTable
+	// or Commit — need the connection to fail at a specific statement inside the
+	// transaction. GameService holds a concrete *pgxpool.Pool, so there is no
+	// seam to inject that without changing the struct. Left uncovered on purpose
+	// rather than faked: they are one-line "log and wrap" paths, and the branch
+	// that actually protects the GM's data (rollback on a failed insert) is
+	// covered above.
 }

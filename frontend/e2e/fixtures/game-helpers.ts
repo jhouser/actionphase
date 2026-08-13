@@ -28,6 +28,7 @@ export const FIXTURE_GAMES = {
   E2E_MESSAGES: 'E2E Test: Private Messages',     // For testing private messages (dedicated game)
   E2E_PM: 'E2E Test: Private Messages',           // Alias for E2E_MESSAGES
   E2E_CHARACTER_SHEETS: 'E2E Test: Character Sheets', // For testing character sheet management
+  E2E_LOOT_TABLES: 'E2E Test: Loot Tables',       // For testing loot tables and rolling loot onto a character
   E2E_GAME_SETTINGS: 'E2E Test: Game Settings',   // For testing game settings modifications
   CO_GM_MANAGEMENT: 'E2E Test: Co-GM Management',  // For testing co-GM promotion/demotion
   CO_GM_ACTION_RESULTS: 'E2E Test: Co-GM Action Results',  // Co-GM game with active action phase for action result editing

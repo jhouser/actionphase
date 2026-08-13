@@ -285,6 +285,37 @@ type GameServiceInterface interface {
 
 	// GetGameLogs retrieves all logs for a given game
 	GetGameLogs(ctx context.Context, gameID int32) ([]models.GameLog, error)
+
+	// AddGameLog appends a log entry for a game
+	AddGameLog(ctx context.Context, arg models.CreateLogParams) (models.GameLog, error)
+
+	// GetGameLootTables retrieves all loot tables belonging to a game
+	GetGameLootTables(ctx context.Context, gameID int32, excludeEmpty bool) ([]models.GameLootTable, error)
+
+	// IsLootTableInGame reports whether a loot table belongs to the given game.
+	// Callers MUST check this before mutating a table by ID: the underlying
+	// update/delete queries are keyed on the table ID alone and are not game-scoped.
+	IsLootTableInGame(ctx context.Context, lootTableID, gameID int32) (bool, error)
+
+	// CreateLootTable creates a new named loot table for a game
+	CreateLootTable(ctx context.Context, gameID int32, name string) (*models.GameLootTable, error)
+
+	// UpdateLootTable renames an existing loot table
+	UpdateLootTable(ctx context.Context, lootTableID int32, name string) (*models.GameLootTable, error)
+
+	// DeleteLootTable removes a loot table and (via cascade) its contents
+	DeleteLootTable(ctx context.Context, lootTableID int32) error
+
+	// GetGameLootTableContents retrieves the items in a loot table
+	GetGameLootTableContents(ctx context.Context, lootTableID int32) ([]models.GameLootTableContent, error)
+
+	// AddLootTableContent appends a single item to a loot table
+	AddLootTableContent(ctx context.Context, lootTableID int32, itemName string, itemData string) (*models.GameLootTableContent, error)
+
+	// ReplaceLootTableContents atomically swaps a loot table's entire item list
+	// and bumps its updated_at. Use this rather than deleting and re-adding:
+	// outside a transaction a mid-rewrite failure destroys the existing items.
+	ReplaceLootTableContents(ctx context.Context, lootTableID int32, items []LootTableItem) error
 }
 
 // GameApplicationServiceInterface defines the contract for game application operations.
@@ -1731,6 +1762,7 @@ type CharacterServiceInterface interface {
 	ApproveCharacter(ctx context.Context, characterID int32) (*models.Character, error)
 	AssignNPCToUser(ctx context.Context, characterID, assignedUserID, assignedByUserID int32) error
 	SetCharacterData(ctx context.Context, req CharacterDataRequest) error
+	AddToCharacterData(ctx context.Context, req CharacterDataRequest) error
 	GetCharacterData(ctx context.Context, characterID int32) ([]models.CharacterDatum, error)
 	GetCharacterDataByModule(ctx context.Context, characterID int32, moduleType string) ([]models.CharacterDatum, error)
 	GetPublicCharacterData(ctx context.Context, characterID int32) ([]models.CharacterDatum, error)
