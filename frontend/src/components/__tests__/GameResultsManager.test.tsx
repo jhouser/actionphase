@@ -1425,4 +1425,92 @@ describe('GameResultsManager', () => {
       });
     });
   });
+
+  describe('Staged result chains', () => {
+    // The GM always receives every part's real content — only the recipient's
+    // copy is blanked — so these assert the schedule readout and the cancel
+    // control, not withholding.
+    const releasedPart: ActionResult = {
+      ...mockPublishedResult,
+      id: 10,
+      content: 'The sword whooshes toward your head...',
+      part_number: 1,
+      part_count: 2,
+      released_at: '2026-08-12T10:00:00Z',
+    };
+
+    const pendingPart: ActionResult = {
+      ...mockPublishedResult,
+      id: 11,
+      content: '...and misses!',
+      part_number: 2,
+      part_count: 2,
+      unlocks_at: '2026-08-12T10:15:00Z',
+    };
+
+    it('shows each part with its position and schedule', async () => {
+      setupDefaultHandlers([releasedPart, pendingPart]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('staged-status-10')).toHaveTextContent('Part 1 of 2');
+        expect(screen.getByTestId('staged-status-11')).toHaveTextContent('Part 2 of 2');
+      });
+
+      expect(screen.getByTestId('staged-status-10')).toHaveTextContent(/Revealed/);
+      expect(screen.getByTestId('staged-status-11')).toHaveTextContent(/Reveals/);
+    });
+
+    it('offers cancel only for a part that has not been revealed', async () => {
+      setupDefaultHandlers([releasedPart, pendingPart]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('cancel-staged-part-11')).toBeInTheDocument();
+      });
+      // Once a part is out, it stays out.
+      expect(screen.queryByTestId('cancel-staged-part-10')).not.toBeInTheDocument();
+    });
+
+    it('cancels a pending part after confirmation', async () => {
+      const user = userEvent.setup();
+      let cancelledId: string | undefined;
+
+      setupDefaultHandlers([releasedPart, pendingPart]);
+      server.use(
+        http.delete('/api/v1/games/:gameId/results/:resultId/pending', ({ params }) => {
+          cancelledId = params.resultId as string;
+          return new HttpResponse(null, { status: 204 });
+        })
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('cancel-staged-part-11')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId('cancel-staged-part-11'));
+      await user.click(screen.getByRole('button', { name: 'Yes, Cancel This Part' }));
+
+      await waitFor(() => expect(cancelledId).toBe('11'));
+    });
+
+    it('shows no staged chrome for an ordinary result', async () => {
+      setupDefaultHandlers([mockPublishedResult]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('This is a published result that was sent')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId(`staged-status-${mockPublishedResult.id}`)).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId(`cancel-staged-part-${mockPublishedResult.id}`)
+      ).not.toBeInTheDocument();
+    });
+  });
 });

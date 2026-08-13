@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useGameActionResults, useUpdateActionResult, usePublishActionResult, useDeleteActionResult } from '../hooks/useActionResults';
+import { useGameActionResults, useUpdateActionResult, usePublishActionResult, useDeleteActionResult, useCancelPendingStagedPart } from '../hooks/useActionResults';
 import type { ActionResult, GamePhase } from '../types/phases';
 import { Button, Badge, Alert } from './ui';
 import { UpdateCharacterSheetModal } from './UpdateCharacterSheetModal';
@@ -151,10 +151,12 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isCancelPartConfirmOpen, setIsCancelPartConfirmOpen] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
   const updateMutation = useUpdateActionResult(gameId);
   const publishMutation = usePublishActionResult(gameId);
   const deleteMutation = useDeleteActionResult(gameId);
+  const cancelPartMutation = useCancelPendingStagedPart(gameId);
   const { data: draftCount, isPending: isDraftCountPending } = useDraftUpdateCount(gameId, result.id);
   const { hasConflict } = useConflictingSheetDrafts(gameId, result, phaseResults);
   const { showError } = useToast();
@@ -174,6 +176,24 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
   // Determine if content should be collapsible (long results)
   const isCollapsible = result.content.length > 200;
   const previewContent = result.content.substring(0, 200) + '...';
+
+  // Staged chain status. The GM always sees every part's real content — only
+  // the recipient's copy is blanked — so this is purely a schedule readout.
+  //
+  // A part is cancellable only while it is published-but-unreleased. An
+  // unpublished chain is deleted through the ordinary Delete control, and a
+  // released part cannot be recalled.
+  const isStagedPart = result.part_count !== undefined && result.part_count > 1;
+  const isPendingPart = isStagedPart && result.is_published && !result.released_at;
+
+  const handleCancelPart = async () => {
+    try {
+      await cancelPartMutation.mutateAsync(result.id);
+    } catch (error) {
+      logger.error('Failed to cancel pending staged part', { error, resultId: result.id, gameId });
+      showError('Failed to cancel this part. Please try again.');
+    }
+  };
 
   const handleSave = async () => {
     if (editedContent.trim() === result.content) {
@@ -250,6 +270,29 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
                   <span className="font-medium text-semantic-warning">Draft</span>
                 )}
               </div>
+              {isStagedPart && (
+                <div
+                  className="flex items-center space-x-2 mt-1"
+                  data-testid={`staged-status-${result.id}`}
+                >
+                  <Badge variant="primary">
+                    Part {result.part_number} of {result.part_count}
+                  </Badge>
+                  {result.released_at ? (
+                    <span className="text-xs text-content-secondary">
+                      Revealed {new Date(result.released_at).toLocaleString()}
+                    </span>
+                  ) : result.unlocks_at ? (
+                    <span className="text-xs text-content-secondary">
+                      Reveals {new Date(result.unlocks_at).toLocaleString()}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-content-secondary">
+                      Reveals after the previous part
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           {!result.is_published && !isEditing && (
@@ -289,6 +332,17 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
                 {publishMutation.isPending ? 'Publishing...' : 'Publish Result'}
               </Button>
             </div>
+          )}
+          {isPendingPart && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setIsCancelPartConfirmOpen(true)}
+              disabled={cancelPartMutation.isPending}
+              data-testid={`cancel-staged-part-${result.id}`}
+            >
+              {cancelPartMutation.isPending ? 'Cancelling...' : 'Cancel This Part'}
+            </Button>
           )}
         </div>
 
@@ -416,6 +470,21 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
           confirmText="Yes, Delete Draft"
           variant="danger"
           isLoading={deleteMutation.isPending}
+        />
+
+        {/* Cancel Pending Part Confirmation */}
+        <ConfirmModal
+          isOpen={isCancelPartConfirmOpen}
+          onClose={() => setIsCancelPartConfirmOpen(false)}
+          onConfirm={async () => {
+            await handleCancelPart();
+            setIsCancelPartConfirmOpen(false);
+          }}
+          title="Cancel Pending Part"
+          message={`Part ${result.part_number} has not been revealed yet. Cancelling removes it permanently — the player will see the chain end at the previous part.`}
+          confirmText="Yes, Cancel This Part"
+          variant="danger"
+          isLoading={cancelPartMutation.isPending}
         />
       </div>
     </div>
