@@ -231,9 +231,11 @@ func setupFullPhaseAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.
 
 				// Action results
 				r.Post("/results", phaseHandler.CreateActionResult)
+				r.Post("/results/staged", phaseHandler.CreateStagedResultChain)
 				r.Get("/results", phaseHandler.GetGameActionResults)
 				r.Get("/results/mine", phaseHandler.GetUserActionResults)
 				r.Put("/results/{resultId}", phaseHandler.UpdateActionResult)
+				r.Delete("/results/{resultId}/pending", phaseHandler.CancelPendingStagedPart)
 				r.Post("/results/{resultId}/publish", phaseHandler.PublishActionResult)
 				r.Post("/phases/{phaseId}/results/publish", phaseHandler.PublishAllPhaseResults)
 				r.Get("/phases/{phaseId}/results/unpublished-count", phaseHandler.GetUnpublishedResultsCount)

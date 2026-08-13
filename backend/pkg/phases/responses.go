@@ -110,6 +110,18 @@ type ActionResultWithDetailsResponse struct {
 	GMUsername         string     `json:"gm_username,omitempty"`    // GM username (for player view)
 	PhaseType          string     `json:"phase_type,omitempty"`
 	PhaseNumber        int32      `json:"phase_number,omitempty"`
+
+	// Staged reveal fields. All omitempty, so an ordinary single-part result
+	// serializes exactly as it did before this feature existed and no client
+	// has to learn about staging to keep working.
+	//
+	// ReleasedAt is when a part became visible to its recipient; nil means
+	// scheduled but not yet released. Distinct from SentAt, which only tracks
+	// publication — a staged part is published long before it is released.
+	PartNumber *int32     `json:"part_number,omitempty"`
+	PartCount  int32      `json:"part_count,omitempty"`
+	ReleasedAt *time.Time `json:"released_at,omitempty"`
+	UnlocksAt  *time.Time `json:"unlocks_at,omitempty"`
 }
 
 func (rd *ActionResultWithDetailsResponse) Render(w http.ResponseWriter, r *http.Request) error {
