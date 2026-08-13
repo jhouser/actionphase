@@ -8,6 +8,7 @@ import type {
   ActionSubmissionRequest,
   ActionWithDetails,
   ActionResult,
+  StagedResultPart,
   DraftCharacterUpdate,
   CreateDraftCharacterUpdateRequest,
   UpdateDraftCharacterUpdateRequest
@@ -70,6 +71,32 @@ export class PhasesApi extends BaseApiClient {
 
   async createActionResult(gameId: number, data: { user_id: number; character_id?: number; action_submission_id?: number; content: string; is_published?: boolean }) {
     return this.client.post<ActionResult>(`/api/v1/games/${gameId}/results`, data);
+  }
+
+  // Creates a whole staged chain in one atomic request. There is deliberately
+  // no append-to-existing-chain endpoint: building a chain across several
+  // requests would leave partial chains behind whenever one failed.
+  //
+  // parts[0] is the head and must have delay_minutes: 0. Every later part's
+  // delay is measured from the moment its predecessor was revealed, not from
+  // publish time.
+  async createStagedResultChain(
+    gameId: number,
+    data: {
+      user_id: number;
+      character_id?: number;
+      action_submission_id?: number;
+      parts: StagedResultPart[];
+      is_published?: boolean;
+    }
+  ) {
+    return this.client.post<ActionResult[]>(`/api/v1/games/${gameId}/results/staged`, data);
+  }
+
+  // Cancels a part that has not yet been revealed. Only pending parts can be
+  // cancelled — once a part is out, it stays out.
+  async cancelPendingStagedPart(gameId: number, resultId: number) {
+    return this.client.delete(`/api/v1/games/${gameId}/results/${resultId}/pending`);
   }
 
   async publishAllPhaseResults(gameId: number, phaseId: number) {

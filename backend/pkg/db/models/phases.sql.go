@@ -801,12 +801,40 @@ func (q *Queries) GetGamePhases(ctx context.Context, gameID int32) ([]GamePhase,
 }
 
 const getGameResults = `-- name: GetGameResults :many
+WITH RECURSIVE chain AS (
+    -- Chain positions for this game's staged results. Same shape as the CTE in
+    -- GetUserResults; see the longer note there for why it is scoped to the
+    -- game rather than to the outer query's filter.
+    SELECT h.id, h.id AS head_id, 1 AS part_number,
+           h.released_at AS parent_released_at, h.reveal_delay_minutes
+    FROM action_results h
+    WHERE h.game_id = $1
+      AND h.parent_result_id IS NULL
+      AND EXISTS (SELECT 1 FROM action_results k WHERE k.parent_result_id = h.id)
+    UNION ALL
+    SELECT child.id, c.head_id, c.part_number + 1,
+           parent.released_at, child.reveal_delay_minutes
+    FROM action_results child
+    JOIN chain c ON child.parent_result_id = c.id
+    JOIN action_results parent ON child.parent_result_id = parent.id
+),
+chain_position AS (
+    SELECT id, part_number,
+           COUNT(*) OVER (PARTITION BY head_id) AS part_count,
+           (CASE
+               WHEN parent_released_at IS NOT NULL AND reveal_delay_minutes IS NOT NULL
+               THEN parent_released_at + make_interval(mins => reveal_delay_minutes)
+           END)::timestamptz AS unlocks_at
+    FROM chain
+)
 SELECT results.id, results.game_id, results.user_id, results.phase_id, results.character_id, results.action_submission_id, results.gm_user_id, results.content, results.is_published, results.sent_at, results.parent_result_id, results.reveal_delay_minutes, results.released_at, u.username, gp.phase_type, gp.phase_number,
-       c.name as character_name
+       c.name as character_name,
+       cp.part_number, cp.part_count, cp.unlocks_at
 FROM action_results results
 JOIN users u ON results.user_id = u.id
 JOIN game_phases gp ON results.phase_id = gp.id
 LEFT JOIN characters c ON results.character_id = c.id
+LEFT JOIN chain_position cp ON cp.id = results.id
 WHERE results.game_id = $1
 ORDER BY gp.phase_number, results.id
 `
@@ -829,6 +857,9 @@ type GetGameResultsRow struct {
 	PhaseType          string             `json:"phase_type"`
 	PhaseNumber        int32              `json:"phase_number"`
 	CharacterName      pgtype.Text        `json:"character_name"`
+	PartNumber         pgtype.Int4        `json:"part_number"`
+	PartCount          pgtype.Int8        `json:"part_count"`
+	UnlocksAt          pgtype.Timestamptz `json:"unlocks_at"`
 }
 
 // Oldest first within a phase, matching GetUserResults so the History tab reads
@@ -871,6 +902,9 @@ func (q *Queries) GetGameResults(ctx context.Context, gameID int32) ([]GetGameRe
 			&i.PhaseType,
 			&i.PhaseNumber,
 			&i.CharacterName,
+			&i.PartNumber,
+			&i.PartCount,
+			&i.UnlocksAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1558,27 +1592,73 @@ func (q *Queries) GetUserPhaseSubmission(ctx context.Context, arg GetUserPhaseSu
 }
 
 const getUserResults = `-- name: GetUserResults :many
-SELECT results.id, results.game_id, results.user_id, results.phase_id, results.character_id, results.action_submission_id, results.gm_user_id, results.content, results.is_published, results.sent_at, results.parent_result_id, results.reveal_delay_minutes, results.released_at, gp.phase_type, gp.phase_number, u.username as gm_username,
-       c.name as character_name
+WITH RECURSIVE chain AS (
+    -- Chain positions for every staged result in this game, computed in one
+    -- pass. Seeded from chain heads — a row with children but no parent — so
+    -- ordinary single-part results never enter the CTE and cost nothing.
+    --
+    -- Deliberately scoped to game_id ONLY, not to the user or the released_at
+    -- gate the outer query applies. The parts this CTE counts are precisely the
+    -- ones the WHERE clause below hides: a player holding part 1 of 3 must
+    -- still be told the chain has three parts, or the UI cannot say "Part 1 of
+    -- 3" and the pending placeholder has nothing to render. Narrowing this CTE
+    -- to match the outer filter would make part_count mean "parts you can
+    -- already see", which is always 1 for the part that matters.
+    SELECT h.id, h.id AS head_id, 1 AS part_number,
+           h.released_at AS parent_released_at, h.reveal_delay_minutes
+    FROM action_results h
+    WHERE h.game_id = $1
+      AND h.parent_result_id IS NULL
+      AND EXISTS (SELECT 1 FROM action_results k WHERE k.parent_result_id = h.id)
+    UNION ALL
+    SELECT child.id, c.head_id, c.part_number + 1,
+           parent.released_at, child.reveal_delay_minutes
+    FROM action_results child
+    JOIN chain c ON child.parent_result_id = c.id
+    JOIN action_results parent ON child.parent_result_id = parent.id
+),
+chain_position AS (
+    SELECT id, part_number,
+           COUNT(*) OVER (PARTITION BY head_id) AS part_count,
+           -- When this part becomes visible: the parent's release plus this
+           -- part's delay. NULL when the parent is itself unreleased, because
+           -- the time is then genuinely unknown — an estimate would be wrong
+           -- the moment any upstream part slips. The UI shows a countdown only
+           -- for the one pending part that has a known unlock time.
+           (CASE
+               WHEN parent_released_at IS NOT NULL AND reveal_delay_minutes IS NOT NULL
+               THEN parent_released_at + make_interval(mins => reveal_delay_minutes)
+           END)::timestamptz AS unlocks_at
+    FROM chain
+)
+SELECT results.id, results.game_id, results.user_id, results.phase_id,
+       results.character_id, results.action_submission_id, results.gm_user_id,
+       -- THE gate the feature rests on. An unreleased part's text must never
+       -- reach the client: a player with devtools would defeat the whole
+       -- feature. Blanked in SQL so no Go code path can leak it by accident.
+       --
+       -- Ordinary unstaged results and every pre-feature row have released_at
+       -- set at publish time (backfilled by migration 20260812214302), so this
+       -- CASE is a no-op for everything except pending staged parts.
+       --
+       -- Empty string rather than NULL: content is NOT NULL on the table and
+       -- every existing client reads it as a string. A locked part is
+       -- identified by released_at being null, not by probing the content.
+       -- The ::text cast is required, not cosmetic: without it sqlc cannot
+       -- infer the CASE's type and generates ` + "`" + `Content interface{}` + "`" + `, which
+       -- erases compile-time checking on the one field that must never leak.
+       (CASE WHEN results.released_at IS NULL THEN '' ELSE results.content END)::text AS content,
+       results.is_published, results.sent_at, results.parent_result_id,
+       results.reveal_delay_minutes, results.released_at,
+       gp.phase_type, gp.phase_number, u.username as gm_username,
+       c.name as character_name,
+       cp.part_number, cp.part_count, cp.unlocks_at
 FROM action_results results
 JOIN game_phases gp ON results.phase_id = gp.id
 JOIN users u ON results.gm_user_id = u.id
 LEFT JOIN characters c ON results.character_id = c.id
+LEFT JOIN chain_position cp ON cp.id = results.id
 WHERE results.game_id = $1 AND results.user_id = $2 AND results.is_published = true
-  -- Staged reveals: a part of a multi-part result is invisible to its recipient
-  -- until the release worker sets released_at. This is THE gate the feature
-  -- rests on — if an unreleased part's content reaches the client, a player with
-  -- devtools defeats the whole thing.
-  --
-  -- Ordinary unstaged results and every pre-feature row have released_at set at
-  -- publish time (and were backfilled by migration 20260812214302), so this
-  -- clause is a no-op for everything except pending staged parts.
-  --
-  -- This is the ONLY read path that gates on released_at besides the archive
-  -- export. GM and audience deliberately see unreleased parts — see the
-  -- "Who sees unreleased parts" table in
-  -- .claude/planning/staged-result-reveals.md.
-  AND results.released_at IS NOT NULL
 ORDER BY gp.phase_number DESC, results.sent_at, results.id
 `
 
@@ -1605,8 +1685,26 @@ type GetUserResultsRow struct {
 	PhaseNumber        int32              `json:"phase_number"`
 	GmUsername         string             `json:"gm_username"`
 	CharacterName      pgtype.Text        `json:"character_name"`
+	PartNumber         pgtype.Int4        `json:"part_number"`
+	PartCount          pgtype.Int8        `json:"part_count"`
+	UnlocksAt          pgtype.Timestamptz `json:"unlocks_at"`
 }
 
+// Columns are listed explicitly rather than using results.*, and that is a
+// security decision, not a style one. A pending part IS returned to its
+// recipient — the countdown placeholder needs the row to exist — with only its
+// content withheld. `results.*` would put the real content on the row and leave
+// nothing but Go discipline between it and the JSON encoder. Listing columns
+// means the blanked content is the only content this query can ever emit.
+//
+// If you add a column to action_results, add it here too; it will not appear by
+// itself. That is the intended trade-off.
+// No released_at filter. Unreleased parts are returned deliberately so the
+// player sees a placeholder counting down to the reveal (Design Decisions,
+// "Locked-part UI"). The suspense comes from withholding the text, not the
+// row's existence. The content CASE above is what enforces that — do not
+// re-add a released_at filter here expecting it to be the gate.
+//
 // Ascending within a phase, unlike the GM-facing queries: a player reading a
 // reveal delivered in several parts wants them in the order the GM sent them.
 // Only published rows are returned here, so sent_at is always populated; id is
@@ -1638,6 +1736,9 @@ func (q *Queries) GetUserResults(ctx context.Context, arg GetUserResultsParams) 
 			&i.PhaseNumber,
 			&i.GmUsername,
 			&i.CharacterName,
+			&i.PartNumber,
+			&i.PartCount,
+			&i.UnlocksAt,
 		); err != nil {
 			return nil, err
 		}

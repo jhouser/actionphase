@@ -313,7 +313,7 @@ func TestReleaseDueStagedParts(t *testing.T) {
 			"release timestamp must not move")
 	})
 
-	t.Run("the recipient cannot read unreleased parts", func(t *testing.T) {
+	t.Run("the recipient cannot read the text of unreleased parts", func(t *testing.T) {
 		env := setupStagedTest(t)
 
 		chain, err := env.actionService.CreateStagedResultChain(ctx, env.chainRequest(0, 15))
@@ -322,14 +322,25 @@ func TestReleaseDueStagedParts(t *testing.T) {
 		queries := models.New(env.testDB.Pool)
 
 		// GetUserResults is the player's read path and the gate the whole
-		// feature rests on.
+		// feature rests on. It withholds an unreleased part's *content* while
+		// still returning the row, so the client can show a placeholder
+		// counting down to the reveal. Withholding the row instead would leave
+		// nothing to count down from.
 		visible, err := queries.GetUserResults(ctx, models.GetUserResultsParams{
 			GameID: env.gameID,
 			UserID: env.playerID,
 		})
 		require.NoError(t, err)
-		require.Len(t, visible, 1, "only the head should be readable")
+		require.Len(t, visible, 2, "both rows are returned; only the text is withheld")
+
 		assert.Equal(t, chain[0].ID, visible[0].ID)
+		assert.NotEmpty(t, visible[0].Content, "the released head is readable")
+
+		assert.Equal(t, chain[1].ID, visible[1].ID)
+		assert.Empty(t, visible[1].Content,
+			"an unreleased part must carry no text — this is the gate the feature rests on")
+		assert.False(t, visible[1].ReleasedAt.Valid,
+			"and released_at is how the client knows the part is still locked")
 
 		env.backdateRelease(t, chain[0].ID, 16)
 		_, _, err = env.actionService.ReleaseDueStagedParts(ctx)
@@ -340,7 +351,9 @@ func TestReleaseDueStagedParts(t *testing.T) {
 			UserID: env.playerID,
 		})
 		require.NoError(t, err)
-		assert.Len(t, visible, 2, "part 2 becomes readable only after release")
+		require.Len(t, visible, 2)
+		assert.NotEmpty(t, visible[1].Content, "part 2's text arrives only after release")
+		assert.True(t, visible[1].ReleasedAt.Valid)
 	})
 
 	t.Run("a chain keeps its own clock after the phase advances", func(t *testing.T) {

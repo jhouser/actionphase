@@ -79,6 +79,34 @@ export interface ActionResult {
   gm_username?: string;
   username?: string;
   character_name?: string;
+
+  // Staged reveal fields. All optional: an ordinary single-part result omits
+  // every one of them, so existing code that never mentions staging is
+  // unaffected.
+  //
+  // part_number / part_count are present only for a result that belongs to a
+  // multi-part chain, and describe its position ("Part 2 of 3").
+  part_number?: number;
+  part_count?: number;
+
+  // When this part became visible to its recipient. Absent while the part is
+  // still locked — this, NOT an empty content string, is how you tell a locked
+  // part from a released one. A player's response carries locked parts with
+  // content blanked server-side.
+  released_at?: string;
+
+  // When a locked part is due to be revealed, for the countdown. Present only
+  // for the next part due out; later parts have no knowable unlock time until
+  // their predecessor releases, and show a plain "pending" state instead.
+  unlocks_at?: string;
+}
+
+// One part of a staged result chain as the GM composes it. The head must carry
+// delay_minutes: 0 — its delay is meaningless because it releases on publish,
+// and the API rejects a head with a non-zero delay rather than ignoring it.
+export interface StagedResultPart {
+  content: string;
+  delay_minutes: number;
 }
 
 export interface DraftCharacterUpdate {
