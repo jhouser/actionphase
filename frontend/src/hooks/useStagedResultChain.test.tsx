@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { useCreateStagedResultChain, useCancelPendingStagedPart } from './useActionResults';
+import {
+  useCreateStagedResultChain,
+  useCancelPendingStagedPart,
+  useAppendStagedPart,
+  useUpdateStagedPartDelay,
+} from './useActionResults';
 import { apiClient } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
@@ -10,6 +15,8 @@ vi.mock('../lib/api', () => ({
     phases: {
       createStagedResultChain: vi.fn(),
       cancelPendingStagedPart: vi.fn(),
+      appendStagedPart: vi.fn(),
+      updateStagedPartDelay: vi.fn(),
     },
   },
 }));
@@ -162,6 +169,100 @@ describe('useCancelPendingStagedPart', () => {
 
     // A pending part is already published — it waits on its timer, not on the
     // GM — so cancelling it cannot change the unpublished count.
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['unpublishedResultsCount'] });
+  });
+});
+
+describe('useAppendStagedPart', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('appends to the named result', async () => {
+    mockedApi.appendStagedPart.mockResolvedValue({ data: {} } as never);
+    const { wrapper } = makeWrapper();
+
+    const { result } = renderHook(() => useAppendStagedPart(GAME_ID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        resultId: 42,
+        part: { content: 'and misses!', delay_minutes: 15 },
+      });
+    });
+
+    expect(mockedApi.appendStagedPart).toHaveBeenCalledWith(GAME_ID, 42, {
+      content: 'and misses!',
+      delay_minutes: 15,
+    });
+  });
+
+  it('refreshes the unpublished count, unlike cancel', async () => {
+    mockedApi.appendStagedPart.mockResolvedValue({ data: {} } as never);
+    const { wrapper, queryClient } = makeWrapper();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useAppendStagedPart(GAME_ID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        resultId: 42,
+        part: { content: 'and misses!', delay_minutes: 15 },
+      });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['actionResults', 'game', GAME_ID] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['actionResults', 'user', GAME_ID] });
+
+    // Appending writes a new UNPUBLISHED row, so the GM's "N results waiting"
+    // badge is now stale. This is the asymmetry with cancel, which removes an
+    // already-published row and correctly leaves the count alone.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['unpublishedResultsCount'] });
+  });
+});
+
+describe('useUpdateStagedPartDelay', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('retimes by result id', async () => {
+    mockedApi.updateStagedPartDelay.mockResolvedValue({ data: {} } as never);
+    const { wrapper } = makeWrapper();
+
+    const { result } = renderHook(() => useUpdateStagedPartDelay(GAME_ID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ resultId: 42, delayMinutes: 30 });
+    });
+
+    expect(mockedApi.updateStagedPartDelay).toHaveBeenCalledWith(GAME_ID, 42, 30);
+  });
+
+  // The player-facing invalidation here is load-bearing, not incidental.
+  // Retiming a part that is already PUBLISHED but still pending changes the
+  // unlocks_at that the recipient's countdown is rendering right now. Drop this
+  // key and the player keeps counting down to the old time and sees "Unlocking…"
+  // hang, with nothing to tell them the deadline moved.
+  it('refreshes the player list so a live countdown is not left on the old time', async () => {
+    mockedApi.updateStagedPartDelay.mockResolvedValue({ data: {} } as never);
+    const { wrapper, queryClient } = makeWrapper();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useUpdateStagedPartDelay(GAME_ID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ resultId: 42, delayMinutes: 30 });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['actionResults', 'user', GAME_ID] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['actionResults', 'game', GAME_ID] });
+
+    // A retime never changes how many results are waiting to be published.
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['unpublishedResultsCount'] });
   });
 });
