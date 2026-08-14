@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useUserActionResults } from '../hooks/useActionResults';
 import { Alert } from './ui';
 import { MarkdownPreview } from './MarkdownPreview';
+import { StagedPartPlaceholder } from './StagedPartPlaceholder';
 
 interface ActionResultsListProps {
   gameId: number;
@@ -10,6 +12,12 @@ interface ActionResultsListProps {
 export const ActionResultsList: React.FC<ActionResultsListProps> = ({ gameId }) => {
   const { data: results, isLoading, error } = useUserActionResults(gameId);
   const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
+  const queryClient = useQueryClient();
+
+  // A countdown reaching zero means "ask the server again", never "show it".
+  const handlePartExpired = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['actionResults', 'user', gameId] });
+  }, [queryClient, gameId]);
 
   if (isLoading) {
     return (
@@ -53,6 +61,12 @@ export const ActionResultsList: React.FC<ActionResultsListProps> = ({ gameId }) 
         const isCollapsible = result.content.length > 200;
         const previewContent = result.content.substring(0, 200) + '...';
 
+        // `released_at` is the authority, not empty content: an ordinary result
+        // has no released_at at all, and a locked part's content arrives blanked
+        // from the server rather than absent.
+        const isStagedPart = result.part_count !== undefined && result.part_count > 1;
+        const isLocked = isStagedPart && !result.released_at;
+
         return (
           <div key={result.id} className="p-4 surface-base border border-theme-default rounded shadow-sm">
             <div className="flex justify-between items-start mb-2">
@@ -65,30 +79,46 @@ export const ActionResultsList: React.FC<ActionResultsListProps> = ({ gameId }) 
                 </span>
               )}
             </div>
-            <div>
-              <MarkdownPreview content={isCollapsible && !isExpanded ? previewContent : result.content} fullWidth />
-            </div>
-            {isCollapsible && (
-              <button
-                onClick={() => toggleExpanded(result.id)}
-                className="mt-2 text-sm text-interactive-primary hover:text-interactive-primary-hover font-medium flex items-center"
-              >
-                {isExpanded ? (
-                  <>
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                    </svg>
-                    Show less
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                    Show full content
-                  </>
+            {isStagedPart && !isLocked && (
+              <p className="text-xs font-medium text-content-secondary mb-2" data-testid={`staged-part-label-${result.id}`}>
+                Part {result.part_number} of {result.part_count}
+              </p>
+            )}
+            {isLocked ? (
+              <StagedPartPlaceholder
+                partNumber={result.part_number}
+                partCount={result.part_count}
+                unlocksAt={result.unlocks_at}
+                onExpired={handlePartExpired}
+              />
+            ) : (
+              <>
+                <div>
+                  <MarkdownPreview content={isCollapsible && !isExpanded ? previewContent : result.content} fullWidth />
+                </div>
+                {isCollapsible && (
+                  <button
+                    onClick={() => toggleExpanded(result.id)}
+                    className="mt-2 text-sm text-interactive-primary hover:text-interactive-primary-hover font-medium flex items-center"
+                  >
+                    {isExpanded ? (
+                      <>
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        </svg>
+                        Show less
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                        Show full content
+                      </>
+                    )}
+                  </button>
                 )}
-              </button>
+              </>
             )}
             {result.gm_username && (
               <p className="text-xs text-content-tertiary mt-2">From: {result.gm_username}</p>

@@ -447,6 +447,73 @@ func TestActionSubmissionService_PublishAllPhaseResults(t *testing.T) {
 		assert.Equal(t, int64(1), count2, "Phase 2 should still have 1 unpublished result")
 	})
 
+	// Regression: a staged chain must be published as ONE result, not N.
+	//
+	// PublishActionResult publishes an entire chain, so if the work list
+	// includes chain followers each one re-publishes the same chain and sends
+	// the recipient another "your result has been published" notification. The
+	// player sees one scene and gets N notifications for it.
+	t.Run("publishes a staged chain once, with one notification", func(t *testing.T) {
+		chainGame := testDB.CreateTestGame(t, int32(gm.ID), "Chain Publish Game")
+		player := testDB.CreateTestUser(t, "chain_pub_player", "chain_pub_player@example.com")
+		_, err := gameService.AddGameParticipant(context.Background(), chainGame.ID, int32(player.ID), "player")
+		require.NoError(t, err)
+
+		chainPhase, err := phaseService.TransitionToNextPhase(context.Background(), chainGame.ID, int32(gm.ID), core.TransitionPhaseRequest{
+			PhaseType: "action",
+			Title:     "Chain Phase",
+		})
+		require.NoError(t, err)
+
+		// A 3-part draft chain: one scene, three rows.
+		_, err = actionService.CreateStagedResultChain(context.Background(), core.CreateStagedResultChainRequest{
+			GameID:  chainGame.ID,
+			PhaseID: chainPhase.ID,
+			UserID:  int32(player.ID),
+			Parts: []core.StagedResultPart{
+				{Content: "The sword swings toward your head..."},
+				{Content: "...and stops.", DelayMinutes: 5},
+				{Content: "The creature folds backward and is gone.", DelayMinutes: 5},
+			},
+			IsPublished: false,
+		})
+		require.NoError(t, err)
+
+		// The GM is being told how many results they are about to publish.
+		// Three rows, but one scene.
+		countBefore, err := actionService.GetUnpublishedResultsCount(context.Background(), chainPhase.ID)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), countBefore, "A 3-part chain is one publishable result, not three")
+
+		err = actionService.PublishAllPhaseResults(context.Background(), chainPhase.ID)
+		require.NoError(t, err)
+
+		// The whole chain went out, not just the head.
+		var publishedParts int
+		err = testDB.Pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM action_results WHERE phase_id = $1 AND is_published = true`,
+			chainPhase.ID).Scan(&publishedParts)
+		require.NoError(t, err)
+		assert.Equal(t, 3, publishedParts, "Publishing the head must publish the entire chain")
+
+		// Only the head is released; the followers wait for the worker. This is
+		// the feature, so assert it here rather than trusting it elsewhere.
+		var releasedParts int
+		err = testDB.Pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM action_results WHERE phase_id = $1 AND released_at IS NOT NULL`,
+			chainPhase.ID).Scan(&releasedParts)
+		require.NoError(t, err)
+		assert.Equal(t, 1, releasedParts, "Only the chain head is released at publish time")
+
+		// The actual player-visible symptom of the bug.
+		var notifications int
+		err = testDB.Pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND game_id = $2`,
+			int32(player.ID), chainGame.ID).Scan(&notifications)
+		require.NoError(t, err)
+		assert.Equal(t, 1, notifications, "One scene must produce exactly one publish notification")
+	})
+
 	t.Run("handles empty phase gracefully", func(t *testing.T) {
 		emptyGame := testDB.CreateTestGame(t, int32(gm.ID), "Empty Game")
 		emptyPhase, err := phaseService.TransitionToNextPhase(context.Background(), emptyGame.ID, int32(gm.ID), core.TransitionPhaseRequest{

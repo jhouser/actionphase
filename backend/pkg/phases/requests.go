@@ -64,6 +64,58 @@ func (r *CreateActionResultRequest) Bind(req *http.Request) error {
 	return nil
 }
 
+// StagedResultPartRequest is one part of a staged result chain.
+//
+// DelayMinutes is how long to wait after the *previous* part becomes visible,
+// which is why the first part must carry 0: nothing precedes it.
+type StagedResultPartRequest struct {
+	Content      string `json:"content" validate:"required"`
+	DelayMinutes int32  `json:"delay_minutes"`
+}
+
+// CreateStagedResultChainRequest represents the request to create a whole
+// staged result chain in one call.
+//
+// The recipient fields sit on the chain rather than on each part, so a chain
+// cannot change recipient midway. That invariant holds by construction and
+// needs no validation; see the service layer.
+type CreateStagedResultChainRequest struct {
+	UserID             int32                     `json:"user_id" validate:"required"`
+	CharacterID        *int32                    `json:"character_id,omitempty"`
+	ActionSubmissionID *int32                    `json:"action_submission_id,omitempty"`
+	Parts              []StagedResultPartRequest `json:"parts" validate:"required"`
+	IsPublished        bool                      `json:"is_published,omitempty"`
+}
+
+func (r *CreateStagedResultChainRequest) Bind(req *http.Request) error {
+	return nil
+}
+
+// AppendStagedPartRequest represents the request to add one part to the end of
+// a draft chain.
+//
+// Recipient fields are absent by design: the appended part inherits them from
+// the chain it joins, which is what keeps a chain from changing recipient
+// midway. The URL's result ID identifies the chain, and it may be any member.
+type AppendStagedPartRequest struct {
+	Content      string `json:"content" validate:"required"`
+	DelayMinutes int32  `json:"delay_minutes" validate:"required"`
+}
+
+func (r *AppendStagedPartRequest) Bind(req *http.Request) error {
+	return nil
+}
+
+// UpdateStagedPartDelayRequest represents the request to retime an unreleased
+// staged part.
+type UpdateStagedPartDelayRequest struct {
+	DelayMinutes int32 `json:"delay_minutes" validate:"required"`
+}
+
+func (r *UpdateStagedPartDelayRequest) Bind(req *http.Request) error {
+	return nil
+}
+
 // CreateDraftCharacterUpdateRequest represents the request to create a draft character update
 type CreateDraftCharacterUpdateRequest struct {
 	CharacterID int32  `json:"character_id" validate:"required"`

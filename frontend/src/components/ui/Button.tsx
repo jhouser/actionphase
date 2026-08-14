@@ -21,7 +21,11 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const buttonStyles = tv({
   base: [
     // Base styles
-    'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors',
+    // whitespace-nowrap: a wrapped label makes a button taller than its
+    // siblings, which is what turns any row of differently-worded buttons into
+    // a ragged staircase. Buttons are short by convention; if a label is long
+    // enough to want two lines, the label is the thing to fix.
+    'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors whitespace-nowrap',
     // Cursor
     'cursor-pointer',
     // Focus states - using semantic tokens. focus-visible (not focus) so the
