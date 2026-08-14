@@ -355,6 +355,50 @@ func TestRenderActionFile_MultipleResultsOrderedAndNumbered(t *testing.T) {
 		"results must be ordered by send time regardless of input order")
 }
 
+// Every part of a staged chain shares one sent_at, so send time cannot order
+// them — the chain link must.
+//
+// PublishActionResult publishes a whole chain in a single UPDATE setting
+// `sent_at = COALESCE(sent_at, NOW())` (phases.sql:406), and NOW() is the
+// transaction timestamp. So all N parts land on a byte-identical sent_at. This
+// is not a corner case: it is what every published chain in the database looks
+// like. Verified against production rows 436/437/438, which share
+// `2026-08-13 19:40:36.693598+00` and come back from the export query in the
+// order 438, 437, 436 — exactly reversed.
+//
+// With the sort key tied, sort.SliceStable preserves input order, so whatever
+// order Postgres returned is what the archive renders. "Result 1 of 3" then
+// labels the payoff and "Result 3 of 3" the setup, and the scene reads
+// backwards with no indication anything is wrong.
+func TestRenderActionFile_ChainOrderedByLinkWhenSendTimesTie(t *testing.T) {
+	sub := models.ListExportActionSubmissionsRow{
+		ID: 7, PhaseID: 5, Content: "I duel the swordsman.",
+		SubmittedAt: tstz(0), Username: "ada_player", CharacterName: txt("Ada"),
+	}
+	// One shared timestamp, supplied reversed — what the export query returns.
+	shared := tstz(100)
+	results := []models.ListExportActionResultsRow{
+		{ID: 438, PhaseID: 5, Content: "and misses! You counterattack.", SentAt: shared,
+			ParentResultID: i4(437), RecipientUsername: "ada_player", GmUsername: "gm_user"},
+		{ID: 437, PhaseID: 5, Content: "The blade whooshes toward your head...", SentAt: shared,
+			ParentResultID: i4(436), RecipientUsername: "ada_player", GmUsername: "gm_user"},
+		{ID: 436, PhaseID: 5, Content: "You get into a fight with X.", SentAt: shared,
+			RecipientUsername: "ada_player", GmUsername: "gm_user"},
+	}
+
+	out := RenderActionFile(sub, results, "Phase 2")
+
+	setup := strings.Index(out, "You get into a fight with X.")
+	swing := strings.Index(out, "The blade whooshes toward your head...")
+	payoff := strings.Index(out, "and misses! You counterattack.")
+
+	assert.Less(t, setup, swing, "the chain head must render first")
+	assert.Less(t, swing, payoff, "the payoff must render last, not first")
+
+	// The numbering must agree with the order, or the labels lie.
+	assert.Less(t, strings.Index(out, "## Result 1 of 3"), strings.Index(out, "## Result 3 of 3"))
+}
+
 // A result with no send time must not displace dated results.
 func TestRenderActionFile_UndatedResultSortsLast(t *testing.T) {
 	sub := models.ListExportActionSubmissionsRow{

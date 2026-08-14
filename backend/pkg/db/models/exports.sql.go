@@ -371,6 +371,7 @@ func (q *Queries) ListExpiredGameExports(ctx context.Context, resultLimit int32)
 
 const listExportActionResults = `-- name: ListExportActionResults :many
 SELECT r.id, r.phase_id, r.user_id, r.action_submission_id, r.content, r.sent_at,
+       r.parent_result_id,
        u.username AS recipient_username, ch.name AS character_name,
        gm.username AS gm_username
 FROM action_results r
@@ -396,7 +397,7 @@ WHERE r.game_id = $1 AND r.is_published = TRUE
   -- The read path that IS gated is GetUserResults (the recipient mid-game),
   -- which blanks unreleased content. That is where the feature lives. An
   -- export is not that path: nothing about a finished game is still a surprise.
-ORDER BY r.phase_id, r.sent_at
+ORDER BY r.phase_id, r.sent_at, r.id
 `
 
 type ListExportActionResultsRow struct {
@@ -406,6 +407,7 @@ type ListExportActionResultsRow struct {
 	ActionSubmissionID pgtype.Int4        `json:"action_submission_id"`
 	Content            string             `json:"content"`
 	SentAt             pgtype.Timestamptz `json:"sent_at"`
+	ParentResultID     pgtype.Int4        `json:"parent_result_id"`
 	RecipientUsername  string             `json:"recipient_username"`
 	CharacterName      pgtype.Text        `json:"character_name"`
 	GmUsername         string             `json:"gm_username"`
@@ -418,6 +420,17 @@ type ListExportActionResultsRow struct {
 // (phase_id, user_id) — the tuple action_submissions enforces as unique via
 // UNIQUE(game_id, user_id, phase_id). user_id is selected for that join;
 // action_submission_id is kept as a preferred hint when it is set.
+// parent_result_id is selected because sent_at CANNOT order a staged chain.
+// PublishActionResult publishes the whole chain in one UPDATE setting
+// `sent_at = COALESCE(sent_at, NOW())`, and NOW() is the transaction timestamp,
+// so every part of a chain carries a byte-identical sent_at. With the sort key
+// tied, row order is whatever the scan happened to produce — observed reversed
+// on real data. The renderer relinks the chain from this column.
+//
+// r.id breaks the sent_at tie that every staged chain produces. Parts are
+// created in narrative order, so ascending id is the authoring order and makes
+// the result set deterministic instead of scan-dependent. The renderer still
+// relinks by parent_result_id rather than trusting this ordering.
 func (q *Queries) ListExportActionResults(ctx context.Context, gameID int32) ([]ListExportActionResultsRow, error) {
 	rows, err := q.db.Query(ctx, listExportActionResults, gameID)
 	if err != nil {
@@ -434,6 +447,7 @@ func (q *Queries) ListExportActionResults(ctx context.Context, gameID int32) ([]
 			&i.ActionSubmissionID,
 			&i.Content,
 			&i.SentAt,
+			&i.ParentResultID,
 			&i.RecipientUsername,
 			&i.CharacterName,
 			&i.GmUsername,
