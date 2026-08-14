@@ -136,6 +136,26 @@ describe('CreateActionResultForm — staged chains', () => {
     ]);
   });
 
+  // The server caps a chain at core.MaxStagedChainLength (10) and rejects
+  // anything longer. Because this form holds unsaved text, discovering the cap
+  // at submit time would surface as a generic "Failed to create result" and
+  // lose every part the GM had written — so the control has to stop them here.
+  it('stops the GM at the maximum chain length', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByTestId('content'), 'The head.');
+
+    // Head + 9 follow-ups = 10, the server's limit.
+    for (let i = 0; i < 9; i++) {
+      await user.click(screen.getByTestId('add-staged-part'));
+    }
+
+    expect(screen.getByTestId('staged-part-10')).toBeInTheDocument();
+    expect(screen.getByTestId('add-staged-part')).toBeDisabled();
+    expect(screen.queryByTestId('staged-part-11')).not.toBeInTheDocument();
+  });
+
   it('removes a follow-up part, reverting to the single-result path', async () => {
     const user = userEvent.setup();
     renderForm();

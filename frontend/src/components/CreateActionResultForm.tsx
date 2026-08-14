@@ -5,7 +5,7 @@ import { Button, Alert } from './ui';
 import { CommentEditor } from './CommentEditor';
 import { StagedPartsEditor } from './StagedPartsEditor';
 import type { StagedResultPart } from '../types/phases';
-import { DEFAULT_DELAY_MINUTES } from '../lib/stagedDelays';
+import { DEFAULT_DELAY_MINUTES, MAX_CHAIN_PARTS } from '../lib/stagedDelays';
 import { logger } from '@/services/LoggingService';
 
 interface CreateActionResultFormProps {
@@ -38,7 +38,14 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
   const isStaged = followUpParts.length > 0;
   const activeMutation = isStaged ? createChain : createResult;
 
+  // The head counts toward the server's cap, so the follow-up allowance is one
+  // less. Enforced here as well as server-side because this form holds unsaved
+  // text: letting the GM write an 11th part and then rejecting it on submit
+  // would throw away everything they had typed.
+  const canAddPart = followUpParts.length + 1 < MAX_CHAIN_PARTS;
+
   const addFollowUpPart = () => {
+    if (!canAddPart) return;
     setFollowUpParts(parts => [...parts, { content: '', delay_minutes: DEFAULT_DELAY_MINUTES }]);
   };
 
@@ -135,7 +142,7 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
           variant="secondary"
           size="sm"
           onClick={addFollowUpPart}
-          disabled={activeMutation.isPending}
+          disabled={activeMutation.isPending || !canAddPart}
           data-testid="add-staged-part"
           data-faro-user-action-name="add-staged-result-part"
         >
@@ -143,8 +150,9 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
         </Button>
         {isStaged && (
           <p className="mt-1 text-xs text-content-tertiary">
-            Parts are revealed one at a time. Each timer starts when the previous
-            part is revealed, not when you publish.
+            {canAddPart
+              ? `Parts are revealed one at a time. Each timer starts when the previous part is revealed, not when you publish.`
+              : `A chain can hold at most ${MAX_CHAIN_PARTS} parts.`}
           </p>
         )}
       </div>

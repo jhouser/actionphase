@@ -41,11 +41,23 @@ export const AppendStagedPartForm: React.FC<AppendStagedPartFormProps> = ({
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
-    await onSubmit({ content: content.trim(), delay_minutes: delayMinutes });
-    // Cleared so the form is ready for the next part; the parent decides
-    // whether to keep it open.
-    setContent('');
-    setDelayMinutes(DEFAULT_DELAY_MINUTES);
+
+    try {
+      // The reset below is reached only when the append succeeded: onSubmit
+      // rejects on failure and the throw skips it. That ordering is
+      // load-bearing — the form stays open on error, so clearing regardless
+      // would wipe a part the server never accepted, with no undo and nothing
+      // left to retry from.
+      await onSubmit({ content: content.trim(), delay_minutes: delayMinutes });
+
+      // Ready for the next part; the parent decides whether to keep it open.
+      setContent('');
+      setDelayMinutes(DEFAULT_DELAY_MINUTES);
+    } catch {
+      // The parent has already logged the error and shown the GM a toast. It
+      // is swallowed here so a click handler does not raise an unhandled
+      // rejection; the state above is deliberately left untouched.
+    }
   };
 
   return (

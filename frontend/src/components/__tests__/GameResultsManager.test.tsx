@@ -1622,6 +1622,44 @@ describe('GameResultsManager', () => {
       });
     });
 
+    // A failed append must not destroy what the GM wrote. The form stays open
+    // on error (the parent only closes it on success), so if the content were
+    // cleared anyway the GM would be left staring at an empty box with an
+    // error toast, and a long-composed part would be gone with no undo.
+    it('keeps the typed content when the append fails', async () => {
+      const user = userEvent.setup();
+
+      setupDefaultHandlers([mockUnpublishedResult]);
+      server.use(
+        http.post('/api/v1/games/:gameId/results/:resultId/parts', () =>
+          HttpResponse.json({ error: 'nope' }, { status: 500 })
+        )
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`add-staged-part-${mockUnpublishedResult.id}`)).toBeInTheDocument();
+      });
+      await user.click(screen.getByTestId(`add-staged-part-${mockUnpublishedResult.id}`));
+
+      const contentBox = await screen.findByTestId(`append-staged-part-content-${mockUnpublishedResult.id}`);
+      await user.type(contentBox, 'A long and hard-won payoff.');
+      await user.click(screen.getByTestId(`save-staged-part-${mockUnpublishedResult.id}`));
+
+      // The form is still open — the parent closes it only on success.
+      expect(
+        await screen.findByTestId(`append-staged-part-form-${mockUnpublishedResult.id}`)
+      ).toBeInTheDocument();
+
+      // And the text survived, so the GM can simply press Add Part again.
+      await waitFor(() => {
+        expect(
+          screen.getByTestId(`append-staged-part-content-${mockUnpublishedResult.id}`)
+        ).toHaveValue('A long and hard-won payoff.');
+      });
+    });
+
     it('cannot save a follow-up with no content', async () => {
       const user = userEvent.setup();
 

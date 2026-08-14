@@ -256,6 +256,11 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
     } catch (error) {
       logger.error('Failed to append staged part', { error, resultId: result.id, gameId });
       showError('Failed to add this part. Please try again.');
+      // Re-thrown after logging and toasting so the form knows the append
+      // failed and can keep the GM's text. Swallowing it here made the child's
+      // `await onSubmit(...)` resolve on failure, which cleared a part the
+      // server never accepted.
+      throw error;
     }
   };
 
