@@ -66,3 +66,11 @@ type GameListingResponse struct {
 	Games    []*EnrichedGameListItem `json:"games"`
 	Metadata GameListingMetadata     `json:"metadata"`
 }
+
+// LootTableItem is a single item in a loot table, as accepted by the service
+// layer. Data is the GM-authored JSON blob describing the item; it is stored
+// verbatim and validated at the HTTP boundary.
+type LootTableItem struct {
+	Name string
+	Data string
+}

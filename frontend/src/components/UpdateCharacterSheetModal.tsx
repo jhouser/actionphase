@@ -243,9 +243,13 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
     scheduleSave('skills', 'skills', newSkills);
   };
 
-  const handleItemsChange = (newItems: InventoryItem[]) => {
+  const handleItemsChange = (newItems: InventoryItem[], reloadOnly: boolean) => {
     setItems(newItems);
-    scheduleSave('inventory', 'items', newItems);
+    if (!reloadOnly) {
+      scheduleSave('inventory', 'items', newItems);
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['characterData', characterId] });
+    }
   };
 
   const handleCurrencyChange = (newCurrency: CurrencyEntry[]) => {
@@ -390,6 +394,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
 
               {activeSection === 'inventory' && (
                 <InventoryManager
+                  characterId={characterId}
                   items={items}
                   currency={currency}
                   canEdit={true}

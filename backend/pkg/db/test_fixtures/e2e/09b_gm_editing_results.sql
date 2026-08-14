@@ -127,7 +127,7 @@ BEGIN
   ) RETURNING id INTO action3_id;
 
   -- Add PUBLISHED action result for Player 1 (to test viewing results)
-  INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, content, gm_user_id, is_published, sent_at, created_at, updated_at)
+  INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, content, gm_user_id, is_published, sent_at, released_at, created_at, updated_at)
   VALUES (
     game_id,
     p1_id,
@@ -139,11 +139,12 @@ BEGIN
     true,
     NOW() - INTERVAL '1 day',
     NOW() - INTERVAL '1 day',
+    NOW() - INTERVAL '1 day',
     NOW() - INTERVAL '1 day'
   );
 
   -- Add PUBLISHED action result for Player 2 (to test multiple results)
-  INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, content, gm_user_id, is_published, sent_at, created_at, updated_at)
+  INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, content, gm_user_id, is_published, sent_at, released_at, created_at, updated_at)
   VALUES (
     game_id,
     p2_id,
@@ -155,11 +156,12 @@ BEGIN
     true,
     NOW() - INTERVAL '1 day',
     NOW() - INTERVAL '1 day',
+    NOW() - INTERVAL '1 day',
     NOW() - INTERVAL '1 day'
   );
 
   -- Add UNPUBLISHED action result for Player 3 (to test GM editing)
-  INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, content, gm_user_id, is_published, sent_at, created_at, updated_at)
+  INSERT INTO action_results (game_id, user_id, phase_id, character_id, action_submission_id, content, gm_user_id, is_published, sent_at, released_at, created_at, updated_at)
   VALUES (
     game_id,
     p3_id,
@@ -169,6 +171,7 @@ BEGIN
     'DRAFT: The symbols appear to be a warning... (GM still working on this result)',
     gm_id,
     false,
+    NULL,
     NULL,
     NOW() - INTERVAL '6 hours',
     NOW() - INTERVAL '6 hours'
