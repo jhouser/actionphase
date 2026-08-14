@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Select, Button, Input, Alert } from './ui';
+import { Select, Button, Alert } from './ui';
 import { CommentEditor } from './CommentEditor';
-import { DELAY_PRESETS, CUSTOM_DELAY, DEFAULT_DELAY_MINUTES, formatDelayLabel, isPresetDelay } from '../lib/stagedDelays';
+import { DELAY_PRESETS, DEFAULT_DELAY_MINUTES, formatDelayLabel } from '../lib/stagedDelays';
 
 interface AppendStagedPartFormProps {
   /** Any member of the chain to append to; the server resolves the tail. */
@@ -37,7 +37,6 @@ export const AppendStagedPartForm: React.FC<AppendStagedPartFormProps> = ({
   const [content, setContent] = useState('');
   const [delayMinutes, setDelayMinutes] = useState(DEFAULT_DELAY_MINUTES);
 
-  const isCustom = !isPresetDelay(delayMinutes);
   const canSubmit = content.trim().length > 0 && delayMinutes >= 1 && !isPending;
 
   const handleSubmit = async () => {
@@ -59,13 +58,8 @@ export const AppendStagedPartForm: React.FC<AppendStagedPartFormProps> = ({
           <Select
             label={`Send out ___ after Part ${nextPartNumber - 1}`}
             selectSize="sm"
-            value={isCustom ? CUSTOM_DELAY : String(delayMinutes)}
-            onChange={e => {
-              const { value } = e.target;
-              // Switching to custom keeps the current value, so changing modes
-              // never silently changes the schedule.
-              if (value !== CUSTOM_DELAY) setDelayMinutes(Number(value));
-            }}
+            value={String(delayMinutes)}
+            onChange={e => setDelayMinutes(Number(e.target.value))}
             disabled={isPending}
             data-testid={`append-staged-part-delay-${resultId}`}
           >
@@ -74,25 +68,9 @@ export const AppendStagedPartForm: React.FC<AppendStagedPartFormProps> = ({
                 {formatDelayLabel(minutes)}
               </option>
             ))}
-            <option value={CUSTOM_DELAY}>Custom…</option>
           </Select>
         </div>
       </div>
-
-      {isCustom && (
-        <div className="mb-3 w-40">
-          <Input
-            label="Custom delay (minutes)"
-            type="number"
-            min={1}
-            inputSize="sm"
-            value={delayMinutes}
-            onChange={e => setDelayMinutes(Number(e.target.value))}
-            disabled={isPending}
-            data-testid={`append-staged-part-custom-delay-${resultId}`}
-          />
-        </div>
-      )}
 
       <label className="block text-sm font-medium text-content-primary mb-1">
         Result Content {nextPartNumber}

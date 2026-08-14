@@ -3,11 +3,16 @@
  *
  * The GM's mockup showed a dropdown, not a free-text box, because the useful
  * range is narrow: long enough to build tension, short enough that the player
- * is still at their desk. "Custom" opens a number input for the rare case.
+ * is still at their desk.
+ *
+ * Deliberately only three options. 1 minute is shorter than the release
+ * worker's own tick, so it reads as "instant" and the timing is a lie; an hour
+ * or more risks outliving the phase the result belongs to, stranding a chain
+ * across a boundary. The server still accepts 1..1440 (MinStagedDelayMinutes /
+ * MaxStagedDelayMinutes) — this list is the editorial choice about what is
+ * worth offering, not the safety bound.
  */
-export const DELAY_PRESETS = [1, 5, 15, 30, 60] as const;
-
-export const CUSTOM_DELAY = 'custom';
+export const DELAY_PRESETS = [5, 15, 30] as const;
 
 /** Default delay for a newly added follow-up part. */
 export const DEFAULT_DELAY_MINUTES = 15;

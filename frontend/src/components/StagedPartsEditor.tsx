@@ -1,8 +1,8 @@
 import React from 'react';
-import { Select, Button, Input } from './ui';
+import { Select, Button } from './ui';
 import { CommentEditor } from './CommentEditor';
 import type { StagedResultPart } from '../types/phases';
-import { DELAY_PRESETS, CUSTOM_DELAY, formatDelayLabel, isPresetDelay } from '../lib/stagedDelays';
+import { DELAY_PRESETS, formatDelayLabel } from '../lib/stagedDelays';
 
 interface StagedPartsEditorProps {
   /**
@@ -41,7 +41,6 @@ export const StagedPartsEditor: React.FC<StagedPartsEditorProps> = ({
         // Part numbering is 1-based and counts the head, so the first follow-up
         // is Part 2 and its delay is measured from Part 1.
         const partNumber = index + 2;
-        const isCustom = !isPresetDelay(part.delay_minutes);
 
         return (
           <div
@@ -54,17 +53,8 @@ export const StagedPartsEditor: React.FC<StagedPartsEditorProps> = ({
                 <Select
                   label={`Send out ___ after Part ${partNumber - 1}`}
                   selectSize="sm"
-                  value={isCustom ? CUSTOM_DELAY : String(part.delay_minutes)}
-                  onChange={e => {
-                    const { value } = e.target;
-                    if (value === CUSTOM_DELAY) {
-                      // Seed custom with the current value so switching modes
-                      // never silently changes the schedule.
-                      updatePart(index, { delay_minutes: part.delay_minutes });
-                    } else {
-                      updatePart(index, { delay_minutes: Number(value) });
-                    }
-                  }}
+                  value={String(part.delay_minutes)}
+                  onChange={e => updatePart(index, { delay_minutes: Number(e.target.value) })}
                   disabled={disabled}
                   data-testid={`staged-part-delay-${partNumber}`}
                 >
@@ -73,7 +63,6 @@ export const StagedPartsEditor: React.FC<StagedPartsEditorProps> = ({
                       {formatDelayLabel(minutes)}
                     </option>
                   ))}
-                  <option value={CUSTOM_DELAY}>Custom…</option>
                 </Select>
               </div>
               <Button
@@ -87,21 +76,6 @@ export const StagedPartsEditor: React.FC<StagedPartsEditorProps> = ({
                 Remove
               </Button>
             </div>
-
-            {isCustom && (
-              <div className="mb-3 w-40">
-                <Input
-                  label="Custom delay (minutes)"
-                  type="number"
-                  min={1}
-                  inputSize="sm"
-                  value={part.delay_minutes}
-                  onChange={e => updatePart(index, { delay_minutes: Number(e.target.value) })}
-                  disabled={disabled}
-                  data-testid={`staged-part-custom-delay-${partNumber}`}
-                />
-              </div>
-            )}
 
             <label className="block text-sm font-medium text-content-primary mb-1">
               Result Content {partNumber}

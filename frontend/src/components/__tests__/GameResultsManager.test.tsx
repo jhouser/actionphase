@@ -1810,7 +1810,7 @@ describe('GameResultsManager', () => {
         http.put('/api/v1/games/:gameId/results/:resultId/delay', async ({ params, request }) => {
           retimedId = params.resultId as string;
           retimedBody = await request.json() as { delay_minutes: number };
-          return HttpResponse.json({ ...pendingPart, reveal_delay_minutes: 60 });
+          return HttpResponse.json({ ...pendingPart, reveal_delay_minutes: 30 });
         })
       );
 
@@ -1820,10 +1820,10 @@ describe('GameResultsManager', () => {
         expect(screen.getByTestId(`edit-staged-delay-${pendingPart.id}`)).toBeInTheDocument();
       });
 
-      await user.selectOptions(screen.getByTestId(`edit-staged-delay-${pendingPart.id}`), '60');
+      await user.selectOptions(screen.getByTestId(`edit-staged-delay-${pendingPart.id}`), '30');
 
       await waitFor(() => expect(retimedId).toBe(String(pendingPart.id)));
-      expect(retimedBody).toEqual({ delay_minutes: 60 });
+      expect(retimedBody).toEqual({ delay_minutes: 30 });
     });
 
     it('does not silently show the first preset when the delay is missing', async () => {
