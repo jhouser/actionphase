@@ -98,12 +98,31 @@ export const StagedPartPlaceholder: React.FC<StagedPartPlaceholderProps> = ({
   const hasCountdown = remainingMs !== null;
   const isUnlocking = hasCountdown && remainingMs <= 0;
 
+  // Everything above is conveyed visually — a dashed box, a pulsing label, a
+  // run of mm:ss digits. None of that survives a screen reader, which would
+  // otherwise read the timer as a bare number with no hint it is counting down,
+  // and say nothing at all at the one moment the player is waiting for. Spoken
+  // separately so the announcement is a sentence rather than the layout read
+  // aloud; `polite` because a value changing every second must never interrupt.
+  const positionLabel = partNumber && partCount ? `Part ${partNumber} of ${partCount}` : 'The next part';
+  const spokenStatus = isUnlocking
+    ? `${positionLabel} is unlocking now.`
+    : hasCountdown
+      ? `${positionLabel} unlocks in ${formatRemaining(remainingMs)}.`
+      : `${positionLabel} unlocks after the previous one is revealed.`;
+
   return (
     <div
       className="p-4 border-2 border-dashed border-theme-default rounded surface-sunken"
       data-testid={`staged-part-placeholder-${partNumber ?? 'pending'}`}
     >
-      <div className="flex items-center justify-between gap-3">
+      <span className="sr-only" role="status" aria-live="polite">
+        {spokenStatus}
+      </span>
+      {/* Hidden from the a11y tree: the sr-only status above already says all
+          of this as a sentence, and leaving both exposed reads the position
+          and timer twice. */}
+      <div className="flex items-center justify-between gap-3" aria-hidden="true">
         <span className="text-sm font-medium text-content-secondary">
           {partNumber && partCount ? `Part ${partNumber} of ${partCount}` : 'Next part'}
         </span>
@@ -119,7 +138,7 @@ export const StagedPartPlaceholder: React.FC<StagedPartPlaceholderProps> = ({
           <span className="text-sm text-content-tertiary">Pending</span>
         )}
       </div>
-      <p className="mt-2 text-sm text-content-tertiary italic">
+      <p className="mt-2 text-sm text-content-tertiary italic" aria-hidden="true">
         {hasCountdown
           ? 'The rest of this result has not been revealed yet.'
           : 'This part unlocks after the previous one is revealed.'}

@@ -45,7 +45,11 @@ describe('StagedPartPlaceholder', () => {
     render(<StagedPartPlaceholder partNumber={3} partCount={3} />);
 
     expect(screen.getByText('Pending')).toBeInTheDocument();
-    expect(screen.getByText(/unlocks after the previous one is revealed/i)).toBeInTheDocument();
+    // Scoped to the visible copy: the sr-only status says the same thing in a
+    // sentence, so an unscoped match now finds both.
+    expect(
+      screen.getByText(/^This part unlocks after the previous one is revealed\.$/i)
+    ).toBeInTheDocument();
   });
 
   it('shows "Unlocking…" rather than a negative timer once the deadline passes', async () => {
@@ -53,8 +57,11 @@ describe('StagedPartPlaceholder', () => {
 
     await advance(10_000);
 
-    expect(screen.getByText(/unlocking/i)).toBeInTheDocument();
-    expect(screen.queryByText(/-/)).not.toBeInTheDocument();
+    // Both the visible label and the sr-only status now say "unlocking", which
+    // is the point of the fix; assert on the visible one specifically.
+    expect(screen.getByText('Unlocking…')).toBeInTheDocument();
+    // The real guard: no negative timer anywhere, visible or spoken.
+    expect(screen.queryByText(/-\d/)).not.toBeInTheDocument();
   });
 
   it('asks the caller to refetch as soon as the countdown expires', async () => {
@@ -94,6 +101,31 @@ describe('StagedPartPlaceholder', () => {
 
     // 30s of lag at one poll per 5s is ~7 calls; one per second would be 30.
     expect(onExpired.mock.calls.length).toBeLessThan(12);
+  });
+
+  // Everything this component conveys is conveyed visually: position in a
+  // dashed box, state by a pulsing "Unlocking…" or a mm:ss digit run. A screen
+  // reader user gets a bare number with no indication it is a countdown, and no
+  // announcement when the wait ends — so the one moment that matters, the part
+  // becoming available, passes silently.
+  it('describes the wait to a screen reader, not only visually', () => {
+    render(<StagedPartPlaceholder partNumber={2} partCount={3} unlocksAt={inSeconds(90)} />);
+
+    const status = screen.getByRole('status');
+    // Polite: a countdown ticking every second must never interrupt what the
+    // user is reading, which is exactly what assertive would do.
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveTextContent(/Part 2 of 3 unlocks in/i);
+  });
+
+  it('announces that the part is arriving once the deadline passes', async () => {
+    render(<StagedPartPlaceholder partNumber={2} partCount={3} unlocksAt={inSeconds(5)} />);
+
+    await advance(6_000);
+
+    // The visual cue here is an animate-pulse class, which conveys nothing
+    // without sight; this is the moment the player is actually waiting for.
+    expect(screen.getByRole('status')).toHaveTextContent(/Part 2 of 3 is unlocking now/i);
   });
 
   it('stops polling once the part is no longer locked', async () => {
