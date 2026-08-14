@@ -492,29 +492,25 @@ SELECT c.*, (SELECT COUNT(*) FROM chain) AS part_count
 FROM chain c
 ORDER BY c.part_number;
 
--- name: CountChainLength :one
--- Number of parts already in the chain ending at $1, used to enforce the
--- max-chain-length invariant before appending another part.
-WITH RECURSIVE ancestors AS (
-    SELECT anchor.id, anchor.parent_result_id
-    FROM action_results anchor
-    WHERE anchor.id = $1
-    UNION ALL
-    SELECT p.id, p.parent_result_id
-    FROM action_results p
-    JOIN ancestors a ON a.parent_result_id = p.id
-)
-SELECT COUNT(*) AS length FROM ancestors;
-
 -- name: GetUnpublishedResultsCount :one
+-- How many results the GM's "publish all" would send out.
+--
+-- Chain heads only. Publishing a head publishes its whole chain (see
+-- PublishActionResult), so counting followers separately would tell the GM
+-- they have 4 results to publish when they have one 4-part scene.
 SELECT COUNT(*) as count
 FROM action_results
-WHERE phase_id = $1 AND is_published = false;
+WHERE phase_id = $1 AND is_published = false AND parent_result_id IS NULL;
 
 -- name: GetUnpublishedResultIDs :many
+-- Work list for PublishAllPhaseResults. Chain heads only, for the same reason
+-- as GetUnpublishedResultsCount — and here it is a correctness matter, not just
+-- a cosmetic one: publishSingleResultWithDrafts publishes the entire chain and
+-- notifies the recipient, so including followers would publish each chain N
+-- times and send the player N notifications for one scene.
 SELECT id
 FROM action_results
-WHERE phase_id = $1 AND is_published = false;
+WHERE phase_id = $1 AND is_published = false AND parent_result_id IS NULL;
 
 -- name: UpdateActionResult :one
 UPDATE action_results
