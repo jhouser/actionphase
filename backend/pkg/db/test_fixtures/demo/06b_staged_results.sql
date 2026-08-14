@@ -199,8 +199,8 @@ BEGIN
   -- state it exists to represent.
   --
   -- Anchoring the parent to NOW() with a 1440-minute (24h) delay keeps this part
-  -- genuinely pending for a day after load, which is what the export gate needs
-  -- to have something to exclude.
+  -- genuinely pending for a day after load, so there is a real pending-at-
+  -- completion row to exercise the read and export paths against.
   INSERT INTO action_results (game_id, user_id, phase_id, action_submission_id, character_id, gm_user_id, content, is_published, sent_at, parent_result_id, reveal_delay_minutes)
   VALUES (
     game9_id,
@@ -211,7 +211,7 @@ BEGIN
     (SELECT character_id FROM action_submissions
       WHERE game_id = game9_id AND user_id = p1_id AND phase_id = game9_phase7_id),
     gm_id,
-    E'UNRELEASED ARCHIVE PART: this text must never appear in an export of game #9.',
+    E'PENDING AT COMPLETION: this reveal never fired. It appears in the archive and in exports by design — see the note on the export query in exports.sql. The path that DOES hide it is GetUserResults, which blanks unreleased content for the recipient mid-game.',
     true,
     NOW() - INTERVAL '58 days',
     part2_id,
