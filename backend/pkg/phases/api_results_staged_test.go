@@ -11,6 +11,9 @@ import (
 
 	"actionphase/pkg/core"
 	models "actionphase/pkg/db/models"
+	dbsvc "actionphase/pkg/db/services"
+	actionsvc "actionphase/pkg/db/services/actions"
+	phasesvc "actionphase/pkg/db/services/phases"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -492,5 +495,130 @@ func TestPhaseAPI_UpdateStagedPartDelay(t *testing.T) {
 	t.Run("retiming a nonexistent result is 404", func(t *testing.T) {
 		rec := setDelay(t, 999999, gmToken, 60)
 		assert.Equal(t, http.StatusNotFound, rec.Code, "body: %s", rec.Body.String())
+	})
+}
+
+// TestPhaseAPI_StagedPart_CrossGameMismatch verifies that the staged chain edit
+// endpoints refuse a result belonging to a different game.
+//
+// All three take {resultId} in the URL but authorize against {gameId}, so
+// without a check binding the two, any GM can pass their own game ID — passing
+// the permission check — while naming a result in someone else's game. The
+// service methods take only a result ID and cannot catch this.
+//
+// The same guard already exists for draft character updates
+// (validateGMAccessAndResult, api_draft_updates.go) with its own cross-game
+// test; these endpoints are the ones that were missed.
+func TestPhaseAPI_StagedPart_CrossGameMismatch(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "notifications", "action_results", "action_submissions", "phases", "characters", "game_participants", "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupFullPhaseAPITestRouter(app, testDB)
+
+	gameService := &dbsvc.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	phaseService := &phasesvc.PhaseService{DB: testDB.Pool, Logger: app.ObsLogger}
+	actionService := &actionsvc.ActionSubmissionService{
+		DB:                  testDB.Pool,
+		Logger:              app.ObsLogger,
+		NotificationService: &dbsvc.NotificationService{DB: testDB.Pool, Logger: app.ObsLogger},
+	}
+
+	// Victim: gm1's game, holding a draft staged chain.
+	gm1 := testDB.CreateTestUser(t, "xg_gm1", "xg_gm1@example.com")
+	player1 := testDB.CreateTestUser(t, "xg_player1", "xg_player1@example.com")
+	game1 := testDB.CreateTestGame(t, int32(gm1.ID), "Victim Game")
+	_, err := gameService.AddGameParticipant(context.Background(), game1.ID, int32(player1.ID), "player")
+	require.NoError(t, err)
+
+	phase1, err := phaseService.TransitionToNextPhase(context.Background(), game1.ID, int32(gm1.ID), core.TransitionPhaseRequest{
+		PhaseType: "action",
+		Title:     "Victim Action Phase",
+	})
+	require.NoError(t, err)
+
+	chain, err := actionService.CreateStagedResultChain(context.Background(), core.CreateStagedResultChainRequest{
+		GameID:   game1.ID,
+		PhaseID:  phase1.ID,
+		UserID:   int32(player1.ID),
+		GMUserID: int32(gm1.ID),
+		Parts: []core.StagedResultPart{
+			{Content: "The victim game's opening beat."},
+			{Content: "The victim game's payoff.", DelayMinutes: 10},
+		},
+		IsPublished: false,
+	})
+	require.NoError(t, err)
+	require.Len(t, chain, 2)
+
+	// Attacker: gm2 is a legitimate GM, but of their own unrelated game.
+	gm2 := testDB.CreateTestUser(t, "xg_gm2", "xg_gm2@example.com")
+	gm2Token, err := core.CreateTestJWTTokenForUser(app, gm2)
+	require.NoError(t, err)
+	game2 := testDB.CreateTestGame(t, int32(gm2.ID), "Attacker Game")
+	_, err = phaseService.TransitionToNextPhase(context.Background(), game2.ID, int32(gm2.ID), core.TransitionPhaseRequest{
+		PhaseType: "action",
+		Title:     "Attacker Action Phase",
+	})
+	require.NoError(t, err)
+
+	authedRequest := func(t *testing.T, method, path string, body map[string]interface{}) *httptest.ResponseRecorder {
+		t.Helper()
+		var reader *bytes.Buffer
+		if body != nil {
+			bodyJSON, err := json.Marshal(body)
+			require.NoError(t, err)
+			reader = bytes.NewBuffer(bodyJSON)
+		} else {
+			reader = bytes.NewBuffer(nil)
+		}
+		req := httptest.NewRequest(method, path, reader)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+gm2Token)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	t.Run("cannot append a part to another game's chain", func(t *testing.T) {
+		rec := authedRequest(t, "POST",
+			fmt.Sprintf("/api/v1/games/%d/results/%d/parts", game2.ID, chain[1].ID),
+			map[string]interface{}{"content": "Injected by another GM.", "delay_minutes": 5})
+
+		assert.Equal(t, http.StatusNotFound, rec.Code,
+			"a result in another game must not be reachable via one's own game ID; body: %s", rec.Body.String())
+
+		var partCount int
+		require.NoError(t, testDB.Pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM action_results WHERE game_id = $1`, game1.ID).Scan(&partCount))
+		assert.Equal(t, 2, partCount, "the victim game's chain must be unchanged")
+	})
+
+	t.Run("cannot retime another game's part", func(t *testing.T) {
+		rec := authedRequest(t, "PUT",
+			fmt.Sprintf("/api/v1/games/%d/results/%d/delay", game2.ID, chain[1].ID),
+			map[string]interface{}{"delay_minutes": 1440})
+
+		assert.Equal(t, http.StatusNotFound, rec.Code,
+			"retiming across games must be refused; body: %s", rec.Body.String())
+
+		var delay int32
+		require.NoError(t, testDB.Pool.QueryRow(context.Background(),
+			`SELECT reveal_delay_minutes FROM action_results WHERE id = $1`, chain[1].ID).Scan(&delay))
+		assert.Equal(t, int32(10), delay, "the victim part's delay must be unchanged")
+	})
+
+	t.Run("cannot cancel another game's pending part", func(t *testing.T) {
+		rec := authedRequest(t, "DELETE",
+			fmt.Sprintf("/api/v1/games/%d/results/%d/pending", game2.ID, chain[1].ID), nil)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code,
+			"cancelling across games must be refused; body: %s", rec.Body.String())
+
+		var stillThere bool
+		require.NoError(t, testDB.Pool.QueryRow(context.Background(),
+			`SELECT EXISTS(SELECT 1 FROM action_results WHERE id = $1)`, chain[1].ID).Scan(&stillThere))
+		assert.True(t, stillThere, "the victim part must not be deleted by another game's GM")
 	})
 }

@@ -169,7 +169,7 @@ func (h *Handler) AppendStagedPart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requireStagedChainManager(ctx, w, r, gameID, "only the GM can add a result part") {
+	if !h.requireStagedChainManager(ctx, w, r, gameID, resultID, "only the GM can add a result part") {
 		return
 	}
 
@@ -210,7 +210,7 @@ func (h *Handler) UpdateStagedPartDelay(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !h.requireStagedChainManager(ctx, w, r, gameID, "only the GM can retime a result part") {
+	if !h.requireStagedChainManager(ctx, w, r, gameID, resultID, "only the GM can retime a result part") {
 		return
 	}
 
@@ -232,9 +232,23 @@ func stagedPartIDFromURL(r *http.Request) (int32, error) {
 	return int32(resultID), nil
 }
 
-// requireStagedChainManager answers the GM check, rendering the failure itself.
-// Returns false when the caller has already been answered.
-func (h *Handler) requireStagedChainManager(ctx context.Context, w http.ResponseWriter, r *http.Request, gameID int32, forbiddenMsg string) bool {
+// requireStagedChainManager answers the GM check and confirms the target result
+// belongs to the game in the URL, rendering the failure itself. Returns false
+// when the caller has already been answered.
+//
+// The ownership check is not redundant with the permission check above. The two
+// identifiers come from different parts of the URL: permission is granted over
+// {gameId}, but the row acted upon is named by {resultId}. Without binding them,
+// any GM can pass their own game ID — passing the permission check honestly —
+// while naming a result in someone else's game. The service methods take only a
+// result ID and so cannot catch it. This is the same guard
+// validateGMAccessAndResult applies to the draft character update endpoints.
+//
+// A mismatch renders 404 rather than 403 or 400: to a caller with no rights over
+// the result's actual game, the result does not exist, and distinguishing "wrong
+// game" from "no such result" would confirm that a given ID is a real result
+// somewhere.
+func (h *Handler) requireStagedChainManager(ctx context.Context, w http.ResponseWriter, r *http.Request, gameID int32, resultID int32, forbiddenMsg string) bool {
 	authUser := core.GetAuthenticatedUser(ctx)
 	if authUser == nil {
 		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "No authenticated user in context")
@@ -249,6 +263,19 @@ func (h *Handler) requireStagedChainManager(ctx context.Context, w http.Response
 
 	if !canManage {
 		h.renderError(ctx, w, r, core.ErrForbidden(forbiddenMsg), forbiddenMsg)
+		return false
+	}
+
+	result, err := h.ActionSubmissionService.GetActionResult(ctx, resultID)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrNotFound("action result not found"), "Failed to get action result", "error", err)
+		return false
+	}
+
+	if result.GameID != gameID {
+		h.renderError(ctx, w, r, core.ErrNotFound("action result not found"),
+			"Staged part does not belong to this game",
+			"result_id", resultID, "url_game_id", gameID, "result_game_id", result.GameID)
 		return false
 	}
 
@@ -331,32 +358,17 @@ func (h *Handler) CancelPendingStagedPart(w http.ResponseWriter, r *http.Request
 
 	gameID := ctx.Value("gameID").(int32)
 
-	resultIDStr := chi.URLParam(r, "resultId")
-	resultID, err := strconv.ParseInt(resultIDStr, 10, 32)
+	resultID, err := stagedPartIDFromURL(r)
 	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInvalidRequest(fmt.Errorf("invalid result ID")), "Invalid cancel pending part request")
+		h.renderError(ctx, w, r, core.ErrInvalidRequest(err), "Invalid cancel pending part request")
 		return
 	}
 
-	authUser := core.GetAuthenticatedUser(ctx)
-	if authUser == nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("authentication required"), "No authenticated user in context")
+	if !h.requireStagedChainManager(ctx, w, r, gameID, resultID, "only the GM can cancel a pending result part") {
 		return
 	}
 
-	phaseService := h.PhaseService
-	canManage, err := phaseService.CanUserManagePhases(ctx, gameID, int32(authUser.ID))
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to check phase management permission", "error", err)
-		return
-	}
-
-	if !canManage {
-		h.renderError(ctx, w, r, core.ErrForbidden("only the GM can cancel a pending result part"), "Cancel pending part forbidden")
-		return
-	}
-
-	if err := h.ActionSubmissionService.CancelPendingPart(ctx, int32(resultID)); err != nil {
+	if err := h.ActionSubmissionService.CancelPendingPart(ctx, resultID); err != nil {
 		// "Already released" and "not a staged part" are both states the GM can
 		// reach by racing the release worker or clicking the wrong control, so
 		// they are 400s rather than 500s.
