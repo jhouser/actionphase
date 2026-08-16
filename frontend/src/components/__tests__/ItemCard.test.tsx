@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ItemCard } from '../ItemCard';
 import type { InventoryItem } from '../../types/characters';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const mockItem: InventoryItem = {
   id: '1',
@@ -14,6 +15,14 @@ const mockItem: InventoryItem = {
   weight: 5,
   equipped: false,
   condition: 'Good',
+};
+
+/** Render inside a QueryClientProvider — LootTableSelector fetches via React Query. */
+const renderWithQuery = (ui: React.ReactElement) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
 };
 
 describe('ItemCard', () => {
@@ -337,7 +346,7 @@ describe('ItemCard', () => {
   describe('Edit Mode', () => {
     it('enters edit mode when edit button clicked', async () => {
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemCard
           item={mockItem}
           canEdit={true}
@@ -355,7 +364,7 @@ describe('ItemCard', () => {
 
     it('shows Save and Cancel buttons in edit mode', async () => {
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemCard
           item={mockItem}
           canEdit={true}
@@ -372,7 +381,7 @@ describe('ItemCard', () => {
 
     it('allows editing item name', async () => {
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemCard
           item={mockItem}
           canEdit={true}
@@ -391,7 +400,7 @@ describe('ItemCard', () => {
 
     it('allows editing quantity', async () => {
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemCard
           item={mockItem}
           canEdit={true}
@@ -409,7 +418,7 @@ describe('ItemCard', () => {
 
     it('allows editing category', async () => {
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemCard
           item={mockItem}
           canEdit={true}
@@ -428,7 +437,7 @@ describe('ItemCard', () => {
 
     it('allows editing description', async () => {
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemCard
           item={mockItem}
           canEdit={true}
@@ -450,7 +459,7 @@ describe('ItemCard', () => {
     it('calls onUpdate with all field values when saved', async () => {
       const onUpdate = vi.fn();
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemCard
           item={mockItem}
           canEdit={true}
@@ -483,7 +492,7 @@ describe('ItemCard', () => {
 
     it('exits edit mode after save', async () => {
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemCard
           item={mockItem}
           canEdit={true}
@@ -504,7 +513,7 @@ describe('ItemCard', () => {
     it('reverts to view mode without calling onUpdate when cancelled', async () => {
       const onUpdate = vi.fn();
       const user = userEvent.setup();
-      render(
+      renderWithQuery(
         <ItemCard
           item={mockItem}
           canEdit={true}

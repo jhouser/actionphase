@@ -1,6 +1,7 @@
 package exports
 
 import (
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -172,4 +173,27 @@ func TestStripCustomMarkdown_PathologicalInput(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAllowedColors pins the exact set of colors archives know how to unwrap.
+// It must stay equal to TEXT_COLORS in
+// frontend/src/components/MarkdownPreview.tsx — the two lists cannot be
+// compared automatically because neither test container mounts the other's
+// tree, so this literal is the checkpoint. If they drift, archives disagree
+// with the app: a color the frontend renders but this list omits stays wrapped
+// in [color:...] markup in the export, and a color only this list knows gets
+// stripped from text the app showed literally.
+func TestAllowedColors(t *testing.T) {
+	want := []string{
+		"blue", "brown", "gold", "gray", "green", "olive", "orange", "pink",
+		"purple", "red", "silver", "teal",
+	}
+
+	got := make([]string, 0, len(allowedColors))
+	for color := range allowedColors {
+		got = append(got, color)
+	}
+	sort.Strings(got)
+
+	assert.Equal(t, want, got)
 }

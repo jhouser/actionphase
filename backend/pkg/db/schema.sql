@@ -164,6 +164,29 @@ CREATE TABLE game_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Game loot tables
+CREATE TABLE game_loot_tables (
+    id SERIAL PRIMARY KEY,
+    game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_game_loot_tables_game_id
+    ON game_loot_tables (game_id, created_at);
+
+-- Items belonging to a loot table
+CREATE TABLE game_loot_table_contents (
+    id SERIAL PRIMARY KEY,
+    loot_table_id INTEGER NOT NULL REFERENCES game_loot_tables(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    data TEXT
+);
+
+CREATE INDEX idx_game_loot_table_contents_loot_table_id
+    ON game_loot_table_contents (loot_table_id, id);
+
 -- Characters
 CREATE TABLE characters (
     id SERIAL PRIMARY KEY,
@@ -228,7 +251,6 @@ CREATE TABLE action_submissions (
     phase_id INTEGER NOT NULL REFERENCES game_phases(id) ON DELETE CASCADE,
     character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
     content TEXT NOT NULL,
-    is_draft BOOLEAN DEFAULT TRUE,
     submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(game_id, user_id, phase_id)
@@ -245,7 +267,14 @@ CREATE TABLE action_results (
     gm_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     is_published BOOLEAN DEFAULT FALSE,
-    sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    -- Staged reveals: a chain is a linked list, each part delayed relative to
+    -- the one before it. NULL parent = part 1 or an ordinary unstaged result.
+    -- Visibility to the recipient is `is_published AND released_at IS NOT NULL`.
+    parent_result_id INTEGER REFERENCES action_results(id) ON DELETE CASCADE,
+    reveal_delay_minutes INTEGER,
+    released_at TIMESTAMP WITH TIME ZONE
 );
 
 -- Draft character updates tied to action results

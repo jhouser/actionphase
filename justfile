@@ -84,9 +84,24 @@ down:
   {{DEV_COMPOSE}} down
 
 # Rebuild images from scratch (after Dockerfile.dev / dependency changes).
+#
+# Frontend node_modules is a NAMED VOLUME (see docker-compose.dev.yml). Docker only
+# seeds a named volume when it is empty — once populated it shadows the image layer
+# permanently, so a rebuilt image with new deps is invisible to the running container.
+# That means rebuilding alone can never pick up a package.json change. We drop the
+# volume here so the fresh image re-seeds it on the next `just up`.
 rebuild service="":
+  #!/usr/bin/env bash
+  set -euo pipefail
   {{DEV_COMPOSE}} build --no-cache {{service}}
-  @echo "✅ Rebuilt. Run 'just up' to (re)start."
+  if [ -z "{{service}}" ] || [ "{{service}}" = "frontend" ]; then
+    echo "🧹 Dropping stale frontend node_modules volume so new deps re-seed..."
+    {{DEV_COMPOSE}} rm -sf frontend >/dev/null 2>&1 || true
+    docker volume rm actionphase-dev_frontend-node-modules >/dev/null 2>&1 \
+      && echo "   Removed actionphase-dev_frontend-node-modules" \
+      || echo "   (volume not present — nothing to remove)"
+  fi
+  echo "✅ Rebuilt. Run 'just up' to (re)start."
 
 # Tail logs for a dev service (backend, frontend, db). Omit for all services.
 dev-logs service="":
@@ -1045,8 +1060,17 @@ test-all:
 # FRONTEND PACKAGE MANAGEMENT
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Frontend deps live in the image (installed at build time). To change deps:
-# edit package.json, then `just relock-frontend` and `just rebuild frontend`.
+# Frontend deps live in the image (installed at build time) but are served from a
+# named volume at runtime, which shadows the image once populated. To change deps:
+#
+#   1. edit frontend/package.json
+#   2. just relock-frontend     # regenerate the lockfile on Linux (never bare npm install on macOS)
+#   3. just rebuild frontend    # rebuilds the image AND drops the stale node_modules volume
+#   4. just up                  # fresh image re-seeds the volume
+#
+# Skipping step 3's volume drop is why a new dep can appear installed in the image
+# yet still fail to resolve in Vite ("Failed to resolve import ..."). If you hit that
+# after pulling a branch that added a dependency, run steps 3-4.
 
 # Lint frontend code (in frontend container)
 lint-frontend:

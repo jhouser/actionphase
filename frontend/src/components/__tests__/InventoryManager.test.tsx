@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { InventoryManager } from '../InventoryManager';
 import type { InventoryItem, CurrencyEntry } from '../../types/characters';
 import { logger } from '@/services/LoggingService';
+import { ToastProvider } from '@/contexts/ToastContext';
 
 vi.mock('@/services/LoggingService', () => ({
   logger: { warn: vi.fn(), error: vi.fn(), debug: vi.fn(), info: vi.fn() }
@@ -35,6 +36,24 @@ vi.mock('../CurrencyCard', () => ({
   )
 }));
 
+// InventoryManager calls useToast (to report loot-roll failures), which throws
+// outside a ToastProvider. It deliberately does NOT require a GameProvider — it
+// renders in the character sheet editor too — so no game context is provided here.
+const renderInventoryManager = (props: Partial<React.ComponentProps<typeof InventoryManager>>) =>
+  render(
+    <ToastProvider>
+      <InventoryManager
+        characterId={1}
+        items={[]}
+        currency={[]}
+        canEdit={true}
+        onItemsChange={vi.fn()}
+        onCurrencyChange={vi.fn()}
+        {...props}
+      />
+    </ToastProvider>
+  );
+
 describe('InventoryManager - Data Corruption Handling', () => {
   // Regression test for bug where draft merge stripped ID fields from currencies/items
   // causing deletion to fail catastrophically (all items deleted instead of one)
@@ -51,15 +70,13 @@ describe('InventoryManager - Data Corruption Handling', () => {
 
       const mockOnChange = vi.fn();
 
-      render(
-        <InventoryManager
-          items={[]}
-          currency={corruptedCurrency}
-          canEdit={true}
-          onItemsChange={vi.fn()}
-          onCurrencyChange={mockOnChange}
-        />
-      );
+      renderInventoryManager({
+        items: [],
+        currency: corruptedCurrency,
+        canEdit: true,
+        onItemsChange: vi.fn(),
+        onCurrencyChange: mockOnChange,
+      });
 
       // Verify warning was logged for corrupted data
       expect(logger.warn).toHaveBeenCalledWith(
@@ -87,15 +104,13 @@ describe('InventoryManager - Data Corruption Handling', () => {
 
       const mockOnChange = vi.fn();
 
-      render(
-        <InventoryManager
-          items={[]}
-          currency={corruptedCurrency}
-          canEdit={true}
-          onItemsChange={vi.fn()}
-          onCurrencyChange={mockOnChange}
-        />
-      );
+      renderInventoryManager({
+        items: [],
+        currency: corruptedCurrency,
+        canEdit: true,
+        onItemsChange: vi.fn(),
+        onCurrencyChange: mockOnChange,
+      });
 
       // Switch to currency tab
       fireEvent.click(screen.getByText(/Currency/));
@@ -141,15 +156,13 @@ describe('InventoryManager - Data Corruption Handling', () => {
 
       const mockOnChange = vi.fn();
 
-      render(
-        <InventoryManager
-          items={corruptedItems}
-          currency={[]}
-          canEdit={true}
-          onItemsChange={mockOnChange}
-          onCurrencyChange={vi.fn()}
-        />
-      );
+      renderInventoryManager({
+        items: corruptedItems,
+        currency: [],
+        canEdit: true,
+        onItemsChange: mockOnChange,
+        onCurrencyChange: vi.fn(),
+      });
 
       // Verify warning was logged for corrupted data
       expect(logger.warn).toHaveBeenCalledWith(
@@ -174,15 +187,13 @@ describe('InventoryManager - Data Corruption Handling', () => {
 
       const mockOnChange = vi.fn();
 
-      render(
-        <InventoryManager
-          items={corruptedItems}
-          currency={[]}
-          canEdit={true}
-          onItemsChange={mockOnChange}
-          onCurrencyChange={vi.fn()}
-        />
-      );
+      renderInventoryManager({
+        items: corruptedItems,
+        currency: [],
+        canEdit: true,
+        onItemsChange: mockOnChange,
+        onCurrencyChange: vi.fn(),
+      });
 
       // All 3 items should be displayed
       expect(screen.getByText('Sword')).toBeInTheDocument();
@@ -220,15 +231,13 @@ describe('InventoryManager - Data Corruption Handling', () => {
         { id: 'currency-2', type: 'Silver', amount: 50 },
       ];
 
-      render(
-        <InventoryManager
-          items={[]}
-          currency={validCurrency}
-          canEdit={true}
-          onItemsChange={vi.fn()}
-          onCurrencyChange={vi.fn()}
-        />
-      );
+      renderInventoryManager({
+        items: [],
+        currency: validCurrency,
+        canEdit: true,
+        onItemsChange: vi.fn(),
+        onCurrencyChange: vi.fn(),
+      });
 
       // No warnings should be logged for valid data
       expect(logger.warn).not.toHaveBeenCalled();

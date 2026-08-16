@@ -259,10 +259,17 @@ func (h *Handler) Start() {
 
 				// Action results management
 				r.Post("/results", phaseHandler.CreateActionResult)
+				r.Post("/results/staged", phaseHandler.CreateStagedResultChain)
 				r.Get("/results", phaseHandler.GetGameActionResults)
 				r.Get("/results/mine", phaseHandler.GetUserActionResults)
 				r.Put("/results/{resultId}", phaseHandler.UpdateActionResult)
 				r.Delete("/results/{resultId}", phaseHandler.DeleteActionResult)
+				// Cancels a scheduled-but-unreleased part. Separate from the
+				// delete above, which is guarded on is_published = false and so
+				// matches nothing for a published-but-unreleased part.
+				r.Delete("/results/{resultId}/pending", phaseHandler.CancelPendingStagedPart)
+				r.Post("/results/{resultId}/parts", phaseHandler.AppendStagedPart)
+				r.Put("/results/{resultId}/delay", phaseHandler.UpdateStagedPartDelay)
 				r.Post("/results/{resultId}/publish", phaseHandler.PublishActionResult)
 				r.Post("/phases/{phaseId}/results/publish", phaseHandler.PublishAllPhaseResults)
 				r.Get("/phases/{phaseId}/results/unpublished-count", phaseHandler.GetUnpublishedResultsCount)
@@ -374,6 +381,14 @@ func (h *Handler) Start() {
 
 				// Logs
 				r.Get("/logs", gameHandler.GetGameLogs)
+
+				r.Get("/loot-tables", gameHandler.GetGameLootTables)
+				r.Post("/loot-tables", gameHandler.AddGameLootTable)
+				r.Put("/loot-tables/{tableId}", gameHandler.UpdateGameLootTable)
+				r.Delete("/loot-tables/{tableId}", gameHandler.DeleteGameLootTable)
+				r.Get("/loot-tables/{tableId}/contents", gameHandler.GetGameLootTableContents)
+				r.Post("/loot-tables/{tableId}/contents", gameHandler.UpdateGameLootTableContent)
+				r.Post("/loot-tables/{tableId}/random/{characterId}", gameHandler.SetRandomLootForCharacter) // Assign random loot to character from table
 			})
 		})
 	})

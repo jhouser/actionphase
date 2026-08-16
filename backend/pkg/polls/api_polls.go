@@ -224,17 +224,17 @@ func (h *Handler) verifyUserInGame(ctx context.Context, gameID int32, userID int
 type pollViewAccess struct {
 	allowed               bool
 	canSeeIndividualVotes bool // true for GM, Co-GM, audience, or any user viewing a completed game
-	// isPrivileged is true only for GM, Co-GM and audience — the roles that may see
-	// results of a poll flagged hide_results_from_players. Unlike
-	// canSeeIndividualVotes, completing a game does not confer it.
+	// isPrivileged is true for GM, Co-GM and audience — the roles that may see
+	// results of a poll flagged hide_results_from_players — and for any viewer of
+	// a completed game, which is a public archive granting audience-level access.
 	isPrivileged bool
 }
 
 // checkPollViewAccess determines what visibility level an authenticated user gets for
-// a game's polls. All authenticated users may read polls; the flag controls whether
-// they see individual vote attribution.
+// a game's polls. All authenticated users may read polls; the flags control whether
+// they see individual vote attribution and results the GM hid from players.
 //
-// Individual votes visible to:
+// Individual votes and hidden-poll results visible to:
 //   - GM / Co-GM: always
 //   - Audience: always (spectator role)
 //   - Everyone else: only after the game is completed
@@ -252,10 +252,12 @@ func (h *Handler) checkPollViewAccess(ctx context.Context, gameID int32, userID 
 		return pollViewAccess{allowed: true, canSeeIndividualVotes: true, isPrivileged: true}, nil
 	}
 
-	// Completed games: everyone else sees full results too, but without the
-	// privilege that would unlock polls hidden from players.
-	if game.State.String == "completed" {
-		return pollViewAccess{allowed: true, canSeeIndividualVotes: true}, nil
+	// Completed games are a public archive: every authenticated viewer gets
+	// audience-level access to the whole game, hidden polls included. Anonymity
+	// (CanSeeUsernamesInAnonymousGame) lifts on completion for the same reason.
+	// Cancelled games are NOT public and keep the play-time rules below.
+	if game.State.String == core.GameStateCompleted {
+		return pollViewAccess{allowed: true, canSeeIndividualVotes: true, isPrivileged: true}, nil
 	}
 
 	// Everyone else (players and non-participants) may see polls exist but not individual votes
@@ -548,8 +550,9 @@ func (h *Handler) GetPollResults(w http.ResponseWriter, r *http.Request) {
 	// Authorize before reading results: both checks answer from the poll row we
 	// already have, so an unauthorized request never pays for the results queries.
 
-	// Hidden-results polls never disclose results to players — not after the
-	// deadline, and not once the game completes. GM, co-GM and audience are exempt.
+	// Hidden-results polls do not disclose results to players while the game runs —
+	// not even after the deadline. GM, co-GM and audience are exempt, as is every
+	// viewer once the game completes and becomes a public archive.
 	if poll.HideResultsFromPlayers && !access.isPrivileged {
 		h.renderError(ctx, w, r, core.ErrForbidden("poll results are hidden by the GM"), "Cannot view results - results hidden from players")
 		return

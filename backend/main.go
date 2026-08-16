@@ -18,6 +18,7 @@ import (
 
 	"actionphase/pkg/core"
 	dbsvc "actionphase/pkg/db/services"
+	dbactions "actionphase/pkg/db/services/actions"
 	phasesvc "actionphase/pkg/db/services/phases"
 	"actionphase/pkg/discord"
 	"actionphase/pkg/exports"
@@ -244,6 +245,19 @@ func main() {
 	sched := scheduler.New(phaseService, obs.Logger, time.Minute)
 	cancelScheduler := sched.Start(ctx)
 	defer cancelScheduler()
+
+	// Start the staged result release worker. It reveals the later parts of a
+	// timed result chain once each part's delay has elapsed. Deliberately
+	// independent of the phase scheduler above: a chain must keep releasing on
+	// its own schedule even if its phase ends or the game advances.
+	actionService := &dbactions.ActionSubmissionService{
+		DB:                  pool,
+		Logger:              obs.Logger,
+		NotificationService: dbsvc.NewNotificationService(pool, obs.Logger),
+	}
+	releaseWorker := dbactions.NewStagedReleaseWorker(actionService, obs.Logger, dbactions.DefaultReleaseInterval)
+	cancelReleaseWorker := releaseWorker.Start(ctx)
+	defer cancelReleaseWorker()
 
 	// Start the game archive export worker. It requeues jobs abandoned by a
 	// crashed process on startup, then drains the queue on each tick.

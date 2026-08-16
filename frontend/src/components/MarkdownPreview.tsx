@@ -4,10 +4,8 @@ import DOMPurify from 'dompurify';
 import CharacterAvatar from './CharacterAvatar';
 import { Badge, Button } from './ui';
 import type { SheetItem } from '../hooks/useCharacterSheetItems';
+import { ALLOWED_COLORS } from './textColors';
 
-const ALLOWED_COLORS = new Set([
-  'red', 'green', 'blue', 'purple', 'orange', 'gold', 'gray', 'teal', 'pink',
-]);
 
 const IMAGE_URL_PATTERN = /\.(png|jpe?g|gif|webp|svg|avif|bmp)(\?.*)?$/i;
 
@@ -61,8 +59,11 @@ marked.use({
       return `<li class="ml-4 !text-content-primary">${rendered}</li>\n`;
     },
 
-    blockquote({ text }) {
-      return `<blockquote class="border-l-4 border-theme-default pl-4 py-2 my-2 italic text-content-secondary">${text}</blockquote>\n`;
+    blockquote({ tokens }) {
+      // Parse child tokens rather than emitting raw source: raw text loses hard
+      // line breaks (and all nested markdown) once the browser collapses newlines.
+      const rendered = this.parser.parse(tokens);
+      return `<blockquote class="border-l-4 border-theme-default pl-4 py-2 my-2 italic text-content-secondary">${rendered}</blockquote>\n`;
     },
 
     hr() {

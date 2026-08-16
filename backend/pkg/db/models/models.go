@@ -107,6 +107,9 @@ type ActionResult struct {
 	Content            string             `json:"content"`
 	IsPublished        pgtype.Bool        `json:"is_published"`
 	SentAt             pgtype.Timestamptz `json:"sent_at"`
+	ParentResultID     pgtype.Int4        `json:"parent_result_id"`
+	RevealDelayMinutes pgtype.Int4        `json:"reveal_delay_minutes"`
+	ReleasedAt         pgtype.Timestamptz `json:"released_at"`
 }
 
 type ActionResultCharacterUpdate struct {
@@ -129,7 +132,6 @@ type ActionSubmission struct {
 	PhaseID     int32              `json:"phase_id"`
 	CharacterID pgtype.Int4        `json:"character_id"`
 	Content     string             `json:"content"`
-	IsDraft     pgtype.Bool        `json:"is_draft"`
 	SubmittedAt pgtype.Timestamptz `json:"submitted_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -303,6 +305,21 @@ type GameLog struct {
 	Type      string             `json:"type"`
 	Message   pgtype.Text        `json:"message"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type GameLootTable struct {
+	ID        int32              `json:"id"`
+	GameID    int32              `json:"game_id"`
+	Name      string             `json:"name"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GameLootTableContent struct {
+	ID          int32       `json:"id"`
+	LootTableID int32       `json:"loot_table_id"`
+	Name        string      `json:"name"`
+	Data        pgtype.Text `json:"data"`
 }
 
 type GameParticipant struct {

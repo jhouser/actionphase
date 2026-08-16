@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
     
         {
             "name": "Launch Package",
@@ -27,6 +28,13 @@
             // resolve to the right files.
             "remotePath": "/app",
             "cwd": "${workspaceFolder}/backend"
+        },
+        {
+            "type": "chrome",
+            "request": "launch",
+            "name": "Debug React Chrome",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/frontend"
         }
     ]
 }

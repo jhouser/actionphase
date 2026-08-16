@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MarkdownPreview } from './MarkdownPreview';
+import { TEXT_COLORS } from './textColors';
 
 describe('MarkdownPreview', () => {
   describe('Basic Markdown Rendering', () => {
@@ -64,6 +66,35 @@ describe('MarkdownPreview', () => {
       const blockquote = screen.getByText('This is a quote').closest('blockquote');
       expect(blockquote).toBeInTheDocument();
       expect(blockquote).toHaveClass('border-l-4');
+    });
+
+    it('preserves hard line breaks inside blockquotes', () => {
+      // Regression: the blockquote renderer emitted raw source text instead of
+      // parsing its child tokens, so every line collapsed onto one line.
+      const { container } = render(
+        <MarkdownPreview content={'> RANDOM BULLSHIT  \n12  \n313  \n2312  \n312'} />
+      );
+      const blockquote = container.querySelector('blockquote');
+      expect(blockquote).toBeInTheDocument();
+      expect(blockquote?.querySelectorAll('br')).toHaveLength(4);
+      expect(blockquote?.textContent).not.toContain('BULLSHIT 12');
+    });
+
+    it('renders markdown syntax inside blockquotes', () => {
+      const { container } = render(
+        <MarkdownPreview content={'> This is **bold** and *italic*'} />
+      );
+      const blockquote = container.querySelector('blockquote');
+      expect(blockquote?.querySelector('strong')?.textContent).toBe('bold');
+      expect(blockquote?.querySelector('em')?.textContent).toBe('italic');
+    });
+
+    it('renders multiple paragraphs inside a blockquote', () => {
+      const { container } = render(
+        <MarkdownPreview content={'> First para\n>\n> Second para'} />
+      );
+      const blockquote = container.querySelector('blockquote');
+      expect(blockquote?.querySelectorAll('p')).toHaveLength(2);
     });
 
     it('renders horizontal rules correctly', () => {
@@ -453,12 +484,28 @@ describe('MarkdownPreview', () => {
       expect(span?.textContent).toBe('hello');
     });
 
-    it.each([
-      'red', 'green', 'blue', 'purple', 'orange', 'gold', 'gray', 'teal', 'pink',
-    ])('renders [color:%s] with the correct data-color attribute', (color) => {
+    it.each(TEXT_COLORS)('renders [color:%s] with the correct data-color attribute', (color) => {
       const { container } = render(<MarkdownPreview content={`[color:${color}]text[/color]`} />);
       const span = container.querySelector(`[data-color="${color}"]`);
       expect(span).toBeInTheDocument();
+    });
+
+    // The it.each above is driven by TEXT_COLORS, so it would still pass for a
+    // color that has no styling at all. This guards the other side: every
+    // accepted name must actually be paintable in both themes. The export
+    // allowlist is pinned separately by TestAllowedColors in
+    // backend/pkg/exports/markdown_test.go — neither test container mounts the
+    // other's tree, so the two lists cannot be diffed automatically. Changing
+    // the palette means updating that Go test too.
+    describe('palette stays in sync across files', () => {
+      // Path is relative to the vitest root (frontend/), not this file:
+      // import.meta.url is an http:// URL under Vite, not a file path.
+      const css = readFileSync('src/index.css', 'utf-8');
+
+      it.each(TEXT_COLORS)('defines light and dark CSS for %s', (color) => {
+        expect(css).toContain(`[data-color="${color}"]`);
+        expect(css).toContain(`.dark [data-color="${color}"]`);
+      });
     });
 
     it('renders unknown color names as literal text', () => {

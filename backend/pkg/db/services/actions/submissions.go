@@ -21,7 +21,6 @@ func (as *ActionSubmissionService) SubmitAction(ctx context.Context, req core.Su
 		"user_id", req.UserID,
 		"phase_id", req.PhaseID,
 		"character_id", req.CharacterID,
-		"is_draft", req.IsDraft,
 	)
 
 	queries := models.New(as.DB)
@@ -114,7 +113,6 @@ func (as *ActionSubmissionService) SubmitAction(ctx context.Context, req core.Su
 		UserID:  req.UserID,
 		PhaseID: req.PhaseID,
 		Content: contentStr,
-		IsDraft: pgtype.Bool{Bool: req.IsDraft, Valid: true},
 	}
 
 	if req.CharacterID != nil {
@@ -137,7 +135,6 @@ func (as *ActionSubmissionService) SubmitAction(ctx context.Context, req core.Su
 		"phase_id", action.PhaseID,
 		"user_id", action.UserID,
 		"character_id", action.CharacterID.Int32,
-		"is_draft", action.IsDraft.Bool,
 	)
 
 	return &action, nil
@@ -194,7 +191,6 @@ func (as *ActionSubmissionService) GetPhaseSubmissions(ctx context.Context, phas
 			PhaseID:   s.PhaseID,
 			UserID:    s.UserID,
 			Content:   s.Content,
-			IsDraft:   s.IsDraft,
 			UpdatedAt: s.UpdatedAt,
 		}
 		if s.CharacterID.Valid {
@@ -235,25 +231,21 @@ func (as *ActionSubmissionService) GetSubmissionStats(ctx context.Context, phase
 	}
 
 	// Calculate stats manually
-	var submittedCount, draftCount int32
+	var submittedCount int32
 	var latestSubmission *time.Time
 
 	for _, submission := range submissions {
-		if submission.IsDraft.Bool {
-			draftCount++
-		} else {
-			submittedCount++
-			if submission.SubmittedAt.Valid {
-				if latestSubmission == nil || submission.SubmittedAt.Time.After(*latestSubmission) {
-					latestSubmission = &submission.SubmittedAt.Time
-				}
+		submittedCount++
+		if submission.SubmittedAt.Valid {
+			if latestSubmission == nil || submission.SubmittedAt.Time.After(*latestSubmission) {
+				latestSubmission = &submission.SubmittedAt.Time
 			}
 		}
 	}
 
 	// Get total players count - for now use a simple approach
 	// This should ideally be the number of participants in the game
-	totalPlayers := submittedCount + draftCount
+	totalPlayers := submittedCount
 	if totalPlayers == 0 {
 		totalPlayers = 1 // Avoid division by zero
 	}
@@ -264,7 +256,6 @@ func (as *ActionSubmissionService) GetSubmissionStats(ctx context.Context, phase
 		PhaseID:        phaseID,
 		TotalPlayers:   totalPlayers,
 		SubmittedCount: submittedCount,
-		DraftCount:     draftCount,
 		SubmissionRate: submissionRate,
 	}
 

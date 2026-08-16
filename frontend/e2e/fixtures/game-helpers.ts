@@ -28,6 +28,7 @@ export const FIXTURE_GAMES = {
   E2E_MESSAGES: 'E2E Test: Private Messages',     // For testing private messages (dedicated game)
   E2E_PM: 'E2E Test: Private Messages',           // Alias for E2E_MESSAGES
   E2E_CHARACTER_SHEETS: 'E2E Test: Character Sheets', // For testing character sheet management
+  E2E_LOOT_TABLES: 'E2E Test: Loot Tables',       // For testing loot tables and rolling loot onto a character
   E2E_GAME_SETTINGS: 'E2E Test: Game Settings',   // For testing game settings modifications
   CO_GM_MANAGEMENT: 'E2E Test: Co-GM Management',  // For testing co-GM promotion/demotion
   CO_GM_ACTION_RESULTS: 'E2E Test: Co-GM Action Results',  // Co-GM game with active action phase for action result editing
@@ -345,6 +346,60 @@ export async function createDraftResultViaApi(
     const data = await resp.json();
     return data.id as number;
   }, { gameId, userId, content });
+
+  return result;
+}
+
+/**
+ * Create a staged (timed multi-part) result chain via the API. GM must be
+ * logged in. Returns every part's ID, head first.
+ *
+ * Seeding through the real endpoint rather than a SQL fixture keeps these tests
+ * free of worker-index fixture variants, and means the setup itself exercises
+ * the write path.
+ *
+ * ⚠️ Timing: the release worker ticks once a minute and the minimum delay is one
+ * minute, so a released follow-up part cannot be observed within a test's
+ * lifetime. Do NOT wait for one. Give follow-up parts a long delay and assert
+ * the *locked* state, which exists the instant this call returns.
+ *
+ * @param parts - Head first. The head must have delay_minutes: 0; the API
+ *                rejects a non-zero head delay rather than ignoring it.
+ */
+export async function createStagedChainViaApi(
+  page: Page,
+  gameId: number,
+  userId: number,
+  parts: Array<{ content: string; delay_minutes: number }>,
+  options: { isPublished?: boolean } = {}
+): Promise<number[]> {
+  const { isPublished = true } = options;
+
+  const result = await page.evaluate(
+    async (args: {
+      gameId: number;
+      userId: number;
+      parts: Array<{ content: string; delay_minutes: number }>;
+      isPublished: boolean;
+    }) => {
+      const resp = await fetch(`/api/v1/games/${args.gameId}/results/staged`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: args.userId,
+          parts: args.parts,
+          is_published: args.isPublished,
+        }),
+      });
+      if (!resp.ok) {
+        throw new Error(`Failed to create staged chain: ${resp.status} ${await resp.text()}`);
+      }
+      const data = await resp.json();
+      return (data as Array<{ id: number }>).map((p) => p.id);
+    },
+    { gameId, userId, parts, isPublished }
+  );
 
   return result;
 }

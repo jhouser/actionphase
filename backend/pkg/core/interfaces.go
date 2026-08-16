@@ -285,6 +285,37 @@ type GameServiceInterface interface {
 
 	// GetGameLogs retrieves all logs for a given game
 	GetGameLogs(ctx context.Context, gameID int32) ([]models.GameLog, error)
+
+	// AddGameLog appends a log entry for a game
+	AddGameLog(ctx context.Context, arg models.CreateLogParams) (models.GameLog, error)
+
+	// GetGameLootTables retrieves all loot tables belonging to a game
+	GetGameLootTables(ctx context.Context, gameID int32, excludeEmpty bool) ([]models.GameLootTable, error)
+
+	// IsLootTableInGame reports whether a loot table belongs to the given game.
+	// Callers MUST check this before mutating a table by ID: the underlying
+	// update/delete queries are keyed on the table ID alone and are not game-scoped.
+	IsLootTableInGame(ctx context.Context, lootTableID, gameID int32) (bool, error)
+
+	// CreateLootTable creates a new named loot table for a game
+	CreateLootTable(ctx context.Context, gameID int32, name string) (*models.GameLootTable, error)
+
+	// UpdateLootTable renames an existing loot table
+	UpdateLootTable(ctx context.Context, lootTableID int32, name string) (*models.GameLootTable, error)
+
+	// DeleteLootTable removes a loot table and (via cascade) its contents
+	DeleteLootTable(ctx context.Context, lootTableID int32) error
+
+	// GetGameLootTableContents retrieves the items in a loot table
+	GetGameLootTableContents(ctx context.Context, lootTableID int32) ([]models.GameLootTableContent, error)
+
+	// AddLootTableContent appends a single item to a loot table
+	AddLootTableContent(ctx context.Context, lootTableID int32, itemName string, itemData string) (*models.GameLootTableContent, error)
+
+	// ReplaceLootTableContents atomically swaps a loot table's entire item list
+	// and bumps its updated_at. Use this rather than deleting and re-adding:
+	// outside a transaction a mid-rewrite failure destroys the existing items.
+	ReplaceLootTableContents(ctx context.Context, lootTableID int32, items []LootTableItem) error
 }
 
 // GameApplicationServiceInterface defines the contract for game application operations.
@@ -507,7 +538,6 @@ type PhaseServiceInterface interface {
 //	    PhaseID:   456,
 //	    UserID:    789,
 //	    Content:   richTextContent,
-//	    IsDraft:   false,
 //	})
 //
 //	// GM retrieves all submissions for processing
@@ -551,6 +581,56 @@ type ActionSubmissionServiceInterface interface {
 
 	// PublishAllPhaseResults publishes all unpublished results for a phase
 	PublishAllPhaseResults(ctx context.Context, phaseID int32) error
+
+	// Staged result reveals ---------------------------------------------
+	//
+	// A staged result is one narrative beat split across several parts
+	// separated by timers, so the player reads "the sword swings toward your
+	// head..." and waits before learning whether it connects. See
+	// .claude/planning/staged-result-reveals.md.
+
+	// CreateStagedResultChain creates a whole chain in one transaction:
+	// parts[0] becomes an ordinary head result, and each later part is linked
+	// to its predecessor with a delay measured from that predecessor's
+	// release. All-or-nothing — a partially written chain would leave parts
+	// that can never release.
+	CreateStagedResultChain(ctx context.Context, req CreateStagedResultChainRequest) ([]models.ActionResult, error)
+
+	// ReleaseDueStagedParts reveals every part whose wait has elapsed and
+	// notifies its recipient. Driven by the release worker on a ticker;
+	// returns how many parts it examined and how many it actually released,
+	// which differ when a concurrent tick wins the guarded update.
+	ReleaseDueStagedParts(ctx context.Context) (examined int, released int, err error)
+
+	// AppendStagedPart adds one part to the end of the draft chain containing
+	// anchorID, accepting any member of that chain rather than only its tail.
+	// A single unstaged draft is a chain of one, so this is also how an
+	// ordinary draft becomes a staged chain — no separate conversion step.
+	//
+	// Rejects a chain any part of which is published. The whole chain must be
+	// complete before the GM publishes it: appending after publication would
+	// extend a scene the player is already reading.
+	AppendStagedPart(ctx context.Context, anchorID int32, part StagedResultPart) (*models.ActionResult, error)
+
+	// UpdateStagedPartDelay retimes a part that has not yet been released,
+	// covering both drafts and published-but-pending parts. The release worker
+	// recomputes due-ness from the parent's release time on every tick, so the
+	// new delay takes effect on the next tick with nothing to reschedule.
+	//
+	// Refuses a released part (unreading it is not possible) and a chain head
+	// (which has no parent to measure a delay from).
+	UpdateStagedPartDelay(ctx context.Context, resultID int32, delayMinutes int32) (*models.ActionResult, error)
+
+	// CancelPendingPart deletes a part that has not yet been released,
+	// taking any parts scheduled after it along via ON DELETE CASCADE.
+	// Returns an error if the part is already visible to the player —
+	// unreading it is not possible.
+	CancelPendingPart(ctx context.Context, resultID int32) error
+
+	// GetResultChain returns every part of the chain containing resultID,
+	// ordered from the head, with 1-based part numbers. Accepts any member of
+	// the chain, not just the head.
+	GetResultChain(ctx context.Context, resultID int32) ([]models.GetResultChainRow, error)
 
 	// GetUnpublishedResultsCount returns the count of unpublished results for a phase
 	GetUnpublishedResultsCount(ctx context.Context, phaseID int32) (int64, error)
@@ -855,7 +935,6 @@ type SubmitActionRequest struct {
 	UserID      int32
 	CharacterID *int32      // Optional reference to character
 	Content     interface{} // Rich text content (JSON)
-	IsDraft     bool
 }
 
 // CreateActionResultRequest represents the parameters needed to create action results
@@ -870,12 +949,62 @@ type CreateActionResultRequest struct {
 	IsPublished        bool
 }
 
+// StagedResultPart is one beat of a staged result chain.
+type StagedResultPart struct {
+	Content interface{} // Rich text content (JSON)
+
+	// DelayMinutes is how long to wait after the *previous* part becomes
+	// visible before revealing this one. Ignored for the first part, which
+	// has nothing to wait for; required and 1..1440 for every later part.
+	DelayMinutes int32
+}
+
+// CreateStagedResultChainRequest describes a whole chain to create atomically.
+//
+// The recipient fields live here rather than on each part because a chain
+// cannot change recipient midway — a constraint the service enforces by
+// construction rather than by validating N copies of the same values.
+type CreateStagedResultChainRequest struct {
+	GameID             int32
+	PhaseID            int32
+	UserID             int32
+	CharacterID        *int32 // Optional reference to character
+	ActionSubmissionID *int32 // Optional reference to the submission being answered
+	GMUserID           int32  // The GM creating the chain
+
+	// Parts in reveal order, head first. Must contain at least 2 entries — a
+	// one-part "chain" is just an ordinary result and belongs in
+	// CreateActionResult. Capped at MaxStagedChainLength.
+	Parts []StagedResultPart
+
+	// IsPublished publishes the chain immediately on creation: the head
+	// becomes visible at once and the timers start running from that moment.
+	// When false the whole chain is a draft, and the clock does not start
+	// until the GM publishes the head through the normal publish path.
+	IsPublished bool
+}
+
+// Staged result chain bounds. The delay bounds are duplicated as CHECK
+// constraints in migration 20260812214302; these give a decent error message
+// before the database gives a blunt one.
+const (
+	// MaxStagedChainLength caps parts per chain, so an authoring mistake
+	// cannot schedule a reveal indefinitely far into the future.
+	MaxStagedChainLength = 10
+
+	// MinStagedDelayMinutes matches the release worker's tick interval —
+	// a shorter delay could not be honored accurately anyway.
+	MinStagedDelayMinutes = 1
+
+	// MaxStagedDelayMinutes (24h) bounds how long a chain can straddle.
+	MaxStagedDelayMinutes = 1440
+)
+
 // ActionSubmissionStats provides statistics about action submissions for a phase
 type ActionSubmissionStats struct {
 	PhaseID          int32
 	TotalPlayers     int32
 	SubmittedCount   int32
-	DraftCount       int32
 	SubmissionRate   float64 // Percentage of players who submitted
 	AverageWordCount int32
 	LatestSubmission *time.Time
@@ -1734,6 +1863,7 @@ type CharacterServiceInterface interface {
 	ApproveCharacter(ctx context.Context, characterID int32) (*models.Character, error)
 	AssignNPCToUser(ctx context.Context, characterID, assignedUserID, assignedByUserID int32) error
 	SetCharacterData(ctx context.Context, req CharacterDataRequest) error
+	AddToCharacterData(ctx context.Context, req CharacterDataRequest) error
 	GetCharacterData(ctx context.Context, characterID int32) ([]models.CharacterDatum, error)
 	GetCharacterDataByModule(ctx context.Context, characterID int32, moduleType string) ([]models.CharacterDatum, error)
 	GetPublicCharacterData(ctx context.Context, characterID int32) ([]models.CharacterDatum, error)

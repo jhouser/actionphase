@@ -1287,3 +1287,142 @@ func (gs *GameService) GetGameLogs(ctx context.Context, gameID int32) ([]models.
 	logs, err := queries.GetGameLogs(ctx, gameID)
 	return logs, err
 }
+
+// AddGameLog - Append a log entry for a game
+func (gs *GameService) AddGameLog(ctx context.Context, arg models.CreateLogParams) (models.GameLog, error) {
+	queries := models.New(gs.DB)
+	log, err := queries.CreateLog(ctx, arg)
+	return log, err
+}
+
+// GetGameLootTables - Get game loot tables
+func (gs *GameService) GetGameLootTables(ctx context.Context, gameID int32, excludeEmpty bool) ([]models.GameLootTable, error) {
+	queries := models.New(gs.DB)
+	if excludeEmpty {
+		lootTables, err := queries.GetNonEmptyLootTables(ctx, gameID)
+		return lootTables, err
+	}
+	lootTables, err := queries.GetLootTables(ctx, gameID)
+	return lootTables, err
+}
+
+// IsLootTableInGame - Check if a loot table belongs to a specific game
+func (gs *GameService) IsLootTableInGame(ctx context.Context, lootTableID, gameID int32) (bool, error) {
+	queries := models.New(gs.DB)
+	result, err := queries.IsLootTableInGame(ctx, models.IsLootTableInGameParams{
+		ID:     lootTableID,
+		GameID: gameID,
+	})
+	if err != nil {
+		return false, err
+	}
+	return result, nil
+}
+
+// CreateLootTable - Create a new loot table for a game
+func (gs *GameService) CreateLootTable(ctx context.Context, gameID int32, name string) (*models.GameLootTable, error) {
+	queries := models.New(gs.DB)
+	lootTable, err := queries.CreateLootTable(ctx, models.CreateLootTableParams{
+		GameID: gameID,
+		Name:   name,
+	})
+	return &lootTable, err
+}
+
+// UpdateLootTable - Update an existing loot table
+func (gs *GameService) UpdateLootTable(ctx context.Context, lootTableID int32, name string) (*models.GameLootTable, error) {
+	queries := models.New(gs.DB)
+	lootTable, err := queries.UpdateLootTable(ctx, models.UpdateLootTableParams{
+		ID:   lootTableID,
+		Name: name,
+	})
+	return &lootTable, err
+}
+
+// DeleteLootTable - Remove a loot table from a game
+func (gs *GameService) DeleteLootTable(ctx context.Context, lootTableID int32) error {
+	queries := models.New(gs.DB)
+	return queries.DeleteLootTable(ctx, lootTableID)
+}
+
+// GetGameLootTableContents - Get contents of a specific loot table
+func (gs *GameService) GetGameLootTableContents(ctx context.Context, lootTableID int32) ([]models.GameLootTableContent, error) {
+	queries := models.New(gs.DB)
+	contents, err := queries.GetLootTableContents(ctx, lootTableID)
+	return contents, err
+}
+
+// AddLootTableContent - Add an item to a loot table
+func (gs *GameService) AddLootTableContent(ctx context.Context, lootTableID int32, itemName string, itemData string) (*models.GameLootTableContent, error) {
+	queries := models.New(gs.DB)
+	content, err := queries.AddLootTableContent(ctx, models.AddLootTableContentParams{
+		LootTableID: lootTableID,
+		Name:        itemName,
+		Data:        pgtype.Text{String: itemData, Valid: true},
+	})
+	return &content, err
+}
+
+// ReplaceLootTableContents - Atomically swap a loot table's entire item list.
+//
+// The rewrite is a delete followed by re-inserts, so it MUST be one transaction:
+// without it, a failure partway through the inserts leaves the table empty or
+// half-populated with the GM's original items already gone. That is silent data
+// loss on what the UI presents as a save.
+//
+// Also bumps updated_at in the same transaction — contents live in a child table,
+// so the parent row is otherwise untouched and its timestamp goes stale.
+func (gs *GameService) ReplaceLootTableContents(ctx context.Context, lootTableID int32, items []core.LootTableItem) error {
+	tx, err := gs.DB.Begin(ctx)
+	if err != nil {
+		gs.Logger.LogError(ctx, err, "Failed to begin loot table contents transaction",
+			"loot_table_id", lootTableID,
+		)
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil {
+			gs.Logger.Debug(ctx, "Transaction already committed (rollback ignored)",
+				"loot_table_id", lootTableID,
+			)
+		}
+	}()
+
+	txQueries := models.New(gs.DB).WithTx(tx)
+
+	if err := txQueries.DeleteLootTableContents(ctx, lootTableID); err != nil {
+		gs.Logger.LogError(ctx, err, "Failed to delete loot table contents",
+			"loot_table_id", lootTableID,
+		)
+		return fmt.Errorf("failed to delete loot table contents: %w", err)
+	}
+
+	for i, item := range items {
+		if _, err := txQueries.AddLootTableContent(ctx, models.AddLootTableContentParams{
+			LootTableID: lootTableID,
+			Name:        item.Name,
+			Data:        pgtype.Text{String: item.Data, Valid: true},
+		}); err != nil {
+			gs.Logger.LogError(ctx, err, "Failed to add loot table content",
+				"loot_table_id", lootTableID,
+				"item_index", i,
+			)
+			return fmt.Errorf("failed to add loot table item %d: %w", i+1, err)
+		}
+	}
+
+	if err := txQueries.TouchLootTable(ctx, lootTableID); err != nil {
+		gs.Logger.LogError(ctx, err, "Failed to bump loot table updated_at",
+			"loot_table_id", lootTableID,
+		)
+		return fmt.Errorf("failed to bump loot table updated_at: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		gs.Logger.LogError(ctx, err, "Failed to commit loot table contents transaction",
+			"loot_table_id", lootTableID,
+		)
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
+}
