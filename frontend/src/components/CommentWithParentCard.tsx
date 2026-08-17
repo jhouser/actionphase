@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import type { CommentWithParent } from '../types/messages';
@@ -168,6 +168,21 @@ export function CommentWithParentCard({
     }
   };
 
+  // This view's payload carries no mentioned_character_ids (unlike ThreadedComment),
+  // so mentions resolve against the full cast. Memoized to keep a stable reference:
+  // busting MarkdownPreview's React.memo boundary re-runs dangerouslySetInnerHTML and
+  // leaves mention tooltips stuck open.
+  const mentionedCharacters = useMemo(
+    () => allGameCharacters.map(char => ({
+      id: char.id,
+      name: char.name,
+      username: char.username,
+      character_type: char.character_type,
+      avatar_url: char.avatar_url ?? undefined,
+    })),
+    [allGameCharacters]
+  );
+
   const parentCharacterId = comment.parent_character_name
     ? allGameCharacters.find(c => c.name === comment.parent_character_name)?.id ?? null
     : null;
@@ -202,6 +217,7 @@ export function CommentWithParentCard({
           characterAvatarUrl={comment.parent_character_avatar_url}
           onNavigateToParent={onNavigateToParent}
           hideViewInThread
+          mentionedCharacters={allGameCharacters}
         />
 
         {/* Comment header + body */}
@@ -266,7 +282,11 @@ export function CommentWithParentCard({
               </div>
             </div>
           ) : (
-            <MarkdownPreview content={comment.content} fullWidth />
+            <MarkdownPreview
+              content={comment.content}
+              mentionedCharacters={mentionedCharacters}
+              fullWidth
+            />
           )}
         </div>
 

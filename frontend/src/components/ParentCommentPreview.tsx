@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { MarkdownPreview } from './MarkdownPreview';
@@ -44,6 +44,20 @@ export function ParentCommentPreview({
   const gameContext = useOptionalGameContext();
   const portraitAvatars = portraitAvatarsProp ?? gameContext?.game?.portrait_avatars ?? false;
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  // Memoized (and declared above the early return, so hook order stays stable):
+  // a fresh array each render busts MarkdownPreview's React.memo boundary, which
+  // re-runs dangerouslySetInnerHTML and leaves mention tooltips stuck open.
+  const mentions = useMemo(
+    () => mentionedCharacters.map(char => ({
+      id: char.id,
+      name: char.name,
+      username: char.username,
+      character_type: char.character_type,
+      avatar_url: char.avatar_url ?? undefined,
+    })),
+    [mentionedCharacters]
+  );
 
   // If there's no parent content, don't render anything
   if (!content && !isDeleted) {
@@ -100,30 +114,18 @@ export function ParentCommentPreview({
 
       {isDeleted ? (
         <div className="text-sm text-content-tertiary italic">[deleted]</div>
-      ) : isExpanded ? (
-        <div className="text-sm">
-          <MarkdownPreview
-            content={content || ''}
-            mentionedCharacters={mentionedCharacters?.map(char => ({
-              id: char.id,
-              name: char.name,
-              username: char.username,
-              character_type: char.character_type,
-              avatar_url: char.avatar_url ?? undefined
-            }))}
-          />
-        </div>
       ) : (
-        <div className="text-sm text-content-secondary line-clamp-2 [&_p]:my-0">
+        <div
+          className={
+            isExpanded
+              ? 'text-sm'
+              : 'text-sm text-content-secondary line-clamp-2 [&_p]:my-0'
+          }
+        >
           <MarkdownPreview
             content={content || ''}
-            mentionedCharacters={mentionedCharacters?.map(char => ({
-              id: char.id,
-              name: char.name,
-              username: char.username,
-              character_type: char.character_type,
-              avatar_url: char.avatar_url ?? undefined
-            }))}
+            mentionedCharacters={mentions}
+            fullWidth
           />
         </div>
       )}
