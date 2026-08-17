@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MarkdownPreview } from './MarkdownPreview';
 
 /** Tailwind class naming the surface the collapsed fade blends into. */
-export type FadeSurface = 'surface-base' | 'surface-raised' | 'info-subtle';
+type FadeSurface = 'surface-base' | 'surface-raised' | 'info-subtle';
 
 const FADE_GRADIENTS: Record<FadeSurface, string> = {
   'surface-base': 'from-[rgb(var(--color-surface-base))]',
