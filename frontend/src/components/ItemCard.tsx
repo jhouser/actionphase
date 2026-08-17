@@ -9,9 +9,11 @@ interface ItemCardProps {
   canEdit: boolean;
   onUpdate: (updates: Partial<InventoryItem>) => void;
   onRemove: () => void;
+  /** Reports whether this card's inline editor holds uncommitted edits. */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
-export const ItemCard: React.FC<ItemCardProps> = ({ item, canEdit, onUpdate, onRemove }) => {
+export const ItemCard: React.FC<ItemCardProps> = ({ item, canEdit, onUpdate, onRemove, onDirtyChange }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -60,6 +62,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, canEdit, onUpdate, onR
           onCancel={() => setIsEditing(false)}
           submitLabel="Save"
           variant="inline"
+          onDirtyChange={onDirtyChange}
         />
       </div>
     );

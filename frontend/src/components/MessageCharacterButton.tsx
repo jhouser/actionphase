@@ -10,8 +10,11 @@ interface MessageCharacterButtonProps {
    * Called before navigating away. Surfaces that render inside a modal (the
    * character sheet) pass their dismiss handler so the modal doesn't linger
    * over the messages page.
+   *
+   * Return `false` to cancel the navigation — the character sheet uses this to
+   * hold position while it asks about unsaved edits that leaving would destroy.
    */
-  onNavigate?: () => void;
+  onNavigate?: () => boolean | void;
   className?: string;
 }
 
@@ -35,7 +38,7 @@ export function MessageCharacterButton({
   }
 
   const handleClick = () => {
-    onNavigate?.();
+    if (onNavigate?.() === false) return;
     navigate(`/games/${gameId}?tab=messages&newConversationWith=${character.id}`);
   };
 

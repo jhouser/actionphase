@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUrlParam } from '../hooks/useUrlParam';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -39,6 +39,8 @@ export function CharactersList({
     serialize: (v) => v === null || v === undefined ? '' : String(v),
     replace: true,
   });
+  const closeSheet = useCallback(() => setSelectedCharacterId(null), [setSelectedCharacterId]);
+
   const [npcToAssign, setNpcToAssign] = useState<Character | null>(null);
   const [characterToDelete, setCharacterToDelete] = useState<Character | null>(null);
   const deletionSubmittedRef = useRef(false);
@@ -366,14 +368,17 @@ export function CharactersList({
         return (
           <Modal
             isOpen={true}
-            onClose={() => setSelectedCharacterId(null)}
+            onClose={closeSheet}
             title=""
+            // The sheet holds editors whose text lives only in local state, so a
+            // stray click on the backdrop must not discard it.
+            dismissOnBackdrop={false}
           >
             <CharacterSheet
               characterId={selectedCharacterId}
               canEdit={canEditCharacterSheet(character)}
               canEditStats={canEditCharacterStats()}
-              onClose={() => setSelectedCharacterId(null)}
+              onClose={closeSheet}
               isAnonymous={isAnonymous}
               userRole={userRole}
               gameState={gameState}

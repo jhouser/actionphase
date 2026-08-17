@@ -17,11 +17,18 @@ import { CharacterSheetPage } from '../pages/CharacterSheetPage';
  * - loot mode gating, JSON unpacking, selection resets -> ItemForm /
  *   LootTableSelector component tests
  * - authorization, cross-game access, empty-table 400 -> pkg/games handler tests
+ * - failed-roll error surfacing (empty table, network, malformed data) ->
+ *   InventoryManager.loot.test.tsx. There was an E2E test for the empty-table
+ *   case, but ItemForm now requests loot tables with exclude-empty=true, so an
+ *   empty table can no longer be selected and the flow is unreachable from the
+ *   UI. The 400 remains as a backstop, asserted by
+ *   TestSetRandomLootForCharacterEmptyTable.
  *
  * Uses the dedicated E2E_LOOT_TABLES fixture (backend .../e2e/24_loot_tables.sql):
  * - 'E2E Single Item Table' holds exactly one item, so a random roll is
  *   deterministic and the test can assert on a specific name
- * - 'E2E Empty Table' holds none, for the error path
+ * - 'E2E Empty Table' holds none; it is no longer selectable in the UI, but is
+ *   kept so the fixture still exercises the exclude-empty filter
  * - 'Loot Test Char' starts with an empty inventory
  */
 
@@ -69,31 +76,5 @@ test.describe('Loot Tables', () => {
     await sheetPage.goToItemsTab();
 
     await expect(page.getByRole('heading', { name: ROLLED_ITEM })).toBeVisible({ timeout: 10000 });
-  });
-
-  test('rolling on an empty loot table surfaces an error instead of failing silently', async ({ page }) => {
-    await loginAs(page, 'GM');
-    const gameId = await getFixtureGameId(page, 'E2E_LOOT_TABLES');
-
-    const characterPage = new CharacterWorkflowPage(page, gameId);
-    await characterPage.goto();
-    await characterPage.openCharacterSheet('Loot Test Char');
-
-    await expect(page.getByRole('heading', { name: 'Loot Test Char', level: 2 })).toBeVisible({ timeout: 10000 });
-
-    const sheetPage = new CharacterSheetPage(page);
-    await sheetPage.goToInventoryModule();
-    await sheetPage.goToItemsTab();
-
-    await page.getByRole('button', { name: /^add item$/i }).click();
-    await page.getByLabel(/^mode$/i).selectOption('loot_table_random');
-    await page.getByLabel(/^loot table$/i).selectOption({ label: 'E2E Empty Table' });
-
-    await page.getByRole('button', { name: /^add item$/i }).last().click();
-
-    // The endpoint returns 400 for an empty table. Before the error handling
-    // existed the request failed with the modal still open and no feedback at
-    // all, which read as a dead button.
-    await expect(page.getByRole('alert')).toBeVisible({ timeout: 10000 });
   });
 });
