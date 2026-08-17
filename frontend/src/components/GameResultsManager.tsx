@@ -7,7 +7,7 @@ import { DELAY_PRESETS, formatDelayLabel, isPresetDelay } from '../lib/stagedDel
 import { UpdateCharacterSheetModal } from './UpdateCharacterSheetModal';
 import { PublishResultConfirmationDialog } from './PublishResultConfirmationDialog';
 import { ConfirmModal } from './ConfirmModal';
-import { MarkdownPreview } from './MarkdownPreview';
+import { CollapsibleMarkdown } from './CollapsibleMarkdown';
 import { CommentEditor } from './CommentEditor';
 import { useDraftUpdateCount } from '../hooks';
 import { useConflictingSheetDrafts } from '../hooks/useConflictingSheetDrafts';
@@ -179,8 +179,6 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
     !result.is_published && hasConflict && hasStagedOrUnknown;
 
   // Determine if content should be collapsible (long results)
-  const isCollapsible = result.content.length > 200;
-  const previewContent = result.content.substring(0, 200) + '...';
 
   // Staged chain status. The GM always sees every part's real content — only
   // the recipient's copy is blanked — so this is purely a schedule readout.
@@ -548,10 +546,12 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
         ) : (
           <>
             <div className="surface-base p-4 rounded border border-theme-default">
-              <MarkdownPreview
-                content={isCollapsible && !isExpanded ? previewContent : result.content}
+              <CollapsibleMarkdown
+                content={result.content}
                 mentionedCharacters={[]}
                 fullWidth
+                expanded={isExpanded}
+                onExpandedChange={setIsExpanded}
               />
             </div>
             {/* Below the content, so the GM writes the follow-up while reading
@@ -571,28 +571,6 @@ function ResultCard({ result, gameId, isEditing, onStartEdit, onCancelEdit, phas
                 isPending={appendPartMutation.isPending}
                 isError={appendPartMutation.isError}
               />
-            )}
-            {isCollapsible && (
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="mt-2 text-sm text-interactive-primary hover:text-interactive-primary-hover font-medium flex items-center"
-              >
-                {isExpanded ? (
-                  <>
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                    </svg>
-                    Show less
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                    Show full content
-                  </>
-                )}
-              </button>
             )}
           </>
         )}

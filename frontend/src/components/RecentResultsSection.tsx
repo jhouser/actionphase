@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { Card, CardBody, Button, Badge } from './ui';
 import { MarkdownPreview } from './MarkdownPreview';
+import { useExpandedSet } from '../hooks/useExpandedSet';
 import type { ActionResult } from '../types/phases';
 
 interface RecentResultsSectionProps {
@@ -41,7 +42,7 @@ export function RecentResultsSection({
   const [isExpanded, setIsExpanded] = useState(!hasViewed);
 
   // Track individual result expansion state (all collapsed by default)
-  const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
+  const expandedResults = useExpandedSet();
 
   // Mark as viewed when expanded
   useEffect(() => {
@@ -50,17 +51,6 @@ export function RecentResultsSection({
     }
   }, [isExpanded, hasViewed, storageKey]);
 
-  const toggleResultExpansion = (resultId: number) => {
-    setExpandedResults(prev => {
-      const next = new Set(prev);
-      if (next.has(resultId)) {
-        next.delete(resultId);
-      } else {
-        next.add(resultId);
-      }
-      return next;
-    });
-  };
 
   const handleViewFullResults = () => {
     // Navigate to History tab with phase selected
@@ -117,7 +107,7 @@ export function RecentResultsSection({
       {isExpanded && (
         <CardBody className="mt-4 space-y-3">
           {results.map((result) => {
-            const isResultExpanded = expandedResults.has(result.id);
+            const isResultExpanded = expandedResults.isExpanded(result.id);
 
             return (
               <Card
@@ -128,7 +118,7 @@ export function RecentResultsSection({
               >
                 <div
                   className="flex items-start justify-between cursor-pointer"
-                  onClick={() => toggleResultExpansion(result.id)}
+                  onClick={() => expandedResults.toggle(result.id)}
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
 import { CharacterPage } from './CharacterPage';
+import { stubRenderedHeight } from '../test-utils/renderedHeight';
 import * as useCharacterCommentsModule from '../hooks/useCharacterComments';
 import * as useCharacterStatsModule from '../hooks/useCharacterStats';
 import type { Character, CharacterData } from '../types/characters';
@@ -484,6 +485,9 @@ describe('CharacterPage', () => {
   });
 
   describe('public bio', () => {
+    // CollapsibleMarkdown decides overflow from measured height; jsdom reports 0.
+    const setBioHeight = stubRenderedHeight(500);
+
     function bioField(overrides: Partial<CharacterData> = {}): CharacterData {
       return {
         id: 1,
@@ -561,28 +565,40 @@ describe('CharacterPage', () => {
       expect(screen.queryByText('Hidden motivations.')).not.toBeInTheDocument();
     });
 
-    it('shows a short bio in full with no expand control', () => {
+    it('shows a bio that fits in full, with no expand control', () => {
+      setBioHeight(40); // fits inside the collapsed height
       renderWithFields([bioField({ field_value: 'Short and sweet.' })]);
 
       expect(screen.getByText('Short and sweet.')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /show more/i })).not.toBeInTheDocument();
-      expect(screen.getByTestId('character-bio')).not.toHaveClass('max-h-40');
+      expect(screen.getByTestId('character-bio')).toHaveAttribute('data-collapsed', 'false');
     });
 
-    it('collapses a long bio behind Show More and expands on click', async () => {
+    it('collapses a bio that overflows behind Show More and expands on click', async () => {
+      // Overflow is measured from rendered height, so the stub — not the source
+      // length — is what makes this bio long.
       const longBio = 'A'.repeat(401);
       renderWithFields([bioField({ field_value: longBio })]);
 
       const toggle = screen.getByRole('button', { name: /show more/i });
-      expect(screen.getByTestId('character-bio')).toHaveClass('max-h-40');
+      expect(screen.getByTestId('character-bio')).toHaveAttribute('data-collapsed', 'true');
       expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
       await userEvent.click(toggle);
 
-      expect(screen.getByTestId('character-bio')).not.toHaveClass('max-h-40');
+      expect(screen.getByTestId('character-bio')).toHaveAttribute('data-collapsed', 'false');
       expect(
         screen.getByRole('button', { name: /show less/i })
       ).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('keeps the whole bio in the DOM while collapsed', () => {
+      // Collapsing is visual: the markdown is never sliced, so a bio whose
+      // clip point lands mid-syntax can't leak raw markup.
+      renderWithFields([bioField({ field_value: 'B'.repeat(300) + ' **bold tail**' })]);
+
+      expect(screen.getByText('bold tail').tagName).toBe('STRONG');
+      expect(document.body.textContent).not.toContain('**');
     });
   });
 });

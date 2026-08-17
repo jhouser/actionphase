@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { MarkdownPreview } from './MarkdownPreview';
+import { CollapsibleMarkdown } from './CollapsibleMarkdown';
 import CharacterAvatar from './CharacterAvatar';
 import { useOptionalGameContext } from '../contexts/GameContext';
 import type { Character } from '../types/characters';
@@ -115,17 +115,17 @@ export function ParentCommentPreview({
       {isDeleted ? (
         <div className="text-sm text-content-tertiary italic">[deleted]</div>
       ) : (
-        <div
-          className={
-            isExpanded
-              ? 'text-sm'
-              : 'text-sm text-content-secondary line-clamp-2 [&_p]:my-0'
-          }
-        >
-          <MarkdownPreview
+        <div className={isExpanded ? 'text-sm' : 'text-sm text-content-secondary [&_p]:my-0'}>
+          {/* Collapsed height stands in for the old line-clamp-2: ~2 lines of
+              text-sm. The toggle lives in the header row above, so this renders
+              the clip and fade only. */}
+          <CollapsibleMarkdown
             content={content || ''}
             mentionedCharacters={mentions}
             fullWidth
+            collapsedMaxHeight={44}
+            expanded={isExpanded}
+            showToggle={false}
           />
         </div>
       )}

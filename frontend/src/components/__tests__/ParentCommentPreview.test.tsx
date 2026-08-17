@@ -2,8 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ParentCommentPreview } from '../ParentCommentPreview';
+import { stubRenderedHeight } from '../../test-utils/renderedHeight';
 
 describe('ParentCommentPreview', () => {
+  // CollapsibleMarkdown decides overflow from measured height; jsdom reports 0.
+  stubRenderedHeight(500);
+
   const mockNavigate = vi.fn();
 
   it('renders parent preview with all information', () => {
@@ -87,7 +91,10 @@ describe('ParentCommentPreview', () => {
       />
     );
 
-    const contentElement = container.querySelector('.line-clamp-2');
+    // Collapsed to a fixed height with a fade (previously line-clamp-2). The
+    // full text stays in the DOM — clipping is visual, so markdown can't be cut
+    // mid-syntax.
+    const contentElement = container.querySelector('[data-collapsed="true"]');
     expect(contentElement).toBeInTheDocument();
     expect(contentElement?.textContent).toContain('This is a very long content that should be truncated.');
   });
@@ -146,7 +153,7 @@ describe('ParentCommentPreview', () => {
 
     expect(screen.getByText('Expand')).toBeInTheDocument();
     expect(screen.queryByText('Collapse')).not.toBeInTheDocument();
-    expect(container.querySelector('.line-clamp-2')).toBeInTheDocument();
+    expect(container.querySelector('[data-collapsed="true"]')).toBeInTheDocument();
   });
 
   it('expands when expand button is clicked', async () => {

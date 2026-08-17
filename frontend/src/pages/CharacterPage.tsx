@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
@@ -9,6 +9,7 @@ import CharacterAvatar from '../components/CharacterAvatar';
 import { useOptionalGameContext } from '../contexts/GameContext';
 import { ParentCommentPreview } from '../components/ParentCommentPreview';
 import { MarkdownPreview } from '../components/MarkdownPreview';
+import { CollapsibleMarkdown } from '../components/CollapsibleMarkdown';
 import { Spinner, Alert, Badge, Card, CardBody } from '../components/ui';
 import { formatDistanceToNow } from 'date-fns';
 import type { CharacterMessage } from '../types/messages';
@@ -26,19 +27,10 @@ import { MessageCharacterButton } from '../components/MessageCharacterButton';
  *
  * Route: /characters/:characterId
  */
-/**
- * Bios longer than this collapse behind a "Show More" toggle so the Activity
- * feed stays reachable. Measured on the raw markdown source, which overcounts
- * link and emphasis syntax — deliberately, since a bio dense with markup is
- * also long once rendered.
- */
-const BIO_COLLAPSE_THRESHOLD = 400;
-
 export function CharacterPage() {
   const { characterId } = useParams<{ characterId: string }>();
   const navigate = useNavigate();
   const gameContext = useOptionalGameContext();
-  const [isBioExpanded, setIsBioExpanded] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -85,8 +77,6 @@ export function CharacterPage() {
       field.field_name === 'background' &&
       field.is_public
   )?.field_value?.trim();
-
-  const isCollapsible = !!publicBio && publicBio.length > BIO_COLLAPSE_THRESHOLD;
 
   const { data: statsData } = useCharacterStats(characterIdNum);
 
@@ -186,47 +176,16 @@ export function CharacterPage() {
             <h2 className="text-lg font-semibold text-text-heading mb-4">About</h2>
             <Card variant="default" padding="md">
               <CardBody>
-                {/* Collapsing by max-height rather than line-clamp: the bio is
-                    markdown, so headings and lists make line counts an
-                    unreliable proxy for rendered height. The overlay fades to
-                    surface-base to match Card's default variant. */}
-                <div
-                  id="character-bio"
-                  className={`relative ${isCollapsible && !isBioExpanded ? 'max-h-40 overflow-hidden' : ''}`}
+                {/* Card's default variant paints surface-base, so the fade
+                    blends to that token. */}
+                <CollapsibleMarkdown
+                  content={publicBio}
+                  fullWidth
+                  fadeSurface="surface-base"
+                  expandLabel="Show More"
+                  collapseLabel="Show Less"
                   data-testid="character-bio"
-                >
-                  <MarkdownPreview content={publicBio} fullWidth />
-                  {isCollapsible && !isBioExpanded && (
-                    <div
-                      aria-hidden="true"
-                      className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[rgb(var(--color-surface-base))] to-transparent"
-                    />
-                  )}
-                </div>
-                {isCollapsible && (
-                  <button
-                    onClick={() => setIsBioExpanded(!isBioExpanded)}
-                    className="text-sm text-interactive-primary hover:text-interactive-primary-hover font-medium mt-2 transition-colors inline-flex items-center gap-1"
-                    aria-expanded={isBioExpanded}
-                    aria-controls="character-bio"
-                  >
-                    {isBioExpanded ? (
-                      <>
-                        <span>Show Less</span>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                        </svg>
-                      </>
-                    ) : (
-                      <>
-                        <span>Show More</span>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </>
-                    )}
-                  </button>
-                )}
+                />
               </CardBody>
             </Card>
           </div>
