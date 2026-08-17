@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CharacterAbility } from '../../types/characters';
 import { Button, Input, Select } from '../ui';
 import { CommentEditor } from '../CommentEditor';
+import { useReportDirty } from '@/hooks/useReportDirty';
 
 export interface AbilityFormData {
   name: string;
@@ -16,6 +17,8 @@ interface AbilityFormProps {
   submitLabel?: string;
   variant?: 'modal' | 'inline';
   submitButtonTestId?: string;
+  /** Reports whether the form holds edits that Save has not yet committed. */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 /**
@@ -29,10 +32,21 @@ export const AbilityForm: React.FC<AbilityFormProps> = ({
   submitLabel = 'Add Ability',
   variant = 'modal',
   submitButtonTestId,
+  onDirtyChange,
 }) => {
   const [name, setName] = useState(initialValues?.name || '');
   const [description, setDescription] = useState(initialValues?.description || '');
   const [type, setType] = useState<CharacterAbility['type']>(initialValues?.type || 'learned');
+
+  // Compared trimmed, because handleSubmit submits trimmed. Comparing raw would call a
+  // lone trailing space "dirty" while saving it is a no-op — the form would never
+  // converge, holding the tab lock open with nothing the user could do to clear it.
+  useReportDirty(
+    name.trim() !== (initialValues?.name || '').trim() ||
+      description.trim() !== (initialValues?.description || '').trim() ||
+      type !== (initialValues?.type || 'learned'),
+    onDirtyChange,
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

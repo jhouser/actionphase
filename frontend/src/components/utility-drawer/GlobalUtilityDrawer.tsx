@@ -24,7 +24,15 @@ export function GlobalUtilityDrawer() {
       <UtilityDrawer open={isOpen} onClose={closeDrawer} ctx={utilityContext} />
 
       {openSheet && (
-        <Modal isOpen onClose={closeSheet} title="" zIndexClass={LAYERS.drawerChild}>
+        // dismissOnBackdrop: the sheet holds editors whose text lives only in local
+        // state, so a stray click on the backdrop must not discard it.
+        <Modal
+          isOpen
+          onClose={closeSheet}
+          title=""
+          zIndexClass={LAYERS.drawerChild}
+          dismissOnBackdrop={false}
+        >
           <Suspense
             fallback={
               <div className="flex justify-center py-12">

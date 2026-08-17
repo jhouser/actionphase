@@ -600,6 +600,147 @@ describe('UpdateCharacterSheetModal', () => {
     });
   });
 
+  /**
+   * A nested item/ability editor keeps its edits in local state until its own Save
+   * fires, so the modal never sees them and closing silently discards the GM's
+   * typing. Reported by a GM who lost work by clicking Done instead of Save.
+   */
+  describe('Unsaved nested edits', () => {
+    // Opens the inline editor on the seeded inventory item.
+    async function openItemEditor() {
+      await waitForLoaded();
+      fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
+      await waitFor(() => {
+        expect(screen.getByText('Healing Potion')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: '✎' }));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/item name/i)).toBeInTheDocument();
+      });
+    }
+
+    it('warns instead of closing when an editor has uncommitted edits', async () => {
+      const onClose = vi.fn();
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: null });
+
+      renderWithProviders(
+        <UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />,
+      );
+      await openItemEditor();
+
+      fireEvent.change(screen.getByLabelText(/item name/i), {
+        target: { value: 'Healing Potion of Vigor' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /done/i }));
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByTestId('confirm-close-unsaved')).toBeInTheDocument();
+    });
+
+    it('closes anyway when the warning is confirmed', async () => {
+      const onClose = vi.fn();
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: null });
+
+      renderWithProviders(
+        <UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />,
+      );
+      await openItemEditor();
+
+      fireEvent.change(screen.getByLabelText(/item name/i), {
+        target: { value: 'Healing Potion of Vigor' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /done/i }));
+      fireEvent.click(screen.getByTestId('confirm-close-discard'));
+
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('keeps the modal and the typed text open when the GM chooses to keep editing', async () => {
+      const onClose = vi.fn();
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: null });
+
+      renderWithProviders(
+        <UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />,
+      );
+      await openItemEditor();
+
+      fireEvent.change(screen.getByLabelText(/item name/i), {
+        target: { value: 'Healing Potion of Vigor' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /done/i }));
+      fireEvent.click(screen.getByRole('button', { name: /keep editing/i }));
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('confirm-close-unsaved')).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/item name/i)).toHaveValue('Healing Potion of Vigor');
+    });
+
+    /**
+     * The regression this change risks introducing: a modal that will not close.
+     * Committing the edit must clear the flag so Done behaves normally again.
+     */
+    it('closes without warning after the nested edit is saved', async () => {
+      const onClose = vi.fn();
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: null });
+
+      renderWithProviders(
+        <UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />,
+      );
+      await openItemEditor();
+
+      fireEvent.change(screen.getByLabelText(/item name/i), {
+        target: { value: 'Healing Potion of Vigor' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/item name/i)).not.toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /done/i }));
+
+      expect(screen.queryByTestId('confirm-close-unsaved')).not.toBeInTheDocument();
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('closes without warning after the nested edit is cancelled', async () => {
+      const onClose = vi.fn();
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: null });
+
+      renderWithProviders(
+        <UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />,
+      );
+      await openItemEditor();
+
+      fireEvent.change(screen.getByLabelText(/item name/i), {
+        target: { value: 'Healing Potion of Vigor' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/item name/i)).not.toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /done/i }));
+
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('does not warn when an editor is open but untouched', async () => {
+      const onClose = vi.fn();
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: null });
+
+      renderWithProviders(
+        <UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />,
+      );
+      await openItemEditor();
+
+      fireEvent.click(screen.getByRole('button', { name: /done/i }));
+
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('Re-initialization on reopen', () => {
     it('resets initialization when modal is closed and reopened', async () => {
       setupHandlers({ characterData: CHAR_DATA_ABILITIES, drafts: null });

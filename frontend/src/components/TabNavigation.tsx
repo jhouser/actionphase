@@ -40,6 +40,13 @@ interface TabNavigationProps {
    * vertical space it permanently costs, which matters most on phone viewports.
    */
   sticky?: boolean;
+  /**
+   * Hold navigation, greying the tabs out. For surfaces where leaving the current tab
+   * would destroy uncommitted work — the character sheet unmounts an open editor on
+   * switch — so the move has to be finished or cancelled first. Pair with a visible
+   * explanation; a disabled control that does not say why just reads as broken.
+   */
+  disabled?: boolean;
 }
 
 /**
@@ -55,6 +62,7 @@ export function TabNavigation({
   getTabHref,
   collapseOverflow = false,
   sticky = false,
+  disabled = false,
 }: TabNavigationProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -160,9 +168,12 @@ export function TabNavigation({
     whitespace-nowrap px-4 border-b-2 font-medium text-sm flex items-center gap-2
     ${condensed ? 'py-1.5' : 'py-3'}
     transition-[padding,color,border-color] duration-200
+    ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
     ${isActive
       ? 'border-interactive-primary text-interactive-primary'
-      : 'border-transparent text-content-secondary hover:text-content-primary hover:border-theme-default'
+      : disabled
+        ? 'border-transparent text-content-secondary'
+        : 'border-transparent text-content-secondary hover:text-content-primary hover:border-theme-default'
     }
   `;
 
@@ -188,12 +199,19 @@ export function TabNavigation({
       'data-overflowing': isOverflowing || undefined,
       ref: (el: HTMLElement | null) => registerTab(tab.id, el),
     };
-    return getTabHref ? (
+    // A disabled Link still navigates on click, so the href is dropped entirely rather
+    // than rendered inert — an anchor with no href is not a link.
+    return getTabHref && !disabled ? (
       <Link key={tab.id} {...sharedProps} to={getTabHref(tab.id)}>
         {renderTabContent(tab, isActive)}
       </Link>
     ) : (
-      <button key={tab.id} {...sharedProps} onClick={() => onTabChange(tab.id)}>
+      <button
+        key={tab.id}
+        {...sharedProps}
+        disabled={disabled}
+        onClick={() => onTabChange(tab.id)}
+      >
         {renderTabContent(tab, isActive)}
       </button>
     );
@@ -219,12 +237,14 @@ export function TabNavigation({
         <select
           id="tab-select"
           value={activeTab}
+          disabled={disabled}
           onChange={(e) => onTabChange(e.target.value)}
           className={`
             block w-full pl-2 pr-10 font-semibold surface-raised text-content-primary
             border border-border-primary md:rounded-t-lg shadow-sm appearance-none cursor-pointer
             focus:outline-none focus:ring-2 focus:ring-interactive-primary focus:border-interactive-primary
             transition-all duration-200
+            disabled:opacity-50 disabled:cursor-not-allowed
             ${condensed ? 'py-1.5 text-sm' : 'py-3 text-base'}
           `}
           style={{ backgroundImage: 'none' }}
@@ -278,6 +298,7 @@ export function TabNavigation({
                   : 'text-content-secondary hover:text-content-primary'
                 }
               `}
+              disabled={disabled}
               onClick={() => setMoreOpen(o => !o)}
               aria-haspopup="true"
               aria-expanded={moreOpen}
@@ -289,7 +310,10 @@ export function TabNavigation({
               </svg>
             </button>
 
-            {moreOpen && (
+            {/* Gated on `disabled` as well as `moreOpen`: the panel can already be open
+                when navigation locks, and its items would otherwise still navigate,
+                unmounting the very editor the lock protects. */}
+            {moreOpen && !disabled && (
               <div className="absolute right-0 top-full z-40 min-w-[160px] surface-raised border border-border-primary rounded-b-lg rounded-tl-lg shadow-lg py-1">
                 {overflowTabs.map((tab) => {
                   const isActive = activeTab === tab.id;

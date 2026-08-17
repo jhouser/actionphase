@@ -33,7 +33,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ onAdd, onAddRandom, 
   };
 
   return (
-    <Modal isOpen={true} onClose={onCancel} title="Add New Item">
+    // dismissOnBackdrop: a half-typed new item lives only in ItemForm's local state.
+    // A stray backdrop click would discard it outright, so closing has to go through
+    // the X or Cancel.
+    <Modal isOpen={true} onClose={onCancel} title="Add New Item" dismissOnBackdrop={false}>
       <ItemForm
         onSubmit={handleSubmit}
         onCancel={onCancel}

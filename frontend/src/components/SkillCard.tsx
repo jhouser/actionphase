@@ -9,9 +9,11 @@ interface SkillCardProps {
   canEdit: boolean;
   onUpdate: (updates: Partial<CharacterSkill>) => void;
   onRemove: () => void;
+  /** Reports whether this card's inline editor holds uncommitted edits. */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
-export const SkillCard: React.FC<SkillCardProps> = ({ skill, canEdit, onUpdate, onRemove }) => {
+export const SkillCard: React.FC<SkillCardProps> = ({ skill, canEdit, onUpdate, onRemove, onDirtyChange }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -39,6 +41,7 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, canEdit, onUpdate, 
           onCancel={() => setIsEditing(false)}
           submitLabel="Save"
           variant="inline"
+          onDirtyChange={onDirtyChange}
         />
       </div>
     );
