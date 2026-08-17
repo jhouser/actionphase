@@ -31,9 +31,9 @@ interface CharacterSheetProps {
   /**
    * Reports whether an editor inside the sheet holds edits its Save has not committed.
    *
-   * The sheet guards its own close paths; this is for parents that need to know, and
-   * is why the Modals wrapping the sheet pass dismissOnBackdrop={false} — a backdrop
-   * click never reaches this component and so could never be guarded from in here.
+   * The sheet guards its own close paths. A backdrop click never reaches this component,
+   * so the Modals wrapping the sheet need this signal to guard theirs: they leave
+   * backdrop dismiss on until it reports true.
    */
   onDirtyChange?: (isDirty: boolean) => void;
   /**
@@ -70,7 +70,8 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
    * uncommitted text. Confirms first when there is something to lose.
    *
    * The backdrop of the Modal wrapping this sheet is not ours to intercept — parents
-   * pass dismissOnBackdrop={false} so a stray click cannot bypass this.
+   * watch onDirtyChange and withdraw backdrop dismiss once there is something to lose,
+   * so a stray click cannot bypass this.
    */
   const requestClose = () => {
     if (!onClose) return;

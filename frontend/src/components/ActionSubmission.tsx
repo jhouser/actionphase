@@ -9,6 +9,8 @@ import { CountdownTimer } from './CountdownTimer';
 import { Button, Select, Alert, Drawer } from './ui';
 import { SheetPanel } from './SheetPanel';
 import { MarkdownPreview } from './MarkdownPreview';
+import { CollapsibleMarkdown } from './CollapsibleMarkdown';
+import { useExpandedSet } from '../hooks/useExpandedSet';
 import { CommentEditor } from './CommentEditor';
 import type { GamePhase, ActionSubmissionRequest, ActionWithDetails } from '../types/phases';
 
@@ -155,9 +157,6 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
 
         {/* Current Action Display */}
         {currentAction && !isExpanded && (() => {
-          const isCollapsible = currentAction.content.length > 200;
-          const previewContent = currentAction.content.substring(0, 200) + '...';
-
           return (
             <div className="mb-6 p-4 bg-semantic-info-subtle border border-semantic-info rounded-lg" data-testid="current-action-display">
               <div className="flex items-center justify-between mb-2">
@@ -174,30 +173,14 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
                 )}
               </div>
               <div className="text-sm text-content-primary surface-base p-3 rounded border border-theme-default" data-testid="action-content">
-                <MarkdownPreview content={isCollapsible && !isCurrentActionExpanded ? previewContent : currentAction.content} fullWidth sheetItemRefs={sheetItems} />
+                <CollapsibleMarkdown
+                  content={currentAction.content}
+                  fullWidth
+                  sheetItemRefs={sheetItems}
+                  expanded={isCurrentActionExpanded}
+                  onExpandedChange={setIsCurrentActionExpanded}
+                />
               </div>
-              {isCollapsible && (
-                <button
-                  onClick={() => setIsCurrentActionExpanded(!isCurrentActionExpanded)}
-                  className="mt-2 text-sm text-interactive-primary hover:text-interactive-primary-hover font-medium flex items-center"
-                >
-                  {isCurrentActionExpanded ? (
-                    <>
-                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                      </svg>
-                      Show less
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                      Show full content
-                    </>
-                  )}
-                </button>
-              )}
               {currentAction.character_name && (
                 <p className="text-sm text-content-primary mt-2">
                   Acting as: <span className="font-medium">{currentAction.character_name}</span>
@@ -381,21 +364,12 @@ interface ActionHistoryProps {
 }
 
 function ActionHistory({ actions, currentPhaseId, sheetItems = [] }: ActionHistoryProps) {
-  const [expandedActions, setExpandedActions] = useState<Set<number>>(new Set());
+  const expandedActions = useExpandedSet();
 
   // Filter out the current phase action
   const previousActions = actions.filter(action => action.phase_id !== currentPhaseId);
   const sortedActions = [...previousActions].sort((a, b) => (b.phase_number || 0) - (a.phase_number || 0));
 
-  const toggleExpanded = (actionId: number) => {
-    const newExpanded = new Set(expandedActions);
-    if (newExpanded.has(actionId)) {
-      newExpanded.delete(actionId);
-    } else {
-      newExpanded.add(actionId);
-    }
-    setExpandedActions(newExpanded);
-  };
 
   if (sortedActions.length === 0) {
     return (
@@ -408,9 +382,7 @@ function ActionHistory({ actions, currentPhaseId, sheetItems = [] }: ActionHisto
   return (
     <div className="space-y-3">
       {sortedActions.map((action) => {
-        const isExpanded = expandedActions.has(action.id);
-        const isCollapsible = action.content.length > 200;
-        const previewContent = action.content.substring(0, 200) + '...';
+        const isExpanded = expandedActions.isExpanded(action.id);
 
         return (
           <div key={action.id} className="border border-theme-default rounded-lg p-4">
@@ -430,30 +402,14 @@ function ActionHistory({ actions, currentPhaseId, sheetItems = [] }: ActionHisto
               </span>
             </div>
             <div className="text-sm text-content-primary surface-raised p-3 rounded">
-              <MarkdownPreview content={isCollapsible && !isExpanded ? previewContent : action.content} fullWidth sheetItemRefs={sheetItems} />
+              <CollapsibleMarkdown
+                content={action.content}
+                fullWidth
+                sheetItemRefs={sheetItems}
+                expanded={isExpanded}
+                onExpandedChange={() => expandedActions.toggle(action.id)}
+              />
             </div>
-            {isCollapsible && (
-              <button
-                onClick={() => toggleExpanded(action.id)}
-                className="mt-2 text-sm text-interactive-primary hover:text-interactive-primary-hover font-medium flex items-center"
-              >
-                {isExpanded ? (
-                  <>
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                    </svg>
-                    Show less
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                    Show full content
-                  </>
-                )}
-              </button>
-            )}
           </div>
         );
       })}

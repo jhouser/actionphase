@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { UtilityDrawer } from './UtilityDrawer';
 import { Modal } from '../Modal';
 import { Spinner } from '../ui';
@@ -19,19 +19,25 @@ const CharacterSheet = lazy(() =>
 export function GlobalUtilityDrawer() {
   const { isOpen, closeDrawer, utilityContext, openSheet, closeSheet } = useUtilityDrawer();
 
+  // Whether an editor inside the sheet holds text its own Save has not committed. The
+  // sheet reports this up because the backdrop is ours, not its — see dismissOnBackdrop
+  // below. CharacterSheet reports false on unmount, so this cannot stay stuck on.
+  const [sheetIsDirty, setSheetIsDirty] = useState(false);
+
   return (
     <>
       <UtilityDrawer open={isOpen} onClose={closeDrawer} ctx={utilityContext} />
 
       {openSheet && (
-        // dismissOnBackdrop: the sheet holds editors whose text lives only in local
-        // state, so a stray click on the backdrop must not discard it.
+        // dismissOnBackdrop: backdrop dismiss stays on for a sheet with nothing to lose —
+        // clicking away is how most people close a modal. It is withdrawn only while an
+        // editor holds uncommitted text, where a stray click would silently discard it.
         <Modal
           isOpen
           onClose={closeSheet}
           title=""
           zIndexClass={LAYERS.drawerChild}
-          dismissOnBackdrop={false}
+          dismissOnBackdrop={!sheetIsDirty}
         >
           <Suspense
             fallback={
@@ -49,6 +55,7 @@ export function GlobalUtilityDrawer() {
               userRole={openSheet.options.userRole}
               gameState={openSheet.options.gameState}
               portraitAvatars={openSheet.options.portraitAvatars}
+              onDirtyChange={setSheetIsDirty}
             />
           </Suspense>
         </Modal>
