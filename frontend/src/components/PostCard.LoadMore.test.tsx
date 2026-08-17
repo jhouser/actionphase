@@ -9,6 +9,7 @@ import { ToastProvider } from '../contexts/ToastContext';
 import { stubIntersectionObserver } from '../test-utils/mockIntersectionObserver';
 import type { Message, CommentWithDepth, PaginatedCommentsResponse } from '@/types/messages';
 import type { Character } from '@/types/characters';
+import { COMMENT_FETCH_MAX_DEPTH } from '@/config/comments';
 
 // Mock the API client
 vi.mock('../lib/api', () => ({
@@ -304,7 +305,7 @@ describe('PostCard - Load More Comments', () => {
         1, // postId
         THREADS_PER_PAGE, // limit
         THREADS_PER_PAGE, // offset (one page in for the second page)
-        5 // maxDepth
+        COMMENT_FETCH_MAX_DEPTH // maxDepth — must come from config, not a literal
       );
     });
 
