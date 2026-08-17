@@ -7,6 +7,8 @@ import { AddSkillModal } from './AddSkillModal';
 import { Button } from './ui';
 import { generateId } from '../utils/generateId';
 import { logger } from '@/services/LoggingService';
+import { useDirtyChildren } from '@/hooks/useDirtyChildren';
+import { ManagerSubTabs } from './ManagerSubTabs';
 
 // Defensive helper to ensure all items have ID fields
 // This protects against data corruption from draft merge bugs
@@ -29,6 +31,11 @@ interface AbilitiesManagerProps {
   canEdit: boolean;
   onAbilitiesChange: (abilities: CharacterAbility[]) => void;
   onSkillsChange: (skills: CharacterSkill[]) => void;
+  /**
+   * Reports whether any ability/skill editor below holds edits that have not been
+   * committed with Save. Ancestors use it to warn before closing the sheet.
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export const AbilitiesManager: React.FC<AbilitiesManagerProps> = ({
@@ -36,8 +43,10 @@ export const AbilitiesManager: React.FC<AbilitiesManagerProps> = ({
   skills,
   canEdit,
   onAbilitiesChange,
-  onSkillsChange
+  onSkillsChange,
+  onDirtyChange
 }) => {
+  const { isAnyDirty, report: reportDirty } = useDirtyChildren(onDirtyChange);
   // Defensive: Ensure all abilities and skills have IDs (protects against backend data corruption)
   const validatedAbilities = useMemo(() => ensureIds(abilities, 'Ability'), [abilities]);
   const validatedSkills = useMemo(() => ensureIds(skills, 'Skill'), [skills]);
@@ -82,31 +91,17 @@ export const AbilitiesManager: React.FC<AbilitiesManagerProps> = ({
 
   return (
     <div>
-      {/* Tab Navigation */}
-      <div className="flex space-x-1 mb-6 border-b border-theme-default">
-        <Button
-          variant="ghost"
-          onClick={() => setActiveTab('abilities')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors rounded-none ${
-            activeTab === 'abilities'
-              ? 'border-interactive-primary text-interactive-primary'
-              : 'border-transparent text-content-secondary hover:text-content-primary'
-          }`}
-        >
-          Abilities ({validatedAbilities.length})
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => setActiveTab('skills')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors rounded-none ${
-            activeTab === 'skills'
-              ? 'border-interactive-primary text-interactive-primary'
-              : 'border-transparent text-content-secondary hover:text-content-primary'
-          }`}
-        >
-          Skills ({validatedSkills.length})
-        </Button>
-      </div>
+      {/* Locked while an editor below holds uncommitted edits, since switching
+          unmounts that editor and destroys them. */}
+      <ManagerSubTabs
+        tabs={[
+          { id: 'abilities', label: 'Abilities', count: validatedAbilities.length },
+          { id: 'skills', label: 'Skills', count: validatedSkills.length },
+        ]}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        locked={isAnyDirty}
+      />
 
       {/* Abilities Tab */}
       {activeTab === 'abilities' && (
@@ -138,6 +133,7 @@ export const AbilitiesManager: React.FC<AbilitiesManagerProps> = ({
                   canEdit={canEdit}
                   onUpdate={(updates) => updateAbility(ability.id, updates)}
                   onRemove={() => removeAbility(ability.id)}
+                  onDirtyChange={(isDirty) => reportDirty(`ability:${ability.id}`, isDirty)}
                 />
               ))}
             </div>
@@ -182,6 +178,7 @@ export const AbilitiesManager: React.FC<AbilitiesManagerProps> = ({
                   canEdit={canEdit}
                   onUpdate={(updates) => updateSkill(skill.id, updates)}
                   onRemove={() => removeSkill(skill.id)}
+                  onDirtyChange={(isDirty) => reportDirty(`skill:${skill.id}`, isDirty)}
                 />
               ))}
             </div>
