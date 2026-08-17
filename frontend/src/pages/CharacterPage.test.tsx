@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
 import { CharacterPage } from './CharacterPage';
 import * as useCharacterCommentsModule from '../hooks/useCharacterComments';
 import * as useCharacterStatsModule from '../hooks/useCharacterStats';
-import type { Character } from '../types/characters';
+import type { Character, CharacterData } from '../types/characters';
 import type { CharacterMessage, CharacterMessagesResponse } from '../types/messages';
 
 // Mock hooks
@@ -103,9 +104,33 @@ function renderCharacterPage(characterId = '42') {
   );
 }
 
+/**
+ * CharacterPage issues two useQuery calls: ['character', id] and
+ * ['characterData', id]. Tests stub the character result per-case via
+ * mockCharacterQuery(); the characterData result defaults to [] and is set by
+ * the bio tests. Routing on the query key keeps the array-shaped bio payload
+ * from being answered with a character object.
+ */
+let characterQueryResult: Partial<UseQueryResult<Character>>;
+let characterFieldsResult: CharacterData[] | undefined;
+
+function mockCharacterQuery(result: Partial<UseQueryResult<Character>>) {
+  characterQueryResult = result;
+}
+
 describe('CharacterPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    characterQueryResult = { data: undefined, isLoading: false, isError: false };
+    characterFieldsResult = [];
+
+    vi.mocked(useQuery).mockImplementation((options: unknown) => {
+      const key = (options as { queryKey?: unknown[] })?.queryKey;
+      if (Array.isArray(key) && key[0] === 'characterData') {
+        return { data: characterFieldsResult, isLoading: false, isError: false } as never;
+      }
+      return characterQueryResult as never;
+    });
     // Default: no messaging affordance. Its own gate is covered by
     // useCanMessageCharacter's suite; stubbing it here also keeps this file's
     // blanket useQuery mock from feeding the real hook a phase payload it
@@ -123,7 +148,7 @@ describe('CharacterPage', () => {
   });
 
   it('shows loading state while character loads', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: undefined,
       isLoading: true,
       isError: false,
@@ -145,7 +170,7 @@ describe('CharacterPage', () => {
   });
 
   it('shows character name and avatar when loaded', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: mockCharacter,
       isLoading: false,
       isError: false,
@@ -167,7 +192,7 @@ describe('CharacterPage', () => {
   });
 
   it('shows empty state when character has no messages', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: mockCharacter,
       isLoading: false,
       isError: false,
@@ -188,7 +213,7 @@ describe('CharacterPage', () => {
   });
 
   it('renders posts and comments in the activity feed', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: mockCharacter,
       isLoading: false,
       isError: false,
@@ -218,7 +243,7 @@ describe('CharacterPage', () => {
   });
 
   it('shows error when messages fail to load', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: mockCharacter,
       isLoading: false,
       isError: false,
@@ -241,7 +266,7 @@ describe('CharacterPage', () => {
   });
 
   it('shows "View in thread" link for non-deleted messages', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: mockCharacter,
       isLoading: false,
       isError: false,
@@ -267,7 +292,7 @@ describe('CharacterPage', () => {
   });
 
   it('navigates to game thread when "View in thread" is clicked', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: mockCharacter,
       isLoading: false,
       isError: false,
@@ -296,7 +321,7 @@ describe('CharacterPage', () => {
   });
 
   it('shows public and private stats when both are returned', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: mockCharacter,
       isLoading: false,
       isError: false,
@@ -325,7 +350,7 @@ describe('CharacterPage', () => {
   });
 
   it('shows only public stats when private_messages is absent', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: mockCharacter,
       isLoading: false,
       isError: false,
@@ -353,7 +378,7 @@ describe('CharacterPage', () => {
   });
 
   it('shows invalid character ID error for non-numeric ID', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: undefined,
       isLoading: false,
       isError: false,
@@ -374,7 +399,7 @@ describe('CharacterPage', () => {
   });
 
   it('shows character type badge when character_type is present', () => {
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: { ...mockCharacter, character_type: 'player_character' },
       isLoading: false,
       isError: false,
@@ -396,7 +421,7 @@ describe('CharacterPage', () => {
 
   it('hides character type badge when character_type is absent (anonymous mode)', () => {
     const { character_type: _, ...characterWithoutType } = mockCharacter;
-    vi.mocked(useQuery).mockReturnValue({
+    mockCharacterQuery({
       data: characterWithoutType as Character,
       isLoading: false,
       isError: false,
@@ -421,7 +446,7 @@ describe('CharacterPage', () => {
 
   describe('private message shortcut', () => {
     function renderLoadedPage() {
-      vi.mocked(useQuery).mockReturnValue({
+      mockCharacterQuery({
         data: mockCharacter,
         isLoading: false,
         isError: false,
@@ -455,6 +480,109 @@ describe('CharacterPage', () => {
       expect(
         screen.queryByRole('button', { name: /send a private message/i })
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('public bio', () => {
+    function bioField(overrides: Partial<CharacterData> = {}): CharacterData {
+      return {
+        id: 1,
+        character_id: 42,
+        module_type: 'bio',
+        field_name: 'background',
+        field_value: 'A salt-marsh fisher-priest turned reluctant envoy.',
+        field_type: 'text',
+        is_public: true,
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        ...overrides,
+      };
+    }
+
+    function renderWithFields(fields: CharacterData[]) {
+      mockCharacterQuery({
+        data: mockCharacter,
+        isLoading: false,
+        isError: false,
+      } as Partial<UseQueryResult<Character>>);
+
+      vi.mocked(useCharacterCommentsModule.useCharacterComments).mockReturnValue({
+        data: { pages: [{ messages: [], pagination: { total: 0, limit: 20, offset: 0 } }] },
+        isLoading: false,
+        isError: false,
+        fetchNextPage: vi.fn(),
+        hasNextPage: false,
+        isFetchingNextPage: false,
+      } as Partial<UseInfiniteQueryResult<CharacterMessagesResponse>>);
+
+      characterFieldsResult = fields;
+      return renderCharacterPage();
+    }
+
+    it('displays the public bio text', () => {
+      renderWithFields([bioField()]);
+
+      expect(
+        screen.getByText('A salt-marsh fisher-priest turned reluctant envoy.')
+      ).toBeInTheDocument();
+    });
+
+    it('omits the About section entirely when there is no bio', () => {
+      renderWithFields([]);
+
+      expect(screen.queryByRole('heading', { name: 'About' })).not.toBeInTheDocument();
+    });
+
+    it('omits the About section when the bio is only whitespace', () => {
+      renderWithFields([bioField({ field_value: '   \n  ' })]);
+
+      expect(screen.queryByRole('heading', { name: 'About' })).not.toBeInTheDocument();
+    });
+
+    it('does not render a private bio field', () => {
+      renderWithFields([
+        bioField({ field_value: 'Secret: she is the heir.', is_public: false }),
+      ]);
+
+      expect(screen.queryByText('Secret: she is the heir.')).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'About' })).not.toBeInTheDocument();
+    });
+
+    it('does not render private notes as the bio', () => {
+      renderWithFields([
+        bioField({
+          module_type: 'notes',
+          field_name: 'private_notes',
+          field_value: 'Hidden motivations.',
+          is_public: false,
+        }),
+      ]);
+
+      expect(screen.queryByText('Hidden motivations.')).not.toBeInTheDocument();
+    });
+
+    it('shows a short bio in full with no expand control', () => {
+      renderWithFields([bioField({ field_value: 'Short and sweet.' })]);
+
+      expect(screen.getByText('Short and sweet.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /show more/i })).not.toBeInTheDocument();
+      expect(screen.getByTestId('character-bio')).not.toHaveClass('max-h-40');
+    });
+
+    it('collapses a long bio behind Show More and expands on click', async () => {
+      const longBio = 'A'.repeat(401);
+      renderWithFields([bioField({ field_value: longBio })]);
+
+      const toggle = screen.getByRole('button', { name: /show more/i });
+      expect(screen.getByTestId('character-bio')).toHaveClass('max-h-40');
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+      await userEvent.click(toggle);
+
+      expect(screen.getByTestId('character-bio')).not.toHaveClass('max-h-40');
+      expect(
+        screen.getByRole('button', { name: /show less/i })
+      ).toHaveAttribute('aria-expanded', 'true');
     });
   });
 });
