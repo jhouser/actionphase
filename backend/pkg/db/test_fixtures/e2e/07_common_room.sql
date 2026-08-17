@@ -29,6 +29,11 @@ DECLARE
   post610_l3 INTEGER;
   post610_l4 INTEGER;
   post610_l5 INTEGER;
+  post610_l6 INTEGER;
+  post610_l7 INTEGER;
+  post610_l8 INTEGER;
+  post610_l9 INTEGER;
+  post610_l10 INTEGER;
   p3_id INTEGER;
   p4_id INTEGER;
   p5_id INTEGER;
@@ -364,7 +369,7 @@ BEGIN
   SELECT id INTO char610_p1_id FROM characters WHERE game_id = 610 AND user_id = p1_id LIMIT 1;
   SELECT id INTO char610_p2_id FROM characters WHERE game_id = 610 AND user_id = p2_id LIMIT 1;
 
-  -- Pre-create a 5-level nested comment chain in the messages table so the deep-nesting
+  -- Pre-create an 11-level nested comment chain in the messages table so the deep-nesting
   -- test only needs to navigate and assert, not create data at runtime.
   -- Root post (GM post, message_type='post', visibility='game')
   INSERT INTO messages (game_id, phase_id, author_id, character_id, content, message_type, visibility, mentioned_character_ids, created_at)
@@ -396,9 +401,35 @@ BEGIN
   VALUES (610, phase610_id, p1_id, char610_p1_id, 'Nested Reply Level 5', 'comment', post610_l4, 'game', '{}', NOW() - INTERVAL '2 days')
   RETURNING id INTO post610_l5;
 
-  -- Level 6 (Player 2) — triggers "Continue this thread" button on Level 5 (desktop max depth)
+  -- Level 6 (Player 2)
   INSERT INTO messages (game_id, phase_id, author_id, character_id, content, message_type, parent_id, visibility, mentioned_character_ids, created_at)
-  VALUES (610, phase610_id, p2_id, char610_p2_id, 'Nested Reply Level 6', 'comment', post610_l5, 'game', '{}', NOW() - INTERVAL '1 day');
+  VALUES (610, phase610_id, p2_id, char610_p2_id, 'Nested Reply Level 6', 'comment', post610_l5, 'game', '{}', NOW() - INTERVAL '1 day')
+  RETURNING id INTO post610_l6;
+
+  -- Levels 7-11 extend the chain past the deepest limit COMMENT_MAX_DEPTH allows
+  -- (validation caps it at 10). The deep-nesting specs derive their targets from
+  -- the configured depth (see e2e/fixtures/comment-depth.ts), so the chain must
+  -- stay deeper than any valid setting: at maxDepth = N the spec asserts that
+  -- "Level N-1" renders inline and "Level N" hides behind "Continue this thread".
+  -- A chain of 11 leaves a hidden reply even at the maximum of 10.
+  INSERT INTO messages (game_id, phase_id, author_id, character_id, content, message_type, parent_id, visibility, mentioned_character_ids, created_at)
+  VALUES (610, phase610_id, p1_id, char610_p1_id, 'Nested Reply Level 7', 'comment', post610_l6, 'game', '{}', NOW() - INTERVAL '22 hours')
+  RETURNING id INTO post610_l7;
+
+  INSERT INTO messages (game_id, phase_id, author_id, character_id, content, message_type, parent_id, visibility, mentioned_character_ids, created_at)
+  VALUES (610, phase610_id, p2_id, char610_p2_id, 'Nested Reply Level 8', 'comment', post610_l7, 'game', '{}', NOW() - INTERVAL '20 hours')
+  RETURNING id INTO post610_l8;
+
+  INSERT INTO messages (game_id, phase_id, author_id, character_id, content, message_type, parent_id, visibility, mentioned_character_ids, created_at)
+  VALUES (610, phase610_id, p1_id, char610_p1_id, 'Nested Reply Level 9', 'comment', post610_l8, 'game', '{}', NOW() - INTERVAL '18 hours')
+  RETURNING id INTO post610_l9;
+
+  INSERT INTO messages (game_id, phase_id, author_id, character_id, content, message_type, parent_id, visibility, mentioned_character_ids, created_at)
+  VALUES (610, phase610_id, p2_id, char610_p2_id, 'Nested Reply Level 10', 'comment', post610_l9, 'game', '{}', NOW() - INTERVAL '16 hours')
+  RETURNING id INTO post610_l10;
+
+  INSERT INTO messages (game_id, phase_id, author_id, character_id, content, message_type, parent_id, visibility, mentioned_character_ids, created_at)
+  VALUES (610, phase610_id, p1_id, char610_p1_id, 'Nested Reply Level 11', 'comment', post610_l10, 'game', '{}', NOW() - INTERVAL '14 hours');
 
   -- ============================================
   -- Summary

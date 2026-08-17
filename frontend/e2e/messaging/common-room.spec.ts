@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { loginAs } from '../fixtures/auth-helpers';
 import { CommonRoomPage } from '../pages/CommonRoomPage';
 import { getFixtureGameId, getWorkerGameId } from '../fixtures/game-helpers';
+import { deepNestingTargets } from '../fixtures/comment-depth';
 
 /**
  * E2E Tests: Common Room Flow
@@ -111,14 +112,17 @@ test.describe('@mobile Common Room Flow', () => {
 
     const postContent = 'Deep Thread Test Post';
     const isMobile = page.viewportSize()!.width < 768;
-    const deepestInlineComment = isMobile ? 'Nested Reply Level 3' : 'Nested Reply Level 4';
+    // Derived from the configured depth limits, not hardcoded: these targets are
+    // really (maxDepth - 1) and maxDepth, so literals break whenever the env vars
+    // are retuned. See e2e/fixtures/comment-depth.ts.
+    const { deepestInline } = deepNestingTargets(isMobile);
 
     await expect(page.getByText(postContent).first()).toBeVisible({ timeout: 15000 });
     await commonRoom.expandComments(postContent);
 
     const deepestCommentLocator = page
       .locator('[data-testid="threaded-comment"]:visible')
-      .filter({ has: page.getByText(deepestInlineComment, { exact: true }) })
+      .filter({ has: page.getByText(deepestInline, { exact: true }) })
       .last();
     await expect(deepestCommentLocator).toBeVisible({ timeout: 15000 });
 
@@ -138,15 +142,16 @@ test.describe('@mobile Common Room Flow', () => {
 
     const postContent = 'Deep Thread Test Post';
     const isMobile = page.viewportSize()!.width < 768;
-    const deepestInlineComment = isMobile ? 'Nested Reply Level 3' : 'Nested Reply Level 4';
-    const modalComment          = isMobile ? 'Nested Reply Level 4' : 'Nested Reply Level 5';
+    // Derived from the configured depth limits — see e2e/fixtures/comment-depth.ts.
+    const { deepestInline, behindContinueButton: modalComment } =
+      deepNestingTargets(isMobile);
 
     await expect(page.getByText(postContent).first()).toBeVisible({ timeout: 15000 });
     await commonRoom.expandComments(postContent);
 
     const deepestCommentLocator = page
       .locator('[data-testid="threaded-comment"]:visible')
-      .filter({ has: page.getByText(deepestInlineComment, { exact: true }) })
+      .filter({ has: page.getByText(deepestInline, { exact: true }) })
       .last();
     await deepestCommentLocator
       .getByRole('button', { name: /Continue this thread/ })
@@ -156,13 +161,24 @@ test.describe('@mobile Common Room Flow', () => {
 
     const modal = page.locator('.fixed.inset-0').filter({ hasText: 'Thread View' });
     await expect(modal.getByText('Thread View')).toBeVisible({ timeout: 5000 });
-    await expect(modal.getByText(modalComment)).toBeVisible({ timeout: 5000 });
+    // exact: true — the chain now runs to "Level 11", so a substring match on
+    // "Nested Reply Level 1" would also hit Levels 10 and 11 (strict-mode violation).
+    await expect(modal.getByText(modalComment, { exact: true })).toBeVisible({ timeout: 5000 });
 
+    // `has:` must take a PAGE-rooted locator: Playwright re-resolves it relative
+    // to each candidate, so a modal-rooted one (modal.getByText(...)) matches
+    // nothing and the filter silently yields zero elements.
     const modalCommentContainer = modal
       .locator('[data-testid="threaded-comment"]:visible')
-      .filter({ hasText: modalComment })
-      .first();
-    await modalCommentContainer.getByRole('button', { name: /reply/i }).first().click();
+      .filter({ has: page.getByText(modalComment, { exact: true }) })
+      .last();
+    // Accessible name is "Reply to this comment" (the visible "Reply" label is
+    // `hidden md:inline`). .first() is this comment's own button — the container
+    // also holds its descendants'.
+    await modalCommentContainer
+      .getByRole('button', { name: /reply to this comment/i })
+      .first()
+      .click();
 
     const modalReply = `Modal Reply - ${Date.now()}`;
     const modalReplyTextarea = modalCommentContainer.locator('textarea').locator('visible=true').first();
