@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { useUrlParam } from '../hooks/useUrlParam';
 import { ConversationList } from './ConversationList';
 import { MessageThread } from './MessageThread';
@@ -30,7 +31,13 @@ function PrivateMessagesInner({ gameId, characters, isAnonymous, allowGroupConve
     loadingConversations,
     selectConversation,
     loadConversations,
+    refreshConversation,
   } = useConversation();
+
+  // Identifies each navigation, so re-entering the conversation already on
+  // screen (e.g. via a notification link) is distinguishable from a re-render.
+  const { key: locationKey } = useLocation();
+  const initialLocationKeyRef = useRef(locationKey);
 
   const [conversationParam, setConversationParam] = useUrlParam<number | null>('conversation', null, {
     deserialize: (s) => parseInt(s, 10) || null,
@@ -61,12 +68,28 @@ function PrivateMessagesInner({ gameId, characters, isAnonymous, allowGroupConve
     loadConversations(gameId);
   }, [gameId, loadConversations]);
 
-  // Sync URL param → context on mount and when param changes
+  // Sync URL param → context on mount and when param changes.
+  //
+  // Keyed on location.key, not just the param, so that navigating to the
+  // conversation already on screen still does something. A notification for a
+  // new reply links to the exact URL you are already viewing; the param is
+  // unchanged, so a param-only dependency never re-runs and the click appears
+  // dead. location.key is fresh on every navigation, including same-URL ones,
+  // which lets us tell "the user arrived here again" from "this component
+  // merely re-rendered" and refetch the thread to pull in the new reply.
   useEffect(() => {
     if (conversationParam !== selectedConversationId) {
       selectConversation(conversationParam);
+      return;
     }
-  }, [conversationParam]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Same conversation, new navigation. Skip the very first render, where the
+    // conversation is already being loaded by the selection above — refreshing
+    // on top of that duplicates the request and fires a bogus "new message" toast.
+    if (conversationParam === null || locationKey === initialLocationKeyRef.current) {
+      return;
+    }
+    refreshConversation(gameId, conversationParam);
+  }, [conversationParam, locationKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Honour the envelope shortcut once, then clear the param so a later refresh
   // or back-navigation doesn't reopen the form. The selected participant moves
