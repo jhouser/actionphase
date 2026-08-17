@@ -70,15 +70,17 @@ export const ItemForm: React.FC<ItemFormProps> = ({
     enabled: !!gameContext?.gameId && (lootModesEnabled.loot_table || lootModesEnabled.loot_table_random)
   });
 
+  // Once the fetch settles, retire the loot modes if the game has no loot tables.
+  // Functional update so the effect does not depend on the state it narrows.
   useEffect(() => {
-    if (isLootTablesFetched || isLootTablesError) {
-      setLootModesEnabled({
-        manual: lootModesEnabled.manual,
-        loot_table: lootModesEnabled.loot_table && (lootTables?.length ?? 0) > 0,
-        loot_table_random: lootModesEnabled.loot_table_random && (lootTables?.length ?? 0) > 0,
-      });
-    }
-  }, [ lootTables ]);
+    if (!isLootTablesFetched && !isLootTablesError) return;
+    const hasLootTables = (lootTables?.length ?? 0) > 0;
+    setLootModesEnabled((prev) => ({
+      manual: prev.manual,
+      loot_table: prev.loot_table && hasLootTables,
+      loot_table_random: prev.loot_table_random && hasLootTables,
+    }));
+  }, [lootTables, isLootTablesFetched, isLootTablesError]);
 
   const [mode, setMode] = useState<lootModes>('manual');
   const [name, setName] = useState(initialValues?.name || '');

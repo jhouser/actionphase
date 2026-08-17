@@ -1,7 +1,7 @@
 import { Button } from './ui';
 import { EditorLockNotice } from './EditorLockNotice';
 
-export interface SubTab<Id extends string> {
+interface SubTab<Id extends string> {
   id: Id;
   label: string;
   /** Shown in parentheses after the label — the number of rows under that tab. */
