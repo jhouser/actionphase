@@ -337,12 +337,9 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
   };
 
   /**
-   * Close request from "Done". An open editor's uncommitted text is invisible to this
-   * modal — it is never staged and never flushed — so closing on it destroys the GM's
-   * typing. Ask first; every other close goes straight through.
-   *
-   * The backdrop does not route here: it is disabled outright below, since a stray
-   * click is not a decision worth raising a confirmation over.
+   * Close request from "Done" or the backdrop. An open editor's uncommitted text is
+   * invisible to this modal — it is never staged and never flushed — so closing on it
+   * destroys the GM's typing. Ask first; every other close goes straight through.
    */
   // Drop the prompt if the edit it was asking about gets committed underneath it — the
   // editor is still on screen while the prompt shows, so its Save stays reachable.
@@ -360,9 +357,11 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
   };
 
   return (
-    // dismissOnBackdrop: this modal renders no title, and so no X — "Done" is the only
-    // close control. A backdrop click here would be the one unguarded path out.
-    <Modal isOpen={isOpen} onClose={requestClose} dismissOnBackdrop={false}>
+    // dismissOnBackdrop: with nothing uncommitted the backdrop closes normally — this
+    // modal renders no title and so no X, making "Done" the only other way out. While an
+    // editor holds uncommitted text the backdrop is withdrawn instead of routed through
+    // requestClose: a stray click is not a decision worth raising a confirmation over.
+    <Modal isOpen={isOpen} onClose={requestClose} dismissOnBackdrop={!hasUncommittedEdit}>
       {/* Bounded flex column so the footer's discard action stays visible: only the
           section content scrolls, not the whole dialog. Height accounts for the
           Modal's own max-h-[90vh] minus its padding. */}

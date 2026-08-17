@@ -3,6 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test-utils/render';
 import { ActionResultsList } from '../ActionResultsList';
+import { stubRenderedHeight } from '../../test-utils/renderedHeight';
 
 vi.mock('../../hooks/useActionResults', () => ({
   useUserActionResults: vi.fn(),
@@ -25,6 +26,9 @@ const makeResult = (overrides = {}) => ({
 });
 
 describe('ActionResultsList', () => {
+  // CollapsibleMarkdown decides overflow from measured height; jsdom reports 0.
+  const setRenderedHeight = stubRenderedHeight(500);
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -55,6 +59,7 @@ describe('ActionResultsList', () => {
   });
 
   it('shows full content for short results (no expand button)', () => {
+    setRenderedHeight(40); // fits inside the collapsed height
     vi.mocked(useUserActionResults).mockReturnValue({ isLoading: false, data: [makeResult({ content: 'Short.' })], error: null } as never);
     renderWithProviders(<ActionResultsList gameId={5} />);
     expect(screen.getByText('Short.')).toBeInTheDocument();

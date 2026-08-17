@@ -6,8 +6,10 @@ import { server } from '../../mocks/server';
 import { renderWithProviders } from '../../test-utils/render';
 import { GameResultsManager } from '../GameResultsManager';
 import type { ActionResult } from '../../types/phases';
+import { stubRenderedHeight } from '../../test-utils/renderedHeight';
 
 describe('GameResultsManager', () => {
+
   const mockGameId = 1;
 
   const mockUnpublishedResult: ActionResult = {
@@ -854,6 +856,9 @@ describe('GameResultsManager', () => {
   });
 
   describe('Collapse/Expand Functionality', () => {
+    // CollapsibleMarkdown decides overflow from measured height; jsdom reports 0.
+    const setRenderedHeight = stubRenderedHeight(500);
+
     it('shows collapse button for long unpublished results (>200 characters)', async () => {
       const longContent = 'A'.repeat(250); // 250 characters
       const longResult: ActionResult = {
@@ -870,6 +875,7 @@ describe('GameResultsManager', () => {
     });
 
     it('does NOT show collapse button for short unpublished results (<=200 characters)', async () => {
+      setRenderedHeight(40); // fits inside the collapsed height
       const shortContent = 'A'.repeat(150); // 150 characters
       const shortResult: ActionResult = {
         ...mockUnpublishedResult,
@@ -896,9 +902,10 @@ describe('GameResultsManager', () => {
 
       renderWithProviders(<GameResultsManager gameId={mockGameId} />);
 
-      // Should show truncated content initially
+      // Collapsed, but the full text is present — clipping is visual only.
       await waitFor(() => {
-        expect(screen.getByText(longContent.substring(0, 200) + '...')).toBeInTheDocument();
+        expect(screen.getByText(longContent).closest('[data-collapsed]'))
+          .toHaveAttribute('data-collapsed', 'true');
       });
 
       // Should have "Show full content" button
@@ -927,13 +934,14 @@ describe('GameResultsManager', () => {
 
       renderWithProviders(<GameResultsManager gameId={mockGameId} />);
 
+      // The full content is always in the DOM — collapsing is visual only, so
+      // markdown can't be cut mid-syntax. What changes is the clip, not the text.
       await waitFor(() => {
-        // Should see first 200 characters + "..."
-        const preview = longContent.substring(0, 200) + '...';
-        expect(screen.getByText(preview)).toBeInTheDocument();
-        // Should NOT see the full content initially
-        expect(screen.queryByText(longContent)).not.toBeInTheDocument();
+        expect(screen.getByText(longContent)).toBeInTheDocument();
       });
+      expect(screen.getByText(longContent).closest('[data-collapsed]'))
+        .toHaveAttribute('data-collapsed', 'true');
+      expect(document.body.textContent).not.toContain(longContent.substring(0, 200) + '...');
     });
 
     it('expands to show full content when "Show full content" is clicked', async () => {
@@ -947,10 +955,10 @@ describe('GameResultsManager', () => {
 
       renderWithProviders(<GameResultsManager gameId={mockGameId} />);
 
-      // Wait for truncated preview
+      // Wait for the collapsed state
       await waitFor(() => {
-        const preview = longContent.substring(0, 200) + '...';
-        expect(screen.getByText(preview)).toBeInTheDocument();
+        expect(screen.getByText(longContent).closest('[data-collapsed]'))
+          .toHaveAttribute('data-collapsed', 'true');
       });
 
       // Click expand button
@@ -988,11 +996,10 @@ describe('GameResultsManager', () => {
       // Collapse
       await user.click(screen.getByText(/show less/i));
 
-      // Should see preview again
+      // Collapsed again: same text, clipped rather than removed.
       await waitFor(() => {
-        const preview = longContent.substring(0, 200) + '...';
-        expect(screen.getByText(preview)).toBeInTheDocument();
-        expect(screen.queryByText(longContent)).not.toBeInTheDocument();
+        expect(screen.getByText(longContent).closest('[data-collapsed]'))
+          .toHaveAttribute('data-collapsed', 'true');
       });
     });
 
@@ -1024,13 +1031,16 @@ describe('GameResultsManager', () => {
       const expandButtons = screen.getAllByText(/show full content/i);
       await user.click(expandButtons[0]);
 
-      // The clicked result expands; the other stays collapsed.
+      // The clicked result expands; the other stays collapsed. Both texts are
+      // in the DOM either way, so independence shows in the collapsed state.
       await waitFor(() => {
-        expect(screen.getByText(longResult2.content)).toBeInTheDocument();
-        expect(screen.queryByText(longResult1.content)).not.toBeInTheDocument();
-        expect(screen.getByText(/show less/i)).toBeInTheDocument();
-        expect(screen.getByText(/show full content/i)).toBeInTheDocument(); // The other is still collapsed
+        expect(screen.getByText(longResult2.content).closest('[data-collapsed]'))
+          .toHaveAttribute('data-collapsed', 'false');
       });
+      expect(screen.getByText(longResult1.content).closest('[data-collapsed]'))
+        .toHaveAttribute('data-collapsed', 'true');
+      expect(screen.getByText(/show less/i)).toBeInTheDocument();
+      expect(screen.getByText(/show full content/i)).toBeInTheDocument(); // The other is still collapsed
     });
   });
 

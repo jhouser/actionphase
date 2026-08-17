@@ -100,6 +100,13 @@ function setupHandlers({
   );
 }
 
+/** Clicks the Modal's backdrop, which carries no role or label to query by. */
+function clickBackdrop() {
+  const backdrop = document.querySelector('.bg-black\\/60') as HTMLElement;
+  expect(backdrop).toBeInTheDocument();
+  fireEvent.click(backdrop);
+}
+
 async function waitForLoaded() {
   await waitFor(() => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
@@ -722,6 +729,81 @@ describe('UpdateCharacterSheetModal', () => {
       });
 
       fireEvent.click(screen.getByRole('button', { name: /done/i }));
+
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    /**
+     * Regression: guarding the backdrop was implemented by disabling it outright, which
+     * left the modal with no way out but "Done" even when there was nothing to protect.
+     * Clicking away is how most people close a modal, so it has to keep working whenever
+     * no editor holds uncommitted text.
+     */
+    it('closes on a backdrop click when nothing is uncommitted', async () => {
+      const onClose = vi.fn();
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: null });
+
+      renderWithProviders(
+        <UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />,
+      );
+      await waitForLoaded();
+
+      clickBackdrop();
+
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('closes on a backdrop click with an editor open but untouched', async () => {
+      const onClose = vi.fn();
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: null });
+
+      renderWithProviders(
+        <UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />,
+      );
+      await openItemEditor();
+
+      clickBackdrop();
+
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('ignores a backdrop click while an editor holds uncommitted edits', async () => {
+      const onClose = vi.fn();
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: null });
+
+      renderWithProviders(
+        <UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />,
+      );
+      await openItemEditor();
+
+      fireEvent.change(screen.getByLabelText(/item name/i), {
+        target: { value: 'Healing Potion of Vigor' },
+      });
+      clickBackdrop();
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByLabelText(/item name/i)).toHaveValue('Healing Potion of Vigor');
+    });
+
+    it('restores backdrop dismissal once the nested edit is saved', async () => {
+      const onClose = vi.fn();
+      setupHandlers({ characterData: CHAR_DATA_ITEMS, drafts: null });
+
+      renderWithProviders(
+        <UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />,
+      );
+      await openItemEditor();
+
+      fireEvent.change(screen.getByLabelText(/item name/i), {
+        target: { value: 'Healing Potion of Vigor' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/item name/i)).not.toBeInTheDocument();
+      });
+
+      clickBackdrop();
 
       expect(onClose).toHaveBeenCalledOnce();
     });

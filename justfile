@@ -760,7 +760,7 @@ relock-frontend:
 # Frontend testing with options (runs in frontend container)
 # Interactive modes (watch/ui) use a TTY-attached exec.
 test-fe mode="run" file="":
-  @just _test-fe-{{os_family()}}
+  @just _test-fe-{{os_family()}} {{mode}} {{file}}
 
 _test-fe-windows mode="run" file="":
   #!pwsh.exe

@@ -28,6 +28,22 @@ export class ActionResultsPage {
   }
 
   /**
+   * Reveal a result's full text, whether or not it is collapsed.
+   *
+   * Results collapse only when their rendered height overflows, so whether a
+   * "Show full content" toggle exists depends on how tall the content actually
+   * renders — not on its character count. Short-but-published results show no
+   * toggle at all and are already fully visible, so this expands when there is
+   * something to expand and is a no-op otherwise.
+   */
+  async expandResultsIfCollapsed() {
+    const toggle = this.page.getByRole('button', { name: 'Show full content' }).first();
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click();
+    }
+  }
+
+  /**
    * View results for a specific phase
    *
    * @param phaseNumber - Phase number to view
