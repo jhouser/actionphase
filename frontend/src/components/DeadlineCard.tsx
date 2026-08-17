@@ -194,7 +194,11 @@ export function DeadlineCard({ deadline, isGM, onEdit, onDelete, onExtend, onCli
       <div className="relative pointer-events-none">
         {/* Title (emoji removed for more space) */}
         <div className="mb-1">
-          <span className="text-sm font-semibold text-content-primary" title={deadline.title}>
+          <span
+            className="text-sm font-semibold text-content-primary"
+            title={deadline.title}
+            data-testid="deadline-title"
+          >
             {displayTitle}
           </span>
         </div>
