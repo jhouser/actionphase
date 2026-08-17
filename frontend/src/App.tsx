@@ -75,7 +75,7 @@ function PageLoader() {
 function GamePageSkeleton() {
   return (
     <div className="min-h-screen surface-page">
-      <div className="max-w-6xl mx-auto md:px-4 py-4 md:py-8">
+      <div className="max-w-7xl mx-auto md:px-4 py-4 md:py-8">
         <div className="surface-base shadow-md py-4 px-3 md:p-6 mb-6 md:rounded-lg animate-pulse">
           <div className="flex items-start justify-between">
             <div className="flex-1">
