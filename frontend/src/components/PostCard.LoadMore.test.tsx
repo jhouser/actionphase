@@ -548,7 +548,7 @@ describe('PostCard - Load More Comments', () => {
     await waitFor(() => {
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenCalledTimes(2);
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenLastCalledWith(
-        1, 1, THREADS_PER_PAGE, THREADS_PER_PAGE, 5
+        1, 1, THREADS_PER_PAGE, THREADS_PER_PAGE, COMMENT_FETCH_MAX_DEPTH
       );
     });
 
@@ -667,7 +667,7 @@ describe('PostCard - Load More Comments', () => {
     await waitFor(() => {
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenCalledTimes(3);
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenLastCalledWith(
-        1, 1, THREADS_PER_PAGE * 2, 0, 5
+        1, 1, THREADS_PER_PAGE * 2, 0, COMMENT_FETCH_MAX_DEPTH
       );
     });
 
@@ -717,7 +717,7 @@ describe('PostCard - Load More Comments', () => {
     // The refresh asked for the pre-load-more window
     await waitFor(() => expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenCalledTimes(3));
     expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenNthCalledWith(
-      3, 1, 1, THREADS_PER_PAGE, 0, 5
+      3, 1, 1, THREADS_PER_PAGE, 0, COMMENT_FETCH_MAX_DEPTH
     );
 
     // Load-more lands first: threads 6-10 appear, window is now 10
@@ -733,7 +733,7 @@ describe('PostCard - Load More Comments', () => {
     await waitFor(() => {
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenCalledTimes(4);
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenLastCalledWith(
-        1, 1, THREADS_PER_PAGE * 2, 0, 5
+        1, 1, THREADS_PER_PAGE * 2, 0, COMMENT_FETCH_MAX_DEPTH
       );
     });
 
