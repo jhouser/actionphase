@@ -32,6 +32,15 @@ ENV VITE_FARO_URL=$VITE_FARO_URL
 ENV VITE_FARO_APP_NAME=$VITE_FARO_APP_NAME
 ENV VITE_ENVIRONMENT=$VITE_ENVIRONMENT
 
+# Comment threading depth limits — baked into the bundle.
+# Must stay <= the backend's COMMENT_MAX_DEPTH, which caps the depth the API
+# returns; a higher value here renders "Continue thread" for replies never fetched.
+ARG VITE_COMMENT_MAX_DEPTH=5
+ARG VITE_COMMENT_MAX_DEPTH_MOBILE=3
+
+ENV VITE_COMMENT_MAX_DEPTH=$VITE_COMMENT_MAX_DEPTH
+ENV VITE_COMMENT_MAX_DEPTH_MOBILE=$VITE_COMMENT_MAX_DEPTH_MOBILE
+
 # Faro source map upload — consumed only by the Vite build plugin, not shipped to browser
 ARG GRAFANA_FARO_API_KEY=
 ARG GRAFANA_FARO_SOURCEMAP_ENDPOINT=
