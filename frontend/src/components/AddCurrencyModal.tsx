@@ -17,7 +17,9 @@ export const AddCurrencyModal: React.FC<AddCurrencyModalProps> = ({ onAdd, onCan
   };
 
   return (
-    <Modal isOpen={true} onClose={onCancel} title="Add Currency/Resource">
+    // dismissOnBackdrop: see AddItemModal — a stray backdrop click must not discard
+    // the half-typed entry held in CurrencyForm's local state.
+    <Modal isOpen={true} onClose={onCancel} title="Add Currency/Resource" dismissOnBackdrop={false}>
       <CurrencyForm
         onSubmit={handleSubmit}
         onCancel={onCancel}

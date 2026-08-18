@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUrlParam } from '../hooks/useUrlParam';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -39,6 +39,14 @@ export function CharactersList({
     serialize: (v) => v === null || v === undefined ? '' : String(v),
     replace: true,
   });
+  const closeSheet = useCallback(() => setSelectedCharacterId(null), [setSelectedCharacterId]);
+
+  // Whether an editor inside the open sheet holds text its own Save has not committed.
+  // The sheet reports this up because the backdrop is ours, not its — see
+  // dismissOnBackdrop below. CharacterSheet reports false on unmount, so this cannot
+  // stay stuck on after the sheet closes.
+  const [sheetIsDirty, setSheetIsDirty] = useState(false);
+
   const [npcToAssign, setNpcToAssign] = useState<Character | null>(null);
   const [characterToDelete, setCharacterToDelete] = useState<Character | null>(null);
   const deletionSubmittedRef = useRef(false);
@@ -366,17 +374,23 @@ export function CharactersList({
         return (
           <Modal
             isOpen={true}
-            onClose={() => setSelectedCharacterId(null)}
+            onClose={closeSheet}
             title=""
+            // Backdrop dismiss stays on for a sheet with nothing to lose — clicking away
+            // is how most people close a modal. It is withdrawn only while an editor
+            // holds text its own Save has not committed, where a stray click would
+            // silently discard it.
+            dismissOnBackdrop={!sheetIsDirty}
           >
             <CharacterSheet
               characterId={selectedCharacterId}
               canEdit={canEditCharacterSheet(character)}
               canEditStats={canEditCharacterStats()}
-              onClose={() => setSelectedCharacterId(null)}
+              onClose={closeSheet}
               isAnonymous={isAnonymous}
               userRole={userRole}
               gameState={gameState}
+              onDirtyChange={setSheetIsDirty}
             />
           </Modal>
         );

@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useUserActionResults } from '../hooks/useActionResults';
+import { useExpandedSet } from '../hooks/useExpandedSet';
 import { Alert } from './ui';
-import { MarkdownPreview } from './MarkdownPreview';
+import { CollapsibleMarkdown } from './CollapsibleMarkdown';
+import { StagedPartPlaceholder } from './StagedPartPlaceholder';
 
 interface ActionResultsListProps {
   gameId: number;
@@ -9,7 +12,13 @@ interface ActionResultsListProps {
 
 export const ActionResultsList: React.FC<ActionResultsListProps> = ({ gameId }) => {
   const { data: results, isLoading, error } = useUserActionResults(gameId);
-  const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
+  const expandedResults = useExpandedSet();
+  const queryClient = useQueryClient();
+
+  // A countdown reaching zero means "ask the server again", never "show it".
+  const handlePartExpired = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['actionResults', 'user', gameId] });
+  }, [queryClient, gameId]);
 
   if (isLoading) {
     return (
@@ -35,23 +44,17 @@ export const ActionResultsList: React.FC<ActionResultsListProps> = ({ gameId }) 
     );
   }
 
-  const toggleExpanded = (resultId: number) => {
-    const newExpanded = new Set(expandedResults);
-    if (newExpanded.has(resultId)) {
-      newExpanded.delete(resultId);
-    } else {
-      newExpanded.add(resultId);
-    }
-    setExpandedResults(newExpanded);
-  };
-
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-content-primary">Your Action Results</h3>
       {results.map((result) => {
-        const isExpanded = expandedResults.has(result.id);
-        const isCollapsible = result.content.length > 200;
-        const previewContent = result.content.substring(0, 200) + '...';
+        const isExpanded = expandedResults.isExpanded(result.id);
+
+        // `released_at` is the authority, not empty content: an ordinary result
+        // has no released_at at all, and a locked part's content arrives blanked
+        // from the server rather than absent.
+        const isStagedPart = result.part_count !== undefined && result.part_count > 1;
+        const isLocked = isStagedPart && !result.released_at;
 
         return (
           <div key={result.id} className="p-4 surface-base border border-theme-default rounded shadow-sm">
@@ -65,30 +68,25 @@ export const ActionResultsList: React.FC<ActionResultsListProps> = ({ gameId }) 
                 </span>
               )}
             </div>
-            <div>
-              <MarkdownPreview content={isCollapsible && !isExpanded ? previewContent : result.content} fullWidth />
-            </div>
-            {isCollapsible && (
-              <button
-                onClick={() => toggleExpanded(result.id)}
-                className="mt-2 text-sm text-interactive-primary hover:text-interactive-primary-hover font-medium flex items-center"
-              >
-                {isExpanded ? (
-                  <>
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                    </svg>
-                    Show less
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                    Show full content
-                  </>
-                )}
-              </button>
+            {isStagedPart && !isLocked && (
+              <p className="text-xs font-medium text-content-secondary mb-2" data-testid={`staged-part-label-${result.id}`}>
+                Part {result.part_number} of {result.part_count}
+              </p>
+            )}
+            {isLocked ? (
+              <StagedPartPlaceholder
+                partNumber={result.part_number}
+                partCount={result.part_count}
+                unlocksAt={result.unlocks_at}
+                onExpired={handlePartExpired}
+              />
+            ) : (
+              <CollapsibleMarkdown
+                content={result.content}
+                fullWidth
+                expanded={isExpanded}
+                onExpandedChange={() => expandedResults.toggle(result.id)}
+              />
             )}
             {result.gm_username && (
               <p className="text-xs text-content-tertiary mt-2">From: {result.gm_username}</p>

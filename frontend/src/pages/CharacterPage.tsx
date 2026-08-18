@@ -9,6 +9,7 @@ import CharacterAvatar from '../components/CharacterAvatar';
 import { useOptionalGameContext } from '../contexts/GameContext';
 import { ParentCommentPreview } from '../components/ParentCommentPreview';
 import { MarkdownPreview } from '../components/MarkdownPreview';
+import { CollapsibleMarkdown } from '../components/CollapsibleMarkdown';
 import { Spinner, Alert, Badge, Card, CardBody } from '../components/ui';
 import { formatDistanceToNow } from 'date-fns';
 import type { CharacterMessage } from '../types/messages';
@@ -42,7 +43,10 @@ export function CharacterPage() {
     isLoading: isLoadingCharacter,
     isError: isCharacterError,
   } = useQuery({
-    queryKey: ['characters', characterIdNum],
+    // Singular 'character' is the shared key for a single character record —
+    // CharacterSheet reads it and the avatar/update mutations invalidate it, so
+    // this page picks up those changes instead of serving a stale copy.
+    queryKey: ['character', characterIdNum],
     queryFn: () => apiClient.characters.getCharacter(characterIdNum!).then(res => res.data),
     enabled: !!characterIdNum && !isNaN(characterIdNum),
   });
@@ -54,6 +58,25 @@ export function CharacterPage() {
   });
 
   const portraitAvatars = gameContext?.game?.portrait_avatars ?? gameData?.portrait_avatars ?? false;
+
+  // Same query key as CharacterSheet so the two share a cache entry.
+  const { data: characterFields } = useQuery({
+    queryKey: ['characterData', characterIdNum],
+    queryFn: () => apiClient.characters.getCharacterData(characterIdNum!).then(res => res.data),
+    enabled: !!characterIdNum && !isNaN(characterIdNum),
+  });
+
+  // The public bio is the `background` field of the `bio` module. The endpoint
+  // already withholds private fields from ordinary viewers, but editors, the
+  // audience and everyone in a completed game receive the private ones too —
+  // so filter on is_public here as well rather than trusting the payload to
+  // contain only public data.
+  const publicBio = characterFields?.find(
+    (field) =>
+      field.module_type === 'bio' &&
+      field.field_name === 'background' &&
+      field.is_public
+  )?.field_value?.trim();
 
   const { data: statsData } = useCharacterStats(characterIdNum);
 
@@ -146,6 +169,27 @@ export function CharacterPage() {
             <CharacterActivityStats stats={statsData} className="mt-4" />
           )}
         </div>
+
+        {/* Public Bio */}
+        {publicBio && (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-text-heading mb-4">About</h2>
+            <Card variant="default" padding="md">
+              <CardBody>
+                {/* Card's default variant paints surface-base, so the fade
+                    blends to that token. */}
+                <CollapsibleMarkdown
+                  content={publicBio}
+                  fullWidth
+                  fadeSurface="surface-base"
+                  expandLabel="Show More"
+                  collapseLabel="Show Less"
+                  data-testid="character-bio"
+                />
+              </CardBody>
+            </Card>
+          </div>
+        )}
 
         {/* Activity Feed */}
         <div>

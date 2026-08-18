@@ -139,10 +139,29 @@ func (as *ActionSubmissionService) publishDraftUpdates(ctx context.Context, quer
 // This is called by both PublishActionResult and PublishAllPhaseResults to ensure consistent behavior.
 // The queries parameter must be from a transaction context to ensure atomicity.
 func (as *ActionSubmissionService) publishSingleResultWithDrafts(ctx context.Context, queries *models.Queries, resultID int32) error {
-	// Step 1: Publish the action result (marks it as published)
-	result, err := queries.PublishActionResult(ctx, resultID)
+	// Step 1: Publish the action result (marks it as published).
+	//
+	// Publishes the whole chain, so a chain built up part by part goes out
+	// intact: an unpublished follower is invisible to the release worker and
+	// would otherwise be stranded forever. For an ordinary single result the
+	// chain is just itself, and this behaves exactly as it always has.
+	published, err := queries.PublishActionResult(ctx, resultID)
 	if err != nil {
 		return fmt.Errorf("failed to publish action result %d: %w", resultID, err)
+	}
+	if len(published) == 0 {
+		return fmt.Errorf("failed to publish action result %d: no rows updated", resultID)
+	}
+
+	// The notification names the result the GM published, not whichever row the
+	// UPDATE happened to return last — for a chain the recipient is the same
+	// either way, but the link and related ID must point at the head.
+	result := published[0]
+	for _, row := range published {
+		if row.ID == resultID {
+			result = row
+			break
+		}
 	}
 
 	// Step 1.5: Create notification for the player
@@ -169,6 +188,12 @@ func (as *ActionSubmissionService) publishSingleResultWithDrafts(ctx context.Con
 
 	// Step 2: Publish draft character updates
 	// Each draft row contains the complete desired final state — write directly to character_data
+	//
+	// Scoped to resultID alone, deliberately, even though step 1 published the
+	// whole chain. A chain's sheet updates are staged on its FINAL part and
+	// apply when that part is released (see ReleaseDueStagedParts), so applying
+	// them here would grant the reward as the scene opens rather than when it
+	// resolves. Publishing a chain head therefore applies no follower's drafts.
 	err = as.publishDraftUpdates(ctx, queries, resultID)
 	if err != nil {
 		return fmt.Errorf("failed to publish draft character updates for result %d: %w", resultID, err)

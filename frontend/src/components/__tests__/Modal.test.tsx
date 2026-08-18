@@ -139,6 +139,36 @@ describe('Modal', () => {
 
       expect(mockOnClose).not.toHaveBeenCalled()
     })
+
+    /**
+     * Modals holding editable content opt out of backdrop dismiss. A backdrop click is
+     * a slip rather than a decision — nothing was aimed at — and on those surfaces it
+     * would discard typing that only lives in local component state.
+     */
+    it('should not call onClose on backdrop click when dismissOnBackdrop is false', () => {
+      render(
+        <Modal isOpen={true} onClose={mockOnClose} dismissOnBackdrop={false}>
+          <div data-testid="modal-content">Content</div>
+        </Modal>
+      )
+
+      const backdrop = document.querySelector('.bg-black\\/60') as HTMLElement
+      fireEvent.click(backdrop)
+
+      expect(mockOnClose).not.toHaveBeenCalled()
+    })
+
+    it('should still close via the X button when dismissOnBackdrop is false', () => {
+      render(
+        <Modal isOpen={true} onClose={mockOnClose} title="Test Modal" dismissOnBackdrop={false}>
+          <div>Content</div>
+        </Modal>
+      )
+
+      fireEvent.click(screen.getByRole('button'))
+
+      expect(mockOnClose).toHaveBeenCalledOnce()
+    })
   })
 
   describe('Content rendering', () => {

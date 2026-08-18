@@ -39,8 +39,9 @@ test.describe('@mobile Action Results Flow', () => {
     // Should see Player 1's published result
     await expect(page.getByText('Basement Investigation Results').first()).toBeVisible({ timeout: 10000 });
 
-    // Result content is > 200 chars so it's collapsed — click to expand
-    await page.getByRole('button', { name: 'Show full content' }).first().click();
+    // Long results collapse behind a toggle; short ones render in full. Which
+    // applies depends on rendered height, so expand only if there is a toggle.
+    await resultsPage.expandResultsIfCollapsed();
 
     // Should see result content with markdown
     await expect(page.locator('text=You descend into the basement')).toBeVisible();
@@ -65,8 +66,9 @@ test.describe('@mobile Action Results Flow', () => {
     // Wait for results to load
     await expect(page.getByText('Basement Investigation Results').first()).toBeVisible({ timeout: 10000 });
 
-    // Result content is > 200 chars so it's collapsed — click to expand
-    await page.getByRole('button', { name: 'Show full content' }).first().click();
+    // Long results collapse behind a toggle; short ones render in full. Which
+    // applies depends on rendered height, so expand only if there is a toggle.
+    await resultsPage.expandResultsIfCollapsed();
 
     // Player 1's result contains a character mention: "@Result Test Char 2"
     await expect(page.locator('text=@Result Test Char 2')).toBeVisible({ timeout: 10000 });
@@ -89,8 +91,9 @@ test.describe('@mobile Action Results Flow', () => {
     // Should see Player 2's result about library research
     await expect(page.getByText('Library Research Results').first()).toBeVisible({ timeout: 10000 });
 
-    // Result content is > 200 chars so it's collapsed — click to expand
-    await page.getByRole('button', { name: 'Show full content' }).first().click();
+    // Long results collapse behind a toggle; short ones render in full. Which
+    // applies depends on rendered height, so expand only if there is a toggle.
+    await resultsPage.expandResultsIfCollapsed();
 
     // Should see result content
     await expect(page.locator('text=dusty tomes')).toBeVisible();

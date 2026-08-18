@@ -9,9 +9,11 @@ interface AbilityCardProps {
   canEdit: boolean;
   onUpdate: (updates: Partial<CharacterAbility>) => void;
   onRemove: () => void;
+  /** Reports whether this card's inline editor holds uncommitted edits. */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
-export const AbilityCard: React.FC<AbilityCardProps> = ({ ability, canEdit, onUpdate, onRemove }) => {
+export const AbilityCard: React.FC<AbilityCardProps> = ({ ability, canEdit, onUpdate, onRemove, onDirtyChange }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -50,6 +52,7 @@ export const AbilityCard: React.FC<AbilityCardProps> = ({ ability, canEdit, onUp
           onCancel={() => setIsEditing(false)}
           submitLabel="Save"
           variant="inline"
+          onDirtyChange={onDirtyChange}
         />
       </div>
     );

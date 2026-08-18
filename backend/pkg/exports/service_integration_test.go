@@ -692,3 +692,110 @@ func TestService_ConcurrentWorkersClaimDistinctJobs(t *testing.T) {
 		`SELECT COUNT(*) FROM game_exports WHERE status IN ('pending','running')`).Scan(&running))
 	assert.Zero(t, running, "no job may be left in flight")
 }
+
+// A completed game's export must contain what that game's archive SHOWS.
+//
+// The peer read path is GetGameResults, which serves the History view for a
+// completed game — readable by any authenticated user and never gated on
+// released_at. So a pending part is already fully visible on the site to anyone
+// who opens the completed game; gating the export made it strictly narrower
+// than the page it archives, preserving no suspense.
+//
+// It also deleted content permanently: a completed game never changes state, so
+// a part still pending at completion will never release. Excluding it does not
+// defer that text, it drops it from the archive forever.
+//
+// This asserts against the real query, not the assembler's fakes, because the
+// filter lived in SQL — an assembler test with hand-built rows cannot see it.
+func TestService_ExportIncludesPendingStagedParts(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	gameID := seedCompletedGame(t, pool)
+
+	var gmID, playerID int32
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT gm_user_id FROM games WHERE id=$1`, gameID).Scan(&gmID))
+
+	suffix := itoa(time.Now().UnixNano())
+	require.NoError(t, pool.QueryRow(ctx,
+		`INSERT INTO users (username, email, password)
+		 VALUES ($1, $2, 'x') RETURNING id`,
+		"exp_pl_"+suffix, "exp_pl_"+suffix+"@example.com").Scan(&playerID))
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, playerID)
+	})
+
+	var phaseID int32
+	require.NoError(t, pool.QueryRow(ctx,
+		`INSERT INTO game_phases (game_id, phase_type, phase_number, title, start_time,
+		                          is_published, activated_at)
+		 VALUES ($1, 'action', 1, 'Final Challenge', NOW(), FALSE, NOW())
+		 RETURNING id`, gameID).Scan(&phaseID))
+
+	// A released head, then a part whose timer never came due before the game
+	// ended — the exact shape a chain has when its game completes mid-reveal.
+	var headID int32
+	require.NoError(t, pool.QueryRow(ctx,
+		`INSERT INTO action_results (game_id, user_id, phase_id, gm_user_id, content,
+		                             is_published, sent_at, released_at)
+		 VALUES ($1, $2, $3, $4, 'The blade swings toward you...', TRUE, NOW(), NOW())
+		 RETURNING id`, gameID, playerID, phaseID, gmID).Scan(&headID))
+
+	_, err := pool.Exec(ctx,
+		`INSERT INTO action_results (game_id, user_id, phase_id, gm_user_id, content,
+		                             is_published, sent_at, parent_result_id,
+		                             reveal_delay_minutes)
+		 VALUES ($1, $2, $3, $4, 'PENDING-PART-never-released', TRUE, NOW(), $5, 1440)`,
+		gameID, playerID, phaseID, gmID, headID)
+	require.NoError(t, err)
+
+	results, err := models.New(pool).ListExportActionResults(ctx, gameID)
+	require.NoError(t, err)
+
+	contents := make([]string, 0, len(results))
+	for _, r := range results {
+		contents = append(contents, r.Content)
+	}
+
+	assert.Contains(t, contents, "The blade swings toward you...",
+		"a released part belongs in the archive")
+	assert.Contains(t, contents, "PENDING-PART-never-released",
+		"a part still pending when the game completed will NEVER release, so excluding "+
+			"it deletes it from the archive permanently — and History already shows it")
+	require.Len(t, results, 2, "both parts of the chain must be archived")
+}
+
+// The counterpart: an unpublished result is still excluded. Dropping the
+// released_at gate must not be read as "export everything" — is_published is a
+// different question, and a draft genuinely never reached anyone.
+func TestService_ExportStillExcludesUnpublishedResults(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	gameID := seedCompletedGame(t, pool)
+
+	var gmID int32
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT gm_user_id FROM games WHERE id=$1`, gameID).Scan(&gmID))
+
+	var phaseID int32
+	require.NoError(t, pool.QueryRow(ctx,
+		`INSERT INTO game_phases (game_id, phase_type, phase_number, title, start_time,
+		                          is_published, activated_at)
+		 VALUES ($1, 'action', 1, 'Final Challenge', NOW(), FALSE, NOW())
+		 RETURNING id`, gameID).Scan(&phaseID))
+
+	_, err := pool.Exec(ctx,
+		`INSERT INTO action_results (game_id, user_id, phase_id, gm_user_id, content,
+		                             is_published, sent_at, released_at)
+		 VALUES ($1, $2, $3, $2, 'DRAFT-never-published', FALSE, NULL, NULL)`,
+		gameID, gmID, phaseID)
+	require.NoError(t, err)
+
+	results, err := models.New(pool).ListExportActionResults(ctx, gameID)
+	require.NoError(t, err)
+
+	for _, r := range results {
+		assert.NotContains(t, r.Content, "DRAFT-never-published",
+			"an unpublished draft never reached the player and stays out of the archive")
+	}
+}

@@ -433,4 +433,155 @@ describe('CurrencyCard', () => {
       expect(screen.getByRole('button', { name: /^preview$/i })).toBeInTheDocument();
     });
   });
+
+  describe('Unsaved-edit reporting', () => {
+    it('reports clean before anything is edited', () => {
+      const onDirtyChange = vi.fn();
+      render(
+        <CurrencyCard
+          currency={mockCurrency}
+          canEdit={true}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+          onDirtyChange={onDirtyChange}
+        />
+      );
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    });
+
+    it('reports dirty once a field diverges from the saved value', async () => {
+      const user = userEvent.setup();
+      const onDirtyChange = vi.fn();
+      render(
+        <CurrencyCard
+          currency={mockCurrency}
+          canEdit={true}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+          onDirtyChange={onDirtyChange}
+        />
+      );
+
+      await user.click(screen.getByText('✎'));
+      await user.type(screen.getByDisplayValue('Gold'), 'en');
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it('reports clean again after cancel restores the saved values', async () => {
+      const user = userEvent.setup();
+      const onDirtyChange = vi.fn();
+      render(
+        <CurrencyCard
+          currency={mockCurrency}
+          canEdit={true}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+          onDirtyChange={onDirtyChange}
+        />
+      );
+
+      await user.click(screen.getByText('✎'));
+      await user.type(screen.getByDisplayValue('Gold'), 'en');
+      await user.click(screen.getByText('✕'));
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    });
+
+    /**
+     * handleSave clears isEditing in the same tick it calls onUpdate, but that write
+     * is async upstream — the currency prop still holds the old value for a while.
+     * Reporting clean across that window would let the sheet close on a save that is
+     * still in flight, which is the loss this whole signal exists to prevent.
+     */
+    it('stays dirty after save while the parent has not yet applied the update', async () => {
+      const user = userEvent.setup();
+      const onDirtyChange = vi.fn();
+      render(
+        <CurrencyCard
+          currency={mockCurrency}
+          canEdit={true}
+          // Parent that never writes back, standing in for a save still in flight.
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+          onDirtyChange={onDirtyChange}
+        />
+      );
+
+      await user.click(screen.getByText('✎'));
+      await user.type(screen.getByDisplayValue('Gold'), 'en');
+      await user.click(screen.getByText('✓'));
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    });
+
+    /**
+     * A dropped write (failed mutation, or a value the parent reshapes) would otherwise
+     * leave the card comparing unequal forever: dirty, with no editor on screen to save
+     * or cancel, so every tab stays locked with nothing to click. Adopting whatever the
+     * parent settles on bounds that.
+     */
+    it('recovers when the parent settles on a different value than was saved', async () => {
+      const user = userEvent.setup();
+      const onDirtyChange = vi.fn();
+      const { rerender } = render(
+        <CurrencyCard
+          currency={mockCurrency}
+          canEdit={true}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+          onDirtyChange={onDirtyChange}
+        />
+      );
+
+      await user.click(screen.getByText('✎'));
+      await user.type(screen.getByDisplayValue('Gold'), 'en');
+      await user.click(screen.getByText('✓'));
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+      // Parent settles on something else entirely — the save did not take.
+      rerender(
+        <CurrencyCard
+          currency={{ ...mockCurrency, type: 'Silver' }}
+          canEdit={true}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+          onDirtyChange={onDirtyChange}
+        />
+      );
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    });
+
+    it('reports clean once the parent applies the saved value', async () => {
+      const user = userEvent.setup();
+      const onDirtyChange = vi.fn();
+      const { rerender } = render(
+        <CurrencyCard
+          currency={mockCurrency}
+          canEdit={true}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+          onDirtyChange={onDirtyChange}
+        />
+      );
+
+      await user.click(screen.getByText('✎'));
+      await user.type(screen.getByDisplayValue('Gold'), 'en');
+      await user.click(screen.getByText('✓'));
+
+      rerender(
+        <CurrencyCard
+          currency={{ ...mockCurrency, type: 'Golden' }}
+          canEdit={true}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+          onDirtyChange={onDirtyChange}
+        />
+      );
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    });
+  });
 });

@@ -10,6 +10,8 @@ import { logger } from '@/services/LoggingService';
 import { apiClient } from '@/lib/api';
 import { useOptionalGameContext } from '@/contexts/GameContext';
 import { useToast } from '@/contexts/ToastContext';
+import { useDirtyChildren } from '@/hooks/useDirtyChildren';
+import { ManagerSubTabs } from './ManagerSubTabs';
 
 // Defensive helper to ensure all items have ID fields
 // This protects against data corruption from draft merge bugs
@@ -33,6 +35,11 @@ interface InventoryManagerProps {
   canEdit: boolean;
   onItemsChange: (items: InventoryItem[], reloadOnly: boolean) => void;
   onCurrencyChange: (currency: CurrencyEntry[]) => void;
+  /**
+   * Reports whether any item/currency editor below holds edits that have not been
+   * committed with Save. Ancestors use it to warn before closing the sheet.
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export const InventoryManager: React.FC<InventoryManagerProps> = ({
@@ -41,8 +48,10 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   currency,
   canEdit,
   onItemsChange,
-  onCurrencyChange
+  onCurrencyChange,
+  onDirtyChange
 }) => {
+  const { isAnyDirty, report: reportDirty } = useDirtyChildren(onDirtyChange);
   // Defensive: Ensure all items and currency have IDs (protects against backend data corruption)
   const validatedItems = useMemo(() => ensureIds(items, 'Item'), [items]);
   const validatedCurrency = useMemo(() => ensureIds(currency, 'Currency'), [currency]);
@@ -139,31 +148,17 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
   return (
     <div>
-      {/* Tab Navigation - Hide currency tab if user cannot edit */}
-      <div className="flex space-x-1 mb-6 border-b border-theme-default">
-        <Button
-          variant="ghost"
-          onClick={() => setActiveTab('items')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors rounded-none ${
-            activeTab === 'items'
-              ? 'border-interactive-primary text-interactive-primary'
-              : 'border-transparent text-content-secondary hover:text-content-primary'
-          }`}
-        >
-          Items ({validatedItems.length})
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => setActiveTab('currency')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors rounded-none ${
-            activeTab === 'currency'
-              ? 'border-interactive-primary text-interactive-primary'
-              : 'border-transparent text-content-secondary hover:text-content-primary'
-          }`}
-        >
-          Currency ({validatedCurrency.length})
-        </Button>
-      </div>
+      {/* Locked while an editor below holds uncommitted edits, since switching
+          unmounts that editor and destroys them. */}
+      <ManagerSubTabs
+        tabs={[
+          { id: 'items', label: 'Items', count: validatedItems.length },
+          { id: 'currency', label: 'Currency', count: validatedCurrency.length },
+        ]}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        locked={isAnyDirty}
+      />
 
       {/* Items Tab */}
       {activeTab === 'items' && (
@@ -202,6 +197,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                   canEdit={canEdit}
                   onUpdate={(updates) => updateItem(item.id, updates)}
                   onRemove={() => removeItem(item.id)}
+                  onDirtyChange={(isDirty) => reportDirty(`item:${item.id}`, isDirty)}
                 />
               ))}
             </div>
@@ -248,6 +244,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                   canEdit={canEdit}
                   onUpdate={(updates) => updateCurrency(curr.id, updates)}
                   onRemove={() => removeCurrency(curr.id)}
+                  onDirtyChange={(isDirty) => reportDirty(`currency:${curr.id}`, isDirty)}
                 />
               ))}
             </div>

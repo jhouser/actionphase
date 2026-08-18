@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Input } from '../ui';
 import { CommentEditor } from '../CommentEditor';
+import { useReportDirty } from '@/hooks/useReportDirty';
 
 export interface SkillFormData {
   name: string;
@@ -16,6 +17,8 @@ interface SkillFormProps {
   submitLabel?: string;
   variant?: 'modal' | 'inline';
   submitButtonTestId?: string;
+  /** Reports whether the form holds edits that Save has not yet committed. */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 /**
@@ -29,11 +32,22 @@ export const SkillForm: React.FC<SkillFormProps> = ({
   submitLabel = 'Add Skill',
   variant = 'modal',
   submitButtonTestId,
+  onDirtyChange,
 }) => {
   const [name, setName] = useState(initialValues?.name || '');
   const [level, setLevel] = useState(initialValues?.level?.toString() || '');
   const [description, setDescription] = useState(initialValues?.description || '');
   const [category, setCategory] = useState(initialValues?.category || '');
+
+  // Compared trimmed, because handleSubmit submits trimmed — see AbilityForm for why
+  // the raw comparison soft-locks the form on a whitespace-only change.
+  useReportDirty(
+    name.trim() !== (initialValues?.name || '').trim() ||
+      level.trim() !== (initialValues?.level?.toString() || '').trim() ||
+      description.trim() !== (initialValues?.description || '').trim() ||
+      category.trim() !== (initialValues?.category || '').trim(),
+    onDirtyChange,
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

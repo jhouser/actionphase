@@ -339,10 +339,7 @@ func RenderActionFile(
 ) string {
 	var b strings.Builder
 
-	ordered := append([]models.ListExportActionResultsRow(nil), results...)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		return sentBefore(ordered[i].SentAt, ordered[j].SentAt)
-	})
+	ordered := orderResults(results)
 
 	fm := [][2]string{
 		{"type", "action"},
@@ -374,6 +371,97 @@ func RenderActionFile(
 	}
 
 	return b.String()
+}
+
+// orderResults puts one player's results into reading order.
+//
+// Send time alone is not enough. A staged chain is published in a single
+// UPDATE that sets `sent_at = COALESCE(sent_at, NOW())` for every part at once
+// (phases.sql:406), so all parts of a chain share one identical timestamp —
+// this is the normal shape of published chain, not an edge case. Sorting on a
+// tied key leaves the order to whatever the scan produced, which on real data
+// came back reversed: the payoff rendered as "Result 1 of 3" and the setup
+// last.
+//
+// So: sort by send time to place separate chains and standalone results
+// relative to each other, then walk each chain from its head through
+// parent_result_id, which is the only authoritative statement of narrative
+// order.
+func orderResults(results []models.ListExportActionResultsRow) []models.ListExportActionResultsRow {
+	byID := make(map[int32]models.ListExportActionResultsRow, len(results))
+	children := make(map[int32][]int32, len(results))
+	for _, r := range results {
+		byID[r.ID] = r
+		if r.ParentResultID.Valid {
+			children[r.ParentResultID.Int32] = append(children[r.ParentResultID.Int32], r.ID)
+		}
+	}
+
+	// Chain heads, in send order. A row whose parent is absent from this set is
+	// treated as a head so an orphaned follower is still rendered rather than
+	// silently dropped.
+	heads := make([]models.ListExportActionResultsRow, 0, len(results))
+	for _, r := range results {
+		if _, hasParent := byID[r.ParentResultID.Int32]; !r.ParentResultID.Valid || !hasParent {
+			heads = append(heads, r)
+		}
+	}
+	sort.SliceStable(heads, func(i, j int) bool {
+		if heads[i].SentAt.Valid != heads[j].SentAt.Valid {
+			return heads[i].SentAt.Valid
+		}
+		if sentBefore(heads[i].SentAt, heads[j].SentAt) {
+			return true
+		}
+		if sentBefore(heads[j].SentAt, heads[i].SentAt) {
+			return false
+		}
+		return heads[i].ID < heads[j].ID
+	})
+
+	ordered := make([]models.ListExportActionResultsRow, 0, len(results))
+	seen := make(map[int32]bool, len(results))
+	// Indexed, not ranged: a chain that forks appends new heads to this slice
+	// and they must be visited too.
+	for h := 0; h < len(heads); h++ {
+		// Follow the chain down. `seen` also bounds the walk if the data ever
+		// contains a cycle, so a bad row cannot hang the export.
+		for id := heads[h].ID; ; {
+			if seen[id] {
+				break
+			}
+			seen[id] = true
+			ordered = append(ordered, byID[id])
+
+			next := children[id]
+			if len(next) == 0 {
+				break
+			}
+			// A part has one follower by design; sort defensively so a
+			// duplicated link is still deterministic.
+			sort.Slice(next, func(i, j int) bool { return next[i] < next[j] })
+			id = next[0]
+
+			// Any extra followers are appended as their own chains rather than
+			// discarded.
+			for _, extra := range next[1:] {
+				if !seen[extra] {
+					heads = append(heads, byID[extra])
+				}
+			}
+		}
+	}
+
+	// Anything unreachable from a head (a cycle with no entry point) still
+	// belongs in the archive.
+	for _, r := range results {
+		if !seen[r.ID] {
+			seen[r.ID] = true
+			ordered = append(ordered, r)
+		}
+	}
+
+	return ordered
 }
 
 // sentBefore orders results by send time, placing rows with no timestamp last

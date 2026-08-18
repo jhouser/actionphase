@@ -336,7 +336,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
   if (loading) {
     return (
       <div className="min-h-screen surface-page">
-        <div className="max-w-6xl mx-auto md:px-4 py-4 md:py-8">
+        <div className="max-w-7xl mx-auto md:px-4 py-4 md:py-8">
           {/* Header skeleton */}
           <div className="surface-base shadow-md py-4 px-3 md:p-6 mb-6 md:rounded-lg animate-pulse">
             <div className="flex items-start justify-between">
@@ -401,11 +401,11 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
     <div className="min-h-screen surface-page">
       {/* Banner: full-bleed on mobile, constrained on desktop */}
       {game.banner_url && (
-        <div className="max-w-6xl mx-auto md:px-4 md:pt-4">
+        <div className="max-w-7xl mx-auto md:px-4 md:pt-4">
           <GameBanner bannerUrl={game.banner_url} />
         </div>
       )}
-      <div className={`max-w-6xl mx-auto md:px-4 ${game.banner_url ? 'py-0 md:py-0' : 'py-4 md:py-8'}`}>
+      <div className={`max-w-7xl mx-auto md:px-4 ${game.banner_url ? 'py-0 md:py-0' : 'py-4 md:py-8'}`}>
         {/* Public Archive Notice */}
         {isPublicViewer && (
           <div className="bg-interactive-primary/10 border border-interactive-primary md:rounded-lg py-3 px-3 md:p-4 mb-6">

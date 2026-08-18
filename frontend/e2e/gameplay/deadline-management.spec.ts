@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Locator, Page } from '@playwright/test';
 import { loginAs } from '../fixtures/auth-helpers';
 import { getFixtureGameId } from '../fixtures/game-helpers';
 import { GameDetailsPage } from '../pages/GameDetailsPage';
@@ -105,6 +105,21 @@ function getOrdinalSuffix(day: number): string {
   }
 }
 
+/**
+ * Deletes a deadline card via the UI. The E2E_ACTION fixture game is shared and
+ * is not reset between runs, so tests that create deadlines must remove them —
+ * otherwise leftovers accumulate and break strict-mode locators on later runs.
+ */
+async function deleteDeadlineCard(page: Page, card: Locator) {
+  await card.hover();
+  await card.getByRole('button', { name: /Delete deadline/i }).click();
+
+  const deleteModal = page.getByRole('dialog', { name: 'Delete Deadline' });
+  await deleteModal.getByRole('button', { name: 'Delete' }).click();
+  await expect(page.getByRole('heading', { name: 'Delete Deadline' })).not.toBeVisible();
+  await expect(card).not.toBeVisible({ timeout: 15000 });
+}
+
 test.describe('Deadline Management', () => {
   test.beforeEach(async ({ page }) => {
     // Login as GM
@@ -139,12 +154,28 @@ test.describe('Deadline Management', () => {
     // Submit form
     await page.getByRole('button', { name: /Create Deadline/i }).click();
 
-    // Verify deadline appears in widget
-    await expect(page.getByText('Test Deadline')).toBeVisible();
+    // Wait for the modal to close so its textarea (which still holds the
+    // description) is out of the DOM before we assert on page text.
+    await expect(page.getByRole('heading', { name: 'Create New Deadline' })).not.toBeVisible();
+
+    // Verify deadline appears in widget. Scope to the card and match on the
+    // title element specifically: a bare getByText('Test Deadline') also matches
+    // the description ("This is a test deadline for E2E") as a substring, and
+    // re-runs against this shared fixture game leave earlier cards behind, so
+    // both make the locator ambiguous under strict mode.
+    const deadlineCard = page
+      .locator('[class*="rounded-lg border-2"]')
+      .filter({ has: page.getByTestId('deadline-title').filter({ hasText: /^Test Deadline$/ }) })
+      .first();
+    await expect(deadlineCard).toBeVisible();
     // Note: Description is now in tooltip (info icon), not directly visible
 
     // Verify countdown timer is displayed (should show something like "2d 0h" for 48 hours)
-    await expect(page.getByText(/\d+d \d+h/)).toBeVisible();
+    await expect(deadlineCard.getByText(/\d+d \d+h/)).toBeVisible();
+
+    // Clean up: this fixture game is shared, and leftover cards accumulate
+    // across retries and re-runs.
+    await deleteDeadlineCard(page, deadlineCard);
   });
 
   test('GM can edit an existing deadline', async ({ page }) => {
@@ -345,7 +376,7 @@ test.describe('Deadline Management', () => {
         page.waitForResponse(resp => resp.url().includes('/deadlines') && resp.request().method() === 'POST' && resp.status() === 201),
         page.getByRole('button', { name: /Create Deadline/i }).click(),
       ]);
-      await expect(page.getByRole('heading', { name: 'Create Deadline' })).not.toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Create New Deadline' })).not.toBeVisible();
     }
 
     // After creating all 4 deadlines, verify "View All" button appears
