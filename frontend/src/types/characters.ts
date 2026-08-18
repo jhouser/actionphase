@@ -35,11 +35,35 @@ export interface Character {
  * personally control), and stay optional because the rest of the payload — a
  * player's own characters — has no one else to credit.
  */
+/**
+ * Per-game character sheet configuration, as sent by the backend.
+ *
+ * Every level is optional because that is the wire reality: the backend stores
+ * only genuine GM overrides and omits the key entirely when there are none, so
+ * most games send nothing at all. Defaults are NOT filled in server-side — the
+ * frontend owns them so exactly one place knows them.
+ */
+export interface CharacterSheetConfig {
+  labels?: {
+    skills?: string;
+    inventory?: string;
+    numbers?: string;
+  };
+}
+
 export interface ControllableCharacterWithGame extends Omit<Character, 'is_active'> {
   game_title: string;
   game_state: string;
   game_is_anonymous: boolean;
   game_portrait_avatars: boolean;
+  /**
+   * That game's character sheet config, for the same reason the flags above
+   * travel here: the drawer renders sheets outside a GameProvider and has no
+   * game context to read it from. Absent when the GM has set no overrides,
+   * which is the common case — the defaults live in the frontend, so an absent
+   * value means "use them", never "the game has no labels".
+   */
+  game_character_sheet?: CharacterSheetConfig;
   /**
    * The current user's role in that character's game. `audience` is reachable:
    * an audience member assigned an NPC controls it, so it comes back here.

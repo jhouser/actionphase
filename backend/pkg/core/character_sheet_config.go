@@ -156,3 +156,28 @@ func MarshalCharacterSheetConfig(config CharacterSheetConfig) ([]byte, error) {
 	}
 	return data, nil
 }
+
+// CharacterSheetConfigForResponse decodes a stored games.character_sheet column
+// for a response body.
+//
+// Returns nil for an empty or all-defaults config so the key is omitted
+// entirely rather than sent as {}, keeping "no overrides" a single shape on the
+// wire. A malformed stored value is treated as no config rather than failing the
+// request: the column is server-written and validated on the way in, so a parse
+// failure here means a bug or a hand-edited row, and dropping a whole response
+// over a cosmetic label override would be the worse outcome.
+//
+// Lives here rather than in an HTTP package because two of them need it — the
+// game endpoints and the cross-game character payload the utility drawer reads —
+// and the drawer's copy has to agree with the game's copy exactly, or the same
+// game would render different tab labels depending on which surface opened it.
+func CharacterSheetConfigForResponse(stored []byte) *CharacterSheetConfig {
+	config, err := UnmarshalCharacterSheetConfig(stored)
+	if err != nil {
+		return nil
+	}
+	if config.Labels == nil {
+		return nil
+	}
+	return &config
+}

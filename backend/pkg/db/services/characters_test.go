@@ -776,6 +776,75 @@ func TestCharacterService_GetUserControllableCharacters_PendingAssignedNPC(t *te
 	})
 }
 
+// TestCrossGameCharactersCarryCharacterSheetConfig pins the per-game sheet
+// config onto the cross-game payload, which is the utility drawer's only source
+// for it — the drawer renders outside a GameProvider, so it cannot read the
+// config from game context the way in-game surfaces do. Without this a game that
+// renamed a tab would show the default name in the drawer and read as a bug.
+//
+// It also pins the DISTINCT behaviour. This query is SELECT DISTINCT, and adding
+// a column of a type with no equality operator would fail at runtime rather than
+// at compile or generate time. jsonb has a default btree opclass so it dedups
+// fine; plain `json` does not. If that column type ever changes, this test is
+// what catches it.
+func TestCrossGameCharactersCarryCharacterSheetConfig(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "character_data", "npc_assignments", "characters", "game_participants", "games", "sessions", "users")
+
+	characterService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	player := testDB.CreateTestUser(t, "sheetplayer", "sheetplayer@example.com")
+	gm := testDB.CreateTestUser(t, "sheetgm", "sheetgm@example.com")
+
+	renamed := testDB.CreateTestGameWithState(t, int32(gm.ID), "Alpha Renamed", "in_progress")
+	plain := testDB.CreateTestGameWithState(t, int32(gm.ID), "Beta Default", "in_progress")
+
+	// Only one of the two games overrides a label, so the test distinguishes
+	// "carried correctly" from "carried onto everything".
+	_, err := testDB.Pool.Exec(ctx,
+		`UPDATE games SET character_sheet = $1::jsonb WHERE id = $2`,
+		`{"labels":{"numbers":"Stress"}}`, renamed.ID)
+	core.AssertNoError(t, err, "Failed to set character sheet config")
+
+	for _, g := range []struct {
+		id   int32
+		name string
+	}{{renamed.ID, "Renamed Hero"}, {plain.ID, "Plain Hero"}} {
+		_, err := characterService.CreateCharacter(ctx, CreateCharacterRequest{
+			GameID:        g.id,
+			UserID:        core.Int32Ptr(int32(player.ID)),
+			Name:          g.name,
+			CharacterType: "player_character",
+		})
+		core.AssertNoError(t, err, "Failed to create character")
+	}
+
+	rows, err := characterService.GetUserControllableCharactersAcrossGames(ctx, int32(player.ID))
+	core.AssertNoError(t, err, "SELECT DISTINCT with a jsonb column must not fail")
+	core.AssertEqual(t, 2, len(rows), "Expected one character per in_progress game")
+
+	byGame := map[int32][]byte{}
+	for _, row := range rows {
+		byGame[row.GameID] = row.GameCharacterSheet
+	}
+
+	config, err := core.UnmarshalCharacterSheetConfig(byGame[renamed.ID])
+	core.AssertNoError(t, err, "Stored config should parse")
+	if config.Labels == nil || config.Labels.Numbers != "Stress" {
+		t.Errorf("renamed game did not carry its label override: %s", byGame[renamed.ID])
+	}
+
+	// The untouched game carries '{}', which must surface as no config at all
+	// rather than an empty object, so the drawer sees exactly one shape for
+	// "no overrides".
+	if got := core.CharacterSheetConfigForResponse(byGame[plain.ID]); got != nil {
+		t.Errorf("game without overrides should carry no config, got %+v", got)
+	}
+}
+
 func TestCharacterService_GetUserControllableCharactersAcrossGames(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	app := core.NewTestApp(testDB.Pool)
