@@ -655,11 +655,16 @@ BEGIN
   -- Character data examples
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
-    (char1_id, 'core', 'playbook', '"Whisper"', 'text', true, NOW(), NOW()),
-    (char1_id, 'core', 'special_ability', '"Compel"', 'text', true, NOW(), NOW()),
-    (char1_id, 'core', 'trauma', '["Haunted"]', 'text', false, NOW(), NOW()),
-    (char2_id, 'core', 'playbook', '"Hound"', 'text', true, NOW(), NOW()),
-    (char2_id, 'core', 'special_ability', '"Sharpshooter"', 'text', true, NOW(), NOW());
+    (char1_id, 'bio', 'background', 'A Whisper who keeps company with things better left unspoken...', 'text', true, NOW(), NOW()),
+    (char1_id, 'skills', 'skills', '[{"id":"...","name":"Compel","level":"2","category":"Arcane"}, ...]', 'json', true, NOW(), NOW()),
+    (char1_id, 'inventory', 'items', '[{"id":"...","name":"Spirit Bottle","quantity":1,"equipped":false}, ...]', 'json', true, NOW(), NOW()),
+    (char1_id, 'currency', 'currency', '[{"id":"...","type":"Coin","amount":6}, {"id":"...","type":"Stress","amount":4}]', 'json', false, NOW(), NOW());
+    -- (char2_id rows follow the same shape; see the fixture for full values)
+
+-- NOTE: module_type is limited to bio/notes/abilities/skills/inventory/currency, and each
+-- stat collection is ONE row holding a JSON array whose element shape must match what the
+-- app writes (see CHARACTER_MODULES and the Add*Modal components). Fixture rows using other
+-- module types or field names are unreadable by every code path and hide real bugs.
 
   -- ============================================
   -- GAME #3: Starfall Station

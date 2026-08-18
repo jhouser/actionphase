@@ -65,20 +65,20 @@ BEGIN
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char1_id, 'abilities', 'abilities',
-     '[{"id":"ability-1","name":"Keen Eye","description":"Can spot hidden details","type":"passive"},{"id":"ability-2","name":"Quick Draw","description":"Fast weapon draw","type":"active"}]',
+     '[{"id":"ability-1","name":"Keen Eye","description":"Can spot hidden details","type":"innate","active":true},{"id":"ability-2","name":"Quick Draw","description":"Fast weapon draw","type":"learned","active":true}]',
      'json', true, NOW(), NOW()),
     (char1_id, 'skills', 'skills',
-     '[{"id":"skill-1","name":"Archery","proficiency":"expert","description":"Master archer"},{"id":"skill-2","name":"Tracking","proficiency":"proficient","description":"Can track creatures"}]',
+     '[{"id":"skill-1","name":"Archery","level":"Expert","description":"Master archer","category":"Combat"},{"id":"skill-2","name":"Tracking","level":"Proficient","description":"Can track creatures","category":"Survival"}]',
      'json', true, NOW(), NOW());
 
   -- Character 1: Inventory data (2 items, currency)
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char1_id, 'inventory', 'items',
-     '[{"id":"item-1","name":"Longbow","quantity":1,"description":"Masterwork longbow"},{"id":"item-2","name":"Arrows","quantity":20,"description":"Steel-tipped arrows"}]',
+     '[{"id":"item-1","name":"Longbow","quantity":1,"description":"Masterwork longbow","category":"Weapon","equipped":true},{"id":"item-2","name":"Arrows","quantity":20,"description":"Steel-tipped arrows","category":"Ammunition","equipped":false}]',
      'json', true, NOW(), NOW()),
     (char1_id, 'currency', 'currency',
-     '[{"name":"Gold","amount":50},{"name":"Silver","amount":25}]',
+     '[{"id":"currency-1","type":"Gold","amount":50},{"id":"currency-2","type":"Silver","amount":25}]',
      'json', false, NOW(), NOW());
 
   -- ============================================
@@ -97,20 +97,20 @@ BEGIN
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char2_id, 'abilities', 'abilities',
-     '[{"id":"ability-3","name":"Fireball","description":"Launches a ball of fire","type":"spell"},{"id":"ability-4","name":"Shield","description":"Creates magical barrier","type":"spell"},{"id":"ability-5","name":"Arcane Knowledge","description":"Deep understanding of magic","type":"passive"}]',
+     '[{"id":"ability-3","name":"Fireball","description":"Launches a ball of fire","type":"learned","active":true},{"id":"ability-4","name":"Shield","description":"Creates magical barrier","type":"learned","active":true},{"id":"ability-5","name":"Arcane Knowledge","description":"Deep understanding of magic","type":"innate","active":true}]',
      'json', true, NOW(), NOW()),
     (char2_id, 'skills', 'skills',
-     '[{"id":"skill-3","name":"Arcana","proficiency":"expert","description":"Knowledge of magical theory"}]',
+     '[{"id":"skill-3","name":"Arcana","level":"Expert","description":"Knowledge of magical theory","category":"Academic"}]',
      'json', true, NOW(), NOW());
 
   -- Character 2: Inventory data (different items)
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char2_id, 'inventory', 'items',
-     '[{"id":"item-3","name":"Spellbook","quantity":1,"description":"Personal grimoire"},{"id":"item-4","name":"Spell Components","quantity":10,"description":"Various magical reagents"}]',
+     '[{"id":"item-3","name":"Spellbook","quantity":1,"description":"Personal grimoire","category":"Arcane","equipped":true},{"id":"item-4","name":"Spell Components","quantity":10,"description":"Various magical reagents","category":"Consumable","equipped":false}]',
      'json', true, NOW(), NOW()),
     (char2_id, 'currency', 'currency',
-     '[{"name":"Gold","amount":100},{"name":"Platinum","amount":5}]',
+     '[{"id":"currency-3","type":"Gold","amount":100},{"id":"currency-4","type":"Platinum","amount":5}]',
      'json', false, NOW(), NOW());
 
   -- ============================================
