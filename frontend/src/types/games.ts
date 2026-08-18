@@ -1,3 +1,5 @@
+import type { CharacterSheetConfig } from './characters';
+
 export interface Game {
   id: number;
   title: string;
@@ -13,6 +15,13 @@ export interface Game {
   auto_accept_audience?: boolean;
   allow_group_conversations?: boolean;
   portrait_avatars?: boolean;
+  /**
+   * Sparse per-game character sheet overrides. Absent for almost every game:
+   * the backend stores only genuine GM overrides and omits the key entirely
+   * when there are none. Absent means "use the defaults", which live in
+   * `useSheetLabels` and nowhere else — never "this game has no tab labels".
+   */
+  character_sheet?: CharacterSheetConfig;
   banner_url?: string | null;
   common_room_open_day?: number | null;
   common_room_open_time?: string | null;
@@ -69,6 +78,12 @@ export interface CreateGameRequest {
   auto_accept_audience?: boolean;
   allow_group_conversations?: boolean;
   portrait_avatars?: boolean;
+  /**
+   * Only the labels the GM actually overrode. Empty strings must be omitted
+   * rather than sent as "": the backend rejects whitespace-only labels, and a
+   * blank box in the form means "use the default", not "name this tab nothing".
+   */
+  character_sheet?: CharacterSheetConfig;
   banner_url?: string | null;
   common_room_open_day?: number | null;
   common_room_open_time?: string | null;

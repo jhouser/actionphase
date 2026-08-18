@@ -98,6 +98,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
 
   const isAnonymous = game?.is_anonymous ?? false;
   const portraitAvatars = game?.portrait_avatars ?? false;
+  const sheetConfig = game?.character_sheet;
 
   // The drawer itself lives at the app root, opened from the global nav, so
   // it's reachable from every page; the game page contributes the game-scoped
@@ -118,6 +119,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
       gameState,
       isAnonymous,
       portraitAvatars,
+      sheetConfig,
       userCharacters,
       allGameCharacters,
       commentReadMode,
@@ -132,6 +134,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
       gameState,
       isAnonymous,
       portraitAvatars,
+      sheetConfig,
       userCharacters,
       allGameCharacters,
       commentReadMode,

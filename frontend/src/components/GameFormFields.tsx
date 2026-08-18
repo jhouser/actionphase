@@ -1,6 +1,15 @@
 import type { ReactNode } from 'react';
 import { Input, Textarea, DateTimeInput, Checkbox, Radio, Select } from './ui';
 import { HelpTooltip } from './ui/HelpTooltip';
+import { DEFAULT_SHEET_LABELS } from '../hooks/useSheetLabels';
+
+/**
+ * Mirrors MaxCharacterSheetLabelLength in the backend's character sheet config.
+ * Counted in runes there and UTF-16 units here; they agree for everything short
+ * of astral-plane characters, where the browser is the stricter of the two — so
+ * this can only ever stop input the server would also reject.
+ */
+const MAX_SHEET_LABEL_LENGTH = 24;
 
 export interface GameFormData {
   title: string;
@@ -14,6 +23,17 @@ export interface GameFormData {
   auto_accept_audience?: boolean;
   allow_group_conversations?: boolean;
   portrait_avatars?: boolean;
+  /**
+   * Character sheet tab labels, held flat rather than nested because the form's
+   * onChange carries a single scalar per field. They are folded back into the
+   * nested `character_sheet` wire shape in `useGameForm`'s buildApiPayload.
+   *
+   * Empty string means "use the default" — the same thing an absent value means
+   * on the wire. buildApiPayload is what turns one into the other.
+   */
+  sheet_label_skills?: string;
+  sheet_label_inventory?: string;
+  sheet_label_numbers?: string;
   common_room_open_day: number | '';
   common_room_open_time: string;
   common_room_close_day: number | '';
@@ -241,6 +261,51 @@ export const GameFormFields = ({ formData, onChange, bannerUpload }: GameFormFie
             onChange={() => onChange('portrait_avatars', true)}
           />
         </div>
+      </div>
+
+      <SectionHeading>Character Sheet</SectionHeading>
+
+      <p className="text-sm text-content-secondary -mt-1">
+        Rename the character sheet tabs to match your game's system. Leave a box
+        blank to keep its default name.
+      </p>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Input
+          label="Skills tab"
+          id="sheet_label_skills"
+          type="text"
+          value={formData.sheet_label_skills ?? ''}
+          onChange={(e) => onChange('sheet_label_skills', e.target.value)}
+          /* The default as placeholder, not as value: a filled-in box would
+             make every game look like it had overridden its labels, and would
+             send the defaults to the server as if the GM had chosen them. */
+          placeholder={DEFAULT_SHEET_LABELS.skills}
+          maxLength={MAX_SHEET_LABEL_LENGTH}
+          data-testid="game-sheet-label-skills"
+        />
+
+        <Input
+          label="Inventory tab"
+          id="sheet_label_inventory"
+          type="text"
+          value={formData.sheet_label_inventory ?? ''}
+          onChange={(e) => onChange('sheet_label_inventory', e.target.value)}
+          placeholder={DEFAULT_SHEET_LABELS.inventory}
+          maxLength={MAX_SHEET_LABEL_LENGTH}
+          data-testid="game-sheet-label-inventory"
+        />
+
+        <Input
+          label="Numbers tab"
+          id="sheet_label_numbers"
+          type="text"
+          value={formData.sheet_label_numbers ?? ''}
+          onChange={(e) => onChange('sheet_label_numbers', e.target.value)}
+          placeholder={DEFAULT_SHEET_LABELS.numbers}
+          maxLength={MAX_SHEET_LABEL_LENGTH}
+          data-testid="game-sheet-label-numbers"
+        />
       </div>
 
       {bannerUpload}

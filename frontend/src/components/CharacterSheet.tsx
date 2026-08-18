@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
-import type { CharacterData, CharacterDataRequest, CharacterAbility, CharacterSkill, InventoryItem, CurrencyEntry } from '../types/characters';
+import type { CharacterData, CharacterDataRequest, CharacterAbility, CharacterSkill, InventoryItem, CurrencyEntry, CharacterSheetConfig } from '../types/characters';
 import { CHARACTER_MODULES } from '../types/characters';
 import { AbilitiesManager } from './AbilitiesManager';
 import { InventoryManager } from './InventoryManager';
@@ -17,6 +17,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { CommentEditor } from './CommentEditor';
 import { MessageCharacterButton } from './MessageCharacterButton';
 import { useDirtyChildren } from '@/hooks/useDirtyChildren';
+import { useSheetLabels } from '../hooks/useSheetLabels';
 import { EditorLockNotice } from './EditorLockNotice';
 import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
 
@@ -42,11 +43,37 @@ interface CharacterSheetProps {
    * GameProvider (the global Utility Drawer), where there is none to read.
    */
   portraitAvatars?: boolean;
+  /**
+   * That game's character sheet tab labels. Normally read from GameContext;
+   * pass it explicitly when rendering outside a GameProvider (the global
+   * Utility Drawer), where there is none to read.
+   *
+   * Falling back to defaults out there would be wrong rather than merely
+   * incomplete: a player whose GM renamed a tab to "Stress" would see
+   * "Numbers" in the drawer and read the difference as a bug. So the drawer
+   * carries the real config per character (see `game_character_sheet`).
+   */
+  sheetConfig?: CharacterSheetConfig;
 }
 
-export function CharacterSheet({ characterId, canEdit = false, canEditStats = false, onClose, isAnonymous = false, userRole, gameState, portraitAvatars, onDirtyChange }: CharacterSheetProps) {
+export function CharacterSheet({ characterId, canEdit = false, canEditStats = false, onClose, isAnonymous = false, userRole, gameState, portraitAvatars, sheetConfig, onDirtyChange }: CharacterSheetProps) {
   const gameContext = useOptionalGameContext();
   const portraitMode = portraitAvatars ?? gameContext?.game?.portrait_avatars ?? false;
+
+  // Same precedence as portraitMode above: an explicit prop wins, then the game
+  // in context, then the defaults the hook owns.
+  //
+  // Underscore-prefixed because nothing renders it yet: the tab strip is still
+  // driven by the static CHARACTER_MODULES, and the current tabs ("Abilities &
+  // Skills", "Inventory") do not correspond to the three renameable ones — the
+  // Inventory tab today contains both Items and Currency. Applying a GM's
+  // "Inventory" label to that tab would mislabel it. Phase 4 replaces the
+  // constant with buildCharacterModules(labels) and consumes this. Resolution
+  // lives here now so the prop-over-context precedence is settled and tested
+  // before the tab restructure depends on it.
+  const _sheetLabels = useSheetLabels(
+    sheetConfig ? { character_sheet: sheetConfig } : gameContext?.game
+  );
 
   const [activeModule, setActiveModule] = useState('bio');
   const [editingField, setEditingField] = useState<string | null>(null);
