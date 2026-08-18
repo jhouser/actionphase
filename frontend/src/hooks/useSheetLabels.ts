@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { CharacterSheetConfig } from '../types/characters';
+import type { CharacterSheetConfig, SheetLabels } from '../types/characters';
 
 /**
  * Default label for each renameable character sheet tab.
@@ -15,13 +15,13 @@ import type { CharacterSheetConfig } from '../types/characters';
  * label and to its storage `module_type`. That is what keeps this a flat lookup
  * rather than a translation table.
  */
+export type { SheetLabels };
+
 export const DEFAULT_SHEET_LABELS = {
   skills: 'Skills',
   inventory: 'Inventory',
   numbers: 'Numbers',
 } as const;
-
-export type SheetLabels = Record<keyof typeof DEFAULT_SHEET_LABELS, string>;
 
 /** Source of labels: a game, a cross-game character payload, or nothing. */
 interface SheetLabelSource {

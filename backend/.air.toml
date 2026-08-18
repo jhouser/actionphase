@@ -16,9 +16,20 @@ tmp_dir = "tmp"
   # On each rebuild Air restarts this, which restarts Delve on :2345; the IDE reconnects.
   full_bin = "dlv exec ./tmp/main --headless --listen=:2345 --api-version=2 --accept-multiclient --continue --check-go-version=false --log"
   # Watch these extensions for changes.
-  include_ext = ["go", "sql"]
+  #
+  # NOT "sql". Migrations are read from disk at runtime (main.go points migrate at
+  # file://pkg/db/migrations) and .sql files are never compiled into the binary, so
+  # watching them buys no reload — and actively breaks migration authoring:
+  # `migrate create` writes two EMPTY stub files, which triggered a rebuild, which
+  # restarted the backend, which auto-ran migrations on boot and stamped the empty
+  # migration as applied. Writing the real SQL afterwards then did nothing, and
+  # `just migrate` reported "no change" against an already-recorded version.
+  # Recovering meant a manual `migrate down 1`. sqlc's queries/*.sql are also
+  # excluded for the same reason: they are inputs to `just sqlgen`, whose generated
+  # .go output is what should trigger the rebuild.
+  include_ext = ["go"]
   # Don't watch generated/vendored/output dirs or tests.
-  exclude_dir = ["tmp", "uploads", "test-results", "scripts", "pkg/db/test_fixtures"]
+  exclude_dir = ["tmp", "uploads", "test-results", "scripts", "pkg/db/test_fixtures", "pkg/db/migrations"]
   exclude_regex = ["_test\\.go$"]
   # Give the compiler a moment to see all writes from an editor save.
   delay = 500

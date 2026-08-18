@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
-import type { CharacterData, CharacterDataRequest, CharacterAbility, CharacterSkill, InventoryItem, CurrencyEntry, CharacterSheetConfig } from '../types/characters';
-import { CHARACTER_MODULES } from '../types/characters';
-import { AbilitiesManager } from './AbilitiesManager';
-import { InventoryManager } from './InventoryManager';
+import type { CharacterData, CharacterDataRequest, CharacterSkill, InventoryItem, CurrencyEntry, CharacterSheetConfig } from '../types/characters';
+import { buildCharacterModules } from '../types/characters';
+import { SkillsManager } from './SkillsManager';
+import { ItemsManager } from './ItemsManager';
+import { NumbersManager } from './NumbersManager';
 import CharacterAvatar from './CharacterAvatar';
 import AvatarUploadModal from './AvatarUploadModal';
 import { useOptionalGameContext } from '../contexts/GameContext';
@@ -63,17 +64,14 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
   // Same precedence as portraitMode above: an explicit prop wins, then the game
   // in context, then the defaults the hook owns.
   //
-  // Underscore-prefixed because nothing renders it yet: the tab strip is still
-  // driven by the static CHARACTER_MODULES, and the current tabs ("Abilities &
-  // Skills", "Inventory") do not correspond to the three renameable ones — the
-  // Inventory tab today contains both Items and Currency. Applying a GM's
-  // "Inventory" label to that tab would mislabel it. Phase 4 replaces the
-  // constant with buildCharacterModules(labels) and consumes this. Resolution
-  // lives here now so the prop-over-context precedence is settled and tested
-  // before the tab restructure depends on it.
-  const _sheetLabels = useSheetLabels(
+  const sheetLabels = useSheetLabels(
     sheetConfig ? { character_sheet: sheetConfig } : gameContext?.game
   );
+
+  // Rebuilt only when a label actually changes: the tab list is derived data,
+  // and a fresh array each render would remount the active manager underneath
+  // an open editor.
+  const modules = useMemo(() => buildCharacterModules(sheetLabels), [sheetLabels]);
 
   const [activeModule, setActiveModule] = useState('bio');
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -449,7 +447,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
         {/* Module Tabs - Filter out modules user cannot view */}
         <div data-testid="character-sheet-module-tabs">
           <TabNavigation
-            tabs={CHARACTER_MODULES.filter((module) => {
+            tabs={modules.filter((module) => {
               // Bio is always visible (public information)
               if (module.type === 'bio') return true;
               // Private modules visible to editors (GM, owner), audience members, and all participants in completed games
@@ -473,7 +471,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-8">
-        {CHARACTER_MODULES.filter(module => {
+        {modules.filter(module => {
           // Only render modules the user has permission to view
           if (module.type === 'bio') return true;
           return canViewPrivate;
@@ -484,25 +482,32 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
               <p className="text-sm md:text-base text-content-secondary">{module.description}</p>
             </div>
 
-            {/* Render specialized components for abilities and inventory modules */}
-            {module.type === 'abilities' ? (
-              <AbilitiesManager
-                abilities={parseJsonField('abilities', 'abilities') as CharacterAbility[]}
+            {/* One manager per stat tab. Each reports its own dirty state under its
+                own key, so a clean manager cannot clear a dirty one's flag. */}
+            {module.type === 'skills' ? (
+              <SkillsManager
                 skills={parseJsonField('skills', 'skills') as CharacterSkill[]}
                 canEdit={canEditStats}
-                onAbilitiesChange={(abilities) => saveJsonField('abilities', 'abilities', abilities)}
                 onSkillsChange={(skills) => saveJsonField('skills', 'skills', skills)}
-                onDirtyChange={(isDirty) => reportDirty('abilities', isDirty)}
+                onDirtyChange={(isDirty) => reportDirty('skills', isDirty)}
+                label={sheetLabels.skills}
               />
             ) : module.type === 'inventory' ? (
-              <InventoryManager
+              <ItemsManager
                 characterId={characterId}
                 items={parseJsonField('inventory', 'items') as InventoryItem[]}
-                currency={parseJsonField('currency', 'currency') as CurrencyEntry[]}
                 canEdit={canEditStats}
                 onItemsChange={(items, reloadOnly) => { if (!reloadOnly) saveJsonField('inventory', 'items', items); else queryClient.invalidateQueries({ queryKey: ['characterData', characterId] }); }}
-                onCurrencyChange={(currency) => saveJsonField('currency', 'currency', currency)}
                 onDirtyChange={(isDirty) => reportDirty('inventory', isDirty)}
+                label={sheetLabels.inventory}
+              />
+            ) : module.type === 'numbers' ? (
+              <NumbersManager
+                numbers={parseJsonField('numbers', 'numbers') as CurrencyEntry[]}
+                canEdit={canEditStats}
+                onNumbersChange={(numbers) => saveJsonField('numbers', 'numbers', numbers)}
+                onDirtyChange={(isDirty) => reportDirty('numbers', isDirty)}
+                label={sheetLabels.numbers}
               />
             ) : (
               /* Regular text-based fields for bio and notes modules */

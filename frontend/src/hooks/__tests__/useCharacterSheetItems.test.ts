@@ -25,8 +25,8 @@ function makeDataRow(overrides: Partial<CharacterData>): CharacterData {
   return {
     id: 1,
     character_id: 42,
-    module_type: 'abilities',
-    field_name: 'abilities',
+    module_type: 'skills',
+    field_name: 'skills',
     field_type: 'json',
     is_public: true,
     created_at: '',
@@ -46,33 +46,6 @@ describe('useCharacterSheetItems', () => {
     });
     expect(result.current).toEqual([]);
     expect(apiClient.characters.getCharacterData).not.toHaveBeenCalled();
-  });
-
-  it('parses abilities into SheetItem[]', async () => {
-    vi.mocked(apiClient.characters.getCharacterData).mockResolvedValue({
-      data: [
-        makeDataRow({
-          field_name: 'abilities',
-          field_value: JSON.stringify([
-            { id: 'abc-1', name: 'Fire Bolt', description: 'Deals fire damage', type: 'innate', active: true },
-          ]),
-        }),
-      ],
-    } as never);
-
-    const { result } = renderHook(() => useCharacterSheetItems(42), {
-      wrapper: makeWrapper(),
-    });
-
-    await waitFor(() => expect(result.current).toHaveLength(1));
-
-    expect(result.current[0]).toEqual({
-      id: 'abc-1',
-      name: 'Fire Bolt',
-      type: 'ability',
-      description: 'Deals fire damage',
-      metadata: 'innate',
-    });
   });
 
   it('parses skills into SheetItem[]', async () => {
@@ -129,15 +102,15 @@ describe('useCharacterSheetItems', () => {
     });
   });
 
-  it('filters out abilities missing id or name', async () => {
+  it('filters out skills missing id or name', async () => {
     vi.mocked(apiClient.characters.getCharacterData).mockResolvedValue({
       data: [
         makeDataRow({
-          field_name: 'abilities',
+          field_name: 'skills',
           field_value: JSON.stringify([
-            { id: 'abc-1', name: 'Good Ability', type: 'innate', active: true },
-            { name: 'No ID', type: 'innate', active: true },
-            { id: 'abc-3', type: 'innate', active: true },
+            { id: 'abc-1', name: 'Good Skill', level: 2, category: 'Combat' },
+            { name: 'No ID', level: 2, category: 'Combat' },
+            { id: 'abc-3', level: 2, category: 'Combat' },
           ]),
         }),
       ],
@@ -155,6 +128,6 @@ describe('useCharacterSheetItems', () => {
       expect(result.current).toHaveLength(1);
     });
 
-    expect(result.current[0].name).toBe('Good Ability');
+    expect(result.current[0].name).toBe('Good Skill');
   });
 });

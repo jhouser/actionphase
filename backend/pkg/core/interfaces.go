@@ -1016,7 +1016,7 @@ type ActionSubmissionStats struct {
 type CreateDraftCharacterUpdateRequest struct {
 	ActionResultID int32
 	CharacterID    int32
-	ModuleType     string // "abilities", "skills", "inventory", "currency"
+	ModuleType     string // "skills", "inventory", "numbers"
 	FieldName      string
 	FieldValue     string
 	FieldType      string // "text", "number", "boolean", "json"

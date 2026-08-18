@@ -50,11 +50,10 @@ func (h *Handler) SetCharacterData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Additional check: only GMs can edit character stats (abilities, skills, items, currency)
-	isStatField := (data.ModuleType == "abilities" && data.FieldName == "abilities") ||
-		(data.ModuleType == "skills" && data.FieldName == "skills") ||
+	// Additional check: only GMs can edit character stats (skills, items, numbers)
+	isStatField := (data.ModuleType == "skills" && data.FieldName == "skills") ||
 		(data.ModuleType == "inventory" && data.FieldName == "items") ||
-		(data.ModuleType == "currency" && data.FieldName == "currency")
+		(data.ModuleType == "numbers" && data.FieldName == "numbers")
 
 	if isStatField {
 		// Verify user is the GM of this character's game
@@ -73,7 +72,7 @@ func (h *Handler) SetCharacterData(w http.ResponseWriter, r *http.Request) {
 
 		// Check if user is GM or Co-GM
 		if game.GmUserID != userID && !core.IsUserCoGM(ctx, h.App.Pool, character.GameID, userID) {
-			h.renderError(ctx, w, r, core.ErrForbidden("only GMs and Co-GMs can edit character stats (abilities, skills, items, currency)"), "Character stats edit permission denied", "character_id", characterID, "user_id", userID, "game_id", character.GameID)
+			h.renderError(ctx, w, r, core.ErrForbidden("only GMs and Co-GMs can edit character stats (skills, items, numbers)"), "Character stats edit permission denied", "character_id", characterID, "user_id", userID, "game_id", character.GameID)
 			return
 		}
 	}

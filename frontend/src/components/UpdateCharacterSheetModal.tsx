@@ -2,14 +2,17 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from './Modal';
 import { Button, Alert, Spinner } from './ui';
-import { AbilitiesManager } from './AbilitiesManager';
-import { InventoryManager } from './InventoryManager';
+import { SkillsManager } from './SkillsManager';
+import { ItemsManager } from './ItemsManager';
+import { NumbersManager } from './NumbersManager';
 import { apiClient } from '../lib/api';
-import type { CharacterAbility, CharacterSkill, InventoryItem, CurrencyEntry } from '../types/characters';
+import type { CharacterSkill, InventoryItem, CurrencyEntry } from '../types/characters';
 import type { CreateDraftCharacterUpdateRequest } from '../types/phases';
 import { logger } from '@/services/LoggingService';
 import { useDiscardSheetDrafts } from '../hooks/useDiscardSheetDrafts';
 import { useDirtyChildren } from '@/hooks/useDirtyChildren';
+import { useSheetLabels } from '../hooks/useSheetLabels';
+import { useOptionalGameContext } from '../contexts/GameContext';
 import { EditorLockNotice } from './EditorLockNotice';
 import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
 
@@ -22,7 +25,7 @@ interface UpdateCharacterSheetModalProps {
   characterName: string;
 }
 
-type ActiveSection = 'abilities' | 'inventory';
+type ActiveSection = 'skills' | 'inventory' | 'numbers';
 
 // Parse a JSON field value from character data, returning empty array on failure
 function parseJsonArray<T>(value: string | undefined): T[] {
@@ -43,7 +46,15 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
   characterId,
   characterName,
 }) => {
-  const [activeSection, setActiveSection] = useState<ActiveSection>('abilities');
+  const [activeSection, setActiveSection] = useState<ActiveSection>('skills');
+  // Same source the character sheet uses, so the GM sees the tab names this
+  // game actually uses rather than the platform defaults. This modal always
+  // opens inside a game, but the context lookup stays optional so a test or a
+  // future surface rendering it outside one falls back to defaults instead of
+  // throwing.
+  const gameContext = useOptionalGameContext();
+  const sheetLabels = useSheetLabels(gameContext?.game);
+
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
@@ -58,10 +69,9 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
   const [confirmingClose, setConfirmingClose] = useState(false);
 
   // Local state for the character sheet being edited
-  const [abilities, setAbilities] = useState<CharacterAbility[]>([]);
   const [skills, setSkills] = useState<CharacterSkill[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [currency, setCurrency] = useState<CurrencyEntry[]>([]);
+  const [numbers, setNumbers] = useState<CurrencyEntry[]>([]);
 
   // Track whether local state has been initialized from server data
   const initialized = useRef(false);
@@ -110,10 +120,9 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
     const getField = (moduleType: string, fieldName: string) =>
       getDraftField(moduleType, fieldName) ?? getCharacterField(moduleType, fieldName);
 
-    setAbilities(parseJsonArray<CharacterAbility>(getField('abilities', 'abilities')));
     setSkills(parseJsonArray<CharacterSkill>(getField('skills', 'skills')));
     setItems(parseJsonArray<InventoryItem>(getField('inventory', 'items')));
-    setCurrency(parseJsonArray<CurrencyEntry>(getField('currency', 'currency')));
+    setNumbers(parseJsonArray<CurrencyEntry>(getField('numbers', 'numbers')));
 
     initialized.current = true;
   }, [isOpen, isLoading, characterData, existingDrafts]);
@@ -246,11 +255,6 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
     };
   }, []);
 
-  const handleAbilitiesChange = (newAbilities: CharacterAbility[]) => {
-    setAbilities(newAbilities);
-    scheduleSave('abilities', 'abilities', newAbilities);
-  };
-
   const handleSkillsChange = (newSkills: CharacterSkill[]) => {
     setSkills(newSkills);
     scheduleSave('skills', 'skills', newSkills);
@@ -265,9 +269,9 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
     }
   };
 
-  const handleCurrencyChange = (newCurrency: CurrencyEntry[]) => {
-    setCurrency(newCurrency);
-    scheduleSave('currency', 'currency', newCurrency);
+  const handleNumbersChange = (newNumbers: CurrencyEntry[]) => {
+    setNumbers(newNumbers);
+    scheduleSave('numbers', 'numbers', newNumbers);
   };
 
   const hasStagedUpdates = (existingDrafts?.length ?? 0) > 0;
@@ -303,10 +307,9 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
     const fromCharacter = (moduleType: string, fieldName: string) =>
       characterData?.find(d => d.module_type === moduleType && d.field_name === fieldName)?.field_value;
 
-    setAbilities(parseJsonArray<CharacterAbility>(fromCharacter('abilities', 'abilities')));
     setSkills(parseJsonArray<CharacterSkill>(fromCharacter('skills', 'skills')));
     setItems(parseJsonArray<InventoryItem>(fromCharacter('inventory', 'items')));
-    setCurrency(parseJsonArray<CurrencyEntry>(fromCharacter('currency', 'currency')));
+    setNumbers(parseJsonArray<CurrencyEntry>(fromCharacter('numbers', 'numbers')));
 
     setConfirmingDiscard(false);
     setSaveStatus('idle');
@@ -395,13 +398,13 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
             switching unmounts that editor and destroys them. See EditorLockNotice. */}
         <div className="border-b border-border-primary">
           <nav className="flex items-center space-x-1" aria-label="Sections">
-            {(['abilities', 'inventory'] as ActiveSection[]).map((section) => (
+            {(['skills', 'inventory', 'numbers'] as ActiveSection[]).map((section) => (
               <button
                 key={section}
                 disabled={hasUncommittedEdit}
                 onClick={() => setActiveSection(section)}
                 className={`
-                  px-4 py-2 text-sm font-medium rounded-t-lg transition-colors capitalize
+                  px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
                   disabled:opacity-50 disabled:cursor-not-allowed
                   ${activeSection === section
                     ? 'bg-bg-primary text-interactive-primary border-b-2 border-interactive-primary'
@@ -409,7 +412,10 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
                   }
                 `}
               >
-                {section}
+                {/* The game's label, not the section key: `capitalize` on the key
+                    was fine when the names were fixed, but a GM who renamed a tab
+                    must see that name here too. */}
+                {sheetLabels[section]}
               </button>
             ))}
             {hasUncommittedEdit && <EditorLockNotice className="ml-2" />}
@@ -425,26 +431,34 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
             </div>
           ) : (
             <>
-              {activeSection === 'abilities' && (
-                <AbilitiesManager
-                  abilities={abilities}
+              {activeSection === 'skills' && (
+                <SkillsManager
                   skills={skills}
                   canEdit={true}
-                  onAbilitiesChange={handleAbilitiesChange}
                   onSkillsChange={handleSkillsChange}
-                  onDirtyChange={(isDirty) => reportDirty('abilities', isDirty)}
+                  onDirtyChange={(isDirty) => reportDirty('skills', isDirty)}
+                  label={sheetLabels.skills}
                 />
               )}
 
               {activeSection === 'inventory' && (
-                <InventoryManager
+                <ItemsManager
                   characterId={characterId}
                   items={items}
-                  currency={currency}
                   canEdit={true}
                   onItemsChange={handleItemsChange}
-                  onCurrencyChange={handleCurrencyChange}
                   onDirtyChange={(isDirty) => reportDirty('inventory', isDirty)}
+                  label={sheetLabels.inventory}
+                />
+              )}
+
+              {activeSection === 'numbers' && (
+                <NumbersManager
+                  numbers={numbers}
+                  canEdit={true}
+                  onNumbersChange={handleNumbersChange}
+                  onDirtyChange={(isDirty) => reportDirty('numbers', isDirty)}
+                  label={sheetLabels.numbers}
                 />
               )}
             </>

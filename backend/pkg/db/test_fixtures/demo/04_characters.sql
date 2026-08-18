@@ -84,7 +84,7 @@ BEGIN
 
   -- Character data examples
   -- Module types and JSON shapes must match what the app actually writes:
-  -- module_type is one of bio/notes/abilities/skills/inventory/currency, and each
+  -- module_type is one of bio/notes/skills/inventory/numbers, and each
   -- stat collection is a single row holding a JSON array (see CHARACTER_MODULES in
   -- frontend/src/types/characters.ts). Blades flavor lives in the values, not in
   -- invented module types.
@@ -99,7 +99,7 @@ BEGIN
     (char1_id, 'inventory', 'items',
      '[{"id":"c3a0e2f4-5d69-4b3c-9e8c-7f4a9b203d56","name":"Spirit Bottle","description":"Holds a captured ghost.","quantity":1,"category":"Arcane","equipped":false},{"id":"d4b1f3a5-6e7a-4c4d-8f9d-8a5b0c314e67","name":"Fine Cloak","description":"Unremarkable until you look twice.","quantity":1,"category":"Gear","equipped":true}]',
      'json', true, NOW(), NOW()),
-    (char1_id, 'currency', 'currency',
+    (char1_id, 'numbers', 'numbers',
      '[{"id":"e5c2a4b6-7f8b-4d5e-9a0e-9b6c1d425f78","type":"Coin","amount":6,"description":"Stashed, not spent."},{"id":"f6d3b5c7-8a9c-4e6f-8b1f-0c7d2e536a89","type":"Stress","amount":4}]',
      'json', false, NOW(), NOW()),
     (char2_id, 'bio', 'background',
@@ -111,7 +111,7 @@ BEGIN
     (char2_id, 'inventory', 'items',
      '[{"id":"c9a6e8f0-1d2f-4b92-9e4c-3f0a5b869d12","name":"Hunting Rifle","description":"Scoped, well maintained.","quantity":1,"category":"Weapon","equipped":true},{"id":"d0b7f9a1-2e30-4ca3-8f5d-4a1b6c970e23","name":"Tranquilizer Darts","description":"For when the job wants them breathing.","quantity":6,"category":"Ammunition","equipped":false}]',
      'json', true, NOW(), NOW()),
-    (char2_id, 'currency', 'currency',
+    (char2_id, 'numbers', 'numbers',
      '[{"id":"e1c8a0b2-3f41-4db4-9a6e-5b2c7d081f34","type":"Coin","amount":3},{"id":"f2d9b1c3-4a52-4ec5-8b7f-6c3d8e192a45","type":"Stress","amount":2}]',
      'json', false, NOW(), NOW());
 

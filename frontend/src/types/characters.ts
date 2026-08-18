@@ -110,17 +110,13 @@ export interface CharacterActivityStats {
   private_messages?: number;
 }
 
-// Individual ability/skill item structures for JSON fields
-export interface CharacterAbility {
-  id: string; // UUID or unique identifier
-  name: string;
-  description?: string;
-  type: 'innate' | 'learned' | 'gm_assigned';
-  source?: string; // Who assigned it (GM name, class, etc.)
-  active: boolean;
-  metadata?: Record<string, unknown>; // For game-specific stats
-}
-
+// Individual skill item structure for JSON fields.
+//
+// CharacterAbility used to sit here. Abilities were retired in the Phase 4
+// refactor: they duplicated skills, which is strictly more featured (level,
+// category, markdown description), so every stat feature had to be built twice.
+// Verified against production before deletion — no character held ability
+// content. The rows remain in character_data and are simply never read again.
 export interface CharacterSkill {
   id: string;
   name: string;
@@ -151,6 +147,14 @@ export interface CurrencyEntry {
   description?: string;
 }
 
+/**
+ * Resolved labels for the three renameable character sheet tabs.
+ *
+ * Defined here rather than beside the hook that produces it so the type layer
+ * has no dependency on the hook layer; `useSheetLabels` imports this.
+ */
+export type SheetLabels = Record<'skills' | 'inventory' | 'numbers', string>;
+
 // Character module types for the modular character sheet system
 export interface CharacterModule {
   type: string;
@@ -168,76 +172,97 @@ interface CharacterModuleField {
   isPublic?: boolean;
 }
 
-// Predefined character modules for MVP
-export const CHARACTER_MODULES: CharacterModule[] = [
-  {
-    type: 'bio',
-    name: 'Public Profile',
-    description: 'Public character details',
-    fields: [
-      {
-        name: 'background',
-        type: 'text',
-        label: 'Character Description',
-        placeholder: 'Describe your character\'s appearance, personality, background, and any publicly visible information...',
-        isPublic: true
-      }
-    ]
-  },
-  {
-    type: 'notes',
-    name: 'Private Notes',
-    description: 'Private notes only visible to you, the audience, and the GM',
-    fields: [
-      {
-        name: 'private_notes',
-        type: 'text',
-        label: 'Private Notes & Secrets',
-        placeholder: 'Your private character notes, secrets, motivations, and hidden information...',
-        isPublic: false
-      }
-    ]
-  },
-  {
-    type: 'abilities',
-    name: 'Abilities & Skills',
-    description: 'Character abilities, skills, and special powers',
-    fields: [
-      {
-        name: 'abilities',
-        type: 'json',
-        label: 'Abilities',
-        placeholder: 'Manage your character abilities...',
-        isPublic: true
-      },
-      {
-        name: 'skills',
-        type: 'json',
-        label: 'Skills',
-        placeholder: 'Manage your character skills...',
-        isPublic: true
-      }
-    ]
-  },
-  {
-    type: 'inventory',
-    name: 'Inventory',
-    description: 'Character possessions and equipment',
-    fields: [
-      {
-        name: 'items',
-        type: 'json',
-        label: 'Items',
-        placeholder: 'Manage your character items...',
-        isPublic: true
-      },
-      {
-        name: 'currency',
-        type: 'json',
-        label: 'Currency/Resources',
-        placeholder: 'Track your character\'s resources...',
-        isPublic: false
-      }
-    ]
-  }
-];
+/**
+ * The character sheet's tabs, with the game's labels applied.
+ *
+ * A function rather than a constant because two of the five tabs are
+ * GM-renameable, so the list is a function of the game. `labels` comes from
+ * `useSheetLabels`, which is the only place that knows the default names —
+ * do not default them here.
+ *
+ * Bio and Private Notes are deliberately NOT renameable: they are platform
+ * concepts (a public description, private notes visible to GM and audience)
+ * rather than game-system ones, so their names stay fixed.
+ *
+ * Per the refactor's invariant each renameable tab's `type` equals its storage
+ * `module_type`, its field name, and its own default label. That is what keeps
+ * this a straight substitution with no mapping table.
+ */
+export function buildCharacterModules(labels: SheetLabels): CharacterModule[] {
+  return [
+    {
+      type: 'bio',
+      name: 'Public Profile',
+      description: 'Public character details',
+      fields: [
+        {
+          name: 'background',
+          type: 'text',
+          label: 'Character Description',
+          placeholder: 'Describe your character\'s appearance, personality, background, and any publicly visible information...',
+          isPublic: true
+        }
+      ]
+    },
+    {
+      type: 'notes',
+      name: 'Private Notes',
+      description: 'Private notes only visible to you, the audience, and the GM',
+      fields: [
+        {
+          name: 'private_notes',
+          type: 'text',
+          label: 'Private Notes & Secrets',
+          placeholder: 'Your private character notes, secrets, motivations, and hidden information...',
+          isPublic: false
+        }
+      ]
+    },
+    {
+      type: 'skills',
+      name: labels.skills,
+      description: `Character ${labels.skills.toLowerCase()}`,
+      fields: [
+        {
+          name: 'skills',
+          type: 'json',
+          label: labels.skills,
+          placeholder: `Manage your character ${labels.skills.toLowerCase()}...`,
+          isPublic: true
+        }
+      ]
+    },
+    {
+      type: 'inventory',
+      name: labels.inventory,
+      description: 'Character possessions and equipment',
+      fields: [
+        {
+          name: 'items',
+          type: 'json',
+          label: 'Items',
+          placeholder: 'Manage your character items...',
+          isPublic: true
+        }
+      ]
+    },
+    {
+      type: 'numbers',
+      name: labels.numbers,
+      description: 'Character resources and numeric tracks',
+      fields: [
+        {
+          // Storage key, not a label: renamed from `currency` in the Phase 4
+          // migration because this tab now holds arbitrary numeric tracks
+          // (stress, XP, clocks), not money. Unlike a label, an identifier
+          // cannot be overridden per game, so it had to stop saying "currency".
+          name: 'numbers',
+          type: 'json',
+          label: labels.numbers,
+          placeholder: `Track your character's ${labels.numbers.toLowerCase()}...`,
+          isPublic: false
+        }
+      ]
+    }
+  ];
+}

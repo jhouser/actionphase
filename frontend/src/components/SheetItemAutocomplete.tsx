@@ -2,8 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import type { SheetItem } from '../hooks/useCharacterSheetItems';
 import { Badge } from './ui';
 
-const TYPE_BADGE_VARIANT: Record<SheetItem['type'], 'primary' | 'success' | 'warning'> = {
-  ability: 'primary',
+const TYPE_BADGE_VARIANT: Record<SheetItem['type'], 'success' | 'warning'> = {
   skill: 'success',
   item: 'warning',
 };

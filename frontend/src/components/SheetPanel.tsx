@@ -9,15 +9,13 @@ interface SheetPanelProps {
 }
 
 const TYPE_LABELS: Record<SheetItem['type'], string> = {
-  ability: 'Abilities',
   skill: 'Skills',
   item: 'Inventory',
 };
 
-const TYPE_ORDER: SheetItem['type'][] = ['ability', 'skill', 'item'];
+const TYPE_ORDER: SheetItem['type'][] = ['skill', 'item'];
 
-const TYPE_BADGE_VARIANT: Record<SheetItem['type'], 'primary' | 'success' | 'warning'> = {
-  ability: 'primary',
+const TYPE_BADGE_VARIANT: Record<SheetItem['type'], 'success' | 'warning'> = {
   skill: 'success',
   item: 'warning',
 };

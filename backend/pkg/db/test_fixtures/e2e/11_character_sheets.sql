@@ -1,6 +1,6 @@
 -- E2E Test Fixture for Character Sheet Management
 -- Creates a game with characters that have various character data for testing sheet management
--- Tests: Adding/removing abilities, skills, inventory items, currency management
+-- Tests: Adding/removing skills, inventory items, numbers management
 --
 -- Game IDs: 328 (offset by worker: Worker 1 = 1328, Worker 2 = 2328, etc.)
 --
@@ -33,7 +33,7 @@ BEGIN
   VALUES (
     game_id,
     'E2E Test: Character Sheets',
-    'This game tests character sheet management: adding abilities, skills, items, currency',
+    'This game tests character sheet management: adding skills, items, numbers',
     'Test',
     gm_id,
     3,
@@ -50,7 +50,7 @@ BEGIN
     (game_id, p2_id, 'player', 'active', NOW() - INTERVAL '6 days');
 
   -- ============================================
-  -- Character 1: Has some existing abilities and inventory
+  -- Character 1: Has some existing skills and inventory
   -- ============================================
   INSERT INTO characters (game_id, user_id, name, character_type, status, created_at, updated_at)
   VALUES (game_id, p1_id, 'Sheet Test Char 1', 'player_character', 'approved', NOW() - INTERVAL '6 days', NOW())
@@ -61,24 +61,23 @@ BEGIN
   VALUES
     (char1_id, 'bio', 'background', 'A weathered ranger with keen eyes. Former member of the King''s Guard. Cautious but loyal.', 'text', true, NOW(), NOW());
 
-  -- Character 1: Abilities data (2 abilities, 2 skills)
+  -- Character 1: Skills data (4 skills)
+  -- The abilities rows that used to sit here were dropped when abilities were
+  -- retired; their content folded into skills, which is what the tab shows now.
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
-    (char1_id, 'abilities', 'abilities',
-     '[{"id":"ability-1","name":"Keen Eye","description":"Can spot hidden details","type":"innate","active":true},{"id":"ability-2","name":"Quick Draw","description":"Fast weapon draw","type":"learned","active":true}]',
-     'json', true, NOW(), NOW()),
     (char1_id, 'skills', 'skills',
-     '[{"id":"skill-1","name":"Archery","level":"Expert","description":"Master archer","category":"Combat"},{"id":"skill-2","name":"Tracking","level":"Proficient","description":"Can track creatures","category":"Survival"}]',
+     '[{"id":"skill-1","name":"Archery","level":"Expert","description":"Master archer","category":"Combat"},{"id":"skill-2","name":"Tracking","level":"Proficient","description":"Can track creatures","category":"Survival"},{"id":"skill-3","name":"Keen Eye","level":"Proficient","description":"Can spot hidden details","category":"Perception"},{"id":"skill-4","name":"Quick Draw","level":"Proficient","description":"Fast weapon draw","category":"Combat"}]',
      'json', true, NOW(), NOW());
 
-  -- Character 1: Inventory data (2 items, currency)
+  -- Character 1: Inventory data (2 items) and numbers
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char1_id, 'inventory', 'items',
      '[{"id":"item-1","name":"Longbow","quantity":1,"description":"Masterwork longbow","category":"Weapon","equipped":true},{"id":"item-2","name":"Arrows","quantity":20,"description":"Steel-tipped arrows","category":"Ammunition","equipped":false}]',
      'json', true, NOW(), NOW()),
-    (char1_id, 'currency', 'currency',
-     '[{"id":"currency-1","type":"Gold","amount":50},{"id":"currency-2","type":"Silver","amount":25}]',
+    (char1_id, 'numbers', 'numbers',
+     '[{"id":"number-1","type":"Gold","amount":50},{"id":"number-2","type":"Silver","amount":25}]',
      'json', false, NOW(), NOW());
 
   -- ============================================
@@ -93,14 +92,11 @@ BEGIN
   VALUES
     (char2_id, 'bio', 'background', 'A mysterious mage in dark robes. Scholarly and reserved.', 'text', true, NOW(), NOW());
 
-  -- Character 2: Abilities data (3 abilities, 1 skill)
+  -- Character 2: Skills data (4 skills)
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
-    (char2_id, 'abilities', 'abilities',
-     '[{"id":"ability-3","name":"Fireball","description":"Launches a ball of fire","type":"learned","active":true},{"id":"ability-4","name":"Shield","description":"Creates magical barrier","type":"learned","active":true},{"id":"ability-5","name":"Arcane Knowledge","description":"Deep understanding of magic","type":"innate","active":true}]',
-     'json', true, NOW(), NOW()),
     (char2_id, 'skills', 'skills',
-     '[{"id":"skill-3","name":"Arcana","level":"Expert","description":"Knowledge of magical theory","category":"Academic"}]',
+     '[{"id":"skill-5","name":"Arcana","level":"Expert","description":"Knowledge of magical theory","category":"Academic"},{"id":"skill-6","name":"Fireball","level":"Expert","description":"Launches a ball of fire","category":"Evocation"},{"id":"skill-7","name":"Shield","level":"Proficient","description":"Creates magical barrier","category":"Abjuration"},{"id":"skill-8","name":"Arcane Knowledge","level":"Expert","description":"Deep understanding of magic","category":"Academic"}]',
      'json', true, NOW(), NOW());
 
   -- Character 2: Inventory data (different items)
@@ -109,8 +105,8 @@ BEGIN
     (char2_id, 'inventory', 'items',
      '[{"id":"item-3","name":"Spellbook","quantity":1,"description":"Personal grimoire","category":"Arcane","equipped":true},{"id":"item-4","name":"Spell Components","quantity":10,"description":"Various magical reagents","category":"Consumable","equipped":false}]',
      'json', true, NOW(), NOW()),
-    (char2_id, 'currency', 'currency',
-     '[{"id":"currency-3","type":"Gold","amount":100},{"id":"currency-4","type":"Platinum","amount":5}]',
+    (char2_id, 'numbers', 'numbers',
+     '[{"id":"number-3","type":"Gold","amount":100},{"id":"number-4","type":"Platinum","amount":5}]',
      'json', false, NOW(), NOW());
 
   -- ============================================
