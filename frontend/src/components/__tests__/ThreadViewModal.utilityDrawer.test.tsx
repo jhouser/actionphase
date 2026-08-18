@@ -27,9 +27,14 @@ import type { Character } from '../../types/characters';
  * and Headless UI has no non-modal mode. That's an accepted trade-off, not an
  * oversight; see the UtilityDrawer docblock.
  *
- * CharacterSheet is mocked: the real one hangs indefinitely under jsdom (see
- * CommonRoom.utilityDrawer.test.tsx for the same workaround). Nothing here
- * depends on its internals.
+ * CharacterSheet is mocked because nothing here depends on its internals — this
+ * file is about the thread's scroll lock and dismissal, and the sheet is only
+ * present as the thing the drawer opens. Mounting the real one would pull two
+ * character queries into every test for no assertion's benefit.
+ *
+ * (It used to be mocked because the real component hung under jsdom. That render
+ * loop is fixed — see CharacterSheet.test.tsx — so the mock is now a scoping
+ * choice rather than a workaround.)
  */
 vi.mock('../CharacterSheet', () => ({
   CharacterSheet: ({ characterId }: { characterId: number }) => (

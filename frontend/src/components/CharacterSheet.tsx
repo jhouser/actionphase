@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
 import type { CharacterData, CharacterDataRequest, CharacterAbility, CharacterSkill, InventoryItem, CurrencyEntry } from '../types/characters';
@@ -50,7 +50,12 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
 
   const [activeModule, setActiveModule] = useState('bio');
   const [editingField, setEditingField] = useState<string | null>(null);
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  // Text of the one field being edited right now, or null when nothing is open.
+  // Deliberately a single value rather than a map keyed by field: only one editor
+  // can be open at a time (`editingField`), so a map would just be a store of
+  // stale text for fields nobody is editing — which is what it used to be, and
+  // what made the saved values and the in-progress edit impossible to tell apart.
+  const [editDraft, setEditDraft] = useState<string | null>(null);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isDeleteAvatarDialogOpen, setIsDeleteAvatarDialogOpen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -120,6 +125,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['characterData', characterId] });
       setEditingField(null);
+      setEditDraft(null);
     }
   });
 
@@ -158,17 +164,27 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
     );
   };
 
-  // Initialize field values from character data
-  useEffect(() => {
+  // Saved field values, keyed `${module_type}_${field_name}`.
+  //
+  // Derived, not stored. Copying this into state via an effect is what produced
+  // the `Maximum update depth exceeded` loop: the query's `= []` default is a new
+  // array on every render, so the effect's dependency never compared equal, and it
+  // set a freshly-built object each time, so React's identical-state bail-out never
+  // fired either. Render -> effect -> setState -> render, until React's 50-update
+  // cap cut it off. Invisible in the browser (the sheet still painted) but it hung
+  // component tests, which start in exactly the unresolved-query state that spins
+  // hardest. Deriving removes the cycle rather than damping it.
+  const fieldValues = useMemo(() => {
     const values: Record<string, string> = {};
     characterData.forEach(data => {
       const key = `${data.module_type}_${data.field_name}`;
       values[key] = data.field_value || '';
     });
-    setFieldValues(values);
+    return values;
   }, [characterData]);
 
-  // Get field value for display
+  // Get saved field value for display. The open editor's uncommitted text lives in
+  // `editDraft`, not here, so this keeps returning what is actually persisted.
   const getFieldValue = (moduleType: string, fieldName: string): string => {
     const key = `${moduleType}_${fieldName}`;
     return fieldValues[key] || '';
@@ -208,12 +224,18 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
   const handleFieldEdit = (moduleType: string, fieldName: string) => {
     if (!canEdit) return;
     setEditingField(`${moduleType}_${fieldName}`);
+    setEditDraft(getFieldValue(moduleType, fieldName));
+  };
+
+  // Handle field edit cancel
+  const handleFieldCancel = () => {
+    setEditingField(null);
+    setEditDraft(null);
   };
 
   // Handle field save
   const handleFieldSave = (moduleType: string, fieldName: string, fieldType: string, isPublic: boolean) => {
-    const key = `${moduleType}_${fieldName}`;
-    const value = fieldValues[key] || '';
+    const value = editDraft ?? '';
 
     saveCharacterDataMutation.mutate({
       module_type: moduleType,
@@ -225,9 +247,6 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
   };
 
   // Handle field value change
-  const handleFieldChange = (key: string, value: string) => {
-    setFieldValues(prev => ({ ...prev, [key]: value }));
-  };
 
   if (isLoading) {
     return (
@@ -515,8 +534,8 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
                       {isEditing ? (
                         <div className="space-y-4">
                           <CommentEditor
-                            value={value}
-                            onChange={(newValue) => handleFieldChange(key, newValue)}
+                            value={editDraft ?? ''}
+                            onChange={setEditDraft}
                             placeholder={field.placeholder}
                             rows={8}
                             showPreviewByDefault={false}
@@ -525,7 +544,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
                             <Button
                               variant="ghost"
                               size="md"
-                              onClick={() => setEditingField(null)}
+                              onClick={handleFieldCancel}
                               disabled={saveCharacterDataMutation.isPending}
                             >
                               Cancel
