@@ -7,7 +7,7 @@ import type { CharacterSkill } from '../../types/characters';
 const mockSkill: CharacterSkill = {
   id: '1',
   name: 'Swordsmanship',
-  level: 'Expert',
+  rank: 'Expert',
   description: 'Mastery of blade combat',
   category: 'Combat',
 };
@@ -27,7 +27,7 @@ describe('SkillCard', () => {
       expect(screen.getByText('Swordsmanship')).toBeInTheDocument();
     });
 
-    it('displays level when provided', () => {
+    it('displays rank when provided', () => {
       render(
         <SkillCard
           skill={mockSkill}
@@ -37,25 +37,28 @@ describe('SkillCard', () => {
         />
       );
 
-      expect(screen.getByText('Level: Expert')).toBeInTheDocument();
+      expect(screen.getByText('Rank: Expert')).toBeInTheDocument();
     });
 
-    it('hides level when not provided', () => {
-      const skillWithoutLevel = { ...mockSkill, level: undefined };
+    it('hides rank when not provided', () => {
+      const skillWithoutRank = { ...mockSkill, rank: undefined };
       render(
         <SkillCard
-          skill={skillWithoutLevel}
+          skill={skillWithoutRank}
           canEdit={false}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
         />
       );
 
-      expect(screen.queryByText(/Level:/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Rank:/)).not.toBeInTheDocument();
     });
 
-    it('displays numeric level', () => {
-      const skillWithNumericLevel = { ...mockSkill, level: 5 };
+    // The legacy `level` key is resolved on read rather than migrated, so an
+    // unmigrated row must still render — including a numeric one, which is what
+    // the old `number | string` union allowed on disk.
+    it('falls back to the legacy numeric level when rank is unset', () => {
+      const skillWithNumericLevel = { ...mockSkill, rank: undefined, level: 5 };
       render(
         <SkillCard
           skill={skillWithNumericLevel}
@@ -65,7 +68,7 @@ describe('SkillCard', () => {
         />
       );
 
-      expect(screen.getByText('Level: 5')).toBeInTheDocument();
+      expect(screen.getByText('Rank: 5')).toBeInTheDocument();
     });
 
     it('shows description button when description provided', () => {
@@ -123,6 +126,30 @@ describe('SkillCard', () => {
       );
 
       expect(screen.queryByText('Combat')).not.toBeInTheDocument();
+    });
+  });
+
+  // The parent merges updates onto the existing entry, so a save that only sets
+  // `rank` leaves the legacy `level` in place — a row carrying two spellings of
+  // the same value, disagreeing, with the display silently preferring one.
+  describe('Legacy level key', () => {
+    it('clears the legacy key when a legacy row is saved', async () => {
+      const user = userEvent.setup();
+      const onUpdate = vi.fn();
+      const legacy = { ...mockSkill, rank: undefined, level: 'Expert' };
+      render(
+        <SkillCard skill={legacy} canEdit={true} onUpdate={onUpdate} onRemove={vi.fn()} />
+      );
+
+      await user.click(screen.getByText('✎'));
+      const rankInput = screen.getByDisplayValue('Expert');
+      await user.clear(rankInput);
+      await user.type(rankInput, 'Master');
+      await user.click(screen.getByRole('button', { name: /save/i }));
+
+      expect(onUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ rank: 'Master', level: undefined })
+      );
     });
   });
 
@@ -212,7 +239,7 @@ describe('SkillCard', () => {
       expect(screen.getByDisplayValue('Archery')).toBeInTheDocument();
     });
 
-    it('allows editing level', async () => {
+    it('allows editing rank', async () => {
       const user = userEvent.setup();
       render(
         <SkillCard
@@ -224,9 +251,9 @@ describe('SkillCard', () => {
       );
 
       await user.click(screen.getByText('✎'));
-      const levelInput = screen.getByDisplayValue('Expert');
-      await user.clear(levelInput);
-      await user.type(levelInput, 'Master');
+      const rankInput = screen.getByDisplayValue('Expert');
+      await user.clear(rankInput);
+      await user.type(rankInput, 'Master');
 
       expect(screen.getByDisplayValue('Master')).toBeInTheDocument();
     });
@@ -289,9 +316,9 @@ describe('SkillCard', () => {
       await user.clear(nameInput);
       await user.type(nameInput, 'Archery');
 
-      const levelInput = screen.getByDisplayValue('Expert');
-      await user.clear(levelInput);
-      await user.type(levelInput, 'Novice');
+      const rankInput = screen.getByDisplayValue('Expert');
+      await user.clear(rankInput);
+      await user.type(rankInput, 'Novice');
 
       const categoryInput = screen.getByDisplayValue('Combat');
       await user.clear(categoryInput);
@@ -302,7 +329,7 @@ describe('SkillCard', () => {
       expect(onUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Archery',
-          level: 'Novice',
+          rank: 'Novice',
           category: 'Ranged',
         })
       );

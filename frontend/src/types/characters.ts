@@ -120,13 +120,51 @@ export interface CharacterActivityStats {
 export interface CharacterSkill {
   id: string;
   name: string;
-  level?: number | string; // Could be numeric or descriptive like "Expert"
+  /**
+   * Free text, e.g. "Expert" or "5".
+   *
+   * Replaces the old `level?: number | string`. The union was a fiction: the
+   * editor stringified on every save, so a numeric level round-tripped into a
+   * string the moment anyone touched it, and nothing in the app ever did
+   * arithmetic on it. Free text is what the field already was in practice.
+   *
+   * Read old rows through `skillRank()` rather than this field directly —
+   * `level` is still on disk and is NOT migrated.
+   */
+  rank?: string;
+  /**
+   * @deprecated Legacy key, read-only. Present on rows written before the
+   * rank rename; never written again. Use `skillRank()` instead of reading it.
+   */
+  level?: number | string;
   description?: string;
   category?: string; // e.g., "Combat", "Social", "Academic"
-  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Resolves a skill's rank across both storage shapes.
+ *
+ * There is deliberately no migration for the `level` → `rank` rename: this key
+ * lives inside a JSON blob, so a read-side fallback covers every old row,
+ * archived payload, and rolled-back deploy at no coordination cost, where a
+ * migration would need all three to line up. Old numeric values stringify here
+ * rather than on write, so a row is only rewritten when a human edits it.
+ *
+ * Returns undefined when neither key is set, so callers can keep using the
+ * `{rank && ...}` pattern to hide the field entirely.
+ */
+export function skillRank(skill: Pick<CharacterSkill, 'rank' | 'level'>): string | undefined {
+  if (skill.rank !== undefined && skill.rank !== '') return skill.rank;
+  if (skill.level === undefined || skill.level === '') return undefined;
+  return String(skill.level);
 }
 
 // Individual inventory item structures for JSON fields
+// `equipped` and `metadata` used to sit here and were dropped in the Phase 5
+// field pass. `equipped` rendered a badge but nothing could ever set it true —
+// AddItemModal hardcoded false and no edit path touched it — so the badge was
+// unreachable. `metadata` had no reader anywhere. Both keys are still tolerated
+// on read (old rows carry `equipped`); they are simply never written again.
 export interface InventoryItem {
   id: string;
   name: string;
@@ -134,17 +172,78 @@ export interface InventoryItem {
   quantity: number;
   category?: string; // e.g., "Weapon", "Armor", "Consumable", "Tool"
   condition?: string; // e.g., "Excellent", "Good", "Damaged"
+  /**
+   * Unused by any game today, kept deliberately: both feed the optional
+   * weight/value summary in ItemsManager, which stays hidden until a game sets
+   * them. Available as defaults rather than dead weight.
+   */
   value?: number;
   weight?: number;
-  equipped?: boolean; // For equipment/weapons
-  metadata?: Record<string, unknown>; // Game-specific properties
 }
 
-export interface CurrencyEntry {
+/**
+ * One entry on the Numbers tab: a named quantity, optionally bounded.
+ *
+ * Renamed from `CurrencyEntry` in the Phase 5 field pass, along with the tab
+ * itself. The tab holds arbitrary numeric tracks — stress, XP, clocks, heat —
+ * and "currency" described only the narrowest case.
+ */
+export interface NumberEntry {
   id: string;
-  type: string; // e.g., "Gold", "Credits", "XP", "Reputation"
+  /**
+   * The entry's label, e.g. "Gold", "Stress", "XP".
+   *
+   * Was `type`, which read like a discriminant. Old rows still use that key —
+   * read through `numberEntryName()`, never this field directly. As with the
+   * skills rename there is deliberately no migration: the key lives inside a
+   * JSON blob, so a read-side fallback covers every old row, archived payload,
+   * and rolled-back deploy at no coordination cost.
+   */
+  name?: string;
+  /**
+   * @deprecated Legacy key, read-only. Use `numberEntryName()`.
+   */
+  type?: string;
   amount: number;
+  /**
+   * Upper bound, which turns a bare count into a track: "Stress 4/9".
+   *
+   * Absent means an unbounded quantity (money, XP), which is why this is
+   * optional rather than defaulted — there is no sensible maximum for a purse.
+   */
+  max?: number;
+  /**
+   * How the entry renders. Only meaningful with `max` set; a bare quantity has
+   * nothing to draw a bar or boxes against, so it always renders as a number.
+   * Absent means 'number'.
+   */
+  display?: NumberEntryDisplay;
   description?: string;
+}
+
+export type NumberEntryDisplay = 'number' | 'track' | 'boxes';
+
+/**
+ * Resolves an entry's label across both storage shapes.
+ *
+ * Returns '' rather than undefined when neither key is set: the name is
+ * required by the form, so an entry without one is corrupt data rather than a
+ * meaningful absence, and callers render it as an empty heading rather than
+ * branching.
+ */
+export function numberEntryName(entry: Pick<NumberEntry, 'name' | 'type'>): string {
+  return entry.name || entry.type || '';
+}
+
+/**
+ * Whether an entry should render as a bounded track rather than a bare number.
+ *
+ * `max` is what makes a track possible, so `display` alone is not enough — a
+ * 'boxes' entry with no maximum has no box count to draw. Guards against a
+ * non-positive max for the same reason: zero boxes is not a track.
+ */
+export function isBoundedTrack(entry: NumberEntry): boolean {
+  return entry.max !== undefined && entry.max > 0 && entry.display !== 'number';
 }
 
 /**

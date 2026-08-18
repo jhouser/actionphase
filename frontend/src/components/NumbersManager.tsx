@@ -1,16 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import type { CurrencyEntry } from '../types/characters';
-import { CurrencyCard } from './CurrencyCard';
-import { AddCurrencyModal } from './AddCurrencyModal';
+import type { NumberEntry } from '../types/characters';
+import { NumberCard } from './NumberCard';
+import { AddNumberModal } from './AddNumberModal';
 import { Button } from './ui';
 import { generateId } from '../utils/generateId';
 import { ensureIds } from '../utils/ensureIds';
 import { useDirtyChildren } from '@/hooks/useDirtyChildren';
 
 interface NumbersManagerProps {
-  numbers: CurrencyEntry[];
+  numbers: NumberEntry[];
   canEdit: boolean;
-  onNumbersChange: (numbers: CurrencyEntry[]) => void;
+  onNumbersChange: (numbers: NumberEntry[]) => void;
   /**
    * Reports whether any editor below holds edits that have not been committed
    * with Save. Ancestors use it to warn before closing the sheet.
@@ -32,8 +32,8 @@ interface NumbersManagerProps {
  * is deliberately general — money, stress, XP, heat, clocks — which is why the
  * storage key was renamed `currency` → `numbers` rather than kept.
  *
- * The row type is still `CurrencyEntry` and the card is still `CurrencyCard`;
- * renaming those is Phase 5's field work, not this phase's.
+ * Entries carry an optional `max`, which turns a bare count into a track
+ * ("Stress 4/9") — the structure that justifies giving the tab its own space.
  */
 export const NumbersManager: React.FC<NumbersManagerProps> = ({
   numbers,
@@ -48,7 +48,7 @@ export const NumbersManager: React.FC<NumbersManagerProps> = ({
 
   const [showAdd, setShowAdd] = useState(false);
 
-  const addNumber = (data: Omit<CurrencyEntry, 'id'>) => {
+  const addNumber = (data: Omit<NumberEntry, 'id'>) => {
     onNumbersChange([...validatedNumbers, { id: generateId(), ...data }]);
     setShowAdd(false);
   };
@@ -57,7 +57,7 @@ export const NumbersManager: React.FC<NumbersManagerProps> = ({
     onNumbersChange(validatedNumbers.filter(c => c.id !== id));
   };
 
-  const updateNumber = (id: string, updates: Partial<CurrencyEntry>) => {
+  const updateNumber = (id: string, updates: Partial<NumberEntry>) => {
     onNumbersChange(validatedNumbers.map(c => c.id === id ? { ...c, ...updates } : c));
   };
 
@@ -80,9 +80,9 @@ export const NumbersManager: React.FC<NumbersManagerProps> = ({
       ) : (
         <div className="space-y-3">
           {validatedNumbers.map((entry) => (
-            <CurrencyCard
+            <NumberCard
               key={entry.id}
-              currency={entry}
+              entry={entry}
               canEdit={canEdit}
               onUpdate={(updates) => updateNumber(entry.id, updates)}
               onRemove={() => removeNumber(entry.id)}
@@ -93,7 +93,7 @@ export const NumbersManager: React.FC<NumbersManagerProps> = ({
       )}
 
       {showAdd && (
-        <AddCurrencyModal onAdd={addNumber} onCancel={() => setShowAdd(false)} />
+        <AddNumberModal onAdd={addNumber} onCancel={() => setShowAdd(false)} label={label} />
       )}
     </div>
   );

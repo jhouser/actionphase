@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AddSkillModal } from '../AddSkillModal';
-import { AddCurrencyModal } from '../AddCurrencyModal';
+import { AddNumberModal } from '../AddNumberModal';
 import { AddItemModal } from '../AddItemModal';
 
 vi.mock('@/contexts/GameContext', () => ({
@@ -49,9 +49,9 @@ describe('Add modals ignore backdrop clicks', () => {
     expect(onCancel).not.toHaveBeenCalled();
   });
 
-  it('AddCurrencyModal does not cancel on a backdrop click', () => {
+  it('AddNumberModal does not cancel on a backdrop click', () => {
     const onCancel = vi.fn();
-    render(<AddCurrencyModal onAdd={vi.fn()} onCancel={onCancel} />);
+    render(<AddNumberModal onAdd={vi.fn()} onCancel={onCancel} />);
 
     clickBackdrop();
 

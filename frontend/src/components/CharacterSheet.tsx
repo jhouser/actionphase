@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
-import type { CharacterData, CharacterDataRequest, CharacterSkill, InventoryItem, CurrencyEntry, CharacterSheetConfig } from '../types/characters';
+import type { CharacterData, CharacterDataRequest, CharacterSkill, InventoryItem, NumberEntry, CharacterSheetConfig } from '../types/characters';
 import { buildCharacterModules } from '../types/characters';
 import { SkillsManager } from './SkillsManager';
 import { ItemsManager } from './ItemsManager';
@@ -503,7 +503,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
               />
             ) : module.type === 'numbers' ? (
               <NumbersManager
-                numbers={parseJsonField('numbers', 'numbers') as CurrencyEntry[]}
+                numbers={parseJsonField('numbers', 'numbers') as NumberEntry[]}
                 canEdit={canEditStats}
                 onNumbersChange={(numbers) => saveJsonField('numbers', 'numbers', numbers)}
                 onDirtyChange={(isDirty) => reportDirty('numbers', isDirty)}

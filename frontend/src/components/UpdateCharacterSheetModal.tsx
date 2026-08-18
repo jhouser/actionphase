@@ -6,7 +6,7 @@ import { SkillsManager } from './SkillsManager';
 import { ItemsManager } from './ItemsManager';
 import { NumbersManager } from './NumbersManager';
 import { apiClient } from '../lib/api';
-import type { CharacterSkill, InventoryItem, CurrencyEntry } from '../types/characters';
+import type { CharacterSkill, InventoryItem, NumberEntry } from '../types/characters';
 import type { CreateDraftCharacterUpdateRequest } from '../types/phases';
 import { logger } from '@/services/LoggingService';
 import { useDiscardSheetDrafts } from '../hooks/useDiscardSheetDrafts';
@@ -71,7 +71,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
   // Local state for the character sheet being edited
   const [skills, setSkills] = useState<CharacterSkill[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [numbers, setNumbers] = useState<CurrencyEntry[]>([]);
+  const [numbers, setNumbers] = useState<NumberEntry[]>([]);
 
   // Track whether local state has been initialized from server data
   const initialized = useRef(false);
@@ -122,7 +122,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
 
     setSkills(parseJsonArray<CharacterSkill>(getField('skills', 'skills')));
     setItems(parseJsonArray<InventoryItem>(getField('inventory', 'items')));
-    setNumbers(parseJsonArray<CurrencyEntry>(getField('numbers', 'numbers')));
+    setNumbers(parseJsonArray<NumberEntry>(getField('numbers', 'numbers')));
 
     initialized.current = true;
   }, [isOpen, isLoading, characterData, existingDrafts]);
@@ -269,7 +269,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
     }
   };
 
-  const handleNumbersChange = (newNumbers: CurrencyEntry[]) => {
+  const handleNumbersChange = (newNumbers: NumberEntry[]) => {
     setNumbers(newNumbers);
     scheduleSave('numbers', 'numbers', newNumbers);
   };
@@ -309,7 +309,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
 
     setSkills(parseJsonArray<CharacterSkill>(fromCharacter('skills', 'skills')));
     setItems(parseJsonArray<InventoryItem>(fromCharacter('inventory', 'items')));
-    setNumbers(parseJsonArray<CurrencyEntry>(fromCharacter('numbers', 'numbers')));
+    setNumbers(parseJsonArray<NumberEntry>(fromCharacter('numbers', 'numbers')));
 
     setConfirmingDiscard(false);
     setSaveStatus('idle');

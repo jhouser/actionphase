@@ -5,7 +5,7 @@ import { useReportDirty } from '@/hooks/useReportDirty';
 
 export interface SkillFormData {
   name: string;
-  level?: number | string;
+  rank?: string;
   description?: string;
   category?: string;
 }
@@ -23,7 +23,7 @@ interface SkillFormProps {
 
 /**
  * Shared form component for adding/editing character skills.
- * Used in both AddSkillModal and SkillsTab to ensure consistency.
+ * Used in both AddSkillModal and SkillCard's inline editor to ensure consistency.
  */
 export const SkillForm: React.FC<SkillFormProps> = ({
   onSubmit,
@@ -35,15 +35,16 @@ export const SkillForm: React.FC<SkillFormProps> = ({
   onDirtyChange,
 }) => {
   const [name, setName] = useState(initialValues?.name || '');
-  const [level, setLevel] = useState(initialValues?.level?.toString() || '');
+  const [rank, setRank] = useState(initialValues?.rank || '');
   const [description, setDescription] = useState(initialValues?.description || '');
   const [category, setCategory] = useState(initialValues?.category || '');
 
-  // Compared trimmed, because handleSubmit submits trimmed — see AbilityForm for why
-  // the raw comparison soft-locks the form on a whitespace-only change.
+  // Compared trimmed, because handleSubmit submits trimmed. An untrimmed
+  // comparison reports dirty for a change that Save would discard, which
+  // soft-locks the form: the tab stays locked with nothing left to commit.
   useReportDirty(
     name.trim() !== (initialValues?.name || '').trim() ||
-      level.trim() !== (initialValues?.level?.toString() || '').trim() ||
+      rank.trim() !== (initialValues?.rank || '').trim() ||
       description.trim() !== (initialValues?.description || '').trim() ||
       category.trim() !== (initialValues?.category || '').trim(),
     onDirtyChange,
@@ -55,7 +56,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({
 
     onSubmit({
       name: name.trim(),
-      level: level.trim() || undefined,
+      rank: rank.trim() || undefined,
       description: description.trim() || undefined,
       category: category.trim() || undefined,
     });
@@ -74,11 +75,11 @@ export const SkillForm: React.FC<SkillFormProps> = ({
       />
 
       <Input
-        id="skill-level"
-        label="Level"
+        id="skill-rank"
+        label="Rank"
         type="text"
-        value={level}
-        onChange={(e) => setLevel(e.target.value)}
+        value={rank}
+        onChange={(e) => setRank(e.target.value)}
         placeholder="e.g., Expert, 5, Advanced"
       />
 

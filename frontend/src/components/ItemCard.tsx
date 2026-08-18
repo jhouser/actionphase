@@ -79,11 +79,6 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, canEdit, onUpdate, onR
                 x{item.quantity}
               </Badge>
             )}
-            {item.equipped && (
-              <Badge variant="success" size="sm">
-                Equipped
-              </Badge>
-            )}
           </div>
         </div>
 

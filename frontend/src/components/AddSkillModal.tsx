@@ -11,7 +11,7 @@ export const AddSkillModal: React.FC<AddSkillModalProps> = ({ onAdd, onCancel })
   const handleSubmit = (data: SkillFormData) => {
     onAdd({
       name: data.name,
-      level: data.level,
+      rank: data.rank,
       description: data.description,
       category: data.category
     });

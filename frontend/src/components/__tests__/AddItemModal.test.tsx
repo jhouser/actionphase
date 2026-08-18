@@ -134,7 +134,6 @@ describe('AddItemModal', () => {
         value: 100,
         weight: 5,
         description: 'A sturdy iron blade',
-        equipped: false
       });
     });
 
@@ -154,7 +153,6 @@ describe('AddItemModal', () => {
         value: undefined,
         weight: undefined,
         description: undefined,
-        equipped: false
       });
     });
 
@@ -248,7 +246,9 @@ describe('AddItemModal', () => {
       expect(onAdd).not.toHaveBeenCalled();
     });
 
-    it('sets equipped to false by default', async () => {
+    // `equipped` was dropped in the Phase 5 field pass. Writing it back would
+    // reintroduce a key the type no longer has and that nothing reads.
+    it('does not write an equipped field', async () => {
       const onAdd = vi.fn();
       const user = userEvent.setup();
       renderWithQuery(<AddItemModal onAdd={onAdd} onCancel={vi.fn()} />);
@@ -256,9 +256,8 @@ describe('AddItemModal', () => {
       await user.type(screen.getByLabelText(/Item Name/), 'Sword');
       await user.click(screen.getByText('Add Item'));
 
-      expect(onAdd).toHaveBeenCalledWith(
-        expect.objectContaining({ equipped: false })
-      );
+      expect(onAdd).toHaveBeenCalledTimes(1);
+      expect(onAdd.mock.calls[0][0]).not.toHaveProperty('equipped');
     });
   });
 

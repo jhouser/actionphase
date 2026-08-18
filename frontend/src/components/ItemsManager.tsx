@@ -110,12 +110,19 @@ export const ItemsManager: React.FC<ItemsManagerProps> = ({
   const getTotalValue = () =>
     validatedItems.reduce((total, item) => total + ((item.value || 0) * item.quantity), 0);
 
+  // Both fields are optional and no game in play sets them, so summing them
+  // unconditionally rendered a meaningless "Total Weight: 0.0 • Total Value: 0"
+  // under every inventory. Show the line only once some item opts in.
+  const hasWeightOrValue = validatedItems.some(
+    (item) => item.weight !== undefined || item.value !== undefined
+  );
+
   return (
     <div data-testid="items-section">
       <div className="flex justify-between items-center mb-4">
         <div>
           <h3 className="text-lg font-medium text-content-primary">{label}</h3>
-          {validatedItems.length > 0 && (
+          {validatedItems.length > 0 && hasWeightOrValue && (
             <div className="text-sm text-content-tertiary mt-1">
               Total Weight: {getTotalWeight().toFixed(1)} • Total Value: {getTotalValue()}
             </div>

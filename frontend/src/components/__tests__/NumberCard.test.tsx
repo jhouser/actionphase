@@ -1,22 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { CurrencyCard } from '../CurrencyCard';
-import type { CurrencyEntry } from '../../types/characters';
+import { NumberCard } from '../NumberCard';
+import type { NumberEntry } from '../../types/characters';
 
-const mockCurrency: CurrencyEntry = {
+const mockEntry: NumberEntry = {
   id: '1',
-  type: 'Gold',
+  name: 'Gold',
   amount: 1000,
-  description: 'Standard currency',
+  description: 'Standard notes',
 };
 
-describe('CurrencyCard', () => {
+describe('NumberCard', () => {
   describe('Display - View Mode', () => {
-    it('displays currency type and amount', () => {
+    it('displays the entry name and amount', () => {
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={false}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -29,37 +29,165 @@ describe('CurrencyCard', () => {
 
     it('displays description when provided', () => {
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={false}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
         />
       );
 
-      expect(screen.getByText('Standard currency')).toBeInTheDocument();
+      expect(screen.getByText('Standard notes')).toBeInTheDocument();
     });
 
     it('hides description when not provided', () => {
-      const currencyWithoutDesc = { ...mockCurrency, description: undefined };
+      const entryWithoutDesc = { ...mockEntry, description: undefined };
       render(
-        <CurrencyCard
-          currency={currencyWithoutDesc}
+        <NumberCard
+          entry={entryWithoutDesc}
           canEdit={false}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
         />
       );
 
-      expect(screen.queryByText('Standard currency')).not.toBeInTheDocument();
+      expect(screen.queryByText('Standard notes')).not.toBeInTheDocument();
+    });
+  });
+
+  // The `type` -> `name` rename has no migration: the key lives inside a JSON
+  // blob, so old rows are resolved on read instead.
+  describe('Legacy name key', () => {
+    it('falls back to the legacy type key when name is unset', () => {
+      const legacy = { id: '1', type: 'Gold', amount: 1000 } as NumberEntry;
+      render(
+        <NumberCard entry={legacy} canEdit={false} onUpdate={vi.fn()} onRemove={vi.fn()} />
+      );
+
+      expect(screen.getByText('Gold')).toBeInTheDocument();
+    });
+
+    it('prefers name when a row carries both keys', () => {
+      const both = { id: '1', name: 'Coin', type: 'Gold', amount: 5 } as NumberEntry;
+      render(
+        <NumberCard entry={both} canEdit={false} onUpdate={vi.fn()} onRemove={vi.fn()} />
+      );
+
+      expect(screen.getByText('Coin')).toBeInTheDocument();
+      expect(screen.queryByText('Gold')).not.toBeInTheDocument();
+    });
+
+    // Editing a legacy row should leave it carrying one spelling of its name,
+    // not both — otherwise the fallback silently keeps choosing between them.
+    it('clears the legacy key when a legacy row is saved', async () => {
+      const user = userEvent.setup();
+      const onUpdate = vi.fn();
+      const legacy = { id: '1', type: 'Gold', amount: 1000 } as NumberEntry;
+      render(
+        <NumberCard entry={legacy} canEdit={true} onUpdate={onUpdate} onRemove={vi.fn()} />
+      );
+
+      await user.click(screen.getByText('✎'));
+      await user.click(screen.getByText('✓'));
+
+      expect(onUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Gold', type: undefined })
+      );
+    });
+  });
+
+  describe('Bounded tracks', () => {
+    it('shows the maximum alongside the amount', () => {
+      render(
+        <NumberCard
+          entry={{ id: '1', name: 'Stress', amount: 4, max: 9 }}
+          canEdit={false}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText('/ 9')).toBeInTheDocument();
+    });
+
+    it('renders boxes for a boxes entry', () => {
+      render(
+        <NumberCard
+          entry={{ id: '1', name: 'Stress', amount: 4, max: 9, display: 'boxes' }}
+          canEdit={false}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      );
+
+      expect(screen.getByRole('img', { name: 'Stress: 4 of 9' })).toBeInTheDocument();
+    });
+
+    it('renders a bar for a track entry', () => {
+      render(
+        <NumberCard
+          entry={{ id: '1', name: 'Heat', amount: 3, max: 6, display: 'track' }}
+          canEdit={false}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      );
+
+      expect(screen.getByRole('img', { name: 'Heat: 3 of 6' })).toBeInTheDocument();
+    });
+
+    // A bare quantity has nothing to draw a bar or boxes against.
+    it('draws nothing for an unbounded entry', () => {
+      render(
+        <NumberCard
+          entry={{ id: '1', name: 'Gold', amount: 500 }}
+          canEdit={false}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    });
+
+    // 'number' is an explicit opt-out of the visual track, not an absent value.
+    it('draws nothing when display is number even with a maximum', () => {
+      render(
+        <NumberCard
+          entry={{ id: '1', name: 'HP', amount: 8, max: 10, display: 'number' }}
+          canEdit={false}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText('/ 10')).toBeInTheDocument();
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    });
+
+    // Twenty boxes is already a wide row on a phone; past that the bar carries
+    // the same information legibly.
+    it('falls back to a bar when a boxes entry exceeds the box limit', () => {
+      render(
+        <NumberCard
+          entry={{ id: '1', name: 'XP', amount: 30, max: 100, display: 'boxes' }}
+          canEdit={false}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      );
+
+      const track = screen.getByRole('img', { name: 'XP: 30 of 100' });
+      // The bar is a single element; the box track renders one span per box.
+      expect(track.querySelectorAll('span')).toHaveLength(0);
     });
   });
 
   describe('Edit Controls', () => {
     it('hides edit buttons when canEdit is false', () => {
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={false}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -72,8 +200,8 @@ describe('CurrencyCard', () => {
 
     it('shows edit buttons when canEdit is true', () => {
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -89,8 +217,8 @@ describe('CurrencyCard', () => {
     it('enters edit mode when edit button clicked', async () => {
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -101,14 +229,14 @@ describe('CurrencyCard', () => {
 
       expect(screen.getByDisplayValue('Gold')).toBeInTheDocument();
       expect(screen.getByDisplayValue('1000')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('Standard currency')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Standard notes')).toBeInTheDocument();
     });
 
     it('shows save and cancel buttons in edit mode', async () => {
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -121,11 +249,11 @@ describe('CurrencyCard', () => {
       expect(screen.getByText('✕')).toBeInTheDocument();
     });
 
-    it('allows editing currency type', async () => {
+    it('allows editing the name', async () => {
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -143,8 +271,8 @@ describe('CurrencyCard', () => {
     it('allows editing amount', async () => {
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -162,8 +290,8 @@ describe('CurrencyCard', () => {
     it('allows editing description', async () => {
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -171,7 +299,7 @@ describe('CurrencyCard', () => {
       );
 
       await user.click(screen.getByText('✎'));
-      const descInput = screen.getByDisplayValue('Standard currency');
+      const descInput = screen.getByDisplayValue('Standard notes');
       await user.clear(descInput);
       await user.type(descInput, 'Updated notes');
 
@@ -184,8 +312,8 @@ describe('CurrencyCard', () => {
       const onUpdate = vi.fn();
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={onUpdate}
           onRemove={vi.fn()}
@@ -194,9 +322,9 @@ describe('CurrencyCard', () => {
 
       await user.click(screen.getByText('✎'));
 
-      const typeInput = screen.getByDisplayValue('Gold');
-      await user.clear(typeInput);
-      await user.type(typeInput, 'Platinum');
+      const nameInput = screen.getByDisplayValue('Gold');
+      await user.clear(nameInput);
+      await user.type(nameInput, 'Platinum');
 
       const amountInput = screen.getByDisplayValue('1000');
       await user.clear(amountInput);
@@ -205,17 +333,20 @@ describe('CurrencyCard', () => {
       await user.click(screen.getByText('✓'));
 
       expect(onUpdate).toHaveBeenCalledWith({
-        type: 'Platinum',
+        name: 'Platinum',
         amount: 5000,
-        description: 'Standard currency',
+        max: undefined,
+        display: undefined,
+        description: 'Standard notes',
+        type: undefined,
       });
     });
 
     it('exits edit mode after save', async () => {
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -233,8 +364,8 @@ describe('CurrencyCard', () => {
       const onUpdate = vi.fn();
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={onUpdate}
           onRemove={vi.fn()}
@@ -243,15 +374,18 @@ describe('CurrencyCard', () => {
 
       await user.click(screen.getByText('✎'));
 
-      const descInput = screen.getByDisplayValue('Standard currency');
+      const descInput = screen.getByDisplayValue('Standard notes');
       await user.clear(descInput);
 
       await user.click(screen.getByText('✓'));
 
       expect(onUpdate).toHaveBeenCalledWith({
-        type: 'Gold',
+        name: 'Gold',
         amount: 1000,
+        max: undefined,
+        display: undefined,
         description: undefined,
+        type: undefined,
       });
     });
   });
@@ -260,8 +394,8 @@ describe('CurrencyCard', () => {
     it('reverts changes when cancelled', async () => {
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -285,8 +419,8 @@ describe('CurrencyCard', () => {
       const onUpdate = vi.fn();
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={onUpdate}
           onRemove={vi.fn()}
@@ -307,8 +441,8 @@ describe('CurrencyCard', () => {
     it('exits edit mode when cancelled', async () => {
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -328,8 +462,8 @@ describe('CurrencyCard', () => {
       const onRemove = vi.fn();
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={onRemove}
@@ -347,8 +481,8 @@ describe('CurrencyCard', () => {
       const onUpdate = vi.fn();
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={onUpdate}
           onRemove={vi.fn()}
@@ -370,10 +504,10 @@ describe('CurrencyCard', () => {
 
   describe('Number Formatting', () => {
     it('formats large amounts with thousands separators', () => {
-      const largeCurrency = { ...mockCurrency, amount: 1234567 };
+      const largeEntry = { ...mockEntry, amount: 1234567 };
       render(
-        <CurrencyCard
-          currency={largeCurrency}
+        <NumberCard
+          entry={largeEntry}
           canEdit={false}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -384,10 +518,10 @@ describe('CurrencyCard', () => {
     });
 
     it('handles zero amount correctly', () => {
-      const zeroCurrency = { ...mockCurrency, amount: 0 };
+      const zeroEntry = { ...mockEntry, amount: 0 };
       render(
-        <CurrencyCard
-          currency={zeroCurrency}
+        <NumberCard
+          entry={zeroEntry}
           canEdit={false}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -400,10 +534,10 @@ describe('CurrencyCard', () => {
 
   describe('Description uses markdown', () => {
     it('renders markdown bold syntax in description as HTML, not raw text', () => {
-      const currency = { ...mockCurrency, description: '**Bold note**' };
+      const entryWithMarkdown = { ...mockEntry, description: '**Bold note**' };
       render(
-        <CurrencyCard
-          currency={currency}
+        <NumberCard
+          entry={entryWithMarkdown}
           canEdit={false}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -418,8 +552,8 @@ describe('CurrencyCard', () => {
     it('renders Write/Preview tabs in edit mode for description field', async () => {
       const user = userEvent.setup();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -438,8 +572,8 @@ describe('CurrencyCard', () => {
     it('reports clean before anything is edited', () => {
       const onDirtyChange = vi.fn();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -454,8 +588,8 @@ describe('CurrencyCard', () => {
       const user = userEvent.setup();
       const onDirtyChange = vi.fn();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -473,8 +607,8 @@ describe('CurrencyCard', () => {
       const user = userEvent.setup();
       const onDirtyChange = vi.fn();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -491,7 +625,7 @@ describe('CurrencyCard', () => {
 
     /**
      * handleSave clears isEditing in the same tick it calls onUpdate, but that write
-     * is async upstream — the currency prop still holds the old value for a while.
+     * is async upstream — the entry prop still holds the old value for a while.
      * Reporting clean across that window would let the sheet close on a save that is
      * still in flight, which is the loss this whole signal exists to prevent.
      */
@@ -499,8 +633,8 @@ describe('CurrencyCard', () => {
       const user = userEvent.setup();
       const onDirtyChange = vi.fn();
       render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           // Parent that never writes back, standing in for a save still in flight.
           onUpdate={vi.fn()}
@@ -526,8 +660,8 @@ describe('CurrencyCard', () => {
       const user = userEvent.setup();
       const onDirtyChange = vi.fn();
       const { rerender } = render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -542,8 +676,8 @@ describe('CurrencyCard', () => {
 
       // Parent settles on something else entirely — the save did not take.
       rerender(
-        <CurrencyCard
-          currency={{ ...mockCurrency, type: 'Silver' }}
+        <NumberCard
+          entry={{ ...mockEntry, name: 'Silver' }}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -558,8 +692,8 @@ describe('CurrencyCard', () => {
       const user = userEvent.setup();
       const onDirtyChange = vi.fn();
       const { rerender } = render(
-        <CurrencyCard
-          currency={mockCurrency}
+        <NumberCard
+          entry={mockEntry}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -572,8 +706,8 @@ describe('CurrencyCard', () => {
       await user.click(screen.getByText('✓'));
 
       rerender(
-        <CurrencyCard
-          currency={{ ...mockCurrency, type: 'Golden' }}
+        <NumberCard
+          entry={{ ...mockEntry, name: 'Golden' }}
           canEdit={true}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}

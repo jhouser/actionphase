@@ -1,22 +1,22 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { NumbersManager } from '../NumbersManager';
-import type { CurrencyEntry } from '../../types/characters';
+import type { NumberEntry } from '../../types/characters';
 import { logger } from '@/services/LoggingService';
 
 vi.mock('@/services/LoggingService', () => ({
   logger: { warn: vi.fn(), error: vi.fn(), debug: vi.fn(), info: vi.fn() }
 }));
 
-vi.mock('../AddCurrencyModal', () => ({
-  AddCurrencyModal: () => <div data-testid="add-currency-modal">Add Modal</div>
+vi.mock('../AddNumberModal', () => ({
+  AddNumberModal: () => <div data-testid="add-number-modal">Add Modal</div>
 }));
 
-vi.mock('../CurrencyCard', () => ({
-  CurrencyCard: ({ currency, onRemove }: { currency: CurrencyEntry; onRemove: () => void }) => (
-    <div data-testid={`currency-card-${currency.id}`}>
-      {currency.type}
-      <button onClick={onRemove} data-testid={`remove-currency-${currency.id}`}>Remove</button>
+vi.mock('../NumberCard', () => ({
+  NumberCard: ({ entry, onRemove }: { entry: NumberEntry; onRemove: () => void }) => (
+    <div data-testid={`number-card-${entry.id}`}>
+      {entry.name}
+      <button onClick={onRemove} data-testid={`remove-number-${entry.id}`}>Remove</button>
     </div>
   )
 }));
@@ -42,8 +42,8 @@ describe('NumbersManager - Data Corruption Handling', () => {
 
       renderNumbers({
         numbers: [
-          { type: 'Gold', amount: 100 } as CurrencyEntry, // Missing id!
-          { type: 'Silver', amount: 50 } as CurrencyEntry, // Missing id!
+          { name: 'Gold', amount: 100 } as NumberEntry, // Missing id!
+          { name: 'Silver', amount: 50 } as NumberEntry, // Missing id!
         ],
       });
 
@@ -61,14 +61,14 @@ describe('NumbersManager - Data Corruption Handling', () => {
       const onNumbersChange = vi.fn();
       renderNumbers({
         numbers: [
-          { type: 'Gold', amount: 100 } as CurrencyEntry,
-          { type: 'Silver', amount: 50 } as CurrencyEntry,
-          { type: 'Bronze', amount: 25 } as CurrencyEntry,
+          { name: 'Gold', amount: 100 } as NumberEntry,
+          { name: 'Silver', amount: 50 } as NumberEntry,
+          { name: 'Bronze', amount: 25 } as NumberEntry,
         ],
         onNumbersChange,
       });
 
-      const silverCard = screen.getByText('Silver').closest('[data-testid^="currency-card-"]');
+      const silverCard = screen.getByText('Silver').closest('[data-testid^="number-card-"]');
       fireEvent.click(silverCard!.querySelector('button')!);
 
       expect(onNumbersChange).toHaveBeenCalledTimes(1);
@@ -76,15 +76,15 @@ describe('NumbersManager - Data Corruption Handling', () => {
 
       // The whole point of the regression: exactly one row goes.
       expect(updated).toHaveLength(2);
-      const types = updated.map((c: CurrencyEntry) => c.type);
-      expect(types).toEqual(expect.arrayContaining(['Gold', 'Bronze']));
-      expect(types).not.toContain('Silver');
+      const names = updated.map((c: NumberEntry) => c.name);
+      expect(names).toEqual(expect.arrayContaining(['Gold', 'Bronze']));
+      expect(names).not.toContain('Silver');
     });
   });
 
   it('does not warn when the data already has IDs', () => {
     vi.mocked(logger.warn).mockClear();
-    renderNumbers({ numbers: [{ id: 'n1', type: 'Gold', amount: 100 }] });
+    renderNumbers({ numbers: [{ id: 'n1', name: 'Gold', amount: 100 }] });
     expect(logger.warn).not.toHaveBeenCalled();
   });
 

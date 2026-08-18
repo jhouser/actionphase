@@ -2,13 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { apiClient } from '../lib/api';
 import type { CharacterSkill, InventoryItem } from '../types/characters';
+import { skillRank } from '../types/characters';
 
 export interface SheetItem {
   id: string;
   name: string;
   type: 'skill' | 'item';
   description?: string;
-  /** Human-readable metadata: skill level/category, item category/quantity */
+  /** Human-readable metadata: skill rank/category, item category/quantity */
   metadata?: string;
 }
 
@@ -23,7 +24,10 @@ function parseJsonField<T>(value: string | undefined): T[] {
 }
 
 function skillToSheetItem(s: CharacterSkill): SheetItem {
-  const meta = [s.category, s.level !== null && s.level !== undefined ? `Level ${s.level}` : undefined]
+  // Via skillRank so mention metadata reads the same value the card shows,
+  // including for rows still holding the pre-rename `level` key.
+  const rank = skillRank(s);
+  const meta = [s.category, rank ? `Rank ${rank}` : undefined]
     .filter(Boolean)
     .join(' · ');
   return {

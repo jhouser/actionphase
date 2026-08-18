@@ -3,7 +3,10 @@ import { Page, Locator } from '@playwright/test';
 /**
  * Page Object for Character Sheet interactions
  *
- * Handles character viewing, editing, and management operations
+ * Handles character viewing, editing, and management operations.
+ *
+ * The sheet's tabs are flat (Phase 4) and its three stat tabs are GM-renameable
+ * (Phase 3), so navigation takes a label rather than assuming fixed wording.
  */
 export class CharacterSheetPage {
   readonly page: Page;
@@ -17,9 +20,10 @@ export class CharacterSheetPage {
   readonly cancelButton: Locator;
   readonly deleteButton: Locator;
   readonly avatarUploadButton: Locator;
-  readonly abilitiesSection: Locator;
   readonly inventorySection: Locator;
   readonly skillsSection: Locator;
+  readonly itemsSection: Locator;
+  readonly numbersSection: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -33,9 +37,10 @@ export class CharacterSheetPage {
     this.cancelButton = page.locator('[data-testid="cancel-edit"]');
     this.deleteButton = page.locator('[data-testid="delete-character"]');
     this.avatarUploadButton = page.locator('input[type="file"]');
-    this.abilitiesSection = page.locator('[data-testid="abilities-section"]');
-    this.inventorySection = page.locator('[data-testid="inventory-section"]');
+    this.inventorySection = page.locator('[data-testid="items-section"]');
     this.skillsSection = page.locator('[data-testid="skills-section"]');
+    this.itemsSection = page.locator('[data-testid="items-section"]');
+    this.numbersSection = page.locator('[data-testid="numbers-section"]');
   }
 
   /**
@@ -159,16 +164,6 @@ export class CharacterSheetPage {
   }
 
   /**
-   * Get all abilities
-   */
-  async getAbilities(): Promise<string[]> {
-    const abilities = await this.abilitiesSection.locator('[data-testid="ability-item"]').all();
-    return Promise.all(abilities.map(a => a.textContent())).then(texts =>
-      texts.filter((t): t is string => t !== null)
-    );
-  }
-
-  /**
    * Get all inventory items
    */
   async getInventoryItems(): Promise<string[]> {
@@ -178,12 +173,21 @@ export class CharacterSheetPage {
     );
   }
 
-  // ========== Character Sheet Modal Module Navigation ==========
-  // Methods for navigating within the character sheet modal
-  // (Bio/Background, Abilities & Skills, Inventory modules)
+  // ========== Character Sheet Tab Navigation ==========
+  // The sheet is a FLAT list of five tabs: Public Profile, Private Notes, and
+  // the three renameable stat tabs (Skills, Inventory, Numbers by default).
+  //
+  // It used to be two levels — "Abilities & Skills" and "Inventory" modules,
+  // each with sub-tabs — which is why the old methods came in pairs
+  // (goToAbilitiesModule + goToAbilitiesTab). There is no second level now, so
+  // one method per tab is the whole API.
+  //
+  // Stat tab labels are GM-renameable per game, so every stat method takes an
+  // optional label. The defaults match DEFAULT_SHEET_LABELS in
+  // frontend/src/hooks/useSheetLabels.ts — the single source of those defaults.
 
   /**
-   * Get the character sheet module select dropdown (mobile).
+   * Get the character sheet tab select dropdown (mobile).
    * Scoped via data-testid="character-sheet-module-tabs" to distinguish it from
    * the game-level tab select when both are present on the same page.
    */
@@ -192,53 +196,79 @@ export class CharacterSheetPage {
   }
 
   /**
-   * Navigate to Bio/Background module
-   * Works with both mobile dropdown and desktop tabs
+   * Navigate to a tab by its storage id and visible label.
+   *
+   * Mobile selects by id; desktop clicks by label. The two differ because the
+   * ids are stable (`skills`) while the labels are per-game (`Talents`), and
+   * only the desktop tab strip renders the label.
+   *
+   * Falls back to the overflow "More" menu on desktop: at five tabs a narrow
+   * viewport pushes the last ones out of the strip, where getByRole('tab') can
+   * still find them but a plain click would miss.
+   */
+  private async goToTab(tabId: string, label: string) {
+    const isMobile = await this.waitForModuleTabsReady();
+    if (isMobile) {
+      await this.moduleSelect.scrollIntoViewIfNeeded();
+      await this.moduleSelect.selectOption(tabId);
+    } else {
+      const tab = this.page.getByRole('tab', { name: label });
+      if (await tab.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await tab.click();
+      } else {
+        await this.page.getByRole('button', { name: /More/ }).click();
+        await tab.click();
+      }
+    }
+    await this.page.waitForLoadState('networkidle');
+  }
+
+  /**
+   * Navigate to the Public Profile (bio) tab.
    */
   async goToBioModule() {
-    const isMobile = await this.waitForModuleTabsReady();
-    if (isMobile) {
-      await this.moduleSelect.scrollIntoViewIfNeeded();
-      await this.moduleSelect.selectOption('bio');
-    } else {
-      await this.page.getByRole('tab', { name: 'Public Profile' }).click();
-    }
-    await this.page.waitForLoadState('networkidle');
+    await this.goToTab('bio', 'Public Profile');
   }
 
   /**
-   * Navigate to Abilities & Skills module
-   * Works with both mobile dropdown and desktop tabs
+   * Navigate to the Private Notes tab.
    */
-  async goToAbilitiesModule() {
-    const isMobile = await this.waitForModuleTabsReady();
-    if (isMobile) {
-      await this.moduleSelect.scrollIntoViewIfNeeded();
-      await this.moduleSelect.selectOption('abilities');
-    } else {
-      await this.page.getByRole('tab', { name: 'Abilities & Skills' }).click();
-    }
-    await this.page.waitForLoadState('networkidle');
+  async goToNotesTab() {
+    await this.goToTab('notes', 'Private Notes');
   }
 
   /**
-   * Navigate to Inventory module
-   * Works with both mobile dropdown and desktop tabs
+   * Navigate to the Skills tab.
+   * @param label - The game's label for this tab, when renamed.
    */
-  async goToInventoryModule() {
-    const isMobile = await this.waitForModuleTabsReady();
-    if (isMobile) {
-      await this.moduleSelect.scrollIntoViewIfNeeded();
-      await this.moduleSelect.selectOption('inventory');
-    } else {
-      await this.page.getByRole('tab', { name: 'Inventory' }).click();
-    }
-    await this.page.waitForLoadState('networkidle');
+  async goToSkillsTab(label = 'Skills') {
+    await this.goToTab('skills', label);
   }
 
   /**
-   * Wait for the character sheet module tabs container to appear in the DOM,
-   * then return whether we're on a mobile viewport (select visible vs tabs visible).
+   * Navigate to the Inventory tab.
+   * @param label - The game's label for this tab, when renamed.
+   */
+  async goToInventoryTab(label = 'Inventory') {
+    await this.goToTab('inventory', label);
+  }
+
+  /**
+   * Navigate to the Numbers tab.
+   *
+   * Replaces goToCurrencyTab: the tab was promoted out of Inventory and its
+   * storage key renamed `currency` -> `numbers`, because it holds arbitrary
+   * numeric tracks (stress, XP, clocks), not only money.
+   *
+   * @param label - The game's label for this tab, when renamed.
+   */
+  async goToNumbersTab(label = 'Numbers') {
+    await this.goToTab('numbers', label);
+  }
+
+  /**
+   * Wait for the character sheet tab container to appear in the DOM, then
+   * report whether we are on a mobile viewport (select visible vs tabs visible).
    */
   private async waitForModuleTabsReady(): Promise<boolean> {
     await this.page.getByTestId('character-sheet-module-tabs').waitFor({ state: 'attached', timeout: 5000 });
@@ -247,80 +277,28 @@ export class CharacterSheetPage {
   }
 
   /**
-   * Navigate to Abilities tab (within Abilities & Skills module)
-   * @param count - Expected count to display (e.g., "Abilities (2)")
+   * Add a skill (requires the "Add Skill" button to be visible).
+   *
+   * Replaces addAbility: abilities were retired because they duplicated skills,
+   * which is strictly more featured (rank, category, markdown description).
+   *
+   * @param name - Skill name
+   * @param description - Skill description
    */
-  async goToAbilitiesTab(count?: number) {
-    const buttonName = count !== undefined ? `Abilities (${count})` : /Abilities \(\d+\)/;
-    await this.page.getByRole('button', { name: buttonName }).click();
-    await this.page.waitForTimeout(500);
-  }
-
-  /**
-   * Navigate to Skills tab (within Abilities & Skills module)
-   * @param count - Expected count to display (e.g., "Skills (2)")
-   */
-  async goToSkillsTab(count?: number) {
-    const buttonName = count !== undefined ? `Skills (${count})` : /Skills \(\d+\)/;
-    await this.page.getByRole('button', { name: buttonName }).click();
-    await this.page.waitForLoadState('networkidle');
-  }
-
-  /**
-   * Navigate to Items tab (within Inventory module - default tab)
-   */
-  async goToItemsTab() {
-    // Items tab is usually the default, but click if needed
-    const itemsTab = this.page.getByRole('button', { name: /Items/ });
-    if (await itemsTab.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await itemsTab.click();
-      await this.page.waitForLoadState('networkidle');
-    }
-  }
-
-  /**
-   * Navigate to Currency tab (within Inventory module)
-   * @param count - Expected count to display (e.g., "Currency (2)")
-   */
-  async goToCurrencyTab(count?: number) {
-    const buttonName = count !== undefined ? `Currency (${count})` : /Currency \(\d+\)/;
-    await this.page.getByRole('button', { name: buttonName }).click();
-    await this.page.waitForTimeout(500);
-  }
-
-  /**
-   * Add a new ability (requires "Add Ability" button to be visible)
-   * @param name - Ability name
-   * @param description - Ability description
-   */
-  async addAbility(name: string, description: string) {
-    await this.page.getByRole('button', { name: 'Add Ability' }).click();
+  async addSkill(name: string, description: string) {
+    await this.page.getByRole('button', { name: 'Add Skill' }).click();
     await this.page.waitForTimeout(500);
 
-    // Fill in ability form - use label-based selectors for reliability
-    await this.page.getByRole('textbox', { name: 'Ability Name *' }).fill(name);
+    await this.page.getByRole('textbox', { name: 'Skill Name *' }).fill(name);
     await this.page.getByRole('textbox', { name: 'Description' }).fill(description);
 
-    // Save the ability
-    const saveButton = this.page.getByRole('button', { name: 'Add Ability' }).nth(1); // Second "Add Ability" button is the submit button
-    await saveButton.click();
+    // The second "Add Skill" button is the form's submit; the first opened the modal.
+    await this.page.getByRole('button', { name: 'Add Skill' }).nth(1).click();
     await this.page.waitForLoadState('networkidle');
   }
 
   /**
-   * Check if "Add Ability" button is visible (GM/owner permission check)
-   */
-  async canAddAbility(): Promise<boolean> {
-    try {
-      await this.page.getByRole('button', { name: 'Add Ability' }).waitFor({ state: 'visible', timeout: 2000 });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Check if "Add Skill" button is visible (GM/owner permission check)
+   * Check if the "Add Skill" button is visible (GM/owner permission check).
    */
   async canAddSkill(): Promise<boolean> {
     try {
@@ -332,7 +310,7 @@ export class CharacterSheetPage {
   }
 
   /**
-   * Check if "Add Item" button is visible (GM/owner permission check)
+   * Check if the "Add Item" button is visible (GM/owner permission check).
    */
   async canAddItem(): Promise<boolean> {
     try {
@@ -344,11 +322,16 @@ export class CharacterSheetPage {
   }
 
   /**
-   * Check if "Add Currency" button is visible (GM/owner permission check)
+   * Check if the Numbers tab's add button is visible (GM/owner permission check).
+   *
+   * Replaces canAddCurrency. The button is labelled "Add {label}", following the
+   * game's name for the tab, so the label has to be passed when renamed.
+   *
+   * @param label - The game's label for this tab, when renamed.
    */
-  async canAddCurrency(): Promise<boolean> {
+  async canAddNumber(label = 'Numbers'): Promise<boolean> {
     try {
-      await this.page.getByRole('button', { name: 'Add Currency' }).waitFor({ state: 'visible', timeout: 2000 });
+      await this.page.getByRole('button', { name: `Add ${label}` }).waitFor({ state: 'visible', timeout: 2000 });
       return true;
     } catch {
       return false;
@@ -356,19 +339,25 @@ export class CharacterSheetPage {
   }
 
   /**
-   * Check if a specific module button is visible
-   * Used to verify permission boundaries (e.g., players shouldn't see Inventory)
-   * Works with both mobile dropdown and desktop tabs
+   * Check if a specific tab is visible.
+   * Used to verify permission boundaries (e.g. players shouldn't see Inventory).
+   * Works with both the mobile dropdown and the desktop tab strip.
    */
-  async isModuleVisible(moduleName: 'Public Profile' | 'Private Notes' | 'Abilities & Skills' | 'Inventory'): Promise<boolean> {
-    // Map display name to module ID
+  async isModuleVisible(
+    moduleName: 'Public Profile' | 'Private Notes' | 'Skills' | 'Inventory' | 'Numbers' | (string & {}),
+    tabId?: string,
+  ): Promise<boolean> {
+    // Map default label to storage id. Stat tabs are GM-renameable, so a game
+    // using its own wording must pass tabId explicitly — the default labels are
+    // only a convenience for games that never renamed anything.
     const moduleIdMap: Record<string, string> = {
       'Public Profile': 'bio',
       'Private Notes': 'notes',
-      'Abilities & Skills': 'abilities',
-      'Inventory': 'inventory'
+      'Skills': 'skills',
+      'Inventory': 'inventory',
+      'Numbers': 'numbers'
     };
-    const moduleId = moduleIdMap[moduleName];
+    const moduleId = tabId ?? moduleIdMap[moduleName];
 
     // Check mobile dropdown (scoped to character sheet module tabs to avoid matching game-level select)
     // Use isVisible() not count() — the select exists in DOM on desktop too but is hidden via md:hidden

@@ -13,7 +13,6 @@ const mockItem: InventoryItem = {
   category: 'Weapon',
   value: 100,
   weight: 5,
-  equipped: false,
   condition: 'Good',
 };
 
@@ -98,25 +97,15 @@ describe('ItemCard', () => {
     });
   });
 
-  describe('Equipped Status', () => {
-    it('shows equipped badge when item is equipped', () => {
-      const equippedItem = { ...mockItem, equipped: true };
+  describe('Equipped Status (retired)', () => {
+    // The badge was removed in the Phase 5 field pass: nothing could ever set
+    // the flag true, so it never rendered in practice. Old rows still carry the
+    // key, and they must not resurrect it.
+    it('renders no equipped badge for a legacy row that still carries the key', () => {
+      const legacyEquippedItem = { ...mockItem, equipped: true } as InventoryItem;
       render(
         <ItemCard
-          item={equippedItem}
-          canEdit={false}
-          onUpdate={vi.fn()}
-          onRemove={vi.fn()}
-        />
-      );
-
-      expect(screen.getByText('Equipped')).toBeInTheDocument();
-    });
-
-    it('hides equipped badge when item is not equipped', () => {
-      render(
-        <ItemCard
-          item={mockItem}
+          item={legacyEquippedItem}
           canEdit={false}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}

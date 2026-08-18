@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { CharacterSkill } from '../types/characters';
+import { skillRank } from '../types/characters';
 import { Button, Badge } from './ui';
 import { MarkdownPreview } from './MarkdownPreview';
 import { SkillForm, type SkillFormData } from './character-updates/SkillForm';
@@ -16,13 +17,20 @@ interface SkillCardProps {
 export const SkillCard: React.FC<SkillCardProps> = ({ skill, canEdit, onUpdate, onRemove, onDirtyChange }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const rank = skillRank(skill);
 
   const handleSave = (data: SkillFormData) => {
     onUpdate({
       name: data.name,
-      level: data.level?.toString() || undefined,
+      rank: data.rank || undefined,
       description: data.description,
       category: data.category,
+      // Clear the legacy key so an edited row stops carrying both spellings of
+      // its rank. The parent merges updates onto the existing entry, so without
+      // this an edited legacy row keeps a stale `level` that disagrees with the
+      // `rank` now being displayed. Rows nobody edits keep `level` and read
+      // through the fallback, which is why this is not a migration.
+      level: undefined,
     });
     setIsEditing(false);
   };
@@ -33,7 +41,7 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, canEdit, onUpdate, 
         <SkillForm
           initialValues={{
             name: skill.name,
-            level: skill.level,
+            rank: skillRank(skill),
             description: skill.description,
             category: skill.category,
           }}
@@ -52,8 +60,8 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, canEdit, onUpdate, 
       <div className="flex justify-between items-start mb-3">
         <div className="flex-1">
           <h4 className="text-base font-semibold text-content-primary mb-1">{skill.name}</h4>
-          {skill.level && (
-            <span className="text-sm text-interactive-primary font-medium">Level: {skill.level}</span>
+          {rank && (
+            <span className="text-sm text-interactive-primary font-medium">Rank: {rank}</span>
           )}
         </div>
 

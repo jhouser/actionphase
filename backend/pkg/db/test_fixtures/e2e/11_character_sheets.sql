@@ -67,17 +67,17 @@ BEGIN
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char1_id, 'skills', 'skills',
-     '[{"id":"skill-1","name":"Archery","level":"Expert","description":"Master archer","category":"Combat"},{"id":"skill-2","name":"Tracking","level":"Proficient","description":"Can track creatures","category":"Survival"},{"id":"skill-3","name":"Keen Eye","level":"Proficient","description":"Can spot hidden details","category":"Perception"},{"id":"skill-4","name":"Quick Draw","level":"Proficient","description":"Fast weapon draw","category":"Combat"}]',
+     '[{"id":"skill-1","name":"Archery","rank":"Expert","description":"Master archer","category":"Combat"},{"id":"skill-2","name":"Tracking","rank":"Proficient","description":"Can track creatures","category":"Survival"},{"id":"skill-3","name":"Keen Eye","rank":"Proficient","description":"Can spot hidden details","category":"Perception"},{"id":"skill-4","name":"Quick Draw","rank":"Proficient","description":"Fast weapon draw","category":"Combat"}]',
      'json', true, NOW(), NOW());
 
   -- Character 1: Inventory data (2 items) and numbers
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char1_id, 'inventory', 'items',
-     '[{"id":"item-1","name":"Longbow","quantity":1,"description":"Masterwork longbow","category":"Weapon","equipped":true},{"id":"item-2","name":"Arrows","quantity":20,"description":"Steel-tipped arrows","category":"Ammunition","equipped":false}]',
+     '[{"id":"item-1","name":"Longbow","quantity":1,"description":"Masterwork longbow","category":"Weapon"},{"id":"item-2","name":"Arrows","quantity":20,"description":"Steel-tipped arrows","category":"Ammunition"}]',
      'json', true, NOW(), NOW()),
     (char1_id, 'numbers', 'numbers',
-     '[{"id":"number-1","type":"Gold","amount":50},{"id":"number-2","type":"Silver","amount":25}]',
+     '[{"id":"number-1","name":"Gold","amount":50},{"id":"number-2","name":"Stress","amount":4,"max":9,"display":"boxes"}]',
      'json', false, NOW(), NOW());
 
   -- ============================================
@@ -93,20 +93,23 @@ BEGIN
     (char2_id, 'bio', 'background', 'A mysterious mage in dark robes. Scholarly and reserved.', 'text', true, NOW(), NOW());
 
   -- Character 2: Skills data (4 skills)
+  -- skill-8 deliberately still uses the pre-rename `level` key: the rename has
+  -- no migration (the key is inside a JSON blob and is resolved on read), so
+  -- one unmigrated row keeps that fallback exercised against real data.
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char2_id, 'skills', 'skills',
-     '[{"id":"skill-5","name":"Arcana","level":"Expert","description":"Knowledge of magical theory","category":"Academic"},{"id":"skill-6","name":"Fireball","level":"Expert","description":"Launches a ball of fire","category":"Evocation"},{"id":"skill-7","name":"Shield","level":"Proficient","description":"Creates magical barrier","category":"Abjuration"},{"id":"skill-8","name":"Arcane Knowledge","level":"Expert","description":"Deep understanding of magic","category":"Academic"}]',
+     '[{"id":"skill-5","name":"Arcana","rank":"Expert","description":"Knowledge of magical theory","category":"Academic"},{"id":"skill-6","name":"Fireball","rank":"Expert","description":"Launches a ball of fire","category":"Evocation"},{"id":"skill-7","name":"Shield","rank":"Proficient","description":"Creates magical barrier","category":"Abjuration"},{"id":"skill-8","name":"Arcane Knowledge","level":"Expert","description":"Deep understanding of magic","category":"Academic"}]',
      'json', true, NOW(), NOW());
 
   -- Character 2: Inventory data (different items)
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char2_id, 'inventory', 'items',
-     '[{"id":"item-3","name":"Spellbook","quantity":1,"description":"Personal grimoire","category":"Arcane","equipped":true},{"id":"item-4","name":"Spell Components","quantity":10,"description":"Various magical reagents","category":"Consumable","equipped":false}]',
+     '[{"id":"item-3","name":"Spellbook","quantity":1,"description":"Personal grimoire","category":"Arcane"},{"id":"item-4","name":"Spell Components","quantity":10,"description":"Various magical reagents","category":"Consumable"}]',
      'json', true, NOW(), NOW()),
     (char2_id, 'numbers', 'numbers',
-     '[{"id":"number-3","type":"Gold","amount":100},{"id":"number-4","type":"Platinum","amount":5}]',
+     '[{"id":"number-3","name":"Gold","amount":100},{"id":"number-4","name":"Platinum","amount":5}]',
      'json', false, NOW(), NOW());
 
   -- ============================================

@@ -98,3 +98,44 @@ describe('ItemsManager - Data Corruption Handling', () => {
     expect(screen.getByRole('heading', { name: 'Load' })).toBeInTheDocument();
   });
 });
+
+// `weight` and `value` are optional and no game in play sets them, so the summary
+// used to render "Total Weight: 0.0 • Total Value: 0" under every inventory —
+// a made-up number presented as a fact about the character.
+describe('ItemsManager - weight/value summary', () => {
+  it('hides the summary when no item sets weight or value', () => {
+    renderItems({
+      items: [
+        { id: 'i1', name: 'Sword', quantity: 1 },
+        { id: 'i2', name: 'Potion', quantity: 3 },
+      ],
+    });
+
+    expect(screen.queryByText(/Total Weight/)).not.toBeInTheDocument();
+  });
+
+  it('shows the summary when at least one item sets weight', () => {
+    renderItems({
+      items: [
+        { id: 'i1', name: 'Sword', quantity: 2, weight: 3 },
+        { id: 'i2', name: 'Potion', quantity: 3 },
+      ],
+    });
+
+    expect(screen.getByText(/Total Weight: 6\.0/)).toBeInTheDocument();
+  });
+
+  // A zero is a real opt-in, not an absent field: a weightless item in a game
+  // that tracks weight should still get a summary.
+  it('shows the summary when an item sets weight to zero', () => {
+    renderItems({ items: [{ id: 'i1', name: 'Feather', quantity: 1, weight: 0 }] });
+
+    expect(screen.getByText(/Total Weight: 0\.0/)).toBeInTheDocument();
+  });
+
+  it('shows the summary when only value is set', () => {
+    renderItems({ items: [{ id: 'i1', name: 'Gem', quantity: 2, value: 50 }] });
+
+    expect(screen.getByText(/Total Value: 100/)).toBeInTheDocument();
+  });
+});

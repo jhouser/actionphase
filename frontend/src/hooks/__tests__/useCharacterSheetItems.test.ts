@@ -55,7 +55,7 @@ describe('useCharacterSheetItems', () => {
           module_type: 'skills',
           field_name: 'skills',
           field_value: JSON.stringify([
-            { id: 'sk-1', name: 'Stealth', level: 3, category: 'Combat' },
+            { id: 'sk-1', name: 'Stealth', rank: 'Expert', category: 'Combat' },
           ]),
         }),
       ],
@@ -71,7 +71,35 @@ describe('useCharacterSheetItems', () => {
       id: 'sk-1',
       name: 'Stealth',
       type: 'skill',
-      metadata: 'Combat · Level 3',
+      metadata: 'Combat · Rank Expert',
+    });
+  });
+
+  // Rows written before the level -> rank rename are never migrated: the key
+  // lives inside a JSON blob and is resolved on read instead. A numeric value
+  // has to survive that path, since `level` was typed `number | string`.
+  it('falls back to the legacy numeric level for unmigrated skill rows', async () => {
+    vi.mocked(apiClient.characters.getCharacterData).mockResolvedValue({
+      data: [
+        makeDataRow({
+          module_type: 'skills',
+          field_name: 'skills',
+          field_value: JSON.stringify([
+            { id: 'sk-1', name: 'Stealth', level: 3, category: 'Combat' },
+          ]),
+        }),
+      ],
+    } as never);
+
+    const { result } = renderHook(() => useCharacterSheetItems(42), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current).toHaveLength(1));
+
+    expect(result.current[0]).toMatchObject({
+      name: 'Stealth',
+      metadata: 'Combat · Rank 3',
     });
   });
 

@@ -28,7 +28,6 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ onAdd, onAddRandom, 
       category: data.category,
       value: data.value,
       weight: data.weight,
-      equipped: false
     });
   };
 
