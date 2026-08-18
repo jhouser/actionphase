@@ -15,7 +15,7 @@ import { useUpdatePost } from '../hooks';
 import { Button, Select } from './ui';
 import { logger } from '@/services/LoggingService';
 import { buildCommentTree, pruneDeletedLeaves, type CommentTreeNode } from '../lib/utils/commentTree';
-import { COMMENT_MAX_DEPTH } from '@/config/comments';
+import { COMMENT_MAX_DEPTH, COMMENT_FETCH_MAX_DEPTH } from '@/config/comments';
 import { usePostCollapseState } from '../hooks/usePostCollapseState';
 import { useInfiniteScrollSentinel } from '../hooks/useInfiniteScrollSentinel';
 import { useOptionalGameContext } from '../contexts/GameContext';
@@ -202,7 +202,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
           post.id,
           THREADS_PER_PAGE,
           0,
-          5 // max_depth
+          COMMENT_FETCH_MAX_DEPTH
         );
         const tree = pruneDeletedLeaves(buildCommentTree(response.data.comments));
         setCommentTree(tree);
@@ -266,7 +266,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
           post.id,
           windowSize,
           0,
-          5 // max_depth
+          COMMENT_FETCH_MAX_DEPTH
         );
       } while (windowSize < Math.min(Math.max(offsetRef.current, THREADS_PER_PAGE), 500));
       // A newer refresh started while this one was in flight — let it win.
@@ -293,7 +293,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
         post.id,
         THREADS_PER_PAGE,
         offsetRef.current,
-        5 // max_depth
+        COMMENT_FETCH_MAX_DEPTH
       );
       const newTree = pruneDeletedLeaves(buildCommentTree(response.data.comments));
       setCommentTree(prev => {

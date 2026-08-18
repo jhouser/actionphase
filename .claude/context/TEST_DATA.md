@@ -173,6 +173,39 @@ just test-data reload
 - **1 draft result** (GM hasn't published yet)
 - Demonstrates storytelling and cliffhangers
 
+### Staged Result Chains (`demo/06b_staged_results.sql`)
+
+A staged chain is one result split into parts revealed on a timer.
+
+- **Game #3** — a *pending* chain (part 1 released, part 2 due minutes after
+  load, part 3 with no knowable unlock time) and a *fully released* chain
+- **Game #9** (completed) — an archive chain: released head and tail, plus one
+  part still pending, which is what the export gate is verified against
+
+#### 🔴 Two rules when writing `action_results` fixtures
+
+**1. A published row MUST set `released_at`.** `GetUserResults` blanks the
+content of any row where `released_at IS NULL`, so a published fixture row
+without it reaches the player as an **empty string** — the result renders blank
+with no error anywhere. `CreateActionResult` sets `released_at` and `sent_at`
+together; fixtures must too. (Every published fixture result was silently
+invisible this way until Aug 2026.)
+
+The *only* legitimate published-with-NULL-`released_at` rows are staged parts
+awaiting their timer; those also carry `parent_result_id` and
+`reveal_delay_minutes`.
+
+**2. A pending staged part cannot be backdated.** The release worker owns a
+chain's clock independently of game state — `ReleaseDueStagedParts` deliberately
+does not join `games` or `game_phases` — so a part whose parent released in the
+past is overdue and fires on the next tick, even in a completed game. To keep a
+part genuinely pending, anchor its **parent's** `released_at` to `NOW()` and give
+the part a long `reveal_delay_minutes`.
+
+The head and follow-up parts come from different queries with different column
+lists (`CreateActionResult` vs `CreateStagedResultPart`); fixtures must mirror
+both. See the header comments in `demo/06b_staged_results.sql`.
+
 ## Edge Cases Covered
 
 ### ✅ Complete Coverage

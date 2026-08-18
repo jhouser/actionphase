@@ -89,3 +89,21 @@ export function parentContextForDepth(maxDepth: number): number {
 export function parentContextForViewport(isMobile: boolean): number {
   return parentContextForDepth(isMobile ? COMMENT_MAX_DEPTH_MOBILE : COMMENT_MAX_DEPTH);
 }
+
+/**
+ * Depth to request from the API.
+ *
+ * Desktop and mobile are NOT separate fetches — ThreadedComment renders both
+ * subtrees from the same fetched tree and hides one with Tailwind `md:` classes
+ * (there is no JS viewport check). So the fetch must cover whichever limit is
+ * deeper, or the larger viewport renders "Continue thread" for replies that were
+ * never fetched.
+ *
+ * Normally desktop >= mobile, but this does not assume that: the two values are
+ * independently configurable via env vars and nothing validates their relative
+ * order.
+ */
+export const COMMENT_FETCH_MAX_DEPTH = Math.max(
+  COMMENT_MAX_DEPTH,
+  COMMENT_MAX_DEPTH_MOBILE
+);

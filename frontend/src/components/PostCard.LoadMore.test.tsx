@@ -9,6 +9,7 @@ import { ToastProvider } from '../contexts/ToastContext';
 import { stubIntersectionObserver } from '../test-utils/mockIntersectionObserver';
 import type { Message, CommentWithDepth, PaginatedCommentsResponse } from '@/types/messages';
 import type { Character } from '@/types/characters';
+import { COMMENT_FETCH_MAX_DEPTH } from '@/config/comments';
 
 // Mock the API client
 vi.mock('../lib/api', () => ({
@@ -304,7 +305,7 @@ describe('PostCard - Load More Comments', () => {
         1, // postId
         THREADS_PER_PAGE, // limit
         THREADS_PER_PAGE, // offset (one page in for the second page)
-        5 // maxDepth
+        COMMENT_FETCH_MAX_DEPTH // maxDepth — must come from config, not a literal
       );
     });
 
@@ -547,7 +548,7 @@ describe('PostCard - Load More Comments', () => {
     await waitFor(() => {
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenCalledTimes(2);
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenLastCalledWith(
-        1, 1, THREADS_PER_PAGE, THREADS_PER_PAGE, 5
+        1, 1, THREADS_PER_PAGE, THREADS_PER_PAGE, COMMENT_FETCH_MAX_DEPTH
       );
     });
 
@@ -666,7 +667,7 @@ describe('PostCard - Load More Comments', () => {
     await waitFor(() => {
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenCalledTimes(3);
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenLastCalledWith(
-        1, 1, THREADS_PER_PAGE * 2, 0, 5
+        1, 1, THREADS_PER_PAGE * 2, 0, COMMENT_FETCH_MAX_DEPTH
       );
     });
 
@@ -716,7 +717,7 @@ describe('PostCard - Load More Comments', () => {
     // The refresh asked for the pre-load-more window
     await waitFor(() => expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenCalledTimes(3));
     expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenNthCalledWith(
-      3, 1, 1, THREADS_PER_PAGE, 0, 5
+      3, 1, 1, THREADS_PER_PAGE, 0, COMMENT_FETCH_MAX_DEPTH
     );
 
     // Load-more lands first: threads 6-10 appear, window is now 10
@@ -732,7 +733,7 @@ describe('PostCard - Load More Comments', () => {
     await waitFor(() => {
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenCalledTimes(4);
       expect(apiClient.messages.getPostCommentsWithThreads).toHaveBeenLastCalledWith(
-        1, 1, THREADS_PER_PAGE * 2, 0, 5
+        1, 1, THREADS_PER_PAGE * 2, 0, COMMENT_FETCH_MAX_DEPTH
       );
     });
 

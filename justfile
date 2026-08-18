@@ -10,6 +10,8 @@
 # For detailed help on any command with subcommands, run:
 #   just <command> help
 
+set windows-shell := ["pwsh.exe", "-c"]
+
 # Show available commands
 help:
   @just --list
@@ -38,6 +40,29 @@ DEV_COMPOSE := "docker compose -f docker-compose.dev.yml"
 
 # Start the full dev stack (db + backend + frontend). Add 'build' to force a rebuild.
 up build="":
+  @just _up-{{os_family()}} {{build}}
+
+_up-windows build="":
+  #!pwsh.exe
+  if ("{{build}}" -eq "build") {
+    Write-Host "Building"
+    {{DEV_COMPOSE}} up -d --build
+  }
+  else {
+    Write-Host "Running"
+    {{DEV_COMPOSE}} up -d
+  }
+  Write-Host "
+    🚀 Dev stack up:
+      Frontend (Vite):  http://localhost:5173
+      Backend  (API):   http://localhost:3000
+      Delve debugger:   localhost:2345  (attach from IDE)
+      Postgres:         localhost:5432
+
+      Logs:    just dev-logs [backend|frontend|db]
+      Shell:   just sh backend   (run go/npm commands in-container)"
+
+_up-unix build="":
   #!/usr/bin/env bash
   if [ "{{build}}" = "build" ]; then
     {{DEV_COMPOSE}} up -d --build
@@ -85,6 +110,20 @@ dev-logs service="":
 # Restart dev service(s) for config changes or a wedged container (code hot-reloads).
 # Pass a service name (backend|frontend|db) or 'all' to restart the whole stack.
 restart service="backend":
+  @just _restart-{{os_family()}} {{service}}
+  
+_restart-windows service="backend":
+  #!pwsh.exe
+  if ( "{{service}}" -eq "all" ) {
+    {{DEV_COMPOSE}} restart
+    Write-Host "✅ Restarted all services"
+  }
+  else {
+    {{DEV_COMPOSE}} restart {{service}}
+    Write-Host "✅ Restarted {{service}}"
+  }
+  
+_restart-unix service="backend":
   #!/usr/bin/env bash
   if [ "{{service}}" = "all" ]; then
     {{DEV_COMPOSE}} restart
@@ -105,6 +144,30 @@ ps:
 
 # Print the containerized-dev workflow cheatsheet.
 dev-help:
+  @just _dev-help-{{os_family()}}
+
+_dev-help-windows:
+  #!pwsh.exe
+  Write-Host "Containerized dev workflow (no host Go/Node required)
+  ─────────────────────────────────────────────────────
+    just up [build]     Start db + backend + frontend (build to rebuild images)
+    just down           Stop the stack (data preserved in volumes)
+    just ps             Container status
+    just dev-logs [svc] Tail logs (backend|frontend|db; blank = all)
+    just restart [svc]  Restart a service (backend|frontend|db|all)
+    just rebuild [svc]  Rebuild image(s) from scratch after Dockerfile changes
+    just sh [svc]       Shell into a container (backend|frontend|db)
+
+  URLs
+    Frontend  http://localhost:5173   (Vite HMR; proxies /api -> backend)
+    Backend   http://localhost:3000   (Air rebuilds on save)
+    Delve     localhost:2345          (attach IDE debugger — see docs)
+    Postgres  localhost:5432
+
+  Hot reload is automatic: edit a .go or frontend file on the host and the
+  running container picks it up. No manual restart needed for code changes."
+
+_dev-help-unix:
   #!/usr/bin/env bash
   cat <<'EOF'
   Containerized dev workflow (no host Go/Node required)
@@ -133,6 +196,44 @@ dev-help:
 
 # Database operations on the dev stack: up, down, reset, create, setup
 db action="help":
+  @just _db-{{os_family()}} {{action}}
+
+_db-windows action="help":
+  #!pwsh.exe
+  switch ("{{action}}") {
+    "up" { {{DEV_COMPOSE}} up -d db }
+    "down" { {{DEV_COMPOSE}} stop db }
+    "reset" { 
+      {{DEV_COMPOSE}} rm -sf db
+      docker volume rm actionphase-dev_pgdata 2>/dev/null || true
+      {{DEV_COMPOSE}} up -d db
+      Write-Host "✅ Database reset (fresh volume). Run 'just migrate' to apply schema."
+    }
+    "create" {
+      # The 'actionphase' db is created by the container (POSTGRES_DB). This
+      # just adds the test database. Runs psql inside the backend container.
+      Write-Host "Creating actionphase_test database (actionphase is auto-created)..."
+      {{DEV_COMPOSE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -c "CREATE DATABASE actionphase_test;"' 2>/dev/null || echo "  (actionphase_test already exists)"
+      Write-Host "✅ Databases ready"
+    }
+    "setup" {
+      just db up
+      just db create
+      Write-Host "Database setup complete! Migrations auto-run on backend startup."
+    }
+    default {
+      Write-Host "Usage: just db [action]
+      
+      Actions:
+        up        Start database container
+        down      Stop database container
+        reset     Reset database (wipe volume + recreate)
+        create    Create the test database (dev db is auto-created)
+        setup     Full database setup (up + create)"
+    }
+  }
+
+_db-unix action="help":
   #!/usr/bin/env bash
   DC='docker compose -f docker-compose.dev.yml'
   case "{{action}}" in
@@ -153,7 +254,7 @@ db action="help":
       # The 'actionphase' db is created by the container (POSTGRES_DB). This
       # just adds the test database. Runs psql inside the backend container.
       echo "Creating actionphase_test database (actionphase is auto-created)..."
-      {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -c "CREATE DATABASE actionphase_test;"' 2>/dev/null \
+      $DC exec -T backend sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -c "CREATE DATABASE actionphase_test;"' 2>/dev/null \
         || echo "  (actionphase_test already exists)"
       echo "✅ Databases ready"
       ;;
@@ -196,6 +297,35 @@ TEST_ENV := "ENVIRONMENT=test TEST_DATABASE_URL=\"" + TEST_DB_URL + "\" TEST_TEM
 
 # Migration operations: create, status, rollback, test (runs in backend container)
 migration action="" name="":
+  @just _migration-{{os_family()}} {{action}} {{name}}
+
+_migration-windows action="" name="":
+  #!pwsh.exe
+  switch ("{{action}}") {
+    "create" { 
+      if (-Not "{{name}}") {
+        Write-Host "❌ Migration name required
+        Usage: just migration create <name>"
+        Return
+      }
+      {{BE}} migrate create -ext sql -dir pkg/db/migrations {{name}}
+    }
+    "status" { {{BE}} migrate -source file://pkg/db/migrations -database "{{DEV_DB_URL}}" version }
+    "rollback" { {{BE}} migrate -source file://pkg/db/migrations -database "{{DEV_DB_URL}}" down }
+    "test" { {{BE}} migrate -source file://pkg/db/migrations -database "{{TEST_DB_URL}}" up }
+    default {
+      Write-Host "Usage: just migration [action]
+      
+      Actions:
+        create <name>    Create new migration
+        status           Show migration status
+        rollback         Rollback last migration
+        test             Apply migrations to test database"
+    }
+
+  }
+
+_migration-unix action="" name="":
   #!/usr/bin/env bash
   case "{{action}}" in
     create)
@@ -233,14 +363,13 @@ migrate:
 # Drop and recreate the test database from scratch, then apply all migrations.
 # Use when the test DB gets into a dirty/broken migration state.
 reset-test-db:
-  #!/usr/bin/env bash
-  echo "Dropping test database..."
+  @echo "Dropping test database..."
   {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -c "DROP DATABASE IF EXISTS actionphase_test;"'
-  echo "Creating test database..."
+  @echo "Creating test database..."
   {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -c "CREATE DATABASE actionphase_test;"'
-  echo "Applying migrations..."
+  @echo "Applying migrations..."
   just migration test
-  echo "✅ Test database reset complete"
+  @echo "✅ Test database reset complete"
 
 # Name of the migrated template DB that per-package test databases are cloned from.
 TEST_TEMPLATE_DB := "actionphase_test_template"
@@ -250,7 +379,7 @@ TEST_TEMPLATE_URL := "postgres://postgres:example@db:5432/" + TEST_TEMPLATE_DB +
 # Each test binary (package) clones this template into its own database at runtime
 # (see NewTestDatabase), so packages never share rows/sequences and can run in
 # parallel. Run before a test suite; cheap because migrations are fast.
-_prepare-test-template:
+_prepare-test-template-unix:
   #!/usr/bin/env bash
   set -euo pipefail
   # Drop any leftover per-package clones from previous (possibly interrupted) runs,
@@ -267,6 +396,21 @@ _prepare-test-template:
   {{BE}} migrate -source file://pkg/db/migrations -database "{{TEST_TEMPLATE_URL}}" up
   echo "✅ Test template ready ({{TEST_TEMPLATE_DB}})"
 
+_prepare-test-template-windows:
+  #!pwsh.exe
+  & {
+    $ErrorActionPreference = 'Stop'
+    $PSNativeCommandUseErrorActionPreference = $true
+    $sql = "SELECT format('DROP DATABASE IF EXISTS %I WITH (FORCE)', datname)
+    FROM pg_database WHERE datname LIKE 'actionphase_test_p%'
+    \gexec
+    DROP DATABASE IF EXISTS {{TEST_TEMPLATE_DB}} WITH (FORCE);
+    CREATE DATABASE {{TEST_TEMPLATE_DB}};"
+    $sql | {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d postgres -q -v ON_ERROR_STOP=1'
+    {{BE}} migrate -source file://pkg/db/migrations -database "{{TEST_TEMPLATE_URL}}" up
+    Write-Host "✅ Test template ready ({{TEST_TEMPLATE_DB}})"
+  }
+
 # ═══════════════════════════════════════════════════════════════════════════
 # TEST DATA COMMANDS
 # ═══════════════════════════════════════════════════════════════════════════
@@ -282,6 +426,38 @@ test-fixtures:
 
 # Reset and reload test data
 test-data action="reload":
+  @just _test-data-{{os_family()}} {{action}}
+
+_test-data-windows action="reload":
+  #!pwsh.exe
+  switch ("{{action}}") {
+    "reset" {
+      Write-Host "Resetting test data..."
+      {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d actionphase -f pkg/db/test_fixtures/00_reset.sql'
+      Write-Host "✅ Test data reset complete"
+    }
+    "reload" {
+      Write-Host "Resetting test data..."
+      {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d actionphase -f pkg/db/test_fixtures/00_reset.sql'
+      Write-Host "Applying test data fixtures..."
+      {{BE}} env DB_HOST=db bash pkg/db/test_fixtures/apply_all.sh
+      Write-Host "🎉 Test data reloaded!
+      
+      Test Accounts Available:
+        GM: test_gm@example.com / testpassword123
+        Players: test_player1@example.com through test_player5@example.com / testpassword123
+        Audience: test_audience@example.com / testpassword123"
+    }
+    default {
+      Write-Host "Usage: just test-data [action]
+      
+      Actions:
+        reset     Reset test data only
+        reload    Full reset and reload (default)"
+    }
+  }
+
+_test-data-unix action="reload":
   #!/usr/bin/env bash
   case "{{action}}" in
     reset)
@@ -324,6 +500,27 @@ load-demo:
 
 # Load E2E test fixtures (worker-specific for parallel execution)
 load-e2e:
+  @just _load-e2e-{{os_family()}}
+
+_load-e2e-windows:
+  #!pwsh.exe
+  & {
+    $ErrorActionPreference = 'Stop'
+    $PSNativeCommandUseErrorActionPreference = $true
+    Write-Host "🤖 Loading E2E test fixtures for parallel execution (6 workers)..."
+    Write-Host "📦 Applying common fixtures..."
+    {{BE}} env DB_HOST=db DB_NAME=actionphase bash pkg/db/test_fixtures/apply_common.sh
+    Write-Host "👥 Creating E2E parallel worker users..."
+    {{BE}} env DB_HOST=db DB_NAME=actionphase bash pkg/db/test_fixtures/apply_e2e_users.sh
+    Write-Host "🔧 Applying worker-specific fixtures..."
+    for ($i=0; $i -lt 6; $i++) {
+      Write-Host "  Worker $i..."
+      {{BE}} env DB_HOST=db DB_NAME=actionphase bash pkg/db/test_fixtures/apply_e2e_worker.sh $i
+    }
+    Write-Host "✅ E2E fixtures loaded for 6 parallel workers (isolated test games)"
+  }
+
+_load-e2e-unix:
   #!/usr/bin/env bash
   set -euo pipefail
   echo "🤖 Loading E2E test fixtures for parallel execution (6 workers)..."
@@ -340,12 +537,10 @@ load-e2e:
 
 # Load all data (dev only) - same as test-fixtures but with new structure
 load-all:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  echo "⚠️  Loading ALL data (demo + E2E)..."
+  @echo "⚠️  Loading ALL data (demo + E2E)..."
   just load-demo
   just load-e2e
-  echo "✅ All data loaded (not recommended for staging)"
+  @echo "✅ All data loaded (not recommended for staging)"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CODE GENERATION
@@ -370,6 +565,22 @@ fmt:
 
 # Run Go vet
 vet:
+  @just _vet-{{os_family()}}
+
+_vet-windows:
+  #!pwsh.exe
+  $packages = ({{BE}} sh -c "go list ./... | grep -v '/pkg/docs/dist' | tr '\n' ' '").trim().split(' ')
+  if ($packages) {
+    foreach ($p in $packages) {
+      Write-Host "Vetting package $p"
+      {{BE}} go vet $p
+    }
+  }
+  else {
+    Write-Host "No packages to vet"
+  }
+
+_vet-unix:
   #!/usr/bin/env bash
   # Exclude pkg/docs/dist (embedded frontend assets)
   packages=$({{BE}} go list ./... | grep -v '/pkg/docs/dist' | tr '\n' ' ')
@@ -379,12 +590,22 @@ vet:
     echo "No packages to vet"
   fi
 
+
 # Run backend linters (fmt + vet)
 lint: fmt vet
   @echo "Go linting complete"
 
 # Find unreachable/dead code in backend (excludes test helpers and mocks)
 dead-code:
+  @just _dead-code-{{os_family()}}
+
+_dead-code-windows:
+  #!pwsh.exe
+  $out = {{BE}} sh -c "deadcode ./... 2>&1 | grep -v ""pkg/core/test_\|pkg/core/mocks\|pkg/core/repository_mocks\|pkg/db/services/test_suite\|pkg/http/test_helpers\|pkg/core/test_best_practices"" || true"
+  if ($out) {
+    Write-Host $out
+  }
+_dead-code-unix:
   #!/usr/bin/env bash
   output=$({{BE}} deadcode ./... 2>&1 | grep -v \
     "pkg/core/test_\|pkg/core/mocks\|pkg/core/repository_mocks\|pkg/db/services/test_suite\|pkg/http/test_helpers\|pkg/core/test_best_practices" || true)
@@ -415,21 +636,40 @@ verify:
 
 # Complete first-time dev setup: create .env, then build images + start the container stack.
 dev-setup:
+  @echo "Setting up containerized development environment..."
+  @just _setup-env-{{os_family()}}
+  @echo "Building images and starting the stack..."
+  @just up build
+  @echo ""
+  @echo "🎉 Dev environment ready. Migrations auto-run on backend startup."
+  @echo "   Load test data with: just test-data reload"
+
+_setup-env-windows:
+  #!pwsh.exe
+  if (!(Test-Path ".env")) {
+    cp .env.example .env
+  }
+_setup-env-unix:
   #!/usr/bin/env bash
-  echo "Setting up containerized development environment..."
   if [ ! -f .env ]; then cp .env.example .env; echo "✓ Created .env from .env.example"; fi
-  echo "Building images and starting the stack..."
-  just up build
-  echo ""
-  echo "🎉 Dev environment ready. Migrations auto-run on backend startup."
-  echo "   Load test data with: just test-data reload"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # BACKEND TESTING
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Helper function to clean test database
-_clean_test_db:
+_clean_test_db-windows:
+  #!pwsh.exe
+  Write-Host "🧹 Cleaning actionphase_test database for integration tests..."
+  $sql = "DO \$\$DECLARE r RECORD;
+  BEGIN
+      FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+          EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' RESTART IDENTITY CASCADE';
+      END LOOP;
+  END\$\$;"
+  {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d actionphase_test -q -c "$sql"'
+  Write-Host "✅ Test database cleaned"
+_clean_test_db-unix:
   #!/usr/bin/env bash
   echo "🧹 Cleaning actionphase_test database for integration tests..."
   {{BE}} sh -c 'PGPASSWORD=example psql -h db -U postgres -d actionphase_test -q -c "
@@ -449,7 +689,7 @@ _clean_test_db:
 # parallel safely (no -p=1). Set TEST_P (e.g. TEST_P=1) to override concurrency.
 test:
   @echo "🧪 Running all backend tests (integration + mocks)..."
-  @just _prepare-test-template
+  @just _prepare-test-template-{{os_family()}}
   {{BE}} env {{TEST_ENV}} go test ./...
 
 # Run fast mock tests only (no database required)
@@ -460,13 +700,13 @@ test-mocks:
 # Run database service integration tests only
 test-integration:
   @echo "🗄️  Running database integration tests..."
-  @just _prepare-test-template
+  @just _prepare-test-template-{{os_family()}}
   {{BE}} env {{TEST_ENV}} go test ./pkg/db/services/...
 
 # Run tests with coverage report
 test-coverage:
   @echo "📊 Running all tests with coverage..."
-  @just _prepare-test-template
+  @just _prepare-test-template-{{os_family()}}
   {{BE}} env {{TEST_ENV}} go test -coverprofile=coverage.out ./...
   @echo ""
   @echo "Coverage report generated: backend/coverage.out"
@@ -475,7 +715,7 @@ test-coverage:
 # Run tests with race detector
 test-race:
   @echo "🔍 Running tests with race detector..."
-  @just _prepare-test-template
+  @just _prepare-test-template-{{os_family()}}
   {{BE}} env {{TEST_ENV}} CGO_ENABLED=1 go test -race ./...
 
 # Clean test cache
@@ -486,7 +726,7 @@ test-clean:
 # Run specific test by name
 test-run pattern:
   @echo "🎯 Running tests matching: {{pattern}}"
-  @just _prepare-test-template
+  @just _prepare-test-template-{{os_family()}}
   {{BE}} env {{TEST_ENV}} go test -v -run {{pattern}} ./...
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -520,6 +760,57 @@ relock-frontend:
 # Frontend testing with options (runs in frontend container)
 # Interactive modes (watch/ui) use a TTY-attached exec.
 test-fe mode="run" file="":
+  @just _test-fe-{{os_family()}} {{mode}} {{file}}
+
+_test-fe-windows mode="run" file="":
+  #!pwsh.exe
+  $FE='docker compose -f docker-compose.dev.yml exec -T frontend'
+  $FE_IT='docker compose -f docker-compose.dev.yml exec frontend'
+  # `npm test` is bare `vitest`, which watches unless told otherwise. The
+  # non-interactive modes pass `--run` explicitly rather than relying on the
+  # absence of a TTY to imply it.
+  switch ("{{mode}}") {
+    {($_ -eq "run") -or ($_ -eq "file")} {
+      # A path narrows the run to matching files; without one the whole suite
+      # runs. `file` is kept as an alias so `just test-fe file <path>` still
+      # works, but it's the same thing as passing a path to `run`.
+      if (($_ -eq "file") -and (-not "{{file}}")) {
+        Write-Host "❌ File path required for file mode
+        Usage: just test-fe file path/to/test.tsx"
+        Return
+      }
+      $cmd = "& " + $FE + " npx vitest run {{file}}"
+      Invoke-Expression $cmd
+    }
+    "watch" { 
+      $cmd = "& " + $FE + " npm run test:watch -- {{file}} "
+      Invoke-Expression $cmd
+    }
+    "coverage" { 
+      $cmd = "& " + $FE + " npx vitest run --coverage {{file}} "
+      Invoke-Expression $cmd
+    }
+    "ui" { 
+      $cmd = "& " + $FE + " npm run test:ui -- {{file}} "
+      Invoke-Expression $cmd
+    }
+    default {
+      Write-Host "Usage: just test-fe [mode] [file]
+      
+      Modes:
+        run [path]      Run tests once (default), optionally filtered to path
+        watch [path]    Run tests in watch mode
+        coverage [path] Run tests with coverage report
+        ui [path]       Run tests with interactive UI
+        file <path>     Run specific test file (alias for: run <path>)
+      
+      Examples:
+        just test-fe
+        just test-fe run src/components/Foo.test.tsx
+        just test-fe watch src/hooks"
+    }
+  }
+_test-fe-unix mode="run" file="":
   #!/usr/bin/env bash
   FE='docker compose -f docker-compose.dev.yml exec -T frontend'
   FE_IT='docker compose -f docker-compose.dev.yml exec frontend'
@@ -794,8 +1085,7 @@ DOCS_RUN := "docker run --rm -v " + justfile_directory() + "/docs-site:/docs -w 
 
 # Start documentation development server (http://localhost:5174)
 docs-dev:
-  docker run --rm -it -p 5174:5174 -v "{{justfile_directory()}}/docs-site":/docs -w /docs node:24 \
-    sh -c 'npm install && npm run docs:dev -- --host --port 5174'
+  docker run --rm -it -p 5174:5174 -v "{{justfile_directory()}}/docs-site":/docs -w /docs node:24 sh -c 'npm install && npm run docs:dev -- --host --port 5174'
 
 # Build documentation site
 docs-build:
@@ -804,8 +1094,7 @@ docs-build:
 
 # Preview built documentation (http://localhost:5175)
 docs-preview:
-  docker run --rm -it -p 5175:5175 -v "{{justfile_directory()}}/docs-site":/docs -w /docs node:24 \
-    sh -c 'npm run docs:preview -- --host --port 5175'
+  docker run --rm -it -p 5175:5175 -v "{{justfile_directory()}}/docs-site":/docs -w /docs node:24 sh -c 'npm run docs:preview -- --host --port 5175'
 
 # Build and embed documentation in backend
 docs-embed: docs-build

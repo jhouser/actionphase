@@ -16,6 +16,9 @@ import { useRenameCharacter } from '../hooks/useCharacters';
 import { MarkdownPreview } from './MarkdownPreview';
 import { CommentEditor } from './CommentEditor';
 import { MessageCharacterButton } from './MessageCharacterButton';
+import { useDirtyChildren } from '@/hooks/useDirtyChildren';
+import { EditorLockNotice } from './EditorLockNotice';
+import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
 
 interface CharacterSheetProps {
   characterId: number;
@@ -26,6 +29,14 @@ interface CharacterSheetProps {
   userRole?: string; // User's role in the game ('gm', 'player', 'audience')
   gameState?: string; // Current game state (e.g. 'completed')
   /**
+   * Reports whether an editor inside the sheet holds edits its Save has not committed.
+   *
+   * The sheet guards its own close paths. A backdrop click never reaches this component,
+   * so the Modals wrapping the sheet need this signal to guard theirs: they leave
+   * backdrop dismiss on until it reports true.
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
+  /**
    * Whether to show the avatar as a portrait rather than a circle. Normally
    * read from GameContext; pass it explicitly when rendering outside a
    * GameProvider (the global Utility Drawer), where there is none to read.
@@ -33,7 +44,7 @@ interface CharacterSheetProps {
   portraitAvatars?: boolean;
 }
 
-export function CharacterSheet({ characterId, canEdit = false, canEditStats = false, onClose, isAnonymous = false, userRole, gameState, portraitAvatars }: CharacterSheetProps) {
+export function CharacterSheet({ characterId, canEdit = false, canEditStats = false, onClose, isAnonymous = false, userRole, gameState, portraitAvatars, onDirtyChange }: CharacterSheetProps) {
   const gameContext = useOptionalGameContext();
   const portraitMode = portraitAvatars ?? gameContext?.game?.portrait_avatars ?? false;
 
@@ -44,6 +55,39 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
   const [isDeleteAvatarDialogOpen, setIsDeleteAvatarDialogOpen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState('');
+
+  // An ability/skill/item/currency editor open below with edits its own Save has not
+  // committed. Those edits live in the child's local state and never reach this
+  // component, so closing the sheet would silently drop them — confirm first.
+  //
+  // Aggregated per manager rather than stored as one boolean: a shared setter would let
+  // whichever manager reported last win, so a clean one could erase a dirty one's flag.
+  const { isAnyDirty: hasUncommittedEdit, report: reportDirty } = useDirtyChildren(onDirtyChange);
+  const [confirmingClose, setConfirmingClose] = useState(false);
+
+  /**
+   * Close request from a path that would unmount the sheet and destroy an open editor's
+   * uncommitted text. Confirms first when there is something to lose.
+   *
+   * The backdrop of the Modal wrapping this sheet is not ours to intercept — parents
+   * watch onDirtyChange and withdraw backdrop dismiss once there is something to lose,
+   * so a stray click cannot bypass this.
+   */
+  const requestClose = () => {
+    if (!onClose) return;
+    if (hasUncommittedEdit) {
+      setConfirmingClose(true);
+      return;
+    }
+    onClose();
+  };
+
+  // Drop the prompt if the edit it was asking about gets committed underneath it — the
+  // editor is still on screen while the prompt shows, so its Save stays reachable.
+  // Left alone, the header would go on offering to discard work that is already saved.
+  useEffect(() => {
+    if (!hasUncommittedEdit) setConfirmingClose(false);
+  }, [hasUncommittedEdit]);
 
   const queryClient = useQueryClient();
   const renameMutation = useRenameCharacter();
@@ -299,8 +343,20 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
                     </button>
                   )}
                   {/* Dismiss the sheet on the way out — it's usually a modal,
-                      and would otherwise sit over the messages page. */}
-                  <MessageCharacterButton character={character} onNavigate={onClose} />
+                      and would otherwise sit over the messages page. Leaving for
+                      the messages page unmounts the sheet just as surely as
+                      closing it, so an open editor's edits get the same
+                      confirmation; returning false holds the navigation. */}
+                  <MessageCharacterButton
+                    character={character}
+                    onNavigate={() => {
+                      if (hasUncommittedEdit) {
+                        setConfirmingClose(true);
+                        return false;
+                      }
+                      onClose?.();
+                    }}
+                  />
                 </div>
               )}
               {/* Hidden on mobile: the badges cost a full row of the header
@@ -322,16 +378,25 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
             </div>
           </div>
           {onClose && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="text-content-tertiary hover:text-content-secondary h-auto p-2 flex-shrink-0"
-            >
-              <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </Button>
+            confirmingClose ? (
+              <ConfirmDiscardEdits
+                onDiscard={onClose}
+                onKeepEditing={() => setConfirmingClose(false)}
+                // The sheet header is cramped beside a truncating character name.
+                hideTextOnMobile
+              />
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={requestClose}
+                className="text-content-tertiary hover:text-content-secondary h-auto p-2 flex-shrink-0"
+              >
+                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            )
           )}
         </div>
 
@@ -349,7 +414,15 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
             }))}
             activeTab={activeModule}
             onTabChange={setActiveModule}
+            // Held while an editor below has uncommitted edits: switching modules
+            // unmounts it and destroys them. See EditorLockNotice below.
+            disabled={hasUncommittedEdit}
           />
+          {hasUncommittedEdit && (
+            <div className="px-2 pb-2">
+              <EditorLockNotice />
+            </div>
+          )}
         </div>
       </div>
 
@@ -373,6 +446,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
                 canEdit={canEditStats}
                 onAbilitiesChange={(abilities) => saveJsonField('abilities', 'abilities', abilities)}
                 onSkillsChange={(skills) => saveJsonField('skills', 'skills', skills)}
+                onDirtyChange={(isDirty) => reportDirty('abilities', isDirty)}
               />
             ) : module.type === 'inventory' ? (
               <InventoryManager
@@ -382,6 +456,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
                 canEdit={canEditStats}
                 onItemsChange={(items, reloadOnly) => { if (!reloadOnly) saveJsonField('inventory', 'items', items); else queryClient.invalidateQueries({ queryKey: ['characterData', characterId] }); }}
                 onCurrencyChange={(currency) => saveJsonField('currency', 'currency', currency)}
+                onDirtyChange={(isDirty) => reportDirty('inventory', isDirty)}
               />
             ) : (
               /* Regular text-based fields for bio and notes modules */

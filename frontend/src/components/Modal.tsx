@@ -11,6 +11,15 @@ interface ModalProps {
    * of rendering underneath it.
    */
   zIndexClass?: string;
+  /**
+   * Whether clicking the backdrop dismisses the modal. Default true.
+   *
+   * Pass false for modals holding editable content. A backdrop click is usually a
+   * slip rather than a decision — nothing was aimed at — and on those surfaces it
+   * would discard typing that only lives in local component state. The X and Cancel
+   * remain, so closing stays possible but has to be deliberate.
+   */
+  dismissOnBackdrop?: boolean;
 }
 
 /**
@@ -20,7 +29,7 @@ interface ModalProps {
  * - 70% less code (no more dark: classes)
  * - Automatically adapts to all themes (light, dark, future themes)
  */
-export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50' }: ModalProps) => {
+export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50', dismissOnBackdrop = true }: ModalProps) => {
   if (!isOpen) return null;
 
   return (
@@ -29,7 +38,7 @@ export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50' }
         {/* Backdrop */}
         <div
           className="fixed inset-0 z-0 bg-black/60 backdrop-blur-sm transition-opacity"
-          onClick={onClose}
+          onClick={dismissOnBackdrop ? onClose : undefined}
           aria-hidden="true"
         />
 

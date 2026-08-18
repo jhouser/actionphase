@@ -18,7 +18,9 @@ export const AddAbilityModal: React.FC<AddAbilityModalProps> = ({ onAdd, onCance
   };
 
   return (
-    <Modal isOpen={true} onClose={onCancel} title="Add New Ability">
+    // dismissOnBackdrop: see AddItemModal — a stray backdrop click must not discard
+    // the half-typed ability held in AbilityForm's local state.
+    <Modal isOpen={true} onClose={onCancel} title="Add New Ability" dismissOnBackdrop={false}>
       <AbilityForm
         onSubmit={handleSubmit}
         onCancel={onCancel}

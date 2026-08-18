@@ -9,6 +9,9 @@ import type { CharacterAbility, CharacterSkill, InventoryItem, CurrencyEntry } f
 import type { CreateDraftCharacterUpdateRequest } from '../types/phases';
 import { logger } from '@/services/LoggingService';
 import { useDiscardSheetDrafts } from '../hooks/useDiscardSheetDrafts';
+import { useDirtyChildren } from '@/hooks/useDirtyChildren';
+import { EditorLockNotice } from './EditorLockNotice';
+import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
 
 interface UpdateCharacterSheetModalProps {
   isOpen: boolean;
@@ -45,6 +48,15 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
+  // An item/ability/skill/currency editor open below with edits not yet committed by
+  // its own Save button. Those edits live in the child's local state and never reach
+  // this modal, so closing would silently discard them — warn instead.
+  //
+  // Aggregated per manager rather than stored as one boolean: a shared setter would let
+  // whichever manager reported last win, so a clean one could erase a dirty one's flag.
+  const { isAnyDirty: hasUncommittedEdit, report: reportDirty } = useDirtyChildren();
+  const [confirmingClose, setConfirmingClose] = useState(false);
+
   // Local state for the character sheet being edited
   const [abilities, setAbilities] = useState<CharacterAbility[]>([]);
   const [skills, setSkills] = useState<CharacterSkill[]>([]);
@@ -80,6 +92,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
     if (!isOpen) {
       initialized.current = false;
       setConfirmingDiscard(false);
+      setConfirmingClose(false);
       return;
     }
     if (initialized.current || isLoading || characterData === undefined || existingDrafts === undefined) return;
@@ -309,6 +322,8 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
   // still run after this component is gone. (Only call-site callbacks passed to
   // mutate(vars, {...}) are dropped on unmount.)
   const handleClose = () => {
+    setConfirmingClose(false);
+
     saveTimers.current.forEach(timer => clearTimeout(timer));
     saveTimers.current.clear();
 
@@ -321,8 +336,32 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
     onClose();
   };
 
+  /**
+   * Close request from "Done" or the backdrop. An open editor's uncommitted text is
+   * invisible to this modal — it is never staged and never flushed — so closing on it
+   * destroys the GM's typing. Ask first; every other close goes straight through.
+   */
+  // Drop the prompt if the edit it was asking about gets committed underneath it — the
+  // editor is still on screen while the prompt shows, so its Save stays reachable.
+  // Left alone, the footer would go on offering to discard work that is already saved.
+  useEffect(() => {
+    if (!hasUncommittedEdit) setConfirmingClose(false);
+  }, [hasUncommittedEdit]);
+
+  const requestClose = () => {
+    if (hasUncommittedEdit) {
+      setConfirmingClose(true);
+      return;
+    }
+    handleClose();
+  };
+
   return (
-    <Modal isOpen={isOpen} onClose={handleClose}>
+    // dismissOnBackdrop: with nothing uncommitted the backdrop closes normally — this
+    // modal renders no title and so no X, making "Done" the only other way out. While an
+    // editor holds uncommitted text the backdrop is withdrawn instead of routed through
+    // requestClose: a stray click is not a decision worth raising a confirmation over.
+    <Modal isOpen={isOpen} onClose={requestClose} dismissOnBackdrop={!hasUncommittedEdit}>
       {/* Bounded flex column so the footer's discard action stays visible: only the
           section content scrolls, not the whole dialog. Height accounts for the
           Modal's own max-h-[90vh] minus its padding. */}
@@ -352,15 +391,18 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
           </Alert>
         )}
 
-        {/* Section Navigation */}
+        {/* Section Navigation — locked while an editor holds uncommitted edits, since
+            switching unmounts that editor and destroys them. See EditorLockNotice. */}
         <div className="border-b border-border-primary">
-          <nav className="flex space-x-1" aria-label="Sections">
+          <nav className="flex items-center space-x-1" aria-label="Sections">
             {(['abilities', 'inventory'] as ActiveSection[]).map((section) => (
               <button
                 key={section}
+                disabled={hasUncommittedEdit}
                 onClick={() => setActiveSection(section)}
                 className={`
                   px-4 py-2 text-sm font-medium rounded-t-lg transition-colors capitalize
+                  disabled:opacity-50 disabled:cursor-not-allowed
                   ${activeSection === section
                     ? 'bg-bg-primary text-interactive-primary border-b-2 border-interactive-primary'
                     : 'text-content-secondary hover:text-content-primary hover:bg-bg-secondary'
@@ -370,6 +412,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
                 {section}
               </button>
             ))}
+            {hasUncommittedEdit && <EditorLockNotice className="ml-2" />}
           </nav>
         </div>
         </div>
@@ -389,6 +432,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
                   canEdit={true}
                   onAbilitiesChange={handleAbilitiesChange}
                   onSkillsChange={handleSkillsChange}
+                  onDirtyChange={(isDirty) => reportDirty('abilities', isDirty)}
                 />
               )}
 
@@ -400,6 +444,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
                   canEdit={true}
                   onItemsChange={handleItemsChange}
                   onCurrencyChange={handleCurrencyChange}
+                  onDirtyChange={(isDirty) => reportDirty('inventory', isDirty)}
                 />
               )}
             </>
@@ -447,9 +492,26 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
               )
             )}
           </div>
-          <Button variant="secondary" onClick={handleClose}>
-            Done
-          </Button>
+          {confirmingClose ? (
+            <ConfirmDiscardEdits
+              onDiscard={handleClose}
+              onKeepEditing={() => setConfirmingClose(false)}
+            />
+          ) : (
+            <div className="flex items-center gap-3">
+              {hasUncommittedEdit && (
+                <span
+                  className="text-sm text-semantic-warning"
+                  data-testid="unsaved-edit-hint"
+                >
+                  Unsaved edit open
+                </span>
+              )}
+              <Button variant="secondary" onClick={requestClose}>
+                Done
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </Modal>

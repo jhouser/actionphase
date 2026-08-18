@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../lib/api';
@@ -6,7 +6,8 @@ import { getActionPhaseLabel, getActionPhaseColor } from '../types/phases';
 import { CommonRoom } from './CommonRoom';
 import { PhaseHistoryPolls } from './PhaseHistoryPolls';
 import { Button, Alert } from './ui';
-import { MarkdownPreview } from './MarkdownPreview';
+import { CollapsibleMarkdown } from './CollapsibleMarkdown';
+import { useExpandedSet } from '../hooks/useExpandedSet';
 import CharacterAvatar from './CharacterAvatar';
 import { useOptionalGameContext } from '../contexts/GameContext';
 import type { ActionWithDetails } from '../types/phases';
@@ -65,8 +66,8 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
     new Set<number>(),
     { ...characterFilterParamOptions, replace: true }
   );
-  const [expandedSubmissions, setExpandedSubmissions] = useState<Set<number>>(new Set());
-  const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
+  const expandedSubmissions = useExpandedSet();
+  const expandedResults = useExpandedSet();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const commentParam = searchParams.get('comment');
@@ -247,25 +248,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
     setSelectedCharacterIds(next);
   };
 
-  const toggleSubmissionExpanded = (submissionId: number) => {
-    const newExpanded = new Set(expandedSubmissions);
-    if (newExpanded.has(submissionId)) {
-      newExpanded.delete(submissionId);
-    } else {
-      newExpanded.add(submissionId);
-    }
-    setExpandedSubmissions(newExpanded);
-  };
 
-  const toggleResultExpanded = (resultId: number) => {
-    const newExpanded = new Set(expandedResults);
-    if (newExpanded.has(resultId)) {
-      newExpanded.delete(resultId);
-    } else {
-      newExpanded.add(resultId);
-    }
-    setExpandedResults(newExpanded);
-  };
 
   // Reset to 'submissions' tab when switching to Action phase while 'polls' is selected
   // (Action phases don't have polls)
@@ -448,9 +431,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                   return (
                     <div className="space-y-4">
                       {visibleSubmissions.map((submission) => {
-                        const isExpanded = expandedSubmissions.has(submission.id);
-                        const isCollapsible = submission.content.length > 200;
-                        const previewContent = submission.content.substring(0, 200) + '...';
+                        const isExpanded = expandedSubmissions.isExpanded(submission.id);
 
                         return (
                           <div key={submission.id} className="p-4 surface-raised border border-theme-default rounded shadow-sm">
@@ -474,32 +455,13 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                                 </div>
                               </div>
                             </div>
-                            <MarkdownPreview
-                              content={isCollapsible && !isExpanded ? previewContent : submission.content}
+                            <CollapsibleMarkdown
+                              content={submission.content}
                               fullWidth
+                              fadeSurface="surface-raised"
+                              expanded={isExpanded}
+                              onExpandedChange={() => expandedSubmissions.toggle(submission.id)}
                             />
-                            {isCollapsible && (
-                              <button
-                                onClick={() => toggleSubmissionExpanded(submission.id)}
-                                className="mt-2 text-sm text-interactive-primary hover:text-interactive-primary-hover font-medium flex items-center"
-                              >
-                                {isExpanded ? (
-                                  <>
-                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                    </svg>
-                                    Show less
-                                  </>
-                                ) : (
-                                  <>
-                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                    Show full content
-                                  </>
-                                )}
-                              </button>
-                            )}
                           </div>
                         );
                       })}
@@ -532,9 +494,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                   return (
                     <div className="space-y-4">
                       {visibleResults.map((result) => {
-                        const isExpanded = expandedResults.has(result.id);
-                        const isCollapsible = result.content.length > 200;
-                        const previewContent = result.content.substring(0, 200) + '...';
+                        const isExpanded = expandedResults.isExpanded(result.id);
 
                         return (
                           <div key={result.id} className="p-4 surface-raised border border-theme-default rounded shadow-sm">
@@ -568,32 +528,13 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                                 )}
                               </div>
                             </div>
-                            <MarkdownPreview
-                              content={isCollapsible && !isExpanded ? previewContent : result.content}
+                            <CollapsibleMarkdown
+                              content={result.content}
                               fullWidth
+                              fadeSurface="surface-raised"
+                              expanded={isExpanded}
+                              onExpandedChange={() => expandedResults.toggle(result.id)}
                             />
-                            {isCollapsible && (
-                              <button
-                                onClick={() => toggleResultExpanded(result.id)}
-                                className="mt-2 text-sm text-interactive-primary hover:text-interactive-primary-hover font-medium flex items-center"
-                              >
-                                {isExpanded ? (
-                                  <>
-                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                    </svg>
-                                    Show less
-                                  </>
-                                ) : (
-                                  <>
-                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                    Show full content
-                                  </>
-                                )}
-                              </button>
-                            )}
                           </div>
                         );
                       })}

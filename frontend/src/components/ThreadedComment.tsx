@@ -148,6 +148,23 @@ export const ThreadedComment = memo(function ThreadedComment({
   // At this depth, we stop rendering children and show the button instead
   const shouldShowContinueButton = depth === maxDepth - 1;
   const shouldShowMobileContinueButton = depth === mobileMaxDepth - 1;
+
+  // Whether *any* rendered viewport will show this comment's children.
+  //
+  // The desktop and mobile subtrees both render from this same component, gated
+  // only by Tailwind `md:` classes — there is no JS viewport check — so a
+  // depth-based fetch/optimistic-update skip must not consult one viewport's
+  // limit alone. Using the desktop limit only (the previous behavior) meant that
+  // with a shallower mobile limit, a mobile user at the deepest visible depth
+  // still triggered a replies fetch and an optimistic insert into a subtree that
+  // `md:hidden` never renders: wasted request, and a reply that appears to
+  // vanish until "Continue thread" is opened.
+  //
+  // `variant` locks a nested subtree to one viewport, so respect it when set.
+  const childrenRenderedSomewhere =
+    (variant !== 'mobile' && depth < maxDepth - 1) ||
+    (variant !== 'desktop' && depth < mobileMaxDepth - 1);
+  const skipChildLoad = !childrenRenderedSomewhere;
   const [linkCopied, setLinkCopied] = useState(false);
 
   // Track component mount status
@@ -200,13 +217,13 @@ export const ThreadedComment = memo(function ThreadedComment({
   }, [gameId, comment.id, postId, hasPreloadedChildren]);
 
   // Load replies immediately when component mounts if there are replies (and no pre-loaded children)
-  // Skip when shouldShowContinueButton is true: children at this depth are never rendered,
-  // so fetching them would be wasted API calls (common in history view with deep threads).
+  // Skip when no rendered viewport shows children at this depth: fetching them
+  // would be wasted API calls (common in history view with deep threads).
   useEffect(() => {
-    if (hasReplies && !hasLoadedRef.current && !hasPreloadedChildren && !shouldShowContinueButton) {
+    if (hasReplies && !hasLoadedRef.current && !hasPreloadedChildren && !skipChildLoad) {
       loadReplies();
     }
-  }, [hasReplies, hasPreloadedChildren, loadReplies, shouldShowContinueButton]);
+  }, [hasReplies, hasPreloadedChildren, loadReplies, skipChildLoad]);
 
   const handleCopyLink = async () => {
     const phaseId = 'phase_id' in comment ? comment.phase_id : undefined;
@@ -358,9 +375,10 @@ export const ThreadedComment = memo(function ThreadedComment({
     try {
       setIsSubmitting(true);
 
-      // Only add optimistic reply if children won't exceed max depth
-      // If at depth maxDepth-1, children would be at maxDepth and won't render
-      if (!shouldShowContinueButton) {
+      // Only add optimistic reply if some rendered viewport will show children
+      // at this depth; otherwise the reply would be inserted into a subtree that
+      // is never rendered and would appear to vanish.
+      if (!skipChildLoad) {
         // Add optimistic reply immediately
         setReplies(prev => [...prev, optimisticReply]);
         hasLoadedRef.current = true; // Mark as loaded so we use replies state instead of preloaded children
@@ -379,8 +397,8 @@ export const ThreadedComment = memo(function ThreadedComment({
       showSuccess('Reply posted successfully');
 
       // Reload replies to get the real data (with proper ID, timestamps, etc.)
-      // But skip reloading if at max depth (children won't render anyway)
-      if (!shouldShowContinueButton) {
+      // But skip reloading if no rendered viewport shows children at this depth
+      if (!skipChildLoad) {
         logger.debug('Loading replies after reply creation', { commentId: comment.id, gameId, postId });
 
         // Force reload by fetching fresh data

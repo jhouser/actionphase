@@ -6,8 +6,10 @@ import { server } from '../../mocks/server';
 import { renderWithProviders } from '../../test-utils/render';
 import { GameResultsManager } from '../GameResultsManager';
 import type { ActionResult } from '../../types/phases';
+import { stubRenderedHeight } from '../../test-utils/renderedHeight';
 
 describe('GameResultsManager', () => {
+
   const mockGameId = 1;
 
   const mockUnpublishedResult: ActionResult = {
@@ -854,6 +856,9 @@ describe('GameResultsManager', () => {
   });
 
   describe('Collapse/Expand Functionality', () => {
+    // CollapsibleMarkdown decides overflow from measured height; jsdom reports 0.
+    const setRenderedHeight = stubRenderedHeight(500);
+
     it('shows collapse button for long unpublished results (>200 characters)', async () => {
       const longContent = 'A'.repeat(250); // 250 characters
       const longResult: ActionResult = {
@@ -870,6 +875,7 @@ describe('GameResultsManager', () => {
     });
 
     it('does NOT show collapse button for short unpublished results (<=200 characters)', async () => {
+      setRenderedHeight(40); // fits inside the collapsed height
       const shortContent = 'A'.repeat(150); // 150 characters
       const shortResult: ActionResult = {
         ...mockUnpublishedResult,
@@ -896,9 +902,10 @@ describe('GameResultsManager', () => {
 
       renderWithProviders(<GameResultsManager gameId={mockGameId} />);
 
-      // Should show truncated content initially
+      // Collapsed, but the full text is present — clipping is visual only.
       await waitFor(() => {
-        expect(screen.getByText(longContent.substring(0, 200) + '...')).toBeInTheDocument();
+        expect(screen.getByText(longContent).closest('[data-collapsed]'))
+          .toHaveAttribute('data-collapsed', 'true');
       });
 
       // Should have "Show full content" button
@@ -927,13 +934,14 @@ describe('GameResultsManager', () => {
 
       renderWithProviders(<GameResultsManager gameId={mockGameId} />);
 
+      // The full content is always in the DOM — collapsing is visual only, so
+      // markdown can't be cut mid-syntax. What changes is the clip, not the text.
       await waitFor(() => {
-        // Should see first 200 characters + "..."
-        const preview = longContent.substring(0, 200) + '...';
-        expect(screen.getByText(preview)).toBeInTheDocument();
-        // Should NOT see the full content initially
-        expect(screen.queryByText(longContent)).not.toBeInTheDocument();
+        expect(screen.getByText(longContent)).toBeInTheDocument();
       });
+      expect(screen.getByText(longContent).closest('[data-collapsed]'))
+        .toHaveAttribute('data-collapsed', 'true');
+      expect(document.body.textContent).not.toContain(longContent.substring(0, 200) + '...');
     });
 
     it('expands to show full content when "Show full content" is clicked', async () => {
@@ -947,10 +955,10 @@ describe('GameResultsManager', () => {
 
       renderWithProviders(<GameResultsManager gameId={mockGameId} />);
 
-      // Wait for truncated preview
+      // Wait for the collapsed state
       await waitFor(() => {
-        const preview = longContent.substring(0, 200) + '...';
-        expect(screen.getByText(preview)).toBeInTheDocument();
+        expect(screen.getByText(longContent).closest('[data-collapsed]'))
+          .toHaveAttribute('data-collapsed', 'true');
       });
 
       // Click expand button
@@ -988,11 +996,10 @@ describe('GameResultsManager', () => {
       // Collapse
       await user.click(screen.getByText(/show less/i));
 
-      // Should see preview again
+      // Collapsed again: same text, clipped rather than removed.
       await waitFor(() => {
-        const preview = longContent.substring(0, 200) + '...';
-        expect(screen.getByText(preview)).toBeInTheDocument();
-        expect(screen.queryByText(longContent)).not.toBeInTheDocument();
+        expect(screen.getByText(longContent).closest('[data-collapsed]'))
+          .toHaveAttribute('data-collapsed', 'true');
       });
     });
 
@@ -1024,13 +1031,16 @@ describe('GameResultsManager', () => {
       const expandButtons = screen.getAllByText(/show full content/i);
       await user.click(expandButtons[0]);
 
-      // The clicked result expands; the other stays collapsed.
+      // The clicked result expands; the other stays collapsed. Both texts are
+      // in the DOM either way, so independence shows in the collapsed state.
       await waitFor(() => {
-        expect(screen.getByText(longResult2.content)).toBeInTheDocument();
-        expect(screen.queryByText(longResult1.content)).not.toBeInTheDocument();
-        expect(screen.getByText(/show less/i)).toBeInTheDocument();
-        expect(screen.getByText(/show full content/i)).toBeInTheDocument(); // The other is still collapsed
+        expect(screen.getByText(longResult2.content).closest('[data-collapsed]'))
+          .toHaveAttribute('data-collapsed', 'false');
       });
+      expect(screen.getByText(longResult1.content).closest('[data-collapsed]'))
+        .toHaveAttribute('data-collapsed', 'true');
+      expect(screen.getByText(/show less/i)).toBeInTheDocument();
+      expect(screen.getByText(/show full content/i)).toBeInTheDocument(); // The other is still collapsed
     });
   });
 
@@ -1422,6 +1432,472 @@ describe('GameResultsManager', () => {
         expect(screen.getByText('This is an unpublished result for the player')).toBeInTheDocument();
         expect(screen.getByText('Another unpublished draft result')).toBeInTheDocument();
         expect(screen.getByText('This is a published result that was sent')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Staged result chains', () => {
+    // The GM always receives every part's real content — only the recipient's
+    // copy is blanked — so these assert the schedule readout and the cancel
+    // control, not withholding.
+    const releasedPart: ActionResult = {
+      ...mockPublishedResult,
+      id: 10,
+      content: 'The sword whooshes toward your head...',
+      part_number: 1,
+      part_count: 2,
+      released_at: '2026-08-12T10:00:00Z',
+    };
+
+    const pendingPart: ActionResult = {
+      ...mockPublishedResult,
+      id: 11,
+      content: '...and misses!',
+      part_number: 2,
+      part_count: 2,
+      unlocks_at: '2026-08-12T10:15:00Z',
+    };
+
+    it('shows each part with its position and schedule', async () => {
+      setupDefaultHandlers([releasedPart, pendingPart]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('staged-status-10')).toHaveTextContent('Part 1 of 2');
+        expect(screen.getByTestId('staged-status-11')).toHaveTextContent('Part 2 of 2');
+      });
+
+      expect(screen.getByTestId('staged-status-10')).toHaveTextContent(/Revealed/);
+      expect(screen.getByTestId('staged-status-11')).toHaveTextContent(/Reveals/);
+    });
+
+    it('offers cancel only for a part that has not been revealed', async () => {
+      setupDefaultHandlers([releasedPart, pendingPart]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('cancel-staged-part-11')).toBeInTheDocument();
+      });
+      // Once a part is out, it stays out.
+      expect(screen.queryByTestId('cancel-staged-part-10')).not.toBeInTheDocument();
+    });
+
+    it('cancels a pending part after confirmation', async () => {
+      const user = userEvent.setup();
+      let cancelledId: string | undefined;
+
+      setupDefaultHandlers([releasedPart, pendingPart]);
+      server.use(
+        http.delete('/api/v1/games/:gameId/results/:resultId/pending', ({ params }) => {
+          cancelledId = params.resultId as string;
+          return new HttpResponse(null, { status: 204 });
+        })
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('cancel-staged-part-11')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId('cancel-staged-part-11'));
+      await user.click(screen.getByRole('button', { name: 'Yes, Cancel This Part' }));
+
+      await waitFor(() => expect(cancelledId).toBe('11'));
+    });
+
+    it('shows no staged chrome for an ordinary result', async () => {
+      setupDefaultHandlers([mockPublishedResult]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('This is a published result that was sent')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId(`staged-status-${mockPublishedResult.id}`)).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId(`cancel-staged-part-${mockPublishedResult.id}`)
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Building a staged chain while drafting', () => {
+    // A GM rarely has the whole scene ready when they start writing, so a chain
+    // is built up over several sittings and only then published.
+
+    const draftHead: ActionResult = {
+      ...mockUnpublishedResult,
+      id: 20,
+      content: 'The sword whooshes toward your head...',
+      part_number: 1,
+      part_count: 2,
+    };
+
+    const draftFollowUp: ActionResult = {
+      ...mockUnpublishedResult,
+      id: 21,
+      content: '...and misses!',
+      part_number: 2,
+      part_count: 2,
+      reveal_delay_minutes: 15,
+    };
+
+    it('offers a follow-up control on a plain unstaged draft', async () => {
+      // The gap this feature closes: before it, staging was a decision the GM
+      // could only make at create time.
+      setupDefaultHandlers([mockUnpublishedResult]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`add-staged-part-${mockUnpublishedResult.id}`)).toBeInTheDocument();
+      });
+    });
+
+    it('does not offer a follow-up control on a published result', async () => {
+      // The chain must be complete before it goes out — appending afterwards
+      // would extend a scene the player has already started reading.
+      setupDefaultHandlers([mockPublishedResult]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('This is a published result that was sent')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId(`add-staged-part-${mockPublishedResult.id}`)).not.toBeInTheDocument();
+    });
+
+    it('appends a part to a draft and sends its content and delay', async () => {
+      const user = userEvent.setup();
+      let appendedTo: string | undefined;
+      let appendedBody: { content: string; delay_minutes: number } | undefined;
+
+      setupDefaultHandlers([mockUnpublishedResult]);
+      server.use(
+        http.post('/api/v1/games/:gameId/results/:resultId/parts', async ({ params, request }) => {
+          appendedTo = params.resultId as string;
+          appendedBody = await request.json() as { content: string; delay_minutes: number };
+          return HttpResponse.json({ ...draftFollowUp }, { status: 201 });
+        })
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`add-staged-part-${mockUnpublishedResult.id}`)).toBeInTheDocument();
+      });
+      await user.click(screen.getByTestId(`add-staged-part-${mockUnpublishedResult.id}`));
+
+      const contentBox = await screen.findByTestId(`append-staged-part-content-${mockUnpublishedResult.id}`);
+      await user.type(contentBox, '...and misses!');
+      await user.selectOptions(
+        screen.getByTestId(`append-staged-part-delay-${mockUnpublishedResult.id}`),
+        '30'
+      );
+      await user.click(screen.getByTestId(`save-staged-part-${mockUnpublishedResult.id}`));
+
+      await waitFor(() => expect(appendedTo).toBe(String(mockUnpublishedResult.id)));
+      expect(appendedBody).toEqual({ content: '...and misses!', delay_minutes: 30 });
+    });
+
+    it('closes the follow-up form once the part is saved', async () => {
+      const user = userEvent.setup();
+
+      setupDefaultHandlers([mockUnpublishedResult]);
+      server.use(
+        http.post('/api/v1/games/:gameId/results/:resultId/parts', () =>
+          HttpResponse.json({ ...draftFollowUp }, { status: 201 })
+        )
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`add-staged-part-${mockUnpublishedResult.id}`)).toBeInTheDocument();
+      });
+      await user.click(screen.getByTestId(`add-staged-part-${mockUnpublishedResult.id}`));
+
+      const contentBox = await screen.findByTestId(`append-staged-part-content-${mockUnpublishedResult.id}`);
+      await user.type(contentBox, 'The payoff.');
+      await user.click(screen.getByTestId(`save-staged-part-${mockUnpublishedResult.id}`));
+
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId(`append-staged-part-form-${mockUnpublishedResult.id}`)
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    // A failed append must not destroy what the GM wrote. The form stays open
+    // on error (the parent only closes it on success), so if the content were
+    // cleared anyway the GM would be left staring at an empty box with an
+    // error toast, and a long-composed part would be gone with no undo.
+    it('keeps the typed content when the append fails', async () => {
+      const user = userEvent.setup();
+
+      setupDefaultHandlers([mockUnpublishedResult]);
+      server.use(
+        http.post('/api/v1/games/:gameId/results/:resultId/parts', () =>
+          HttpResponse.json({ error: 'nope' }, { status: 500 })
+        )
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`add-staged-part-${mockUnpublishedResult.id}`)).toBeInTheDocument();
+      });
+      await user.click(screen.getByTestId(`add-staged-part-${mockUnpublishedResult.id}`));
+
+      const contentBox = await screen.findByTestId(`append-staged-part-content-${mockUnpublishedResult.id}`);
+      await user.type(contentBox, 'A long and hard-won payoff.');
+      await user.click(screen.getByTestId(`save-staged-part-${mockUnpublishedResult.id}`));
+
+      // The form is still open — the parent closes it only on success.
+      expect(
+        await screen.findByTestId(`append-staged-part-form-${mockUnpublishedResult.id}`)
+      ).toBeInTheDocument();
+
+      // And the text survived, so the GM can simply press Add Part again.
+      await waitFor(() => {
+        expect(
+          screen.getByTestId(`append-staged-part-content-${mockUnpublishedResult.id}`)
+        ).toHaveValue('A long and hard-won payoff.');
+      });
+    });
+
+    it('cannot save a follow-up with no content', async () => {
+      const user = userEvent.setup();
+
+      setupDefaultHandlers([draftHead, draftFollowUp]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      // The tail, since that is the only part offering the control.
+      await waitFor(() => {
+        expect(screen.getByTestId(`add-staged-part-${draftFollowUp.id}`)).toBeInTheDocument();
+      });
+      await user.click(screen.getByTestId(`add-staged-part-${draftFollowUp.id}`));
+
+      expect(await screen.findByTestId(`save-staged-part-${draftFollowUp.id}`)).toBeDisabled();
+    });
+
+    it('offers the follow-up control on the chain tail only', async () => {
+      // A new part always lands at the end, so a button on part 1 of a 2-part
+      // chain would read as "follow this part" while appending after part 2.
+      // The GM adds a follow-up to the child, not to the parent again.
+      setupDefaultHandlers([draftHead, draftFollowUp]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`add-staged-part-${draftFollowUp.id}`)).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId(`add-staged-part-${draftHead.id}`)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Chain-level controls belong to the head', () => {
+    // Publishing publishes the whole chain, so a per-part Publish button would
+    // imply parts can go out separately — exactly what the feature prevents.
+
+    const draftHead: ActionResult = {
+      ...mockUnpublishedResult,
+      id: 40,
+      part_number: 1,
+      part_count: 2,
+    };
+
+    const draftFollowUp: ActionResult = {
+      ...mockUnpublishedResult,
+      id: 41,
+      part_number: 2,
+      part_count: 2,
+      reveal_delay_minutes: 15,
+    };
+
+    it('offers Publish on the head only', async () => {
+      setupDefaultHandlers([draftHead, draftFollowUp]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`publish-result-${draftHead.id}`)).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId(`publish-result-${draftFollowUp.id}`)).not.toBeInTheDocument();
+    });
+
+    it('labels the head Publish button with the whole chain', async () => {
+      // The GM must know one click sends every part, not just this one.
+      setupDefaultHandlers([draftHead, draftFollowUp]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`publish-result-${draftHead.id}`))
+          .toHaveTextContent('Publish Chain (2 parts)');
+      });
+    });
+
+    it('offers Delete on the head only, and Cancel on the follower', async () => {
+      // Delete on a follower would strand or silently cascade the parts behind
+      // it; Cancel is the removal control that cascades correctly.
+      setupDefaultHandlers([draftHead, draftFollowUp]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`delete-result-${draftHead.id}`)).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId(`delete-result-${draftFollowUp.id}`)).not.toBeInTheDocument();
+      expect(screen.getByTestId(`cancel-staged-part-${draftFollowUp.id}`)).toBeInTheDocument();
+    });
+
+    it('offers Update Character Sheet on the tail, not the head', async () => {
+      // Sheet updates apply when their part is released, so they belong to the
+      // beat that earns them. On the head the reward would land as the scene
+      // opens — before the player has read whether they survived.
+      //
+      // One control per chain also makes the sibling-clobber that
+      // useConflictingSheetDrafts warns about structurally impossible: every
+      // part of a chain shares a recipient.
+      setupDefaultHandlers([draftHead, draftFollowUp]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`publish-result-${draftHead.id}`)).toBeInTheDocument();
+      });
+
+      const sheetButtons = screen.getAllByRole('button', { name: /Update Character Sheet/ });
+      expect(sheetButtons).toHaveLength(1);
+
+      // And it is the tail's card that carries it.
+      const tailCard = screen.getByTestId(`staged-status-${draftFollowUp.id}`).closest('div.border');
+      expect(tailCard).toContainElement(sheetButtons[0]);
+    });
+
+    it('still offers Publish on an ordinary unstaged draft', async () => {
+      // The chain-of-one case must be unaffected.
+      setupDefaultHandlers([mockUnpublishedResult]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`publish-result-${mockUnpublishedResult.id}`))
+          .toHaveTextContent('Publish Result');
+      });
+    });
+  });
+
+  describe('Retiming a staged part', () => {
+    const releasedHead: ActionResult = {
+      ...mockPublishedResult,
+      id: 30,
+      part_number: 1,
+      part_count: 2,
+      released_at: '2026-08-12T10:00:00Z',
+    };
+
+    const pendingPart: ActionResult = {
+      ...mockPublishedResult,
+      id: 31,
+      part_number: 2,
+      part_count: 2,
+      unlocks_at: '2026-08-12T10:15:00Z',
+      reveal_delay_minutes: 15,
+    };
+
+    it('offers a delay control on a published pending part', async () => {
+      // Guarded on release, not publication: the usual reason to move a timer
+      // is that the scene is already running and the players need longer.
+      setupDefaultHandlers([releasedHead, pendingPart]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`edit-staged-delay-${pendingPart.id}`)).toBeInTheDocument();
+      });
+    });
+
+    it('does not offer a delay control on a released part or a chain head', async () => {
+      setupDefaultHandlers([releasedHead, pendingPart]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`edit-staged-delay-${pendingPart.id}`)).toBeInTheDocument();
+      });
+      // The head is both released and parentless — it has no delay to edit.
+      expect(screen.queryByTestId(`edit-staged-delay-${releasedHead.id}`)).not.toBeInTheDocument();
+    });
+
+    it('shows the stored delay as the selected value', async () => {
+      // The GM must see what the timer currently is before changing it, which
+      // unlocks_at cannot supply — it is a timestamp, not a duration.
+      setupDefaultHandlers([releasedHead, pendingPart]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`edit-staged-delay-${pendingPart.id}`)).toHaveValue('15');
+      });
+    });
+
+    it('sends the new delay when the GM changes it', async () => {
+      const user = userEvent.setup();
+      let retimedId: string | undefined;
+      let retimedBody: { delay_minutes: number } | undefined;
+
+      setupDefaultHandlers([releasedHead, pendingPart]);
+      server.use(
+        http.put('/api/v1/games/:gameId/results/:resultId/delay', async ({ params, request }) => {
+          retimedId = params.resultId as string;
+          retimedBody = await request.json() as { delay_minutes: number };
+          return HttpResponse.json({ ...pendingPart, reveal_delay_minutes: 30 });
+        })
+      );
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`edit-staged-delay-${pendingPart.id}`)).toBeInTheDocument();
+      });
+
+      await user.selectOptions(screen.getByTestId(`edit-staged-delay-${pendingPart.id}`), '30');
+
+      await waitFor(() => expect(retimedId).toBe(String(pendingPart.id)));
+      expect(retimedBody).toEqual({ delay_minutes: 30 });
+    });
+
+    it('does not silently show the first preset when the delay is missing', async () => {
+      // Regression: the list endpoint did not serialize reveal_delay_minutes,
+      // so the selector got undefined, matched no option, and fell back to the
+      // browser default — every part read as "1 minute" no matter its real
+      // delay, with nothing to indicate the display was wrong.
+      const partWithoutDelay: ActionResult = { ...pendingPart, reveal_delay_minutes: undefined };
+      setupDefaultHandlers([releasedHead, partWithoutDelay]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      const select = await screen.findByTestId(`edit-staged-delay-${partWithoutDelay.id}`);
+      expect(select).not.toHaveValue('1');
+    });
+
+    it('keeps a custom delay selectable even though it is not a preset', async () => {
+      // A GM who typed 7 minutes must not have it silently rewritten to the
+      // nearest preset just by the selector rendering.
+      const customPart: ActionResult = { ...pendingPart, reveal_delay_minutes: 7 };
+      setupDefaultHandlers([releasedHead, customPart]);
+
+      renderWithProviders(<GameResultsManager gameId={mockGameId} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`edit-staged-delay-${customPart.id}`)).toHaveValue('7');
       });
     });
   });

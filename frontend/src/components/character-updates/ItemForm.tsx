@@ -7,6 +7,7 @@ import type { LootTableContent } from '@/types/games';
 import { LootTableSelector } from './LootTableSelector';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
+import { useReportDirty } from '@/hooks/useReportDirty';
 
 export interface ItemFormData {
   name: string;
@@ -34,6 +35,8 @@ interface ItemFormProps {
    * from a loot table.
    */
   allowedLootModes?: lootModes[];
+  /** Reports whether the form holds edits that Save has not yet committed. */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 
@@ -49,6 +52,7 @@ export const ItemForm: React.FC<ItemFormProps> = ({
   variant = 'modal',
   submitButtonTestId,
   allowedLootModes = ['manual'],
+  onDirtyChange,
 }) => {
   const gameContext = useOptionalGameContext();
 
@@ -66,26 +70,48 @@ export const ItemForm: React.FC<ItemFormProps> = ({
     enabled: !!gameContext?.gameId && (lootModesEnabled.loot_table || lootModesEnabled.loot_table_random)
   });
 
+  // Once the fetch settles, retire the loot modes if the game has no loot tables.
+  // Functional update so the effect does not depend on the state it narrows.
   useEffect(() => {
-    if (isLootTablesFetched || isLootTablesError) {
-      setLootModesEnabled({
-        manual: lootModesEnabled.manual,
-        loot_table: lootModesEnabled.loot_table && (lootTables?.length ?? 0) > 0,
-        loot_table_random: lootModesEnabled.loot_table_random && (lootTables?.length ?? 0) > 0,
-      });
-    }
-  }, [ lootTables ]);
+    if (!isLootTablesFetched && !isLootTablesError) return;
+    const hasLootTables = (lootTables?.length ?? 0) > 0;
+    setLootModesEnabled((prev) => ({
+      manual: prev.manual,
+      loot_table: prev.loot_table && hasLootTables,
+      loot_table_random: prev.loot_table_random && hasLootTables,
+    }));
+  }, [lootTables, isLootTablesFetched, isLootTablesError]);
 
   const [mode, setMode] = useState<lootModes>('manual');
   const [name, setName] = useState(initialValues?.name || '');
   const [description, setDescription] = useState(initialValues?.description || '');
-  const [quantity, setQuantity] = useState(initialValues?.quantity || 1);
+  // ?? not ||, so an item legitimately saved with quantity 0 opens showing 0 rather
+  // than silently becoming 1 — and so the dirty comparison below agrees with it.
+  const [quantity, setQuantity] = useState(initialValues?.quantity ?? 1);
   const [category, setCategory] = useState(initialValues?.category || '');
   const [value, setValue] = useState<number | ''>(initialValues?.value ?? '');
   const [weight, setWeight] = useState<number | ''>(initialValues?.weight ?? '');
   const [lootTableId, setLootTableId] = useState<number | null>(null);
   const [selectedLootItem, setSelectedLootItem] = useState<LootTableContent | null>(null);
 
+  // A picked loot table/item is unsaved work too, but only in a loot mode: handleSubmit
+  // ignores that state entirely when submitting as manual, so a table picked while
+  // browsing and then abandoned by switching back to manual is not pending work. The
+  // selection is intentionally not cleared on mode change — switching away and back
+  // keeps it — so the mode has to be part of the comparison rather than the state alone.
+  const isLootMode = lootModesEnabled[mode] && mode !== 'manual';
+  // String fields compared trimmed, because handleSubmit submits them trimmed — see
+  // AbilityForm for why the raw comparison soft-locks on a whitespace-only change.
+  useReportDirty(
+    name.trim() !== (initialValues?.name || '').trim() ||
+      description.trim() !== (initialValues?.description || '').trim() ||
+      quantity !== (initialValues?.quantity ?? 1) ||
+      category.trim() !== (initialValues?.category || '').trim() ||
+      value !== (initialValues?.value ?? '') ||
+      weight !== (initialValues?.weight ?? '') ||
+      (isLootMode && (lootTableId !== null || selectedLootItem !== null)),
+    onDirtyChange,
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
