@@ -61,6 +61,7 @@ func (h *Handler) CreateGame(w http.ResponseWriter, r *http.Request) {
 		CommonRoomCloseDay:      data.CommonRoomCloseDay,
 		CommonRoomCloseTime:     data.CommonRoomCloseTime,
 		ScheduleTimezone:        data.ScheduleTimezone,
+		CharacterSheet:          data.CharacterSheetConfig(),
 	})
 
 	if err != nil {
@@ -90,6 +91,7 @@ func (h *Handler) CreateGame(w http.ResponseWriter, r *http.Request) {
 		AutoAcceptAudience:      game.AutoAcceptAudience,
 		AllowGroupConversations: game.AllowGroupConversations,
 		PortraitAvatars:         game.PortraitAvatars,
+		CharacterSheet:          characterSheetResponse(game.CharacterSheet),
 		CreatedAt:               game.CreatedAt.Time,
 		UpdatedAt:               game.UpdatedAt.Time,
 	}
@@ -154,6 +156,7 @@ func (h *Handler) GetGame(w http.ResponseWriter, r *http.Request) {
 		AutoAcceptAudience:      game.AutoAcceptAudience,
 		AllowGroupConversations: game.AllowGroupConversations,
 		PortraitAvatars:         game.PortraitAvatars,
+		CharacterSheet:          characterSheetResponse(game.CharacterSheet),
 		CreatedAt:               game.CreatedAt.Time,
 		UpdatedAt:               game.UpdatedAt.Time,
 	}
@@ -366,6 +369,7 @@ func (h *Handler) UpdateGame(w http.ResponseWriter, r *http.Request) {
 		CommonRoomCloseDay:      data.CommonRoomCloseDay,
 		CommonRoomCloseTime:     data.CommonRoomCloseTime,
 		ScheduleTimezone:        data.ScheduleTimezone,
+		CharacterSheet:          data.CharacterSheetConfig(),
 	})
 
 	if err != nil {
@@ -384,6 +388,7 @@ func (h *Handler) UpdateGame(w http.ResponseWriter, r *http.Request) {
 		AutoAcceptAudience:      updatedGame.AutoAcceptAudience,
 		AllowGroupConversations: updatedGame.AllowGroupConversations,
 		PortraitAvatars:         updatedGame.PortraitAvatars,
+		CharacterSheet:          characterSheetResponse(updatedGame.CharacterSheet),
 		CreatedAt:               updatedGame.CreatedAt.Time,
 		UpdatedAt:               updatedGame.UpdatedAt.Time,
 	}
@@ -493,6 +498,7 @@ func (h *Handler) GetGameWithDetails(w http.ResponseWriter, r *http.Request) {
 		AutoAcceptAudience:      game.AutoAcceptAudience,
 		AllowGroupConversations: game.AllowGroupConversations,
 		PortraitAvatars:         game.PortraitAvatars,
+		CharacterSheet:          characterSheetResponse(game.CharacterSheet),
 		CurrentPlayers:          game.CurrentPlayers,
 		CreatedAt:               game.CreatedAt.Time,
 		UpdatedAt:               game.UpdatedAt.Time,

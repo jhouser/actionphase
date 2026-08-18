@@ -2,10 +2,16 @@
 INSERT INTO games (
     title, description, gm_user_id, genre, start_date, end_date,
     recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url,
-    common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone
+    common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone,
+    character_sheet
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-    $15, $16, $17, $18, $19
+    $15, $16, $17, $18, $19,
+    -- COALESCE so a caller that builds CreateGameParams directly and leaves
+    -- CharacterSheet nil gets '{}' rather than a NOT NULL violation. Naming the
+    -- column in the INSERT disables the column DEFAULT, so the default has to be
+    -- restated here.
+    COALESCE(sqlc.narg('character_sheet')::jsonb, '{}'::jsonb)
 ) RETURNING *;
 
 -- name: GetGame :one
@@ -37,6 +43,11 @@ SET title = $2, description = $3, genre = $4, start_date = $5,
     common_room_open_day = $15, common_room_open_time = $16,
     common_room_close_day = $17, common_room_close_time = $18,
     schedule_timezone = $19,
+    -- COALESCE to the EXISTING value, not to '{}': a nil here means "the caller
+    -- did not supply a config", and on an update that must preserve the GM's
+    -- labels rather than silently wipe them. (CreateGame coalesces to '{}'
+    -- instead, since there is no prior value to keep.)
+    character_sheet = COALESCE(sqlc.narg('character_sheet')::jsonb, games.character_sheet),
     updated_at = NOW()
 WHERE id = $1
 RETURNING *;
