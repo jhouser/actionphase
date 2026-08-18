@@ -107,7 +107,10 @@ export const ThreadedComment = memo(function ThreadedComment({
   const portraitAvatars = gameContext?.game?.portrait_avatars ?? false;
   const { adminModeEnabled } = useAdminMode();
   const { screenshotModeEnabled } = useScreenshotMode();
-  const { isGM } = useGamePermissions(gameId);
+  // Co-GMs may delete others' comments too — CanUserDeleteComment admits both
+  // (backend/pkg/db/services/messages/comments.go). Gating on isGM alone left
+  // the co-GM without a button the API would have honoured.
+  const { hasGMPowers } = useGamePermissions(gameId);
   const updateCommentMutation = useUpdateComment();
   const deleteCommentMutation = useDeleteComment();
   const isAuthor = currentUserId === comment.author_id;
@@ -713,14 +716,14 @@ export const ThreadedComment = memo(function ThreadedComment({
             </Button>
           )}
 
-          {(isAuthor || isGM || adminModeEnabled) && !isEditing && !comment.is_deleted && !readOnly && !screenshotModeEnabled && (
+          {(isAuthor || hasGMPowers || adminModeEnabled) && !isEditing && !comment.is_deleted && !readOnly && !screenshotModeEnabled && (
             <Button
               variant="ghost"
               onClick={handleDeleteClick}
               disabled={isDeleting}
               className="p-2 md:p-0 min-h-[44px] md:min-h-0 h-auto text-xs text-semantic-danger hover:text-semantic-danger"
-              title={isAuthor ? "Delete this comment" : (isGM ? "Delete this comment (GM)" : "Delete this comment (admin)")}
-              aria-label={isAuthor ? "Delete this comment" : (isGM ? "Delete this comment (GM)" : "Delete this comment (admin)")}
+              title={isAuthor ? "Delete this comment" : (hasGMPowers ? "Delete this comment (GM)" : "Delete this comment (admin)")}
+              aria-label={isAuthor ? "Delete this comment" : (hasGMPowers ? "Delete this comment (GM)" : "Delete this comment (admin)")}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

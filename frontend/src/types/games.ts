@@ -113,6 +113,36 @@ export interface GameLog {
   created_at: string;
 }
 
+export interface CreateLootTableRequest {
+  name: string;
+  items: LootTableContent[] | undefined;
+}
+
+export interface UpdateLootTableRequest {
+  id: number;
+  name: string;
+}
+
+export interface UpdateLootTableContentsRequest {
+  id: number;
+  items: LootTableContent[];
+}
+
+export interface LootTable {
+  id: number;
+  game_id: number;
+  name: string;
+  created_at: string;
+  /** Bumped when the table is renamed. Equals created_at until then. */
+  updated_at: string;
+}
+
+export interface LootTableContent {
+  id: number;
+  name: string;
+  data: string;
+}
+
 // Public applicant view (no status, message, email, or review info)
 // Available to anyone when game is in recruitment state
 export interface PublicGameApplicant {

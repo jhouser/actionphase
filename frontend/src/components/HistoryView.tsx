@@ -102,22 +102,38 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
   // Only fetch results/submissions once a phase is selected — avoids loading all data on tab open
   const hasSelectedPhase = selectedPhaseId !== null;
 
+  // A COMPLETED game is a public archive: the backend serves the whole cast's
+  // submissions and results to any authenticated user, not just to spectators
+  // (CanUserViewGame, and the "completed" arm of GetGameActionResults). A player
+  // looking back at a finished game therefore gets the same reach here as an
+  // audience member — reading their own rows only would hide the story they just
+  // finished playing through. Cancelled games are NOT public and keep the
+  // play-time rule, which is why this keys on completion rather than "not active".
+  const hasArchiveAccess = isAudience || isGameCompleted;
+
   const { data: userActionResults, isLoading: isLoadingUserResults, error: userResultsError } = useQuery({
     queryKey: ['actionResults', 'user', gameId],
     queryFn: () => apiClient.phases.getUserResults(gameId).then(res => res.data),
-    enabled: !!gameId && !isGM && !isAudience && hasSelectedPhase,
+    enabled: !!gameId && !isGM && !hasArchiveAccess && hasSelectedPhase,
   });
 
   // Audience uses the same game-wide endpoint as the GM: it admits audience
   // members, so a spectator sees the whole cast's results rather than their own
-  // (they have no characters, so the per-user endpoint returns nothing).
+  // (they have no characters, so the per-user endpoint returns nothing). Players
+  // in a completed game join them via hasArchiveAccess.
   //
-  // Drafts are NOT withheld from audience. Spectators are trusted with the
-  // game's private traffic already, and watching results take shape is part of
-  // what they are here for — see TestPhaseAPI_AudienceSeesUnpublishedResults.
-  // Players are the ones excluded: /results/mine serves only published results,
-  // so a draft never reaches the character it answers.
-  const seesAllResults = isGM || isAudience;
+  // Unpublished results are NOT withheld from audience. Spectators are trusted
+  // with the game's private traffic already, and watching results take shape is
+  // part of what they are here for — see
+  // TestPhaseAPI_AudienceSeesUnpublishedResults. Players in a LIVE game are the
+  // ones excluded: /results/mine serves only published results, so an
+  // unpublished one never reaches the character it answers. Once the game
+  // completes there is nothing left to spoil, and the backend serves them to
+  // everyone on this endpoint anyway.
+  //
+  // (This is about action *results*, which have a real is_published state.
+  // Action submissions have no draft state at all.)
+  const seesAllResults = isGM || hasArchiveAccess;
 
   const { data: gmActionResults, isLoading: isLoadingGMResults, error: gmResultsError } = useQuery({
     queryKey: ['actionResults', 'game', gameId],
@@ -133,7 +149,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
   const { data: userActionSubmissionsData, isLoading: isLoadingUserSubmissions, error: userSubmissionsError } = useQuery<ActionWithDetails[]>({
     queryKey: ['userActions', gameId],
     queryFn: () => apiClient.phases.getUserActions(gameId).then(res => res.data),
-    enabled: !!gameId && !isGM && !isAudience && hasSelectedPhase,
+    enabled: !!gameId && !isGM && !hasArchiveAccess && hasSelectedPhase,
   });
 
   const { data: gmActionSubmissionsData, isLoading: isLoadingGMSubmissions, error: gmSubmissionsError } = useQuery<ActionWithDetails[]>({
@@ -142,11 +158,12 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
     enabled: !!gameId && isGM && hasSelectedPhase,
   });
 
-  // Audience members cannot use the GM submissions endpoint — it rejects
-  // non-GMs outright — so they read the audience listing, which authorizes on
-  // "can view this game" instead. It is paginated, but this view drills into a
-  // single phase at a time, so one generous page covers the phase rather than
-  // dragging infinite scroll into a drill-down.
+  // Audience members — and players in a completed game — cannot use the GM
+  // submissions endpoint, which rejects non-GMs outright. They read the
+  // game-wide listing instead, which authorizes on "can view this game" and so
+  // admits both. It is paginated, but this view drills into a single phase at a
+  // time, so one generous page covers the phase rather than dragging infinite
+  // scroll into a drill-down.
   const {
     data: audienceSubmissionsData,
     isLoading: isLoadingAudienceSubmissions,
@@ -156,8 +173,8 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
     queryFn: () =>
       apiClient.games
         .listAllActionSubmissions(gameId, { phaseId: selectedPhaseId ?? undefined, limit: 200 })
-        .then(res => (res.data.action_submissions ?? []) as unknown as ActionWithDetails[]),
-    enabled: !!gameId && isAudience && !isGM && hasSelectedPhase,
+        .then(res => res.data.action_submissions ?? []),
+    enabled: !!gameId && hasArchiveAccess && !isGM && hasSelectedPhase,
   });
 
   // Memoised because the `|| []` fallbacks mint a new array on every render, which
@@ -166,19 +183,19 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
     () =>
       isGM
         ? (gmActionSubmissionsData || [])
-        : isAudience
+        : hasArchiveAccess
           ? (audienceSubmissionsData || [])
           : (userActionSubmissionsData || []),
-    [isGM, isAudience, gmActionSubmissionsData, audienceSubmissionsData, userActionSubmissionsData]
+    [isGM, hasArchiveAccess, gmActionSubmissionsData, audienceSubmissionsData, userActionSubmissionsData]
   );
   const isLoadingSubmissions = isGM
     ? isLoadingGMSubmissions
-    : isAudience
+    : hasArchiveAccess
       ? isLoadingAudienceSubmissions
       : isLoadingUserSubmissions;
   const submissionsError = isGM
     ? gmSubmissionsError
-    : isAudience
+    : hasArchiveAccess
       ? audienceSubmissionsError
       : userSubmissionsError;
 
@@ -448,11 +465,6 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                                 <div className="flex justify-between items-start">
                                   <div>
                                     <span className="font-semibold text-content-primary">{submission.character_name}</span>
-                                    {submission.is_draft && (
-                                      <span className="inline-block px-2 py-1 text-xs bg-semantic-warning-subtle text-content-primary rounded ml-2">
-                                        Draft
-                                      </span>
-                                    )}
                                   </div>
                                   {submission.submitted_at && (
                                     <span className="text-xs text-content-tertiary">

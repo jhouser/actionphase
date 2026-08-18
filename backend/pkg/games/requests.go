@@ -2,9 +2,11 @@ package games
 
 import (
 	"actionphase/pkg/core"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -118,4 +120,50 @@ type ReviewApplicationRequest struct {
 
 func (r *ReviewApplicationRequest) Bind(req *http.Request) error {
 	return nil
+}
+
+// LootTableItemRequest is a single item within a loot table. Data is the
+// GM-authored JSON blob describing the item; it is stored verbatim and parsed by
+// the frontend when the item is granted, so it must be present and well-formed.
+type LootTableItemRequest struct {
+	Name string `json:"name" validate:"required"`
+	Data string `json:"data" validate:"required"`
+}
+
+// validateLootTableItems enforces the `validate` tags above. The struct tags are
+// not executed anywhere in this package (see .claude/planning/request-validation.md),
+// so the checks are explicit.
+func validateLootTableItems(items []LootTableItemRequest) error {
+	for i, item := range items {
+		if strings.TrimSpace(item.Name) == "" {
+			return fmt.Errorf("loot table item %d: name is required", i+1)
+		}
+		if strings.TrimSpace(item.Data) == "" {
+			return fmt.Errorf("loot table item %d: data is required", i+1)
+		}
+		if !json.Valid([]byte(item.Data)) {
+			return fmt.Errorf("loot table item %d (%q): data must be valid JSON", i+1, item.Name)
+		}
+	}
+	return nil
+}
+
+type UpdateLootTableRequest struct {
+	Name  string                 `json:"name" validate:"required"`
+	Items []LootTableItemRequest `json:"items"`
+}
+
+func (r *UpdateLootTableRequest) Bind(req *http.Request) error {
+	if strings.TrimSpace(r.Name) == "" {
+		return errors.New("loot table name is required")
+	}
+	return validateLootTableItems(r.Items)
+}
+
+type UpdateLootTableContentsRequest struct {
+	Items []LootTableItemRequest `json:"items"`
+}
+
+func (r *UpdateLootTableContentsRequest) Bind(req *http.Request) error {
+	return validateLootTableItems(r.Items)
 }

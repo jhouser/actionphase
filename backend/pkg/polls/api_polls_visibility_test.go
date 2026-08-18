@@ -256,7 +256,12 @@ func TestHiddenResults_GMAndAudienceStillSeeResults(t *testing.T) {
 	}
 }
 
-func TestHiddenResults_PlayerDeniedEvenAfterGameCompleted(t *testing.T) {
+// hide_results_from_players is a play-time protection, not a permanent one.
+// Once a game is COMPLETED it becomes a public archive in which every
+// authenticated viewer gets audience-level access to the whole game, so a poll
+// the GM hid during play opens up along with everything else. Cancelled games
+// are NOT public and keep the play-time rule.
+func TestHiddenResults_PlayerSeesResultsAfterGameCompleted(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
 	defer testDB.CleanupTables(t, visibilityTables...)
@@ -271,14 +276,55 @@ func TestHiddenResults_PlayerDeniedEvenAfterGameCompleted(t *testing.T) {
 	require.Equal(t, http.StatusOK, voteReq(t, router, f.pollID, f.optionAID, f.playerToken).Code)
 	expirePoll(t, testDB, f.pollID)
 
-	// Completing a game normally opens results to everyone — hidden polls must not follow.
+	// While the game is live the poll stays hidden — the archive rule must be
+	// what opens it, not the deadline.
+	require.Equal(t, http.StatusForbidden, getResultsReq(t, router, f.pollID, f.playerToken).Code,
+		"hidden poll must stay hidden while the game is still running")
+
 	_, err := testDB.Pool.Exec(context.Background(),
 		"UPDATE games SET state = 'completed' WHERE id = $1", f.gameID)
 	require.NoError(t, err)
 
 	rec := getResultsReq(t, router, f.pollID, f.playerToken)
+	require.Equal(t, http.StatusOK, rec.Code,
+		"completing the game must open a hidden-results poll to players: %s", rec.Body.String())
+
+	var results PollResultsResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &results))
+	assert.Equal(t, int32(1), results.TotalVotes, "player should see the real vote total in the archive")
+
+	var votesForA int32
+	for _, opt := range results.OptionResults {
+		if opt.PollOptionID != nil && *opt.PollOptionID == f.optionAID {
+			votesForA = opt.VoteCount
+		}
+	}
+	assert.Equal(t, int32(1), votesForA, "player should see the vote counted against option A")
+}
+
+// A cancelled game is not a public archive, so the play-time protection holds.
+func TestHiddenResults_PlayerDeniedAfterGameCancelled(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, visibilityTables...)
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupVisibilityRouter(app, testDB)
+
+	f := setupVisibilityFixture(t, testDB, app, "hidcanc", core.CreatePollRequest{
+		HideResultsFromPlayers: true,
+	})
+
+	require.Equal(t, http.StatusOK, voteReq(t, router, f.pollID, f.optionAID, f.playerToken).Code)
+	expirePoll(t, testDB, f.pollID)
+
+	_, err := testDB.Pool.Exec(context.Background(),
+		"UPDATE games SET state = 'cancelled' WHERE id = $1", f.gameID)
+	require.NoError(t, err)
+
+	rec := getResultsReq(t, router, f.pollID, f.playerToken)
 	assert.Equal(t, http.StatusForbidden, rec.Code,
-		"completing the game must not unhide a hidden-results poll for players")
+		"cancelling a game must not unhide a hidden-results poll")
 }
 
 func TestVisibleResults_PlayerSeesResultsAfterDeadline(t *testing.T) {

@@ -463,7 +463,6 @@ func TestGameAPI_ListAllActionSubmissions(t *testing.T) {
 		PhaseID: phase.ID,
 		UserID:  int32(player.ID),
 		Content: "I search the ancient library.",
-		IsDraft: false,
 	})
 	require.NoError(t, err)
 
@@ -485,7 +484,7 @@ func TestGameAPI_ListAllActionSubmissions(t *testing.T) {
 		assert.Equal(t, "I search the ancient library.", sub["content"])
 		assert.Contains(t, sub, "username")
 		assert.Contains(t, sub, "phase_type")
-		assert.Contains(t, sub, "status")
+		assert.Contains(t, sub, "phase_number")
 		_, hasTotal := response["total"]
 		assert.True(t, hasTotal, "response should include 'total' field")
 	})

@@ -6,8 +6,12 @@ FROM node:24-alpine
 WORKDIR /app
 
 # Install deps in the image so a fresh container is runnable before the source
-# bind-mount lands. node_modules is a named volume at runtime (see compose), so
-# this baked copy is the fallback/seed, and stays Linux-native regardless of host.
+# bind-mount lands, and so node_modules stays Linux-native regardless of host.
+#
+# node_modules is a named volume at runtime (see compose). Docker seeds that volume
+# from this layer ONLY while the volume is empty — once populated it shadows the
+# image copy permanently. So changing package.json and rebuilding is NOT enough:
+# the stale volume must be dropped too. `just rebuild frontend` does that for you.
 COPY package*.json ./
 RUN npm ci
 

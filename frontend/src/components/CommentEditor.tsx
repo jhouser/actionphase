@@ -3,6 +3,7 @@ import type { ReactNode, MutableRefObject, ChangeEvent, KeyboardEvent } from 're
 import { useBlocker } from 'react-router-dom';
 import { Pencil, Eye, HelpCircle } from 'lucide-react';
 import { MarkdownPreview } from './MarkdownPreview';
+import { TEXT_COLORS } from './textColors';
 import { CharacterAutocomplete } from './CharacterAutocomplete';
 import { SheetItemAutocomplete } from './SheetItemAutocomplete';
 import { Button, Textarea, Modal } from './ui';
@@ -534,7 +535,13 @@ export const CommentEditor = memo(function CommentEditor({
               <div className="font-semibold text-content-secondary mb-1">Colored Text</div>
               <div>
                 <code className="surface-sunken px-1 rounded">[color:red]text[/color]</code>
-                {' — colors: red, green, blue, purple, orange, gold, gray, teal, pink'}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+                {TEXT_COLORS.map((color) => (
+                  <span key={color} data-color={color}>
+                    {color}
+                  </span>
+                ))}
               </div>
             </div>
           </div>

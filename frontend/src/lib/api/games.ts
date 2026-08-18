@@ -13,13 +13,17 @@ import type {
   ReviewApplicationRequest,
   GameListingFilters,
   GameListingResponse,
-  GameLog
+  GameLog,
+  LootTable,
+  LootTableContent,
+  CreateLootTableRequest,
+  UpdateLootTableRequest
 } from '../../types/games';
 import type {
   AudienceConversationListItem,
   AudienceConversationMessage
 } from '../../types/conversations';
-import type { ActionSubmission } from '../../types/phases';
+import type { ActionWithDetails } from '../../types/phases';
 import type { GameStats } from '../../types/gameStats';
 
 /**
@@ -225,7 +229,7 @@ export class GamesApi extends BaseApiClient {
       ? `/api/v1/games/${gameId}/action-submissions/all?${queryString}`
       : `/api/v1/games/${gameId}/action-submissions/all`;
 
-    return this.client.get<{ action_submissions: ActionSubmission[]; total: number }>(url);
+    return this.client.get<{ action_submissions: ActionWithDetails[]; total: number }>(url);
   }
 
   
@@ -234,6 +238,34 @@ export class GamesApi extends BaseApiClient {
     return this.client.get<GameLog[]>(`/api/v1/games/${id}/logs`);
   }
 
+  async getLootTables(gameId: number, excludeEmpty: boolean = false) {
+    return this.client.get<LootTable[]>(`/api/v1/games/${gameId}/loot-tables${(excludeEmpty ? '?exclude-empty=true': '')}`);
+  }
+
+  async createLootTable(gameId: number, data: CreateLootTableRequest) {
+    return this.client.post<LootTable>(`/api/v1/games/${gameId}/loot-tables`, { name: data.name, items: data.items });
+  }
+
+  async updateLootTable(gameId: number, lootTableId: number, data: UpdateLootTableRequest) {
+    return this.client.put(`/api/v1/games/${gameId}/loot-tables/${lootTableId}`, { name: data.name });
+  }
+
+  async deleteLootTable(gameId: number, lootTableId: number) {
+    return this.client.delete(`/api/v1/games/${gameId}/loot-tables/${lootTableId}`);
+  }
+
+  async getLootTableContents(gameId: number, tableId: number) {
+    return this.client.get<LootTableContent[]>(`/api/v1/games/${gameId}/loot-tables/${tableId}/contents`);
+  }
+
+  async setLootTableContents(gameId: number, tableId: number, contents: LootTableContent[]) {
+    return this.client.post(`/api/v1/games/${gameId}/loot-tables/${tableId}/contents`, { items: contents });
+  }
+
+  async giveRandomLootTableContent(gameId: number, tableId: number, characterId: number) {
+    return this.client.post<LootTableContent>(`/api/v1/games/${gameId}/loot-tables/${tableId}/random/${characterId}`, { });
+  }
+  
   // Post-game statistics. Returns 409 unless the game is completed, so only
   // call this for completed games.
   async getGameStats(id: number) {

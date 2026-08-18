@@ -299,40 +299,21 @@ func TestActionSubmissionBuilder(t *testing.T) {
 		AssertEqual(t, game.ID, submission.GameID, "Game ID should match")
 		AssertEqual(t, user.ID, submission.UserID, "User ID should match")
 		AssertEqual(t, phase.ID, submission.PhaseID, "Phase ID should match")
-		AssertEqual(t, false, submission.IsDraft.Bool, "Should not be draft by default")
 	})
 
-	t.Run("creates draft submission", func(t *testing.T) {
+	t.Run("stamps every submission with a submission time", func(t *testing.T) {
 		user := factory.NewUser().Create()
 		game := factory.NewGame().WithGM(user.ID).Create()
 		phase := factory.NewPhase().InGame(game).ActionPhase().Active().Create()
 
-		draft := factory.NewActionSubmission().
-			InPhase(phase).
-			ByUser(user).
-			WithContent("Work in progress...").
-			Draft().
-			Create()
-
-		AssertEqual(t, true, draft.IsDraft.Bool, "Should be draft")
-		AssertEqual(t, "Work in progress...", draft.Content, "Content should match")
-		AssertEqual(t, false, draft.SubmittedAt.Valid, "Draft should not have submission time")
-	})
-
-	t.Run("creates final submission", func(t *testing.T) {
-		user := factory.NewUser().Create()
-		game := factory.NewGame().WithGM(user.ID).Create()
-		phase := factory.NewPhase().InGame(game).ActionPhase().Active().Create()
-
-		final := factory.NewActionSubmission().
+		submission := factory.NewActionSubmission().
 			InPhase(phase).
 			ByUser(user).
 			WithContent("I search the ancient library for clues").
-			Final().
 			Create()
 
-		AssertEqual(t, false, final.IsDraft.Bool, "Should not be draft")
-		AssertTrue(t, final.SubmittedAt.Valid, "Final submission should have submission time")
+		AssertEqual(t, "I search the ancient library for clues", submission.Content, "Content should match")
+		AssertTrue(t, submission.SubmittedAt.Valid, "Submission should have submission time")
 	})
 
 	t.Run("creates submission with character", func(t *testing.T) {

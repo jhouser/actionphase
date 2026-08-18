@@ -752,27 +752,45 @@
   }
 }
 
-/* Colored text — custom markdown extension [color:X]...[/color] */
-[data-color="red"]    { color: #dc2626; }
-[data-color="green"]  { color: #16a34a; }
-[data-color="blue"]   { color: #2563eb; }
-[data-color="purple"] { color: #7c3aed; }
-[data-color="orange"] { color: #f97316; }
-[data-color="gold"]   { color: #ca8a04; }
-[data-color="gray"]   { color: #6b7280; }
-[data-color="teal"]   { color: #0d9488; }
-[data-color="pink"]   { color: #db2777; }
+/* Colored text — custom markdown extension [color:X]...[/color]
+ *
+ * Each color is defined twice: a 600/700-weight value for light mode and a
+ * 300/400-weight value for dark. Both sides must stay legible against their own
+ * background, so these are *roles*, not literal hues. That is why there is no
+ * "black" or "white": body text is already #111827 on light and #fff on dark
+ * (see --color-content-primary in lib/theme/themes.ts), so either name could
+ * only duplicate the default or be unreadable in one theme.
+ *
+ * Adding a color means touching four places, all of which must agree:
+ *   1. here (light), 2. here (dark),
+ *   3. ALLOWED_COLORS in frontend/src/components/MarkdownPreview.tsx,
+ *   4. allowedColors in backend/pkg/exports/markdown.go,
+ * plus the help text in CommentEditor.tsx. */
+[data-color="red"]     { color: #dc2626; }
+[data-color="green"]   { color: #16a34a; }
+[data-color="blue"]    { color: #2563eb; }
+[data-color="purple"]  { color: #7c3aed; }
+[data-color="orange"]  { color: #f97316; }
+[data-color="gold"]    { color: #ca8a04; }
+[data-color="gray"]    { color: #6b7280; }
+[data-color="teal"]    { color: #0d9488; }
+[data-color="pink"]    { color: #db2777; }
+[data-color="brown"]   { color: #92400e; }
+[data-color="olive"]   { color: #4d7c0f; }
+[data-color="silver"]  { color: #94a3b8; }
 
-
-.dark [data-color="red"]    { color: #f87171; }
-.dark [data-color="green"]  { color: #4ade80; }
-.dark [data-color="blue"]   { color: #60a5fa; }
-.dark [data-color="purple"] { color: #a78bfa; }
-.dark [data-color="orange"] { color: #fb923c; }
-.dark [data-color="gold"]   { color: #facc15; }
-.dark [data-color="gray"]   { color: #9ca3af; }
-.dark [data-color="teal"]   { color: #2dd4bf; }
-.dark [data-color="pink"]   { color: #f472b6; }
+.dark [data-color="red"]     { color: #f87171; }
+.dark [data-color="green"]   { color: #4ade80; }
+.dark [data-color="blue"]    { color: #60a5fa; }
+.dark [data-color="purple"]  { color: #a78bfa; }
+.dark [data-color="orange"]  { color: #fb923c; }
+.dark [data-color="gold"]    { color: #facc15; }
+.dark [data-color="gray"]    { color: #9ca3af; }
+.dark [data-color="teal"]    { color: #2dd4bf; }
+.dark [data-color="pink"]    { color: #f472b6; }
+.dark [data-color="brown"]   { color: #d3a06a; }
+.dark [data-color="olive"]   { color: #a3e635; }
+.dark [data-color="silver"]  { color: #cbd5e1; }
 
 /* Landscape orientation: Adjust for wider viewport but shorter height */
 @media (max-width: 896px) and (orientation: landscape) {

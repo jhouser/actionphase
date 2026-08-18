@@ -76,11 +76,15 @@ FROM game_phases
 WHERE game_id = $1;
 
 -- name: SubmitAction :one
-INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, is_draft, submitted_at)
-VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 THEN NULL ELSE NOW() END)
+-- submitted_at is stamped once on insert and preserved across edits: it marks
+-- when the player first submitted, not when they last touched the text.
+-- updated_at carries the latter, and the two being equal is how the handler
+-- detects a first-time submission for GM notification.
+INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, submitted_at)
+VALUES ($1, $2, $3, $4, $5, NOW())
 ON CONFLICT (game_id, user_id, phase_id)
-DO UPDATE SET content = $5, character_id = $4, is_draft = $6,
-              submitted_at = CASE WHEN $6 THEN action_submissions.submitted_at ELSE COALESCE(action_submissions.submitted_at, NOW()) END,
+DO UPDATE SET content = $5, character_id = $4,
+              submitted_at = COALESCE(action_submissions.submitted_at, NOW()),
               updated_at = NOW()
 RETURNING *;
 
@@ -250,11 +254,10 @@ WHERE id = $1 AND is_published = false;
 SELECT
     $1::int as phase_id,
     COUNT(DISTINCT gp.user_id) as total_players,
-    COUNT(DISTINCT CASE WHEN acts.id IS NOT NULL AND NOT acts.is_draft THEN acts.user_id END) as submitted_count,
-    COUNT(DISTINCT CASE WHEN acts.is_draft THEN acts.user_id END) as draft_count,
+    COUNT(DISTINCT acts.user_id) as submitted_count,
     COALESCE(
         ROUND(
-            (COUNT(DISTINCT CASE WHEN acts.id IS NOT NULL AND NOT acts.is_draft THEN acts.user_id END) * 100.0) /
+            (COUNT(DISTINCT acts.user_id) * 100.0) /
             NULLIF(COUNT(DISTINCT gp.user_id), 0),
             2
         ),
@@ -303,19 +306,18 @@ ORDER BY pt.created_at;
 
 -- name: ListAllActionSubmissions :many
 -- List all action submissions for a game (for audience/GM)
--- Includes character name and submission status
-SELECT acts.*, u.username, c.name as character_name, gp.phase_type, gp.phase_number, gp.title as phase_title,
-       ar.id as action_result_id,
-       CASE
-         WHEN ar.id IS NOT NULL THEN 'result_posted'
-         WHEN acts.is_draft THEN 'draft'
-         ELSE 'submitted'
-       END as status
+--
+-- Deliberately does NOT join action_results. Results are meaningful per phase,
+-- not per submission: a player submits 0-1 actions but may receive several
+-- results (staged reveals), so joining them fanned one submission into a row
+-- per result and desynced LIMIT/OFFSET from CountAllActionSubmissions, which
+-- counts submissions alone. Consumers read results from the per-phase results
+-- endpoints instead.
+SELECT acts.*, u.username, c.name as character_name, gp.phase_type, gp.phase_number, gp.title as phase_title
 FROM action_submissions acts
 JOIN users u ON acts.user_id = u.id
 JOIN game_phases gp ON acts.phase_id = gp.id
 LEFT JOIN characters c ON acts.character_id = c.id
-LEFT JOIN action_results ar ON ar.action_submission_id = acts.id
 WHERE acts.game_id = sqlc.arg(game_id)
   AND (CASE WHEN sqlc.arg(phase_id) = 0 THEN TRUE ELSE acts.phase_id = sqlc.arg(phase_id) END)
 ORDER BY gp.phase_number DESC, acts.submitted_at DESC

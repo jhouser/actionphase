@@ -215,28 +215,26 @@ BEGIN
   ) RETURNING id INTO phase_id;
 
   -- Add an existing action for Player 1 (to test viewing existing actions)
-  INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, is_draft, submitted_at, updated_at)
+  INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, submitted_at, updated_at)
   VALUES (
     game_action_id,
     p1_id,
     phase_id,
     char1_id,
     'This is my existing action for testing purposes. I will do something interesting.',
-    false,
     NOW() - INTERVAL '1 hour',
     NOW() - INTERVAL '1 hour'
   );
 
-  -- Add a draft action for Player 4 (to test editing drafts)
-  INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, is_draft, submitted_at, updated_at)
+  -- Add an in-progress action for Player 4 (to test editing before the deadline)
+  INSERT INTO action_submissions (game_id, user_id, phase_id, character_id, content, submitted_at, updated_at)
   VALUES (
     game_action_id,
     p4_id,
     phase_id,
     char4_id,
-    'This is a draft action that needs to be completed.',
-    true,
-    NULL,
+    'This is an in-progress action that needs to be completed.',
+    NOW() - INTERVAL '45 minutes',
     NOW() - INTERVAL '30 minutes'
   );
 
