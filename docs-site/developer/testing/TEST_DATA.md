@@ -656,15 +656,29 @@ BEGIN
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char1_id, 'bio', 'background', 'A Whisper who keeps company with things better left unspoken...', 'text', true, NOW(), NOW()),
-    (char1_id, 'skills', 'skills', '[{"id":"...","name":"Compel","level":"2","category":"Arcane"}, ...]', 'json', true, NOW(), NOW()),
-    (char1_id, 'inventory', 'items', '[{"id":"...","name":"Spirit Bottle","quantity":1,"equipped":false}, ...]', 'json', true, NOW(), NOW()),
-    (char1_id, 'currency', 'currency', '[{"id":"...","type":"Coin","amount":6}, {"id":"...","type":"Stress","amount":4}]', 'json', false, NOW(), NOW());
+    (char1_id, 'skills', 'skills', '[{"id":"...","name":"Compel","rank":"2","category":"Arcane"}, ...]', 'json', true, NOW(), NOW()),
+    (char1_id, 'inventory', 'items', '[{"id":"...","name":"Spirit Bottle","quantity":1}, ...]', 'json', true, NOW(), NOW()),
+    (char1_id, 'numbers', 'numbers', '[{"id":"...","name":"Coin","amount":6}, {"id":"...","name":"Stress","amount":4,"max":9,"display":"boxes"}]', 'json', false, NOW(), NOW());
     -- (char2_id rows follow the same shape; see the fixture for full values)
 
--- NOTE: module_type is limited to bio/notes/abilities/skills/inventory/currency, and each
--- stat collection is ONE row holding a JSON array whose element shape must match what the
--- app writes (see CHARACTER_MODULES and the Add*Modal components). Fixture rows using other
--- module types or field names are unreadable by every code path and hide real bugs.
+-- NOTE: module_type is bio/notes/skills/inventory/numbers. This is enforced in application
+-- code, NOT by a DB constraint, which is why a bad fixture inserts cleanly and then renders
+-- as nothing. (The check_module_type constraint is on action_result_character_updates.) Each stat
+-- collection is ONE row holding a JSON array whose element shape must match what the app
+-- writes (see buildCharacterModules() in frontend/src/types/characters.ts and the Add*Modal
+-- components). Fixture rows using other module types or field names are unreadable by every
+-- code path and hide real bugs.
+--
+-- Matching the column list is NOT sufficient — the element JSON has to match the write path
+-- too, which is narrower than the TypeScript type. Keys retired by the character sheet
+-- refactor and never written again:
+--   * `abilities` module_type   -> retired; its content folded into `skills`
+--   * `currency` module_type    -> renamed to `numbers` (a real migration; reads are keyed
+--                                  by module_type, so there is no fallback)
+--   * skill `level`             -> renamed to `rank`, resolved on READ (no migration), so
+--                                  old rows keep parsing. Fixtures should use `rank`.
+--   * item `equipped`           -> dropped; nothing could ever set it true
+--   * `metadata` on skills/items-> dropped; no reader ever existed
 
   -- ============================================
   -- GAME #3: Starfall Station

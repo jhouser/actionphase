@@ -20,7 +20,7 @@ While writing your action you can insert a reference to any item from your chara
 
 There are two ways to insert:
 
-**From the Character Sheet drawer** — Click the **Character Sheet** button (person icon) in the toolbar to open a sidebar listing your abilities, skills, and inventory. Use the filter box to narrow the list, then click any item to insert it at the current cursor position.
+**From the Character Sheet drawer** — Click the **Character Sheet** button (person icon) in the toolbar to open a sidebar listing your skills and inventory. Use the filter box to narrow the list, then click any item to insert it at the current cursor position.
 
 **With the `%%` shortcut** — Type `%%` anywhere in the editor to open an inline autocomplete menu. Continue typing to filter, then press `Enter` or click a result to insert.
 
@@ -64,7 +64,7 @@ If you attempt to activate a new phase while draft results exist, a prompt will 
 
 Before publishing a result, you can prepare character sheet changes as part of that result. Click the character sheet edit button on the result card to open the **Update Character Sheet** modal.
 
-The modal lets you edit the character's Abilities and Inventory sections directly. Changes are saved as drafts and applied to the character sheet automatically when you publish the result.
+The modal lets you edit the character's Skills, Inventory, and Numbers sections directly. Changes are saved as drafts and applied to the character sheet automatically when you publish the result.
 
 ### Keep each character's sheet updates in ONE result per phase
 
