@@ -9,6 +9,7 @@ import (
 	core "actionphase/pkg/core"
 	models "actionphase/pkg/db/models"
 	db "actionphase/pkg/db/services"
+	"actionphase/pkg/observability"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -319,7 +320,9 @@ func (ps *PhaseService) activatePhaseInternal(ctx context.Context, phaseID int32
 	notifCtx := context.WithoutCancel(ctx)
 
 	// Trigger notifications for phase activation (fire-and-forget)
-	go ps.notifyPhaseActivated(notifCtx, phase.GameID, activePhase.ID, activePhase.Title, 0)
+	observability.SafeGo(notifCtx, ps.Logger, "notify-phase-activated", func() {
+		ps.notifyPhaseActivated(notifCtx, phase.GameID, activePhase.ID, activePhase.Title, 0)
+	})
 
 	return &activePhase, nil
 }

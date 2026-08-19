@@ -23,15 +23,36 @@ var _ core.ConversationServiceInterface = (*ConversationService)(nil)
 type ConversationService struct {
 	DB      *pgxpool.Pool
 	Queries *models.Queries
+
+	// Logger is optional. When unset, logger() supplies a package-local
+	// fallback so callers that construct this service directly keep working.
+	Logger *observability.Logger
 }
 
-// NewConversationService creates a new conversation service
-func NewConversationService(db *pgxpool.Pool) *ConversationService {
+// NewConversationService creates a new conversation service.
+//
+// The logger may be nil; see ConversationService.Logger.
+func NewConversationService(db *pgxpool.Pool, logger *observability.Logger) *ConversationService {
 	return &ConversationService{
 		DB:      db,
 		Queries: models.New(db),
+		Logger:  logger,
 	}
 }
+
+// logger returns the service logger, falling back to a package-local one when
+// none was supplied. Background work recovers panics through this logger, so it
+// must never be nil.
+func (s *ConversationService) logger() *observability.Logger {
+	if s.Logger != nil {
+		return s.Logger
+	}
+	return fallbackConversationLogger
+}
+
+// fallbackConversationLogger backs ConversationService.logger() for callers
+// that construct the service without one.
+var fallbackConversationLogger = observability.NewLogger("conversations", "info")
 
 // CreateConversationRequest represents a request to create a new conversation
 // CreateConversationRequest is an alias kept for callers that used the old db-package type.
@@ -285,7 +306,9 @@ func (s *ConversationService) SendMessage(ctx context.Context, req SendMessageRe
 	}
 
 	// Trigger notifications for all participants except sender (fire-and-forget)
-	go s.notifyPrivateMessage(context.Background(), req.ConversationID, req.SenderUserID, req.SenderCharacterID, msg.ID)
+	observability.SafeGo(context.Background(), s.logger(), "notify-private-message", func() {
+		s.notifyPrivateMessage(context.Background(), req.ConversationID, req.SenderUserID, req.SenderCharacterID, msg.ID)
+	})
 
 	return &msg, nil
 }
@@ -428,8 +451,7 @@ func (s *ConversationService) AddParticipant(ctx context.Context, conversationID
 // notifyPrivateMessage triggers notifications for all conversation participants except the sender
 // This runs in a goroutine and should not fail the parent operation
 func (s *ConversationService) notifyPrivateMessage(ctx context.Context, conversationID, senderUserID, senderCharacterID int32, messageID int32) {
-	logger := observability.NewLogger("conversations", "info")
-	notificationService := NewNotificationService(s.DB, logger)
+	notificationService := NewNotificationService(s.DB, s.logger())
 
 	// Get conversation details to find game_id
 	conv, err := s.Queries.GetConversation(ctx, conversationID)

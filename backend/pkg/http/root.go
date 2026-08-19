@@ -24,12 +24,10 @@ import (
 	"actionphase/pkg/phases"
 	"actionphase/pkg/polls"
 	"actionphase/pkg/users"
-	"context"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -317,7 +315,7 @@ func (h *Handler) Start() {
 					App:                 h.App,
 					GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					CharacterService:    &db.CharacterService{DB: h.App.Pool, Logger: h.App.ObsLogger},
-					ConversationService: db.NewConversationService(h.App.Pool),
+					ConversationService: db.NewConversationService(h.App.Pool, h.App.ObsLogger),
 					PhaseService:        &dbphases.PhaseService{DB: h.App.Pool},
 				}
 				conversationHandler.RegisterRoutes(r)
@@ -776,38 +774,10 @@ func (h *Handler) Start() {
 		"read_timeout", server.ReadTimeout,
 		"write_timeout", server.WriteTimeout)
 
-	// Background job: delete notifications older than 30 days, runs once per day
-	go func() {
-		notificationService := db.NewNotificationService(h.App.Pool, h.App.ObsLogger)
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for range ticker.C {
-			if err := notificationService.DeleteOldReadNotifications(context.Background()); err != nil {
-				h.App.ObsLogger.Error(context.Background(), "Background notification cleanup failed", "error", err)
-			}
-		}
-	}()
-
-	// Background job: auth table cleanup (tokens, verification records, bot data)
-	go func() {
-		passwordSvc := &auth.PasswordService{DB: h.App.Pool, Logger: h.App.ObsLogger}
-		accountSvc := &auth.AccountService{DB: h.App.Pool, Logger: h.App.ObsLogger}
-		botPreventionSvc := auth.NewBotPreventionService(h.App.Pool)
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for range ticker.C {
-			ctx := context.Background()
-			if err := passwordSvc.CleanupExpiredTokens(ctx); err != nil {
-				h.App.ObsLogger.Error(ctx, "Background password token cleanup failed", "error", err)
-			}
-			if err := accountSvc.CleanupExpiredVerificationTokens(ctx); err != nil {
-				h.App.ObsLogger.Error(ctx, "Background verification token cleanup failed", "error", err)
-			}
-			if err := botPreventionSvc.CleanupOldRegistrationAttempts(ctx); err != nil {
-				h.App.ObsLogger.Error(ctx, "Background registration attempt cleanup failed", "error", err)
-			}
-		}
-	}()
+	// Background housekeeping workers are started in main.go, where the
+	// cancellable process context lives alongside the scheduler and export
+	// workers. Starting them here would strand them on context.Background(),
+	// making their ctx.Done() case unreachable.
 
 	if err := server.ListenAndServe(); err != nil {
 		h.App.Logger.Error("HTTP server failed", "error", err)

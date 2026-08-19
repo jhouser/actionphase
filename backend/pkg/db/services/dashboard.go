@@ -6,6 +6,7 @@ import (
 	"actionphase/pkg/observability"
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -78,11 +79,16 @@ func (s *DashboardService) GetUserDashboard(ctx context.Context, userID int32) (
 		mu.Unlock()
 	}
 
+	// Each query below defers wg.Done() *before* recoverFanOut, so Done still
+	// runs on the panic path. A recover that skipped it would leave wg.Wait()
+	// blocked forever, turning a process crash into a permanently hung request.
 	var wg sync.WaitGroup
 	wg.Add(5)
 
 	go func() {
 		defer wg.Done()
+		defer recoverFanOut(ctx, s.Logger, "dashboard-games", setErr)
+
 		res, err := q.GetUserDashboardGames(ctx, userID)
 		if err != nil {
 			s.Logger.LogError(ctx, err, "Failed to get dashboard games", "user_id", userID)
@@ -94,6 +100,8 @@ func (s *DashboardService) GetUserDashboard(ctx context.Context, userID int32) (
 
 	go func() {
 		defer wg.Done()
+		defer recoverFanOut(ctx, s.Logger, "dashboard-recent-messages", setErr)
+
 		res, err := q.GetUserRecentMessages(ctx, db.GetUserRecentMessagesParams{UserID: userID, Limit: 5})
 		if err != nil {
 			s.Logger.LogError(ctx, err, "Failed to get recent messages", "user_id", userID)
@@ -105,6 +113,8 @@ func (s *DashboardService) GetUserDashboard(ctx context.Context, userID int32) (
 
 	go func() {
 		defer wg.Done()
+		defer recoverFanOut(ctx, s.Logger, "dashboard-upcoming-deadlines", setErr)
+
 		res, err := q.GetUserUpcomingDeadlines(ctx, db.GetUserUpcomingDeadlinesParams{UserID: userID, Limit: 10})
 		if err != nil {
 			s.Logger.LogError(ctx, err, "Failed to get upcoming deadlines", "user_id", userID)
@@ -116,6 +126,8 @@ func (s *DashboardService) GetUserDashboard(ctx context.Context, userID int32) (
 
 	go func() {
 		defer wg.Done()
+		defer recoverFanOut(ctx, s.Logger, "dashboard-notification-counts", setErr)
+
 		res, err := q.GetUserUnreadNotificationsByType(ctx, userID)
 		if err != nil {
 			s.Logger.LogError(ctx, err, "Failed to get notification counts by type", "user_id", userID)
@@ -127,6 +139,8 @@ func (s *DashboardService) GetUserDashboard(ctx context.Context, userID int32) (
 
 	go func() {
 		defer wg.Done()
+		defer recoverFanOut(ctx, s.Logger, "dashboard-unread-comments", setErr)
+
 		res, err := getUnreadCommentCountsForDashboard(ctx, s.DB, userID, prefs.CommentReadMode)
 		if err != nil {
 			s.Logger.LogError(ctx, err, "Failed to get unread comment counts", "user_id", userID)
@@ -429,4 +443,31 @@ func ptrStringValue(v pgtype.Text) *string {
 		return &s
 	}
 	return nil
+}
+
+// recoverFanOut recovers a panic in one dashboard fan-out query and reports it
+// through setErr so the request fails cleanly.
+//
+// This deliberately does not use observability.SafeRun. SafeRun is for
+// fire-and-forget background work, where swallowing the panic and carrying on is
+// the right outcome. Here a panicking query means part of the dashboard is
+// missing, and returning a silently incomplete dashboard as a 200 would be
+// worse than an error: the caller cannot tell the difference between "no
+// upcoming deadlines" and "the deadlines query blew up".
+//
+// Callers must defer wg.Done() *before* deferring this, so that Done still runs
+// on the panic path and wg.Wait() cannot block forever.
+func recoverFanOut(ctx context.Context, logger *observability.Logger, name string, setErr func(error)) {
+	r := recover()
+	if r == nil {
+		return
+	}
+
+	err := fmt.Errorf("panic in %s: %v", name, r)
+	if logger != nil {
+		logger.LogError(ctx, err, "Dashboard fan-out query panicked",
+			"unit", name,
+			"stack_trace", string(debug.Stack()))
+	}
+	setErr(err)
 }

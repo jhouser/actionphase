@@ -59,12 +59,14 @@ func (w *Worker) Start(ctx context.Context) context.CancelFunc {
 
 		// Recover jobs abandoned by a previous process before taking new work,
 		// so a crash mid-export doesn't leave a request stuck forever.
-		if _, err := w.runner.RequeueStalled(ctx, DefaultStaleAfter); err != nil {
-			w.logErr(ctx, err, "Startup requeue of stalled exports failed")
-		}
+		observability.SafeRun(ctx, w.logger, "export-startup-requeue", func() {
+			if _, err := w.runner.RequeueStalled(ctx, DefaultStaleAfter); err != nil {
+				w.logErr(ctx, err, "Startup requeue of stalled exports failed")
+			}
+		})
 
 		// Reclaim anything that expired while the process was down.
-		w.sweep(ctx)
+		w.safeSweep(ctx)
 
 		ticker := time.NewTicker(w.interval)
 		defer ticker.Stop()
@@ -72,12 +74,12 @@ func (w *Worker) Start(ctx context.Context) context.CancelFunc {
 		defer sweepTicker.Stop()
 
 		for {
-			w.drain(ctx)
+			w.safeDrain(ctx)
 
 			select {
 			case <-ticker.C:
 			case <-sweepTicker.C:
-				w.sweep(ctx)
+				w.safeSweep(ctx)
 			case <-ctx.Done():
 				w.logInfo(ctx, "Export worker stopped")
 				return
@@ -86,6 +88,18 @@ func (w *Worker) Start(ctx context.Context) context.CancelFunc {
 	}()
 
 	return cancel
+}
+
+// safeDrain runs one drain pass with panic recovery. Recovery is per-pass, not
+// around the loop: a panic on one malformed job must not stop the queue
+// permanently and silently.
+func (w *Worker) safeDrain(ctx context.Context) {
+	observability.SafeRun(ctx, w.logger, "export-drain-tick", func() { w.drain(ctx) })
+}
+
+// safeSweep runs one retention sweep with panic recovery.
+func (w *Worker) safeSweep(ctx context.Context) {
+	observability.SafeRun(ctx, w.logger, "export-sweep-tick", func() { w.sweep(ctx) })
 }
 
 // drain runs queued jobs until the queue empties, the budget is spent, or the

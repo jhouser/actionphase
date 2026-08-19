@@ -53,7 +53,7 @@ func setupConversationAPITestRouter(app *core.App, testDB *core.TestDatabase) *c
 				App:                 app,
 				GameService:         &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 				CharacterService:    &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger},
-				ConversationService: db.NewConversationService(testDB.Pool),
+				ConversationService: db.NewConversationService(testDB.Pool, nil),
 				PhaseService:        &phasesvc.PhaseService{DB: testDB.Pool},
 			}
 
@@ -339,7 +339,7 @@ func TestConversationAPI_SendMessage(t *testing.T) {
 	game := testDB.CreateTestGame(t, int32(gm.ID), "Test Game")
 
 	// Setup services
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	characterService := &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 	phaseService := &phasesvc.PhaseService{DB: testDB.Pool, Logger: app.ObsLogger}
@@ -556,7 +556,7 @@ func TestConversationAPI_GetConversationMessages(t *testing.T) {
 	game := testDB.CreateTestGame(t, int32(gm.ID), "Test Game")
 
 	// Setup services
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	characterService := &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -843,7 +843,7 @@ func TestConversationAPI_DeleteMessage(t *testing.T) {
 	game := testDB.CreateTestGame(t, int32(gm.ID), "Test Game")
 
 	// Setup services
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	characterService := &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -976,7 +976,7 @@ func TestConversationAPI_GetUserConversations(t *testing.T) {
 	})
 	core.AssertNoError(t, err, "Should create player2 character")
 
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	_, err = conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          game.ID,
 		Title:           "Conversation Between P1 and P2",
@@ -1061,7 +1061,7 @@ func TestConversationAPI_GetConversation(t *testing.T) {
 	})
 	core.AssertNoError(t, err, "Should create player2 character")
 
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	conversation, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          game.ID,
 		Title:           "Secret Conversation",
@@ -1140,7 +1140,7 @@ func TestConversationAPI_MarkAsRead(t *testing.T) {
 	})
 	core.AssertNoError(t, err, "Should create player2 character")
 
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	conversation, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          game.ID,
 		Title:           "Conversation",
@@ -1237,7 +1237,7 @@ func TestConversationAPI_AddParticipant(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a conversation between player1 and player2
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	conversation, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          game.ID,
 		Title:           "Private Chat",
@@ -1331,7 +1331,7 @@ func TestConversationAPI_UpdateMessage(t *testing.T) {
 	err = phaseService.ActivatePhase(context.Background(), phase.ID, int32(gm.ID))
 	require.NoError(t, err)
 
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	conversation, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          game.ID,
 		Title:           "Chat",
@@ -1511,7 +1511,7 @@ func TestConversationAPI_InterludePhaseMessaging(t *testing.T) {
 
 	phaseService := &phasesvc.PhaseService{DB: testDB.Pool, Logger: app.ObsLogger}
 
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	conversation, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          game.ID,
 		Title:           "Planning Chat",
@@ -1629,7 +1629,7 @@ func TestConversationAPI_GetUserConversations_UnreadOnly(t *testing.T) {
 
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	characterService := &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 
 	_, err = gameService.AddGameParticipant(context.Background(), game.ID, int32(player1.ID), "player")
 	core.AssertNoError(t, err, "Should add player1")
@@ -1741,7 +1741,7 @@ func TestConversationAPI_DeleteConversation(t *testing.T) {
 
 	game := testDB.CreateTestGame(t, int32(gm.ID), "Conversation Delete API Game")
 
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	characterService := &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
