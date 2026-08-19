@@ -20,7 +20,23 @@ interface ModalProps {
    * remain, so closing stays possible but has to be deliberate.
    */
   dismissOnBackdrop?: boolean;
+  /**
+   * Panel width. Named after the Tailwind max-width it maps to, rather than an
+   * abstract scale, because the `ui/Modal` component next door already uses
+   * md/lg/xl for a *different* set of widths — `xl` there is `max-w-4xl`.
+   * Defaults to `4xl`, the width every caller had before this prop existed.
+   */
+  size?: ModalSize;
 }
+
+type ModalSize = '2xl' | '4xl' | '5xl' | '7xl';
+
+const sizeClasses: Record<ModalSize, string> = {
+  '2xl': 'max-w-2xl',
+  '4xl': 'max-w-4xl',
+  '5xl': 'max-w-5xl',
+  '7xl': 'max-w-7xl',
+};
 
 /**
  * Modal - Dialog overlay component with semantic theme tokens
@@ -29,7 +45,7 @@ interface ModalProps {
  * - 70% less code (no more dark: classes)
  * - Automatically adapts to all themes (light, dark, future themes)
  */
-export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50', dismissOnBackdrop = true }: ModalProps) => {
+export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50', dismissOnBackdrop = true, size = '4xl' }: ModalProps) => {
   if (!isOpen) return null;
 
   return (
@@ -43,7 +59,7 @@ export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50', 
         />
 
         {/* Modal */}
-        <div className="relative z-10 surface-raised rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-border-primary">
+        <div className={`relative z-10 surface-raised rounded-lg shadow-2xl ${sizeClasses[size]} w-full max-h-[90vh] overflow-y-auto border border-border-primary`}>
           {title && (
             <div className="px-3 py-2 sm:px-6 sm:py-4 border-b border-theme-default">
               <div className="flex items-center justify-between">

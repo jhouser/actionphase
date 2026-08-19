@@ -5,7 +5,7 @@ import type { GameFormData } from '../components/GameFormFields';
 import { convertToISO8601, formatDateTimeLocal } from '../lib/utils/dates';
 import { useUploadGameBanner, useDeleteGameBanner } from './useGameBanner';
 
-const BLANK_FORM_DATA: GameFormData = {
+export const BLANK_FORM_DATA: GameFormData = {
   title: '',
   description: '',
   genre: '',
@@ -93,6 +93,11 @@ export function useGameForm(initialData?: GameWithDetails) {
   const [formData, setFormData] = useState<GameFormData>(() =>
     initialData ? gameToFormData(initialData) : { ...BLANK_FORM_DATA }
   );
+  // The state the form was opened in, for the unsaved-edit comparison. Held in
+  // state rather than recomputed so it survives re-renders, and so Edit's
+  // re-hydration effect can move the baseline when it reloads the game — a
+  // fresh hydration is not an edit.
+  const [initialFormData, setInitialFormData] = useState<GameFormData>(formData);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [pendingBannerFile, setPendingBannerFile] = useState<File | null>(null);
@@ -212,9 +217,18 @@ export function useGameForm(initialData?: GameWithDetails) {
     return { payload, error: null };
   }, [formData]);
 
+  // Replaces both the form contents and the baseline they are compared against,
+  // so re-hydrating an unedited form does not register as dirty.
+  const resetFormData = useCallback((next: GameFormData) => {
+    setFormData(next);
+    setInitialFormData(next);
+  }, []);
+
   return {
     formData,
     setFormData,
+    initialFormData,
+    resetFormData,
     handleChange,
     error,
     setError,
