@@ -239,9 +239,50 @@ components:
           minimum: 1
           maximum: 20
           example: 6
+        character_sheet:
+          $ref: '#/components/schemas/CharacterSheetConfig'
       required:
         - title
         - description
+
+    CharacterSheetConfig:
+      type: object
+      description: >-
+        Per-game character sheet overrides. Sparse: a key is present only when the GM
+        has actually overridden it, and an absent key means "use the default". Defaults
+        are owned by the frontend and are never filled in by the server.
+
+
+        Replace semantics, not merge. `PUT /games/{gameID}` is a full replace, so a
+        request that omits `character_sheet` RESETS every label to its default -- this
+        is how a GM unsets a renamed tab. Likewise, supplying a config with only
+        `skills` clears any previously stored `inventory` and `numbers` labels.
+
+
+        Unknown keys are rejected with 400.
+      properties:
+        labels:
+          type: object
+          description: >-
+            GM overrides for the stat tab names. Each key is the tab's storage
+            module_type. Values are trimmed; a whitespace-only value is treated as
+            no override. Max 24 characters (counted in runes); control characters and
+            newlines are rejected.
+          properties:
+            skills:
+              type: string
+              maxLength: 24
+              example: "Approaches"
+            inventory:
+              type: string
+              maxLength: 24
+              example: "Gear"
+            numbers:
+              type: string
+              maxLength: 24
+              example: "Stress"
+          additionalProperties: false
+      additionalProperties: false
 
     UpdateGameRequest:
       type: object
@@ -274,6 +315,8 @@ components:
           maximum: 20
         is_public:
           type: boolean
+        character_sheet:
+          $ref: '#/components/schemas/CharacterSheetConfig'
 
     UpdateGameStateRequest:
       type: object

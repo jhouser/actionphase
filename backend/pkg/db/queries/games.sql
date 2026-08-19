@@ -43,10 +43,21 @@ SET title = $2, description = $3, genre = $4, start_date = $5,
     common_room_open_day = $15, common_room_open_time = $16,
     common_room_close_day = $17, common_room_close_time = $18,
     schedule_timezone = $19,
-    -- COALESCE to the EXISTING value, not to '{}': a nil here means "the caller
-    -- did not supply a config", and on an update that must preserve the GM's
-    -- labels rather than silently wipe them. (CreateGame coalesces to '{}'
-    -- instead, since there is no prior value to keep.)
+    -- The COALESCE is belt-and-braces only: it fires just for a caller that builds
+    -- UpdateGameParams by hand and leaves CharacterSheet nil. It is NOT a
+    -- preserve-on-absent contract, and must not be read as one.
+    --
+    -- UpdateGame is a full replace, not a patch. core.UpdateGameRequest.CharacterSheet
+    -- is a value, not a pointer, and the service marshals an empty config to '{}'
+    -- rather than nil, so a request that omits `character_sheet` RESETS the labels to
+    -- defaults. That is deliberate and is how the GM unsets them: the edit form clears
+    -- all three boxes and sends no key at all.
+    --
+    -- It also matches every other field here -- omitting `portrait_avatars` writes
+    -- false, omitting `title` fails validation. `banner_url` above is the one genuine
+    -- preserve-on-absent field, and it earns that by being a *string the caller can
+    -- leave nil. If character_sheet ever needs the same, it has to become a pointer
+    -- too; the COALESCE alone cannot express it.
     character_sheet = COALESCE(sqlc.narg('character_sheet')::jsonb, games.character_sheet),
     updated_at = NOW()
 WHERE id = $1
