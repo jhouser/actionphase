@@ -451,6 +451,15 @@ func (h *Handler) GetUserControllableCharactersAcrossGames(w http.ResponseWriter
 			"user_role":             char.UserRole,
 		}
 
+		// Omitted when the game has no overrides, matching the game endpoints'
+		// `character_sheet` key: absent means "all defaults", which the frontend
+		// owns. The drawer has no game in scope, so this is its only source for
+		// the labels — without it a game that renamed a tab would render the
+		// default name here and read as a bug.
+		if sheet := core.CharacterSheetConfigForResponse(char.GameCharacterSheet); sheet != nil {
+			charData["game_character_sheet"] = sheet
+		}
+
 		if char.UserID.Valid {
 			charData["user_id"] = char.UserID.Int32
 		}

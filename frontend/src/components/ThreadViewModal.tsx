@@ -8,6 +8,7 @@ import { UtilitiesButton } from './UtilitiesButton';
 import { THREAD_VIEW_MAX_DEPTH } from '../config/comments';
 import { LAYERS } from '../config/layers';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { useDirtyChildren } from '../hooks/useDirtyChildren';
 
 interface ThreadViewModalProps {
   gameId: number;
@@ -62,20 +63,18 @@ export function ThreadViewModal({
   // backdrop click where both mousedown and mouseup occurred on the backdrop itself.
   const backdropMouseDownTarget = useRef<EventTarget | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-  // Single source of truth: Set of comment IDs with pending reply content.
-  // Using a ref+state pair avoids stale closures: the ref is mutated synchronously,
-  // then state is set to trigger a re-render.
-  const dirtyCommentIds = useRef<Set<number>>(new Set());
-  const [hasDirtyReply, setHasDirtyReply] = useState(false);
+  // Any comment in the thread may hold a pending reply, so dirty state is tracked per
+  // comment id rather than as a single boolean — otherwise one comment's "clean" report
+  // would erase another's "dirty".
+  const { isAnyDirty: hasDirtyReply, report } = useDirtyChildren();
 
-  const handleDirtyStateChange = useCallback((commentId: number, isDirty: boolean) => {
-    if (isDirty) {
-      dirtyCommentIds.current.add(commentId);
-    } else {
-      dirtyCommentIds.current.delete(commentId);
-    }
-    setHasDirtyReply(dirtyCommentIds.current.size > 0);
-  }, []);
+  // ThreadedComment reports (commentId, isDirty); useDirtyChildren keys on strings.
+  // Wrapped rather than inlined because ThreadedComment renders itself recursively and
+  // passes this straight down, so an unstable identity would churn every descendant.
+  const handleDirtyStateChange = useCallback(
+    (commentId: number, isDirty: boolean) => report(String(commentId), isDirty),
+    [report],
+  );
 
   const handleClose = useCallback(() => {
     if (hasDirtyReply) {
@@ -128,6 +127,12 @@ export function ThreadViewModal({
         className={`fixed inset-0 bg-black/60 backdrop-blur-sm ${LAYERS.modal} flex items-center justify-center p-4`}
         onMouseDown={(e) => { backdropMouseDownTarget.current = e.target; }}
         onClick={(e) => {
+          // Matches the character sheet (UpdateCharacterSheetModal's dismissOnBackdrop):
+          // once there is something to lose, a backdrop click does nothing at all. A click
+          // out here is usually a slip rather than a decision — nothing was aimed at — and
+          // answering a slip with a confirm dialog makes the user dismiss a question they
+          // never asked. The X still closes, and still confirms.
+          if (hasDirtyReply) return;
           if (backdropMouseDownTarget.current === e.currentTarget) handleClose();
         }}
       >

@@ -124,7 +124,7 @@ export interface DraftCharacterUpdate {
   id: number;
   action_result_id: number;
   character_id: number;
-  module_type: 'abilities' | 'skills' | 'inventory' | 'currency';
+  module_type: 'skills' | 'inventory' | 'numbers';
   field_name: string;
   field_value: string;
   field_type: 'text' | 'number' | 'boolean' | 'json';
@@ -135,7 +135,7 @@ export interface DraftCharacterUpdate {
 
 export interface CreateDraftCharacterUpdateRequest {
   character_id: number;
-  module_type: 'abilities' | 'skills' | 'inventory' | 'currency';
+  module_type: 'skills' | 'inventory' | 'numbers';
   field_name: string;
   field_value: string;
   field_type: 'text' | 'number' | 'boolean' | 'json';

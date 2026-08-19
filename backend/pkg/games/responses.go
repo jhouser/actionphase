@@ -3,6 +3,8 @@ package games
 import (
 	"net/http"
 	"time"
+
+	"actionphase/pkg/core"
 )
 
 // GameResponse represents a basic game response
@@ -27,8 +29,11 @@ type GameResponse struct {
 	CommonRoomCloseDay      *int16     `json:"common_room_close_day,omitempty"`
 	CommonRoomCloseTime     *string    `json:"common_room_close_time,omitempty"`
 	ScheduleTimezone        *string    `json:"schedule_timezone,omitempty"`
-	CreatedAt               time.Time  `json:"created_at"`
-	UpdatedAt               time.Time  `json:"updated_at"`
+	// As stored: sparse, containing only genuine GM overrides. Defaults are NOT
+	// filled in here — the frontend owns them, so exactly one place knows them.
+	CharacterSheet *core.CharacterSheetConfig `json:"character_sheet,omitempty"`
+	CreatedAt      time.Time                  `json:"created_at"`
+	UpdatedAt      time.Time                  `json:"updated_at"`
 }
 
 func (rd *GameResponse) Render(w http.ResponseWriter, r *http.Request) error {
@@ -58,9 +63,11 @@ type GameWithDetailsResponse struct {
 	CommonRoomCloseDay      *int16     `json:"common_room_close_day,omitempty"`
 	CommonRoomCloseTime     *string    `json:"common_room_close_time,omitempty"`
 	ScheduleTimezone        *string    `json:"schedule_timezone,omitempty"`
-	CurrentPlayers          int64      `json:"current_players"`
-	CreatedAt               time.Time  `json:"created_at"`
-	UpdatedAt               time.Time  `json:"updated_at"`
+	// As stored: sparse, containing only genuine GM overrides. See GameResponse.
+	CharacterSheet *core.CharacterSheetConfig `json:"character_sheet,omitempty"`
+	CurrentPlayers int64                      `json:"current_players"`
+	CreatedAt      time.Time                  `json:"created_at"`
+	UpdatedAt      time.Time                  `json:"updated_at"`
 }
 
 func (rd *GameWithDetailsResponse) Render(w http.ResponseWriter, r *http.Request) error {

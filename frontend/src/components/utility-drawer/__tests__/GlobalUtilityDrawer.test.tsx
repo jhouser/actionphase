@@ -5,7 +5,8 @@ import { GlobalUtilityDrawer } from '../GlobalUtilityDrawer';
 import { useUtilityDrawer } from '../../../contexts/UtilityDrawerContext';
 import type { OpenCharacterSheetOptions } from '../types';
 
-// The real sheet hangs under jsdom, so probe the props it is handed instead.
+// Probe the props the sheet is handed rather than mounting it. (This used to be
+// forced — the real sheet hung under jsdom until its render loop was fixed.)
 // The wiring is what's under test here: the drawer mounts at the app root,
 // outside any GameProvider, so anything the sheet would normally read from
 // GameContext has to arrive through these props or it silently defaults.

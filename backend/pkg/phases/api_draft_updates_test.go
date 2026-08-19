@@ -92,7 +92,7 @@ func TestPhaseAPI_CreateDraftCharacterUpdate(t *testing.T) {
 	t.Run("GM creates draft character update successfully", func(t *testing.T) {
 		body := map[string]interface{}{
 			"character_id": character.ID,
-			"module_type":  "abilities",
+			"module_type":  "skills",
 			"field_name":   "strength",
 			"field_value":  "18",
 			"field_type":   "number",
@@ -110,7 +110,7 @@ func TestPhaseAPI_CreateDraftCharacterUpdate(t *testing.T) {
 		assert.Equal(t, http.StatusCreated, rec.Code)
 		var response map[string]interface{}
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-		assert.Equal(t, "abilities", response["module_type"])
+		assert.Equal(t, "skills", response["module_type"])
 		assert.Equal(t, "strength", response["field_name"])
 		assert.Equal(t, "18", response["field_value"])
 	})
@@ -118,7 +118,7 @@ func TestPhaseAPI_CreateDraftCharacterUpdate(t *testing.T) {
 	t.Run("non-GM player cannot create draft update", func(t *testing.T) {
 		body := map[string]interface{}{
 			"character_id": character.ID,
-			"module_type":  "abilities",
+			"module_type":  "skills",
 			"field_name":   "strength",
 			"field_value":  "18",
 			"field_type":   "number",
@@ -139,7 +139,7 @@ func TestPhaseAPI_CreateDraftCharacterUpdate(t *testing.T) {
 	t.Run("rejects character that does not belong to this game", func(t *testing.T) {
 		body := map[string]interface{}{
 			"character_id": int32(99999), // non-existent character
-			"module_type":  "abilities",
+			"module_type":  "skills",
 			"field_name":   "strength",
 			"field_value":  "18",
 			"field_type":   "number",
@@ -247,7 +247,7 @@ func TestPhaseAPI_GetDraftUpdateCount(t *testing.T) {
 			_, err := actionService.CreateDraftCharacterUpdate(context.Background(), core.CreateDraftCharacterUpdateRequest{
 				ActionResultID: result.ID,
 				CharacterID:    character.ID,
-				ModuleType:     "abilities",
+				ModuleType:     "skills",
 				FieldName:      fmt.Sprintf("stat_%d", i),
 				FieldValue:     "10",
 				FieldType:      "number",
@@ -299,7 +299,7 @@ func TestPhaseAPI_UpdateDraftCharacterUpdate(t *testing.T) {
 	draft, err := actionService.CreateDraftCharacterUpdate(context.Background(), core.CreateDraftCharacterUpdateRequest{
 		ActionResultID: result.ID,
 		CharacterID:    character.ID,
-		ModuleType:     "abilities",
+		ModuleType:     "skills",
 		FieldName:      "strength",
 		FieldValue:     "10",
 		FieldType:      "number",
@@ -422,7 +422,7 @@ func TestPhaseAPI_DeleteDraftCharacterUpdate(t *testing.T) {
 		draft, err := actionService.CreateDraftCharacterUpdate(context.Background(), core.CreateDraftCharacterUpdateRequest{
 			ActionResultID: result.ID,
 			CharacterID:    character.ID,
-			ModuleType:     "abilities",
+			ModuleType:     "skills",
 			FieldName:      "dexterity",
 			FieldValue:     "12",
 			FieldType:      "number",
@@ -443,7 +443,7 @@ func TestPhaseAPI_DeleteDraftCharacterUpdate(t *testing.T) {
 		draft, err := actionService.CreateDraftCharacterUpdate(context.Background(), core.CreateDraftCharacterUpdateRequest{
 			ActionResultID: result.ID,
 			CharacterID:    character.ID,
-			ModuleType:     "abilities",
+			ModuleType:     "skills",
 			FieldName:      "constitution",
 			FieldValue:     "14",
 			FieldType:      "number",

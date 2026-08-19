@@ -8,16 +8,15 @@ import { CharacterSheetPage } from '../pages/CharacterSheetPage';
  * E2E Tests for Character Sheet Management
  *
  * Tests the complete character sheet management workflow including:
- * - Adding/viewing abilities with descriptions
- * - Adding/viewing skills with proficiency levels
+ * - Adding/viewing skills with ranks and descriptions
  * - Adding/removing inventory items
- * - Updating currency values
- * - Permission boundaries (Bio public, Abilities/Inventory private)
+ * - Viewing numbers, including bounded tracks
+ * - Permission boundaries (bio public, stat tabs private and GM-edit-only)
  * - GM can view all character sheets
  *
  * Uses dedicated E2E fixture (E2E_CHARACTER_SHEETS) which includes:
- * - Character 1: Has existing abilities (2), skills (2), items (2), currency
- * - Character 2: Has different data for comparison
+ * - Character 1: skills (4), items (2), numbers (2, one a bounded track)
+ * - Character 2: different data for comparison, incl. one unmigrated `level` row
  * - Character 3: Empty sheet for fresh additions
  *
  * CRITICAL: This tests CORE player engagement mechanics
@@ -33,7 +32,7 @@ test.describe('Character Sheet Management', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('player can view existing abilities, skills, items, and currency on their character sheet', async ({ page }) => {
+  test('player can view existing skills, items, and numbers on their character sheet', async ({ page }) => {
     await loginAs(page, 'PLAYER_1');
 
     const gameId = await getFixtureGameId(page, 'E2E_CHARACTER_SHEETS');
@@ -51,72 +50,73 @@ test.describe('Character Sheet Management', () => {
     // Initialize CharacterSheetPage
     const sheetPage = new CharacterSheetPage(page);
 
-    // ===== Test Abilities =====
-    // Navigate to Abilities & Skills module and Abilities tab
-    await sheetPage.goToAbilitiesModule();
-    await sheetPage.goToAbilitiesTab(2);
-
-    // Verify existing abilities are displayed
-    await expect(page.locator('text=Keen Eye')).toBeVisible();
-
-    // Expand description for Keen Eye (descriptions are collapsed by default)
-    const keenEyeCard = page.locator('div.border.rounded-lg').filter({ has: page.locator('text=Keen Eye') });
-    await keenEyeCard.getByRole('button', { name: /expand description/i }).first().click();
-    await expect(page.locator('text=Can spot hidden details')).toBeVisible();
-
-    await expect(page.locator('text=Quick Draw')).toBeVisible();
-
-    // Expand description for Quick Draw
-    const quickDrawCard = page.locator('div.border.rounded-lg').filter({ has: page.locator('text=Quick Draw') });
-    await quickDrawCard.getByRole('button', { name: /expand description/i }).first().click();
-    await expect(page.locator('text=Fast weapon draw')).toBeVisible();
-
     // ===== Test Skills =====
-    // Navigate to Skills tab
-    await sheetPage.goToSkillsTab(2);
+    // All four entries live on one tab now. Keen Eye and Quick Draw were
+    // abilities before the refactor retired that module and folded its content
+    // into skills, so they are asserted here rather than in a separate block.
+    await sheetPage.goToSkillsTab();
 
-    // Verify existing skills are displayed (proficiency levels may not be shown as text)
-    await expect(page.locator('text=Archery')).toBeVisible();
+    const expectSkillWithDescription = async (name: string, description: string) => {
+      await expect(page.getByRole('heading', { name })).toBeVisible();
+      // Filtered on both the heading and the expand button rather than picking
+      // a div by position: `.locator('div')` matches nested wrappers, so
+      // .last() lands on the heading's own wrapper, which holds no button.
+      const card = sheetPage.skillsSection
+        .locator('div')
+        .filter({ has: page.getByRole('heading', { name }) })
+        .filter({ has: page.getByRole('button', { name: /expand description/i }) })
+        .last();
+      // Descriptions render collapsed.
+      await card.getByRole('button', { name: /expand description/i }).first().click();
+      await expect(page.locator(`text=${description}`)).toBeVisible();
+    };
 
-    // Expand description for Archery (descriptions are collapsed by default)
-    const archeryCard = page.locator('div.border.rounded-lg').filter({ has: page.locator('text=Archery') });
-    await archeryCard.getByRole('button', { name: /expand description/i }).first().click();
-    await expect(page.locator('text=Master archer')).toBeVisible();
+    await expectSkillWithDescription('Archery', 'Master archer');
+    await expectSkillWithDescription('Tracking', 'Can track creatures');
+    await expectSkillWithDescription('Keen Eye', 'Can spot hidden details');
+    await expectSkillWithDescription('Quick Draw', 'Fast weapon draw');
 
-    await expect(page.locator('text=Tracking')).toBeVisible();
+    // Rank replaced the old `level` field. The fixture's skill-8 deliberately
+    // still uses the legacy key, but these four are on the current shape.
+    await expect(sheetPage.skillsSection.getByText('Rank: Expert').first()).toBeVisible();
 
-    // Expand description for Tracking
-    const trackingCard = page.locator('div.border.rounded-lg').filter({ has: page.locator('text=Tracking') });
-    await trackingCard.getByRole('button', { name: /expand description/i }).first().click();
-    await expect(page.locator('text=Can track creatures')).toBeVisible();
+    // ===== Test Inventory =====
+    await sheetPage.goToInventoryTab();
 
-    // ===== Test Inventory (Items & Currency) =====
-    // Navigate to Inventory module
-    await sheetPage.goToInventoryModule();
-
-    // Verify existing items are displayed (Items tab should be selected by default)
     await expect(page.getByRole('heading', { name: 'Longbow' })).toBeVisible();
-
-    // Expand description for Longbow (descriptions are collapsed by default)
-    const longbowCard = page.locator('div.border.rounded-lg').filter({ has: page.getByRole('heading', { name: 'Longbow' }) });
+    const longbowCard = sheetPage.itemsSection
+      .locator('div')
+      .filter({ has: page.getByRole('heading', { name: 'Longbow' }) })
+      .filter({ has: page.getByRole('button', { name: /expand description/i }) })
+      .last();
     await longbowCard.getByRole('button', { name: /expand description/i }).first().click();
     await expect(page.locator('text=Masterwork longbow')).toBeVisible();
 
     await expect(page.getByRole('heading', { name: 'Arrows' })).toBeVisible();
-
-    // Expand description for Arrows
-    const arrowsCard = page.locator('div.border.rounded-lg').filter({ has: page.getByRole('heading', { name: 'Arrows' }) });
+    const arrowsCard = sheetPage.itemsSection
+      .locator('div')
+      .filter({ has: page.getByRole('heading', { name: 'Arrows' }) })
+      .filter({ has: page.getByRole('button', { name: /expand description/i }) })
+      .last();
     await arrowsCard.getByRole('button', { name: /expand description/i }).first().click();
     await expect(page.locator('text=Steel-tipped arrows')).toBeVisible();
 
-    // Navigate to Currency tab
-    await sheetPage.goToCurrencyTab(2);
+    // No item sets weight or value, so the totals line stays hidden rather than
+    // reporting a fabricated "0.0".
+    await expect(sheetPage.itemsSection.getByText(/Total Weight/)).not.toBeVisible();
 
-    // Verify currency amounts are displayed — scoped to currency section to avoid matching unrelated "50"/"25" on page
-    const currencySection = page.getByTestId('currency-section');
-    await expect(currencySection.locator('text=Currency & Resources')).toBeVisible();
-    await expect(currencySection.locator('text=50')).toBeVisible();
-    await expect(currencySection.locator('text=25')).toBeVisible();
+    // ===== Test Numbers =====
+    // Promoted out of Inventory's Currency sub-tab and renamed: the tab holds
+    // arbitrary numeric tracks, not only money.
+    await sheetPage.goToNumbersTab();
+
+    await expect(sheetPage.numbersSection.getByText('Gold')).toBeVisible();
+    await expect(sheetPage.numbersSection.getByText('50')).toBeVisible();
+
+    // Stress carries a maximum, which renders as a bounded track rather than a
+    // bare count — the structure that justified giving Numbers its own tab.
+    await expect(sheetPage.numbersSection.getByText('Stress')).toBeVisible();
+    await expect(sheetPage.numbersSection.getByRole('img', { name: 'Stress: 4 of 9' })).toBeVisible();
   });
 
   test('GM can view all character sheets', async ({ page }) => {
@@ -145,18 +145,28 @@ test.describe('Character Sheet Management', () => {
     // Initialize CharacterSheetPage
     const sheetPage = new CharacterSheetPage(page);
 
-    // Navigate to Abilities & Skills module and Abilities tab
-    await sheetPage.goToAbilitiesModule();
-    await sheetPage.goToAbilitiesTab(3);
+    await sheetPage.goToSkillsTab();
 
-    // Verify GM sees the mage's abilities
-    await expect(page.locator('text=Fireball')).toBeVisible();
-    await expect(page.locator('text=Shield')).toBeVisible();
-    await expect(page.locator('text=Arcane Knowledge')).toBeVisible();
+    // Verify the GM sees the mage's skills. Fireball and Shield were abilities
+    // before that module was retired and folded into skills.
+    await expect(page.getByRole('heading', { name: 'Arcana' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Fireball' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Shield' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Arcane Knowledge' })).toBeVisible();
+
+    // Arcane Knowledge deliberately still carries the pre-rename `level` key in
+    // the fixture: the rename is resolved on read, not migrated, so an
+    // unmigrated row must still render its rank.
+    const arcaneCard = sheetPage.skillsSection
+      .locator('div')
+      .filter({ has: page.getByRole('heading', { name: 'Arcane Knowledge' }) })
+      .filter({ has: page.getByText('Rank:') })
+      .last();
+    await expect(arcaneCard.getByText('Rank: Expert')).toBeVisible();
   });
 
-  test('bio module is public, abilities and inventory modules are private', async ({ page }) => {
-    // Verify PLAYER_2 can only see bio of PLAYER_1's character (not abilities/inventory)
+  test('bio tab is public, stat tabs are private', async ({ page }) => {
+    // Verify PLAYER_2 can only see the bio of PLAYER_1's character
     await loginAs(page, 'PLAYER_2');
 
     const gameId = await getFixtureGameId(page, 'E2E_CHARACTER_SHEETS');
@@ -174,20 +184,21 @@ test.describe('Character Sheet Management', () => {
     // Initialize CharacterSheetPage
     const sheetPage = new CharacterSheetPage(page);
 
-    // Should see Bio/Background module (public)
+    // Should see the Public Profile tab (public)
     expect(await sheetPage.isModuleVisible('Public Profile')).toBe(true);
 
-    // Should NOT see Private Notes, Abilities & Skills or Inventory modules (private - owner/GM only)
+    // Should NOT see Private Notes or any stat tab (owner/GM only)
     expect(await sheetPage.isModuleVisible('Private Notes')).toBe(false);
-    expect(await sheetPage.isModuleVisible('Abilities & Skills')).toBe(false);
+    expect(await sheetPage.isModuleVisible('Skills')).toBe(false);
     expect(await sheetPage.isModuleVisible('Inventory')).toBe(false);
+    expect(await sheetPage.isModuleVisible('Numbers')).toBe(false);
 
     // Verify bio content is visible
     await expect(page.locator('text=A weathered ranger with keen eyes')).toBeVisible();
   });
 
-  test('player cannot edit abilities, skills, inventory, or currency', async ({ page }) => {
-    // Verify player CANNOT add/edit abilities, skills, items, or currency on their own character
+  test('player cannot edit skills, inventory, or numbers', async ({ page }) => {
+    // Verify a player CANNOT add or edit stats on their own character
     await loginAs(page, 'PLAYER_1');
 
     const gameId = await getFixtureGameId(page, 'E2E_CHARACTER_SHEETS');
@@ -203,43 +214,33 @@ test.describe('Character Sheet Management', () => {
     // Initialize CharacterSheetPage
     const sheetPage = new CharacterSheetPage(page);
 
-    // ===== Test Abilities - No Edit UI =====
-    await sheetPage.goToAbilitiesModule();
-    await sheetPage.goToAbilitiesTab(2);
+    // ===== Skills - No Edit UI =====
+    // Stat tabs are GM-edit-only by design: players cannot touch their own
+    // numbers. Enforced server-side too (api_data.go's isStatField).
+    await sheetPage.goToSkillsTab();
 
-    // Player should NOT see "Add Ability" button or edit controls
-    expect(await sheetPage.canAddAbility()).toBe(false);
-    await expect(page.locator('button[title="Edit ability"]')).not.toBeVisible();
-    await expect(page.locator('button[title="Delete ability"]')).not.toBeVisible();
-
-    // ===== Test Skills - No Edit UI =====
-    await sheetPage.goToSkillsTab(2);
-
-    // Player should NOT see "Add Skill" button or edit controls
     expect(await sheetPage.canAddSkill()).toBe(false);
-    await expect(page.locator('button[title="Edit skill"]')).not.toBeVisible();
-    await expect(page.locator('button[title="Delete skill"]')).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit skill' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Remove skill' })).toHaveCount(0);
 
-    // ===== Test Inventory - No Edit UI =====
-    await sheetPage.goToInventoryModule();
+    // ===== Inventory - No Edit UI =====
+    await sheetPage.goToInventoryTab();
 
-    // Player should NOT see "Add Item" button or edit controls
     expect(await sheetPage.canAddItem()).toBe(false);
-    await expect(page.locator('button[title="Edit item"]')).not.toBeVisible();
-    await expect(page.locator('button[title="Delete item"]')).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit item' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Remove item' })).toHaveCount(0);
 
-    // ===== Test Currency - No Edit UI =====
-    await sheetPage.goToCurrencyTab(2);
+    // ===== Numbers - No Edit UI =====
+    await sheetPage.goToNumbersTab();
 
-    // Player should NOT see "Add Currency" button or edit controls
-    expect(await sheetPage.canAddCurrency()).toBe(false);
-    await expect(page.locator('button[title="Edit currency"]')).not.toBeVisible();
-    await expect(page.locator('button[title="Delete currency"]')).not.toBeVisible();
+    expect(await sheetPage.canAddNumber()).toBe(false);
+    await expect(page.getByRole('button', { name: 'Edit entry' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Remove entry' })).toHaveCount(0);
   });
 
-  test('GM can edit abilities, skills, inventory, and currency', async ({ page }) => {
+  test('GM can edit skills, inventory, and numbers', async ({ page }) => {
     // CharacterWorkflowPage now supports both character_creation and in_progress game states
-    // Verify GM CAN add/edit abilities, skills, items, and currency on any character
+    // Verify a GM CAN add and edit stats on any character
     await loginAs(page, 'GM');
 
     const gameId = await getFixtureGameId(page, 'E2E_CHARACTER_SHEETS');
@@ -255,33 +256,21 @@ test.describe('Character Sheet Management', () => {
     // Initialize CharacterSheetPage
     const sheetPage = new CharacterSheetPage(page);
 
-    // ===== Test Abilities - GM can add/edit =====
-    await sheetPage.goToAbilitiesModule();
-    await sheetPage.goToAbilitiesTab(2);
+    // ===== Skills - GM can add =====
+    await sheetPage.goToSkillsTab();
 
-    // GM SHOULD see "Add Ability" button and can add a new ability
-    expect(await sheetPage.canAddAbility()).toBe(true);
-    await sheetPage.addAbility('Test Ability', 'Test description');
-
-    // Verify new ability appears
-    await expect(page.locator('text=Test Ability')).toBeVisible();
-
-    // ===== Test Skills - GM can add =====
-    await sheetPage.goToSkillsTab(2);
-
-    // GM SHOULD see "Add Skill" button
     expect(await sheetPage.canAddSkill()).toBe(true);
+    await sheetPage.addSkill('Test Skill', 'Test description');
+    await expect(page.getByRole('heading', { name: 'Test Skill' })).toBeVisible();
 
-    // ===== Test Inventory - GM can add items =====
-    await sheetPage.goToInventoryModule();
+    // ===== Inventory - GM can add =====
+    await sheetPage.goToInventoryTab();
 
-    // GM SHOULD see "Add Item" button
     expect(await sheetPage.canAddItem()).toBe(true);
 
-    // ===== Test Currency - GM can add =====
-    await sheetPage.goToCurrencyTab(2);
+    // ===== Numbers - GM can add =====
+    await sheetPage.goToNumbersTab();
 
-    // GM SHOULD see "Add Currency" button
-    expect(await sheetPage.canAddCurrency()).toBe(true);
+    expect(await sheetPage.canAddNumber()).toBe(true);
   });
 });

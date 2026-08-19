@@ -120,6 +120,10 @@ CREATE TABLE games (
     common_room_close_day  SMALLINT,
     common_room_close_time TIME,
     schedule_timezone      VARCHAR(64),
+    -- Per-game character sheet config (tab label overrides today, tab
+    -- composition later). Sparse: '{}' means all defaults, which live in the
+    -- frontend. See core.CharacterSheetConfig.
+    character_sheet JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

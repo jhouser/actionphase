@@ -86,7 +86,7 @@ export function LootTableForm({ onClose, onSubmit, isSubmitting, lootTable }: Lo
   // Empty tables are allowed on purpose: GMs build a table before they have
   // decided its contents, and importing a CSV into a saved table is a normal
   // flow. Rolling on an empty table is already handled in depth — the API
-  // returns 400 and InventoryManager surfaces that as an error toast — so
+  // returns 400 and ItemsManager surfaces that as an error toast — so
   // blocking creation here only got in the way of authoring.
   const validationError = !formData.name.trim() ? 'Give the loot table a name.' : null;
 

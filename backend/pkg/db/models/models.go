@@ -251,6 +251,7 @@ type Game struct {
 	CommonRoomCloseDay      pgtype.Int2        `json:"common_room_close_day"`
 	CommonRoomCloseTime     pgtype.Time        `json:"common_room_close_time"`
 	ScheduleTimezone        pgtype.Text        `json:"schedule_timezone"`
+	CharacterSheet          []byte             `json:"character_sheet"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }

@@ -624,23 +624,23 @@ func TestActionSubmissionService_PublishCharacterUpdates(t *testing.T) {
 		assert.Equal(t, 0, draftCount, "draft updates should be deleted after publishing")
 	})
 
-	t.Run("writes abilities array draft directly to character_data", func(t *testing.T) {
+	t.Run("writes skills array draft directly to character_data", func(t *testing.T) {
 		result2, err := actionService.CreateActionResult(context.Background(), core.CreateActionResultRequest{
 			GameID:      game.ID,
 			PhaseID:     phase.ID,
 			UserID:      int32(player.ID),
-			Content:     "You gain new abilities.",
+			Content:     "You gain new skills.",
 			IsPublished: false,
 		})
 		require.NoError(t, err)
 
-		abilitiesJSON := `[{"name":"Fireball","description":"Cast a fireball","cost":5},{"name":"Shield","description":"Protective barrier","cost":3}]`
+		skillsJSON := `[{"id":"s-1","name":"Fireball","description":"Cast a fireball","level":5},{"id":"s-2","name":"Shield","description":"Protective barrier","level":3}]`
 
 		_, err = testDB.Pool.Exec(context.Background(),
 			`INSERT INTO action_result_character_updates
 			(action_result_id, character_id, module_type, field_name, field_value, field_type, operation)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			result2.ID, character.ID, "abilities", "abilities", abilitiesJSON, "json", "upsert")
+			result2.ID, character.ID, "skills", "skills", skillsJSON, "json", "upsert")
 		require.NoError(t, err)
 
 		err = actionService.PublishActionResult(context.Background(), result2.ID, int32(player.ID))
@@ -650,10 +650,10 @@ func TestActionSubmissionService_PublishCharacterUpdates(t *testing.T) {
 		err = testDB.Pool.QueryRow(context.Background(),
 			`SELECT field_name, field_value FROM character_data
 			WHERE character_id = $1 AND module_type = $2`,
-			character.ID, "abilities").Scan(&fieldName, &fieldValue)
+			character.ID, "skills").Scan(&fieldName, &fieldValue)
 		require.NoError(t, err)
 
-		assert.Equal(t, "abilities", fieldName)
+		assert.Equal(t, "skills", fieldName)
 		assert.Contains(t, fieldValue, `"name":"Fireball"`)
 		assert.Contains(t, fieldValue, `"name":"Shield"`)
 		assert.True(t, len(fieldValue) > 0 && fieldValue[0] == '[', "field value should be a JSON array")

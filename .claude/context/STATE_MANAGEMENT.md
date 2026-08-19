@@ -120,6 +120,46 @@ const currentUserId = currentUser?.id ?? null;
 const decoded = decodeJWT(token);  // SECURITY RISK
 ```
 
+### 5. Unsaved-Edit Guards
+
+*Added 2026-08-19.*
+
+Surfaces that can be closed while holding uncommitted text confirm first. **Which
+mechanism depends on who holds the state** — pick by that, not by habit:
+
+| Situation | Use |
+|---|---|
+| Child editors hold state the parent cannot see | `useReportDirty` in the child |
+| A parent tracks *several* such children | `useDirtyChildren` (keyed by id) |
+| The form already holds every field itself | A plain comparison — **no hooks** |
+
+The game create/edit form is the third case: `useGameForm` holds all fields, so
+dirty is one comparison against an initial snapshot (`useGameFormDirty.ts`). Only
+reach for the hooks when state is genuinely invisible to the parent — the
+character sheet's editors are the motivating case.
+
+**Comparison details that matter:**
+
+- **Compare trimmed.** `buildApiPayload` trims, so an untrimmed comparison reports
+  dirty for a change Save would discard — soft-locking the guard on an edit that
+  cannot be committed away.
+- **Hold the baseline in state, and move it on re-hydration.** `useGameForm`
+  exposes `resetFormData` for exactly this: reloading a form from fresh server
+  data must not read as the user having edited every changed field.
+- **State outside `formData` still counts.** `pendingBannerFile` is separate, so
+  the comparison includes it explicitly or a chosen-but-unuploaded banner closes
+  silently. (An *already uploaded* banner is genuinely saved, so it is not dirty.)
+
+**Closing conventions** (match `UpdateCharacterSheetModal`):
+
+- **Backdrop: withdrawn entirely while dirty** (`dismissOnBackdrop={!isDirty}`) —
+  a stray click out is a slip, not a decision, and answering it with a prompt
+  makes the user dismiss a question they never asked.
+- **X and Cancel: confirm** via the shared `ConfirmDiscardEdits` bar, so every
+  surface asks in the same words.
+- `useReportDirty` reports `false` on unmount, so an ancestor mirroring the flag
+  (e.g. `GamesPage` → `dismissOnBackdrop`) never gets stuck dirty.
+
 ---
 
 ## Anti-Patterns (NEVER DO)

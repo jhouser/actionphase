@@ -211,7 +211,7 @@ describe('ThreadViewModal', () => {
       children: [mockChildComment],
     };
 
-    it('should show confirmation when backdrop clicked with pending reply on a nested comment', async () => {
+    it('should show confirmation when closed with pending reply on a nested comment', async () => {
       // This is the actual failure case: dirty state originates from a child
       // ThreadedComment (id=2), not the root (id=1). Before the fix, the root's
       // onDirtyStateChange was not propagated to children, so hasDirtyReply stayed false.
@@ -237,12 +237,44 @@ describe('ThreadViewModal', () => {
       const textarea = screen.getByPlaceholderText('Write a reply...');
       await user.type(textarea, 'Half-written reply text');
 
-      // Click the backdrop — should NOT close immediately
-      const backdrop = document.querySelector('.fixed.inset-0') as HTMLElement;
-      await user.click(backdrop);
+      // Close via the X — should NOT close immediately
+      await user.click(screen.getByRole('button', { name: /close thread view/i }));
 
       expect(mockOnClose).not.toHaveBeenCalled();
       expect(screen.getByText(/discard unsaved reply/i)).toBeInTheDocument();
+    });
+
+    it('should ignore a backdrop click entirely while a reply is pending', async () => {
+      // A backdrop click is usually a slip rather than a decision, so once there is
+      // something to lose it does nothing at all — matching the character sheet.
+      // Asserting "still open" alone would also pass against the old behaviour, where
+      // the backdrop raised the confirm dialog; the absence of the dialog is what
+      // distinguishes inert from confirming.
+      const user = userEvent.setup();
+      renderWithProviders(
+        <ThreadViewModal
+          gameId={mockGameId}
+          postId={mockPostId}
+          comment={mockCommentWithChild}
+          characters={mockCharacters}
+          controllableCharacters={mockCharacters}
+          onClose={mockOnClose}
+          onCreateReply={mockOnCreateReply}
+          currentUserId={mockCurrentUserId}
+        />
+      );
+
+      const replyButtons = screen.getAllByRole('button', { name: /reply to this comment/i });
+      await user.click(replyButtons[replyButtons.length - 1]);
+      await user.type(screen.getByPlaceholderText('Write a reply...'), 'Half-written reply text');
+
+      await user.click(document.querySelector('.fixed.inset-0') as HTMLElement);
+
+      expect(mockOnClose).not.toHaveBeenCalled();
+      expect(screen.queryByText(/discard unsaved reply/i)).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /thread view/i })).toBeInTheDocument();
+      // The typed reply survives untouched — the point of the guard.
+      expect(screen.getByPlaceholderText('Write a reply...')).toHaveValue('Half-written reply text');
     });
 
     it('should close without confirmation when no reply content is pending', async () => {
@@ -285,7 +317,7 @@ describe('ThreadViewModal', () => {
       await user.click(replyButtons[replyButtons.length - 1]);
       await user.type(screen.getByPlaceholderText('Write a reply...'), 'Half-written reply text');
 
-      await user.click(document.querySelector('.fixed.inset-0') as HTMLElement);
+      await user.click(screen.getByRole('button', { name: /close thread view/i }));
       await user.click(screen.getByRole('button', { name: /discard/i }));
 
       expect(mockOnClose).toHaveBeenCalledOnce();
@@ -310,7 +342,7 @@ describe('ThreadViewModal', () => {
       await user.click(replyButtons[replyButtons.length - 1]);
       await user.type(screen.getByPlaceholderText('Write a reply...'), 'Half-written reply text');
 
-      await user.click(document.querySelector('.fixed.inset-0') as HTMLElement);
+      await user.click(screen.getByRole('button', { name: /close thread view/i }));
       await user.click(screen.getByRole('button', { name: /keep editing/i }));
 
       expect(mockOnClose).not.toHaveBeenCalled();

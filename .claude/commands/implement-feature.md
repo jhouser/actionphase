@@ -46,7 +46,7 @@ Follow the test pyramid bottom-up. **Do not skip layers.**
 ### 3. Backend Handler
 - Add route in the appropriate `api.go` or `root.go`
 - Implement handler using existing patterns
-- **Verify with curl** using `scripts/api-test.sh`
+- **Verify with curl** using `backend/scripts/api-test.sh`
 
 ### 4. Frontend Hook
 - Add API client method to `frontend/src/lib/api.ts`

@@ -29,10 +29,41 @@ type CreateGameRequest struct {
 	CommonRoomCloseDay      *int16              `json:"common_room_close_day,omitempty"`
 	CommonRoomCloseTime     *string             `json:"common_room_close_time,omitempty"`
 	ScheduleTimezone        *string             `json:"schedule_timezone,omitempty"`
+	// Sparse per-game character sheet overrides. Absent means "all defaults",
+	// which the frontend owns; the server never fills them in.
+	//
+	// Kept as RawMessage rather than the typed struct because render.Bind decodes
+	// with a permissive decoder: an unknown key would be silently discarded here
+	// instead of rejected, defeating the whole point of the strict schema. It is
+	// parsed by core.UnmarshalCharacterSheetConfig in Bind below.
+	CharacterSheet json.RawMessage `json:"character_sheet,omitempty"`
+
+	// Parsed form of CharacterSheet, populated by Bind.
+	characterSheet core.CharacterSheetConfig
 }
 
 func (r *CreateGameRequest) Bind(req *http.Request) error {
+	// Parsed AND validated here, not only in the service. The service validates
+	// too (its invariants are its own to hold), but a violation surfacing there
+	// renders as a 500 "unexpected error" — so a GM typing a 25-character tab
+	// label would be told the server broke. Bind failures render as 400 with the
+	// message, which is what a bad label actually is.
+	parsed, err := core.UnmarshalCharacterSheetConfig(r.CharacterSheet)
+	if err != nil {
+		return err
+	}
+	validated, err := core.ValidateCharacterSheetConfig(parsed)
+	if err != nil {
+		return err
+	}
+	r.characterSheet = validated
+
 	return validateScheduleFields(r.CommonRoomOpenDay, r.CommonRoomCloseDay, r.CommonRoomOpenTime, r.CommonRoomCloseTime, r.ScheduleTimezone)
+}
+
+// CharacterSheetConfig returns the parsed per-game sheet config.
+func (r *CreateGameRequest) CharacterSheetConfig() core.CharacterSheetConfig {
+	return r.characterSheet
 }
 
 // UpdateGameStateRequest represents the request to update a game's state
@@ -64,10 +95,41 @@ type UpdateGameRequest struct {
 	CommonRoomCloseDay      *int16     `json:"common_room_close_day,omitempty"`
 	CommonRoomCloseTime     *string    `json:"common_room_close_time,omitempty"`
 	ScheduleTimezone        *string    `json:"schedule_timezone,omitempty"`
+	// Sparse per-game character sheet overrides. Absent means "all defaults",
+	// which the frontend owns; the server never fills them in.
+	//
+	// Kept as RawMessage rather than the typed struct because render.Bind decodes
+	// with a permissive decoder: an unknown key would be silently discarded here
+	// instead of rejected, defeating the whole point of the strict schema. It is
+	// parsed by core.UnmarshalCharacterSheetConfig in Bind below.
+	CharacterSheet json.RawMessage `json:"character_sheet,omitempty"`
+
+	// Parsed form of CharacterSheet, populated by Bind.
+	characterSheet core.CharacterSheetConfig
 }
 
 func (r *UpdateGameRequest) Bind(req *http.Request) error {
+	// Parsed AND validated here, not only in the service. The service validates
+	// too (its invariants are its own to hold), but a violation surfacing there
+	// renders as a 500 "unexpected error" — so a GM typing a 25-character tab
+	// label would be told the server broke. Bind failures render as 400 with the
+	// message, which is what a bad label actually is.
+	parsed, err := core.UnmarshalCharacterSheetConfig(r.CharacterSheet)
+	if err != nil {
+		return err
+	}
+	validated, err := core.ValidateCharacterSheetConfig(parsed)
+	if err != nil {
+		return err
+	}
+	r.characterSheet = validated
+
 	return validateScheduleFields(r.CommonRoomOpenDay, r.CommonRoomCloseDay, r.CommonRoomOpenTime, r.CommonRoomCloseTime, r.ScheduleTimezone)
+}
+
+// CharacterSheetConfig returns the parsed per-game sheet config.
+func (r *UpdateGameRequest) CharacterSheetConfig() core.CharacterSheetConfig {
+	return r.characterSheet
 }
 
 func validateScheduleFields(openDay, closeDay *int16, openTime, closeTime *string, tz *string) error {

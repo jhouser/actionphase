@@ -210,10 +210,10 @@ just ci-test                  # Full CI test suite (lint + test + race)
 # ALWAYS use this pattern for authenticated API requests:
 curl -s -H "Authorization: Bearer $(cat /tmp/api-token.txt)" "http://localhost:3000/api/v1/endpoint"
 
-# Login first to get token:
-./scripts/api-test.sh login-player  # Token saved to /tmp/api-token.txt
+# Login first to get token (run from the repo root):
+./backend/scripts/api-test.sh login-player  # Token saved to /tmp/api-token.txt
 
-# See scripts/api-test.sh for reference patterns
+# See backend/scripts/api-test.sh for reference patterns
 ```
 
 **Frontend Development**:

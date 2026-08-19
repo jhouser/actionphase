@@ -25,15 +25,16 @@ import type { Character } from '../../types/characters';
  * permissions are computed from. That contribution is what's under test here.
  *
  * WHY THE REAL CharacterSheet IS NOT RENDERED HERE:
- * The full CharacterSheet component cannot be mounted under jsdom in this test
- * harness — its render tree hangs indefinitely (see the standalone
- * CharacterSheet component tests for its own coverage). That component's
- * internals are NOT what these tests are validating. What we validate is the
- * WIRING CommonRoom performs: which `characterId` it passes and what `canEdit`
- * value it computes and hands to the sheet. So we replace CharacterSheet with a
- * lightweight probe that reports its received props via the DOM, and assert on
- * those. This severs the cursed render while testing exactly the contract that
- * would break silently on a refactor.
+ * What these tests validate is the WIRING CommonRoom performs: which
+ * `characterId` it passes, and what `canEdit` value it computes and hands to the
+ * sheet. Those are props, and `canEdit=false` in particular has no reliable
+ * rendered consequence to assert on — so a real mount would make the permission
+ * check unobservable, which is the one thing here that would break silently on a
+ * refactor. The probe reports the received props via the DOM instead.
+ *
+ * The sheet's own behaviour is covered by CharacterSheet.test.tsx. Note that this
+ * mock previously existed because the real component's render tree hung under
+ * jsdom; that loop is fixed, and the mock is kept for the scoping reason above.
  */
 
 // Probe standing in for the real CharacterSheet. It records the props CommonRoom

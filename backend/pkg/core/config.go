@@ -298,7 +298,7 @@ func (c *Config) Validate() error {
 	}
 
 	// Warn about weak JWT secrets in production
-	if c.App.Environment == "production" && len(c.JWT.Secret) < 32 {
+	if c.IsProduction() && len(c.JWT.Secret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters in production")
 	}
 

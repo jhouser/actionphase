@@ -63,7 +63,7 @@ func TestActionSubmissionService_CreateDraftCharacterUpdate(t *testing.T) {
 		req := core.CreateDraftCharacterUpdateRequest{
 			ActionResultID: result.ID,
 			CharacterID:    character.ID,
-			ModuleType:     "abilities",
+			ModuleType:     "skills",
 			FieldName:      "strength",
 			FieldValue:     "15",
 			FieldType:      "number",
@@ -125,7 +125,7 @@ func TestActionSubmissionService_CreateDraftCharacterUpdate(t *testing.T) {
 		req := core.CreateDraftCharacterUpdateRequest{
 			ActionResultID: result.ID,
 			CharacterID:    character.ID,
-			ModuleType:     "abilities",
+			ModuleType:     "skills",
 			FieldName:      "test",
 			FieldValue:     "value",
 			FieldType:      "invalid_type",
@@ -141,7 +141,7 @@ func TestActionSubmissionService_CreateDraftCharacterUpdate(t *testing.T) {
 		req := core.CreateDraftCharacterUpdateRequest{
 			ActionResultID: result.ID,
 			CharacterID:    character.ID,
-			ModuleType:     "abilities",
+			ModuleType:     "skills",
 			FieldName:      "test",
 			FieldValue:     "value",
 			FieldType:      "text",
@@ -154,7 +154,7 @@ func TestActionSubmissionService_CreateDraftCharacterUpdate(t *testing.T) {
 	})
 
 	t.Run("supports all module types", func(t *testing.T) {
-		modules := []string{"abilities", "skills", "inventory", "currency"}
+		modules := []string{"skills", "inventory", "numbers"}
 		for _, module := range modules {
 			req := core.CreateDraftCharacterUpdateRequest{
 				ActionResultID: result.ID,
@@ -178,7 +178,7 @@ func TestActionSubmissionService_CreateDraftCharacterUpdate(t *testing.T) {
 			req := core.CreateDraftCharacterUpdateRequest{
 				ActionResultID: result.ID,
 				CharacterID:    character.ID,
-				ModuleType:     "abilities",
+				ModuleType:     "skills",
 				FieldName:      "test_" + fieldType,
 				FieldValue:     "value",
 				FieldType:      fieldType,
@@ -249,7 +249,7 @@ func TestActionSubmissionService_GetDraftCharacterUpdates(t *testing.T) {
 			{
 				ActionResultID: result.ID,
 				CharacterID:    character.ID,
-				ModuleType:     "abilities",
+				ModuleType:     "skills",
 				FieldName:      "strength",
 				FieldValue:     "15",
 				FieldType:      "number",
@@ -345,7 +345,7 @@ func TestActionSubmissionService_UpdateDraftCharacterUpdate(t *testing.T) {
 		createReq := core.CreateDraftCharacterUpdateRequest{
 			ActionResultID: result.ID,
 			CharacterID:    character.ID,
-			ModuleType:     "abilities",
+			ModuleType:     "skills",
 			FieldName:      "strength",
 			FieldValue:     "15",
 			FieldType:      "number",
@@ -413,7 +413,7 @@ func TestActionSubmissionService_DeleteDraftCharacterUpdate(t *testing.T) {
 		createReq := core.CreateDraftCharacterUpdateRequest{
 			ActionResultID: result.ID,
 			CharacterID:    character.ID,
-			ModuleType:     "abilities",
+			ModuleType:     "skills",
 			FieldName:      "strength",
 			FieldValue:     "15",
 			FieldType:      "number",
@@ -490,7 +490,7 @@ func TestActionSubmissionService_GetDraftUpdateCount(t *testing.T) {
 			createReq := core.CreateDraftCharacterUpdateRequest{
 				ActionResultID: result.ID,
 				CharacterID:    character.ID,
-				ModuleType:     "abilities",
+				ModuleType:     "skills",
 				FieldName:      string(rune('a' + i)),
 				FieldValue:     "value",
 				FieldType:      "text",
@@ -552,14 +552,14 @@ func TestActionSubmissionService_PublishActionResult_WithDrafts(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("publishing action result also publishes character updates", func(t *testing.T) {
-		// Create draft with the complete desired abilities array (new whole-array format)
-		abilitiesJSON := `[{"id":"ability-1","name":"Keen Eye","type":"gm_assigned","active":true,"description":"Can spot hidden details"}]`
+		// Create draft with the complete desired skills array (new whole-array format)
+		skillsJSON := `[{"id":"skill-1","name":"Keen Eye","level":2,"category":"perception","description":"Can spot hidden details"}]`
 		createReq := core.CreateDraftCharacterUpdateRequest{
 			ActionResultID: result.ID,
 			CharacterID:    character.ID,
-			ModuleType:     "abilities",
-			FieldName:      "abilities",
-			FieldValue:     abilitiesJSON,
+			ModuleType:     "skills",
+			FieldName:      "skills",
+			FieldValue:     skillsJSON,
 			FieldType:      "json",
 			Operation:      "upsert",
 		}
@@ -586,13 +586,13 @@ func TestActionSubmissionService_PublishActionResult_WithDrafts(t *testing.T) {
 
 		found := false
 		for _, data := range characterData {
-			if data.ModuleType == "abilities" && data.FieldName == "abilities" {
-				assert.Equal(t, abilitiesJSON, data.FieldValue.String)
+			if data.ModuleType == "skills" && data.FieldName == "skills" {
+				assert.Equal(t, skillsJSON, data.FieldValue.String)
 				found = true
 				break
 			}
 		}
-		assert.True(t, found, "abilities array should be written to character_data after publishing")
+		assert.True(t, found, "skills array should be written to character_data after publishing")
 	})
 }
 
@@ -669,13 +669,13 @@ func TestActionSubmissionService_PublishAllPhaseResults_WithDrafts(t *testing.T)
 
 	t.Run("bulk publish publishes all drafts for all results", func(t *testing.T) {
 		// Drafts store the complete desired final array (whole-array format)
-		abilities1JSON := `[{"id":"ability-1","name":"Keen Eye","type":"gm_assigned","active":true}]`
+		skills1JSON := `[{"id":"skill-1","name":"Keen Eye","level":2,"category":"perception"}]`
 		draft1Req := core.CreateDraftCharacterUpdateRequest{
 			ActionResultID: result1.ID,
 			CharacterID:    character1.ID,
-			ModuleType:     "abilities",
-			FieldName:      "abilities",
-			FieldValue:     abilities1JSON,
+			ModuleType:     "skills",
+			FieldName:      "skills",
+			FieldValue:     skills1JSON,
 			FieldType:      "json",
 			Operation:      "upsert",
 		}
@@ -732,13 +732,13 @@ func TestActionSubmissionService_PublishAllPhaseResults_WithDrafts(t *testing.T)
 
 		found1 := false
 		for _, data := range characterData1 {
-			if data.ModuleType == "abilities" && data.FieldName == "abilities" {
-				assert.Equal(t, abilities1JSON, data.FieldValue.String)
+			if data.ModuleType == "skills" && data.FieldName == "skills" {
+				assert.Equal(t, skills1JSON, data.FieldValue.String)
 				found1 = true
 				break
 			}
 		}
-		assert.True(t, found1, "Player 1 abilities array should be in character_data")
+		assert.True(t, found1, "Player 1 skills array should be in character_data")
 
 		characterData2, err := characterService.GetCharacterData(context.Background(), character2.ID)
 		require.NoError(t, err)
@@ -787,9 +787,9 @@ func TestActionSubmissionService_PublishAllPhaseResults_WithDrafts(t *testing.T)
 			draftReq := core.CreateDraftCharacterUpdateRequest{
 				ActionResultID: result.ID,
 				CharacterID:    character1.ID,
-				ModuleType:     "currency",
+				ModuleType:     "numbers",
 				FieldName:      "test_" + string(rune('a'+i)),
-				FieldValue:     fmt.Sprintf(`{"type":"test_%s","amount":%d,"description":"Test currency"}`, string(rune('a'+i)), i+1),
+				FieldValue:     fmt.Sprintf(`{"type":"test_%s","amount":%d,"description":"Test number"}`, string(rune('a'+i)), i+1),
 				FieldType:      "json",
 				Operation:      "upsert",
 			}
@@ -862,7 +862,7 @@ func TestDraftPublish_DirectWrite(t *testing.T) {
 	}
 
 	t.Run("draft value written directly to character_data on publish", func(t *testing.T) {
-		resultID := makeResult(t, "You gain abilities")
+		resultID := makeResult(t, "You gain skills")
 		itemsJSON := `[{"id":"item-1","name":"Sword","quantity":1},{"id":"item-2","name":"Shield","quantity":1}]`
 
 		_, err := actionService.CreateDraftCharacterUpdate(context.Background(), core.CreateDraftCharacterUpdateRequest{
@@ -935,12 +935,12 @@ func TestDraftPublish_DirectWrite(t *testing.T) {
 
 	t.Run("multiple module drafts all published correctly", func(t *testing.T) {
 		resultID := makeResult(t, "Multiple updates")
-		abilitiesJSON := `[{"id":"a-1","name":"Keen Eye","type":"gm_assigned","active":true}]`
-		currencyJSON := `[{"id":"c-1","type":"Gold","amount":100}]`
+		skillsJSON := `[{"id":"a-1","name":"Keen Eye","type":"gm_assigned","active":true}]`
+		numbersJSON := `[{"id":"n-1","type":"Gold","amount":100}]`
 
 		for _, req := range []core.CreateDraftCharacterUpdateRequest{
-			{ActionResultID: resultID, CharacterID: character.ID, ModuleType: "abilities", FieldName: "abilities", FieldValue: abilitiesJSON, FieldType: "json", Operation: "upsert"},
-			{ActionResultID: resultID, CharacterID: character.ID, ModuleType: "currency", FieldName: "currency", FieldValue: currencyJSON, FieldType: "json", Operation: "upsert"},
+			{ActionResultID: resultID, CharacterID: character.ID, ModuleType: "skills", FieldName: "skills", FieldValue: skillsJSON, FieldType: "json", Operation: "upsert"},
+			{ActionResultID: resultID, CharacterID: character.ID, ModuleType: "numbers", FieldName: "numbers", FieldValue: numbersJSON, FieldType: "json", Operation: "upsert"},
 		} {
 			_, err := actionService.CreateDraftCharacterUpdate(context.Background(), req)
 			require.NoError(t, err)
@@ -957,8 +957,8 @@ func TestDraftPublish_DirectWrite(t *testing.T) {
 			dataByKey[d.ModuleType+"/"+d.FieldName] = d.FieldValue.String
 		}
 
-		assert.Equal(t, abilitiesJSON, dataByKey["abilities/abilities"], "abilities should be written")
-		assert.Equal(t, currencyJSON, dataByKey["currency/currency"], "currency should be written")
+		assert.Equal(t, skillsJSON, dataByKey["skills/skills"], "skills should be written")
+		assert.Equal(t, numbersJSON, dataByKey["numbers/numbers"], "numbers should be written")
 	})
 
 	t.Run("character with no prior character_data gets row created on publish", func(t *testing.T) {

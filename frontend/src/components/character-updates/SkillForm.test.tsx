@@ -9,7 +9,7 @@ describe('SkillForm', () => {
         <SkillForm
           onSubmit={vi.fn()}
           onCancel={vi.fn()}
-          submitLabel="Add Skill"
+          submitLabel="Add"
         />
       );
 
@@ -23,7 +23,7 @@ describe('SkillForm', () => {
         <SkillForm
           onSubmit={vi.fn()}
           onCancel={vi.fn()}
-          submitLabel="Add Skill"
+          submitLabel="Add"
           initialValues={{ description: 'Mastery of blades' }}
         />
       );

@@ -159,6 +159,7 @@ function InGameCharacterSheetPanel({
     gameState,
     isAnonymous,
     portraitAvatars,
+    sheetConfig,
     isGM,
   } = game;
 
@@ -194,6 +195,7 @@ function InGameCharacterSheetPanel({
     userRole,
     gameState,
     portraitAvatars,
+    sheetConfig,
   };
 
   // With a single character there is nothing to choose — open it directly. Not
@@ -329,6 +331,7 @@ function sheetOptionsFor(
     userRole: character.user_role,
     gameState: character.game_state,
     portraitAvatars: character.game_portrait_avatars,
+    sheetConfig: character.game_character_sheet,
   };
 }
 

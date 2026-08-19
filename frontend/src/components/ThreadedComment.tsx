@@ -14,6 +14,7 @@ import { useScreenshotMode } from '../hooks/useScreenshotMode';
 import { useUpdateComment, useDeleteComment } from '../hooks/useCommentMutations';
 import { useGamePermissions } from '../hooks/useGamePermissions';
 import { useOptionalGameContext } from '../contexts/GameContext';
+import { useReportDirty } from '../hooks/useReportDirty';
 import { ConfirmModal } from './ConfirmModal';
 import { logger } from '@/services/LoggingService';
 import type { CommentTreeNode } from '../lib/utils/commentTree';
@@ -91,13 +92,15 @@ export const ThreadedComment = memo(function ThreadedComment({
   const isMountedRef = useRef(true);
   const hasLoadedRef = useRef(false);
 
-  // Notify parent (e.g. ThreadViewModal) when pending reply content transitions from empty↔non-empty.
-  // Cleanup on unmount always signals false so the parent Set doesn't retain a stale dirty entry.
-  const isReplyDirty = replyContent.trim().length > 0;
-  useEffect(() => {
-    if (isReplyDirty) onDirtyStateChange?.(comment.id, true);
-    return () => onDirtyStateChange?.(comment.id, false);
-  }, [isReplyDirty, onDirtyStateChange, comment.id]);
+  // Notify parent (e.g. ThreadViewModal) when pending reply content transitions from
+  // empty↔non-empty. Curried here because useReportDirty reports a bare boolean, while
+  // this component's callers key on comment id — a thread has many comments, any of which
+  // may hold an unsaved reply.
+  const reportDirty = useCallback(
+    (isDirty: boolean) => onDirtyStateChange?.(comment.id, isDirty),
+    [onDirtyStateChange, comment.id],
+  );
+  useReportDirty(replyContent.trim().length > 0, reportDirty);
 
   // Check if this comment has pre-loaded children (from tree structure)
   const hasPreloadedChildren = 'children' in comment && Array.isArray(comment.children) && comment.children.length > 0;

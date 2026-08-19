@@ -829,6 +829,12 @@ SELECT DISTINCT
   g.state AS game_state,
   g.is_anonymous AS game_is_anonymous,
   g.portrait_avatars AS game_portrait_avatars,
+  -- The drawer renders sheets with no game in scope, so it cannot read the
+  -- config from game context the way in-game surfaces do; it has to travel with
+  -- each character. Safe in this SELECT DISTINCT: jsonb has a default btree
+  -- opclass, so it dedups directly. (Plain ` + "`" + `json` + "`" + ` does not, and would fail with
+  -- "could not identify an equality operator" — the column is jsonb.)
+  g.character_sheet AS game_character_sheet,
   u.username AS owner_username,
   au.username AS assigned_username,
   CASE
@@ -886,6 +892,7 @@ type GetUserControllableCharactersAcrossGamesRow struct {
 	GameState           pgtype.Text        `json:"game_state"`
 	GameIsAnonymous     bool               `json:"game_is_anonymous"`
 	GamePortraitAvatars bool               `json:"game_portrait_avatars"`
+	GameCharacterSheet  []byte             `json:"game_character_sheet"`
 	OwnerUsername       pgtype.Text        `json:"owner_username"`
 	AssignedUsername    pgtype.Text        `json:"assigned_username"`
 	UserRole            string             `json:"user_role"`
@@ -933,6 +940,7 @@ func (q *Queries) GetUserControllableCharactersAcrossGames(ctx context.Context, 
 			&i.GameState,
 			&i.GameIsAnonymous,
 			&i.GamePortraitAvatars,
+			&i.GameCharacterSheet,
 			&i.OwnerUsername,
 			&i.AssignedUsername,
 			&i.UserRole,

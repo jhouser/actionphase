@@ -76,18 +76,28 @@ export class GamesListPage {
       await this.page.fill('#max_players', gameData.maxPlayers.toString());
     }
 
-    // Toggle checkbox settings if specified
-    if (gameData.isAnonymous !== undefined) {
-      const isChecked = await this.page.locator('#is_anonymous').isChecked();
-      if (isChecked !== gameData.isAnonymous) {
-        await this.page.locator('#is_anonymous').click();
-      }
-    }
+    // Toggle checkbox settings if specified.
+    //
+    // These live on the Rules tab. Inactive tab panels stay mounted (hidden with
+    // display:none) so the whole form still validates and submits from any tab —
+    // but a hidden control cannot be clicked, so open the tab first. Only when
+    // there is something to toggle: switching unconditionally would leave every
+    // created game sitting on Rules rather than Info.
+    if (gameData.isAnonymous !== undefined || gameData.autoAcceptAudience !== undefined) {
+      await this.page.getByTestId('tab-game-form-rules').click();
 
-    if (gameData.autoAcceptAudience !== undefined) {
-      const isChecked = await this.page.locator('#auto_accept_audience').isChecked();
-      if (isChecked !== gameData.autoAcceptAudience) {
-        await this.page.locator('#auto_accept_audience').click();
+      if (gameData.isAnonymous !== undefined) {
+        const isChecked = await this.page.locator('#is_anonymous').isChecked();
+        if (isChecked !== gameData.isAnonymous) {
+          await this.page.locator('#is_anonymous').click();
+        }
+      }
+
+      if (gameData.autoAcceptAudience !== undefined) {
+        const isChecked = await this.page.locator('#auto_accept_audience').isChecked();
+        if (isChecked !== gameData.autoAcceptAudience) {
+          await this.page.locator('#auto_accept_audience').click();
+        }
       }
     }
 

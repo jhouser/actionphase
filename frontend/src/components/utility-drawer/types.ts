@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import type { Character } from '../../types/characters';
+import type { Character, CharacterSheetConfig } from '../../types/characters';
 import type { GamePhase } from '../../types/phases';
 import type { UserGameRole } from '../../contexts/GameContext';
 import type { CommentReadMode } from '../../lib/api/auth';
@@ -24,6 +24,11 @@ export interface GameUtilityContext {
   isAnonymous: boolean;
   /** Whether the game displays character avatars as portraits rather than circles. */
   portraitAvatars: boolean;
+  /**
+   * The game's character sheet tab labels, if its GM renamed any. Absent is the
+   * common case and means "all defaults", which the frontend owns.
+   */
+  sheetConfig?: CharacterSheetConfig;
   /** Characters the current user controls in this game (may be empty for GM/audience). */
   userCharacters: Character[];
   /** All characters in the game (for reference/lookup within panels). */
@@ -49,6 +54,13 @@ export interface OpenCharacterSheetOptions {
    * GameContext to recover this from when opened outside a game.
    */
   portraitAvatars: boolean;
+  /**
+   * That game's character sheet tab labels. Optional, unlike portraitAvatars
+   * above, because absent is a meaningful and correct value here rather than a
+   * missed one: it is what the backend sends for a game with no overrides, and
+   * the sheet's own defaults are the right answer for it.
+   */
+  sheetConfig?: CharacterSheetConfig;
 }
 
 /**

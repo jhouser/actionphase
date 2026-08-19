@@ -225,16 +225,23 @@ func main() {
 		DiscordNotifier: discordNotifier,
 	}
 
-	// Run database migrations if configured
+	// Run database migrations if configured.
+	//
+	// TODO: this still belongs at deploy time rather than at process start. Until
+	// then, RUN_MIGRATIONS=false is the supported way to boot without migrating.
 	if config.App.RunMigrations {
 		if err := runMigrations(logger, pool); err != nil {
-			logger.Error("Migration failed", "error", err)
-			// Don't exit - allow manual migration in production
-			if config.IsProduction() {
-				logger.Warn("Skipping failed migrations in production - please run manually")
-			} else {
-				os.Exit(1)
-			}
+			// Fatal in every environment, production included. Production used to
+			// log a warning and continue, which meant serving traffic against a
+			// schema the code does not match — and the failure modes of that are
+			// silent rather than loud. Reads keyed by a renamed column render as
+			// empty rather than erroring, so the app looks healthy while showing
+			// users nothing. Refusing to start turns that into an obvious failure
+			// at the moment of deploy, while the previous image is still on disk.
+			//
+			// Set RUN_MIGRATIONS=false to start deliberately without migrating.
+			logger.Error("Migration failed; refusing to start", "error", err)
+			os.Exit(1)
 		}
 	} else {
 		logger.Info("Skipping database migrations (RUN_MIGRATIONS=false)")
@@ -301,6 +308,24 @@ func main() {
 	httpHandler.Start()
 }
 
+// checkMigrationState rejects a dirty migration state.
+//
+// Split out from runMigrations so the decision is testable without a database:
+// everything else in that function is driver plumbing, and this is the only part
+// that makes a judgment call.
+func checkMigrationState(version uint, dirty bool) error {
+	if !dirty {
+		return nil
+	}
+	return fmt.Errorf(
+		"database is in a dirty migration state at version %d: migration %d failed partway "+
+			"and the schema may be half-applied. Inspect the schema, finish or revert %d by hand, "+
+			"then clear the flag with `migrate force <version>`. Refusing to continue: forcing it "+
+			"clean automatically would skip %d permanently",
+		version, version, version, version,
+	)
+}
+
 // runMigrations applies database schema migrations
 func runMigrations(logger *slog.Logger, pool *pgxpool.Pool) error {
 	logger.Info("Running database migrations...")
@@ -324,46 +349,30 @@ func runMigrations(logger *slog.Logger, pool *pgxpool.Pool) error {
 	}
 	defer m.Close()
 
-	// Check for dirty migrations and auto-fix
+	// A dirty state is fatal. It means a migration failed partway and the schema
+	// may be half-applied, which is a question only a human can answer.
+	//
+	// This used to call m.Force(version) and carry on, described as an "auto-fix".
+	// Force does not repair anything: it writes dirty=false against the current
+	// version, asserting "this migration completed". When it did not, that
+	// assertion is permanent — the next Up() starts at version+1 and the failed
+	// migration's changes are skipped forever, with schema_migrations claiming
+	// success. Force is golang-migrate's manual escape hatch, for an operator who
+	// has inspected the schema and knows what actually landed; it is the one
+	// operation that requires judgment, so it is the one thing that must not be
+	// automatic.
+	//
+	// Postgres runs each migration in a transaction, so a dirty flag here means
+	// something unusual happened (a killed process mid-ALTER, a dropped
+	// connection). Every such case wants eyes on it.
 	version, dirty, err := m.Version()
 	if err != nil && err != migrate.ErrNilVersion {
 		// If we can't get version info, something is wrong
 		return fmt.Errorf("failed to get migration version: %w", err)
 	}
 
-	if dirty {
-		logger.Warn("Detected dirty migration state, attempting to fix...",
-			"version", version)
-
-		// Force the version to clean state
-		// This marks the migration as complete in the schema_migrations table
-		if err := m.Force(int(version)); err != nil {
-			return fmt.Errorf("failed to force clean migration state: %w", err)
-		}
-
-		logger.Info("Migration state fixed", "version", version)
-
-		// Close the current migrate instance and create a fresh one
-		// This ensures the migrate library properly detects the current clean state
-		m.Close()
-
-		// Recreate driver and migrate instance
-		driver, err = postgres.WithInstance(database, &postgres.Config{})
-		if err != nil {
-			return fmt.Errorf("failed to recreate migration driver: %w", err)
-		}
-
-		m, err = migrate.NewWithDatabaseInstance(
-			"file://pkg/db/migrations",
-			"postgres",
-			driver,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to recreate migration instance: %w", err)
-		}
-		defer m.Close()
-
-		logger.Info("Migration instance recreated, continuing with pending migrations...")
+	if err := checkMigrationState(version, dirty); err != nil {
+		return err
 	}
 
 	// Apply migrations
