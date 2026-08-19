@@ -17,6 +17,10 @@ export const GamesPage = () => {
   const queryClient = useQueryClient();
   const { showSuccess } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // Mirrored up from CreateGameForm so the modal can withdraw backdrop dismissal
+  // while the form holds unsaved edits.
+  const [createFormDirty, setCreateFormDirty] = useState(false);
+  const [createCloseRequested, setCreateCloseRequested] = useState(false);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [selectedGame, setSelectedGame] = useState<EnrichedGameListItem | null>(null);
   const [searchInput, setSearchInput] = useState('');
@@ -50,6 +54,22 @@ export const GamesPage = () => {
 
   const handleCreateGame = () => {
     setShowCreateModal(true);
+  };
+
+  // The X asks the form to close rather than closing outright: the form owns the
+  // confirmation, since it is the thing holding the unsaved edits.
+  const handleCreateModalClose = () => {
+    if (createFormDirty) {
+      setCreateCloseRequested(true);
+      return;
+    }
+    setShowCreateModal(false);
+  };
+
+  const closeCreateModal = () => {
+    setCreateCloseRequested(false);
+    setCreateFormDirty(false);
+    setShowCreateModal(false);
   };
 
   const handleCreateSuccess = (gameId: number) => {
@@ -141,14 +161,22 @@ export const GamesPage = () => {
       </div>
 
       {/* Create Game Modal */}
+      {/* The backdrop is withdrawn while the form holds unsaved edits: a stray
+          click out is not a decision worth discarding a half-filled form over.
+          Cancel and the header X still close, and both confirm first. */}
       <Modal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={handleCreateModalClose}
         title="Create New Game"
+        size="5xl"
+        dismissOnBackdrop={!createFormDirty}
       >
         <CreateGameForm
           onSuccess={handleCreateSuccess}
-          onCancel={() => setShowCreateModal(false)}
+          onCancel={closeCreateModal}
+          onDirtyChange={setCreateFormDirty}
+          closeRequested={createCloseRequested}
+          onCloseRequestHandled={() => setCreateCloseRequested(false)}
         />
       </Modal>
 

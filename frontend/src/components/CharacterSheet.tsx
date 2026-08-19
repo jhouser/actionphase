@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
-import type { CharacterData, CharacterDataRequest, CharacterAbility, CharacterSkill, InventoryItem, CurrencyEntry } from '../types/characters';
-import { CHARACTER_MODULES } from '../types/characters';
-import { AbilitiesManager } from './AbilitiesManager';
-import { InventoryManager } from './InventoryManager';
+import type { CharacterData, CharacterDataRequest, CharacterSkill, InventoryItem, NumberEntry, CharacterSheetConfig } from '../types/characters';
+import { buildCharacterModules } from '../types/characters';
+import { SkillsManager } from './SkillsManager';
+import { ItemsManager } from './ItemsManager';
+import { NumbersManager } from './NumbersManager';
 import CharacterAvatar from './CharacterAvatar';
 import AvatarUploadModal from './AvatarUploadModal';
 import { useOptionalGameContext } from '../contexts/GameContext';
@@ -17,6 +18,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { CommentEditor } from './CommentEditor';
 import { MessageCharacterButton } from './MessageCharacterButton';
 import { useDirtyChildren } from '@/hooks/useDirtyChildren';
+import { useSheetLabels } from '../hooks/useSheetLabels';
 import { EditorLockNotice } from './EditorLockNotice';
 import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
 
@@ -42,15 +44,50 @@ interface CharacterSheetProps {
    * GameProvider (the global Utility Drawer), where there is none to read.
    */
   portraitAvatars?: boolean;
+  /**
+   * That game's character sheet tab labels. Normally read from GameContext;
+   * pass it explicitly when rendering outside a GameProvider (the global
+   * Utility Drawer), where there is none to read.
+   *
+   * Falling back to defaults out there would be wrong rather than merely
+   * incomplete: a player whose GM renamed a tab to "Stress" would see
+   * "Numbers" in the drawer and read the difference as a bug. So the drawer
+   * carries the real config per character (see `game_character_sheet`).
+   */
+  sheetConfig?: CharacterSheetConfig;
 }
 
-export function CharacterSheet({ characterId, canEdit = false, canEditStats = false, onClose, isAnonymous = false, userRole, gameState, portraitAvatars, onDirtyChange }: CharacterSheetProps) {
+/**
+ * Module tabs rendered by a manager component rather than the generic field
+ * list. Each manager heads itself, so the sheet skips its own module header for
+ * these — keep this in step with the manager branch in the render body.
+ */
+const MANAGED_MODULE_TYPES = new Set(['skills', 'inventory', 'numbers']);
+
+export function CharacterSheet({ characterId, canEdit = false, canEditStats = false, onClose, isAnonymous = false, userRole, gameState, portraitAvatars, sheetConfig, onDirtyChange }: CharacterSheetProps) {
   const gameContext = useOptionalGameContext();
   const portraitMode = portraitAvatars ?? gameContext?.game?.portrait_avatars ?? false;
 
+  // Same precedence as portraitMode above: an explicit prop wins, then the game
+  // in context, then the defaults the hook owns.
+  //
+  const sheetLabels = useSheetLabels(
+    sheetConfig ? { character_sheet: sheetConfig } : gameContext?.game
+  );
+
+  // Rebuilt only when a label actually changes: the tab list is derived data,
+  // and a fresh array each render would remount the active manager underneath
+  // an open editor.
+  const modules = useMemo(() => buildCharacterModules(sheetLabels), [sheetLabels]);
+
   const [activeModule, setActiveModule] = useState('bio');
   const [editingField, setEditingField] = useState<string | null>(null);
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  // Text of the one field being edited right now, or null when nothing is open.
+  // Deliberately a single value rather than a map keyed by field: only one editor
+  // can be open at a time (`editingField`), so a map would just be a store of
+  // stale text for fields nobody is editing — which is what it used to be, and
+  // what made the saved values and the in-progress edit impossible to tell apart.
+  const [editDraft, setEditDraft] = useState<string | null>(null);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isDeleteAvatarDialogOpen, setIsDeleteAvatarDialogOpen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -120,6 +157,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['characterData', characterId] });
       setEditingField(null);
+      setEditDraft(null);
     }
   });
 
@@ -158,17 +196,27 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
     );
   };
 
-  // Initialize field values from character data
-  useEffect(() => {
+  // Saved field values, keyed `${module_type}_${field_name}`.
+  //
+  // Derived, not stored. Copying this into state via an effect is what produced
+  // the `Maximum update depth exceeded` loop: the query's `= []` default is a new
+  // array on every render, so the effect's dependency never compared equal, and it
+  // set a freshly-built object each time, so React's identical-state bail-out never
+  // fired either. Render -> effect -> setState -> render, until React's 50-update
+  // cap cut it off. Invisible in the browser (the sheet still painted) but it hung
+  // component tests, which start in exactly the unresolved-query state that spins
+  // hardest. Deriving removes the cycle rather than damping it.
+  const fieldValues = useMemo(() => {
     const values: Record<string, string> = {};
     characterData.forEach(data => {
       const key = `${data.module_type}_${data.field_name}`;
       values[key] = data.field_value || '';
     });
-    setFieldValues(values);
+    return values;
   }, [characterData]);
 
-  // Get field value for display
+  // Get saved field value for display. The open editor's uncommitted text lives in
+  // `editDraft`, not here, so this keeps returning what is actually persisted.
   const getFieldValue = (moduleType: string, fieldName: string): string => {
     const key = `${moduleType}_${fieldName}`;
     return fieldValues[key] || '';
@@ -208,12 +256,18 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
   const handleFieldEdit = (moduleType: string, fieldName: string) => {
     if (!canEdit) return;
     setEditingField(`${moduleType}_${fieldName}`);
+    setEditDraft(getFieldValue(moduleType, fieldName));
+  };
+
+  // Handle field edit cancel
+  const handleFieldCancel = () => {
+    setEditingField(null);
+    setEditDraft(null);
   };
 
   // Handle field save
   const handleFieldSave = (moduleType: string, fieldName: string, fieldType: string, isPublic: boolean) => {
-    const key = `${moduleType}_${fieldName}`;
-    const value = fieldValues[key] || '';
+    const value = editDraft ?? '';
 
     saveCharacterDataMutation.mutate({
       module_type: moduleType,
@@ -225,9 +279,6 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
   };
 
   // Handle field value change
-  const handleFieldChange = (key: string, value: string) => {
-    setFieldValues(prev => ({ ...prev, [key]: value }));
-  };
 
   if (isLoading) {
     return (
@@ -403,7 +454,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
         {/* Module Tabs - Filter out modules user cannot view */}
         <div data-testid="character-sheet-module-tabs">
           <TabNavigation
-            tabs={CHARACTER_MODULES.filter((module) => {
+            tabs={modules.filter((module) => {
               // Bio is always visible (public information)
               if (module.type === 'bio') return true;
               // Private modules visible to editors (GM, owner), audience members, and all participants in completed games
@@ -427,36 +478,50 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-8">
-        {CHARACTER_MODULES.filter(module => {
+        {modules.filter(module => {
           // Only render modules the user has permission to view
           if (module.type === 'bio') return true;
           return canViewPrivate;
         }).filter(module => module.type === activeModule).map((module) => (
           <div key={module.type} className="max-w-4xl mx-auto">
-            <div className="mb-4 md:mb-6">
-              <h3 className="text-lg md:text-xl font-semibold text-content-primary mb-2">{module.name}</h3>
-              <p className="text-sm md:text-base text-content-secondary">{module.description}</p>
-            </div>
+            {/* Only the text modules get a header here. The three stat managers
+                render their own heading (the modal embeds them without this
+                block and relies on it), so repeating the module name above them
+                printed it twice — plus a description that only restated it
+                ("Skills" / "Character skills"). */}
+            {!MANAGED_MODULE_TYPES.has(module.type) && (
+              <div className="mb-4 md:mb-6">
+                <h3 className="text-lg md:text-xl font-semibold text-content-primary mb-2">{module.name}</h3>
+                <p className="text-sm md:text-base text-content-secondary">{module.description}</p>
+              </div>
+            )}
 
-            {/* Render specialized components for abilities and inventory modules */}
-            {module.type === 'abilities' ? (
-              <AbilitiesManager
-                abilities={parseJsonField('abilities', 'abilities') as CharacterAbility[]}
+            {/* One manager per stat tab. Each reports its own dirty state under its
+                own key, so a clean manager cannot clear a dirty one's flag. */}
+            {module.type === 'skills' ? (
+              <SkillsManager
                 skills={parseJsonField('skills', 'skills') as CharacterSkill[]}
                 canEdit={canEditStats}
-                onAbilitiesChange={(abilities) => saveJsonField('abilities', 'abilities', abilities)}
                 onSkillsChange={(skills) => saveJsonField('skills', 'skills', skills)}
-                onDirtyChange={(isDirty) => reportDirty('abilities', isDirty)}
+                onDirtyChange={(isDirty) => reportDirty('skills', isDirty)}
+                label={sheetLabels.skills}
               />
             ) : module.type === 'inventory' ? (
-              <InventoryManager
+              <ItemsManager
                 characterId={characterId}
                 items={parseJsonField('inventory', 'items') as InventoryItem[]}
-                currency={parseJsonField('currency', 'currency') as CurrencyEntry[]}
                 canEdit={canEditStats}
                 onItemsChange={(items, reloadOnly) => { if (!reloadOnly) saveJsonField('inventory', 'items', items); else queryClient.invalidateQueries({ queryKey: ['characterData', characterId] }); }}
-                onCurrencyChange={(currency) => saveJsonField('currency', 'currency', currency)}
                 onDirtyChange={(isDirty) => reportDirty('inventory', isDirty)}
+                label={sheetLabels.inventory}
+              />
+            ) : module.type === 'numbers' ? (
+              <NumbersManager
+                numbers={parseJsonField('numbers', 'numbers') as NumberEntry[]}
+                canEdit={canEditStats}
+                onNumbersChange={(numbers) => saveJsonField('numbers', 'numbers', numbers)}
+                onDirtyChange={(isDirty) => reportDirty('numbers', isDirty)}
+                label={sheetLabels.numbers}
               />
             ) : (
               /* Regular text-based fields for bio and notes modules */
@@ -515,8 +580,8 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
                       {isEditing ? (
                         <div className="space-y-4">
                           <CommentEditor
-                            value={value}
-                            onChange={(newValue) => handleFieldChange(key, newValue)}
+                            value={editDraft ?? ''}
+                            onChange={setEditDraft}
                             placeholder={field.placeholder}
                             rows={8}
                             showPreviewByDefault={false}
@@ -525,7 +590,7 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
                             <Button
                               variant="ghost"
                               size="md"
-                              onClick={() => setEditingField(null)}
+                              onClick={handleFieldCancel}
                               disabled={saveCharacterDataMutation.isPending}
                             >
                               Cancel

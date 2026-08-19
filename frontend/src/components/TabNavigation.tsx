@@ -209,6 +209,10 @@ export function TabNavigation({
       <button
         key={tab.id}
         {...sharedProps}
+        // Without this a tab bar rendered inside a <form> submits it on every
+        // tab click, since <button> defaults to type="submit". A tab is never a
+        // submit button.
+        type="button"
         disabled={disabled}
         onClick={() => onTabChange(tab.id)}
       >
@@ -298,6 +302,7 @@ export function TabNavigation({
                   : 'text-content-secondary hover:text-content-primary'
                 }
               `}
+              type="button"
               disabled={disabled}
               onClick={() => setMoreOpen(o => !o)}
               aria-haspopup="true"
@@ -336,6 +341,7 @@ export function TabNavigation({
                   ) : (
                     <button
                       key={tab.id}
+                      type="button"
                       className={itemClass}
                       onClick={handleClick}
                       data-testid={`tab-${tab.id}-overflow`}

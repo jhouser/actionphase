@@ -27,7 +27,7 @@ What you can do as an assigned NPC:
 - **Send and receive private messages** as the NPC character
 - The **Messages** tab becomes visible in your game view
 
-You can edit the NPC's name, avatar, public profile, and private notes — the same fields a player controls for their own character. Abilities, skills, items, and currency remain GM-controlled.
+You can edit the NPC's name, avatar, public profile, and private notes — the same fields a player controls for their own character. The stat tabs (Skills, Inventory, Numbers by default) remain GM-controlled.
 
 ## Becoming a Co-GM
 

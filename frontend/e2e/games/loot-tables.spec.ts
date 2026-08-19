@@ -46,21 +46,24 @@ test.describe('Loot Tables', () => {
     await expect(page.getByRole('heading', { name: 'Loot Test Char', level: 2 })).toBeVisible({ timeout: 10000 });
 
     const sheetPage = new CharacterSheetPage(page);
-    await sheetPage.goToInventoryModule();
-    await sheetPage.goToItemsTab();
+    // One call, not two: the sheet's tabs are flat now, so Inventory is a tab
+    // rather than a module with an Items sub-tab.
+    await sheetPage.goToInventoryTab();
 
     // The fixture character starts empty, so anything present afterwards came
     // from the roll rather than from seeded data.
     await expect(page.getByRole('heading', { name: ROLLED_ITEM })).toHaveCount(0);
 
-    await page.getByRole('button', { name: /^add item$/i }).click();
+    await page.getByTestId('add-item').click();
 
     // Loot modes only appear inside a game context; their absence here would
     // mean the sheet lost its GameProvider.
     await page.getByLabel(/^mode$/i).selectOption('loot_table_random');
     await page.getByLabel(/^loot table$/i).selectOption({ label: 'E2E Single Item Table' });
 
-    await page.getByRole('button', { name: /^add item$/i }).last().click();
+    // The modal's submit is a bare "Add"; the trigger above is found by testid,
+    // so this no longer needs .last() to disambiguate the two.
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
 
     // The roll round-trips through the server, which persists the item and
     // returns its GM-authored JSON for the client to unpack.
@@ -72,8 +75,9 @@ test.describe('Loot Tables', () => {
     // would land on the still-open modal's backdrop.
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Loot Test Char', level: 2 })).toBeVisible({ timeout: 10000 });
-    await sheetPage.goToInventoryModule();
-    await sheetPage.goToItemsTab();
+    // One call, not two: the sheet's tabs are flat now, so Inventory is a tab
+    // rather than a module with an Items sub-tab.
+    await sheetPage.goToInventoryTab();
 
     await expect(page.getByRole('heading', { name: ROLLED_ITEM })).toBeVisible({ timeout: 10000 });
   });

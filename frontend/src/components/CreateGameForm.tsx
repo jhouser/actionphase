@@ -1,19 +1,47 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '../lib/api';
 import { Button, Alert } from './ui';
 import { GameFormFields } from './GameFormFields';
+import { useReportDirty } from '../hooks/useReportDirty';
+import type { GameFormTabId } from './gameFormTabs';
+import { useRevealInvalidTab } from '../hooks/useRevealInvalidTab';
 import { HelpTooltip } from './ui/HelpTooltip';
 import { useGameForm } from '../hooks/useGameForm';
+import { useGameFormDirty } from '../hooks/useGameFormDirty';
+import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
 
 interface CreateGameFormProps {
   onSuccess?: (gameId: number) => void;
   onCancel?: () => void;
+  /**
+   * Reports whether the form holds unsaved edits, so the containing modal can
+   * withdraw its backdrop dismissal. The form owns the comparison because only
+   * it holds the field state; the modal owns the backdrop.
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
+  /**
+   * Set when the containing modal's close affordance (its header X) was used.
+   * The form, not the modal, raises the confirmation — it is the thing holding
+   * the unsaved edits and the thing that can show the prompt inline.
+   */
+  closeRequested?: boolean;
+  /** Acknowledges a handled close request so it does not re-fire. */
+  onCloseRequestHandled?: () => void;
 }
 
-export const CreateGameForm = ({ onSuccess, onCancel }: CreateGameFormProps) => {
+export const CreateGameForm = ({
+  onSuccess,
+  onCancel,
+  onDirtyChange,
+  closeRequested = false,
+  onCloseRequestHandled,
+}: CreateGameFormProps) => {
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<GameFormTabId>('game-form-info');
+  const handleInvalid = useRevealInvalidTab(setActiveTab);
   const {
     formData,
+    initialFormData,
     handleChange,
     error,
     setError,
@@ -27,6 +55,32 @@ export const CreateGameForm = ({ onSuccess, onCancel }: CreateGameFormProps) => 
     uploadBanner,
     buildApiPayload,
   } = useGameForm();
+
+  const isDirty = useGameFormDirty(formData, initialFormData, pendingBannerFile);
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  useReportDirty(isDirty, onDirtyChange);
+
+  // Drop the prompt if the edits it asks about disappear underneath it.
+  useEffect(() => {
+    if (!isDirty) setConfirmingClose(false);
+  }, [isDirty]);
+
+  // A close requested from the modal header raises the same inline prompt the
+  // Cancel button does, so both routes out ask the same question.
+  useEffect(() => {
+    if (closeRequested) {
+      setConfirmingClose(true);
+      onCloseRequestHandled?.();
+    }
+  }, [closeRequested, onCloseRequestHandled]);
+
+  const requestCancel = () => {
+    if (isDirty) {
+      setConfirmingClose(true);
+      return;
+    }
+    onCancel?.();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,18 +180,23 @@ export const CreateGameForm = ({ onSuccess, onCancel }: CreateGameFormProps) => 
   );
 
   return (
-    <div className="max-w-2xl mx-auto">
+    // No max-width here: the containing Modal owns the width, and this wrapper's
+    // former `max-w-2xl mx-auto` made Create render 159px narrower than Edit for
+    // the same form.
+    <div>
       {error && (
         <Alert variant="danger" className="mb-6" dismissible onDismiss={() => setError(null)} data-testid="error-message">
           {error}
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} onInvalid={handleInvalid} className="space-y-6">
         <GameFormFields
           formData={formData}
           onChange={handleChange}
           bannerUpload={bannerUpload}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
         />
 
         <Alert variant="info" title="Game Creation Process">
@@ -155,27 +214,36 @@ export const CreateGameForm = ({ onSuccess, onCancel }: CreateGameFormProps) => 
           </Alert>
         )}
 
-        <div className="flex gap-4 pt-4">
-          <Button
-            type="submit"
-            variant="primary"
-            loading={loading}
-            className="flex-1"
-            data-testid="create-game-submit"
-          >
-            {loading ? 'Creating Game...' : 'Create Game'}
-          </Button>
-          {onCancel && (
+        {confirmingClose ? (
+          <div className="flex justify-end pt-4">
+            <ConfirmDiscardEdits
+              onDiscard={() => onCancel?.()}
+              onKeepEditing={() => setConfirmingClose(false)}
+            />
+          </div>
+        ) : (
+          <div className="flex gap-4 pt-4">
             <Button
-              type="button"
-              variant="secondary"
-              onClick={onCancel}
-              className="px-6"
+              type="submit"
+              variant="primary"
+              loading={loading}
+              className="flex-1"
+              data-testid="create-game-submit"
             >
-              Cancel
+              {loading ? 'Creating Game...' : 'Create Game'}
             </Button>
-          )}
-        </div>
+            {onCancel && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={requestCancel}
+                className="px-6"
+              >
+                Cancel
+              </Button>
+            )}
+          </div>
+        )}
       </form>
     </div>
   );

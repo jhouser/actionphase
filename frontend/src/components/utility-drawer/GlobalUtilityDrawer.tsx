@@ -55,6 +55,7 @@ export function GlobalUtilityDrawer() {
               userRole={openSheet.options.userRole}
               gameState={openSheet.options.gameState}
               portraitAvatars={openSheet.options.portraitAvatars}
+              sheetConfig={openSheet.options.sheetConfig}
               onDirtyChange={setSheetIsDirty}
             />
           </Suspense>

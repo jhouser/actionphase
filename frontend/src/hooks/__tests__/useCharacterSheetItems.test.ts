@@ -25,8 +25,8 @@ function makeDataRow(overrides: Partial<CharacterData>): CharacterData {
   return {
     id: 1,
     character_id: 42,
-    module_type: 'abilities',
-    field_name: 'abilities',
+    module_type: 'skills',
+    field_name: 'skills',
     field_type: 'json',
     is_public: true,
     created_at: '',
@@ -48,13 +48,14 @@ describe('useCharacterSheetItems', () => {
     expect(apiClient.characters.getCharacterData).not.toHaveBeenCalled();
   });
 
-  it('parses abilities into SheetItem[]', async () => {
+  it('parses skills into SheetItem[]', async () => {
     vi.mocked(apiClient.characters.getCharacterData).mockResolvedValue({
       data: [
         makeDataRow({
-          field_name: 'abilities',
+          module_type: 'skills',
+          field_name: 'skills',
           field_value: JSON.stringify([
-            { id: 'abc-1', name: 'Fire Bolt', description: 'Deals fire damage', type: 'innate', active: true },
+            { id: 'sk-1', name: 'Stealth', rank: 'Expert', category: 'Combat' },
           ]),
         }),
       ],
@@ -66,16 +67,18 @@ describe('useCharacterSheetItems', () => {
 
     await waitFor(() => expect(result.current).toHaveLength(1));
 
-    expect(result.current[0]).toEqual({
-      id: 'abc-1',
-      name: 'Fire Bolt',
-      type: 'ability',
-      description: 'Deals fire damage',
-      metadata: 'innate',
+    expect(result.current[0]).toMatchObject({
+      id: 'sk-1',
+      name: 'Stealth',
+      type: 'skill',
+      metadata: 'Combat · Rank Expert',
     });
   });
 
-  it('parses skills into SheetItem[]', async () => {
+  // Rows written before the level -> rank rename are never migrated: the key
+  // lives inside a JSON blob and is resolved on read instead. A numeric value
+  // has to survive that path, since `level` was typed `number | string`.
+  it('falls back to the legacy numeric level for unmigrated skill rows', async () => {
     vi.mocked(apiClient.characters.getCharacterData).mockResolvedValue({
       data: [
         makeDataRow({
@@ -95,10 +98,8 @@ describe('useCharacterSheetItems', () => {
     await waitFor(() => expect(result.current).toHaveLength(1));
 
     expect(result.current[0]).toMatchObject({
-      id: 'sk-1',
       name: 'Stealth',
-      type: 'skill',
-      metadata: 'Combat · Level 3',
+      metadata: 'Combat · Rank 3',
     });
   });
 
@@ -129,15 +130,15 @@ describe('useCharacterSheetItems', () => {
     });
   });
 
-  it('filters out abilities missing id or name', async () => {
+  it('filters out skills missing id or name', async () => {
     vi.mocked(apiClient.characters.getCharacterData).mockResolvedValue({
       data: [
         makeDataRow({
-          field_name: 'abilities',
+          field_name: 'skills',
           field_value: JSON.stringify([
-            { id: 'abc-1', name: 'Good Ability', type: 'innate', active: true },
-            { name: 'No ID', type: 'innate', active: true },
-            { id: 'abc-3', type: 'innate', active: true },
+            { id: 'abc-1', name: 'Good Skill', level: 2, category: 'Combat' },
+            { name: 'No ID', level: 2, category: 'Combat' },
+            { id: 'abc-3', level: 2, category: 'Combat' },
           ]),
         }),
       ],
@@ -155,6 +156,6 @@ describe('useCharacterSheetItems', () => {
       expect(result.current).toHaveLength(1);
     });
 
-    expect(result.current[0].name).toBe('Good Ability');
+    expect(result.current[0].name).toBe('Good Skill');
   });
 });

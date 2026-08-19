@@ -342,14 +342,45 @@ WHERE m.id = $1;
 -- For threaded display, call this recursively on the frontend
 -- Sorted newest first (DESC) for better UX - users see latest comments at top
 -- INCLUDES deleted comments to preserve thread structure - UI will show "[Comment deleted]" placeholder
+--
+-- reply_count is the count of ALL descendants, not just direct children. It has
+-- to match GetPostCommentsWithThreads (see descendant_counts in
+-- backend/pkg/db/services/messages/comments.go), because the frontend renders
+-- this field as the "Continue this thread (N replies)" preview of how much
+-- thread is hidden behind the link. The main view is fed by the threaded query
+-- and the thread modal re-fetches each level through this query; when the two
+-- disagreed, a linear thread (one reply per comment) showed "(1 reply)" in the
+-- modal no matter how many comments were actually below.
+WITH RECURSIVE descendants AS (
+    -- Seed with the direct children we're about to return...
+    SELECT id AS root_id, id AS descendant_id
+    FROM messages
+    WHERE parent_id = $1
+      AND message_type = 'comment'
+
+    UNION ALL
+
+    -- ...then walk down the whole subtree under each of them.
+    SELECT d.root_id, m.id
+    FROM descendants d
+    JOIN messages m ON m.parent_id = d.descendant_id
+    WHERE m.message_type = 'comment'
+),
+descendant_counts AS (
+    -- COUNT(*) - 1 drops the seed row (the comment counting itself).
+    SELECT root_id, COUNT(*) - 1 AS reply_count
+    FROM descendants
+    GROUP BY root_id
+)
 SELECT m.*,
        u.username as author_username,
        c.name as character_name,
        COALESCE(m.character_avatar_url_at_post, c.avatar_url) as character_avatar_url,
-       (SELECT COUNT(*) FROM messages WHERE parent_id = m.id) as reply_count
+       COALESCE(dc.reply_count, 0)::bigint as reply_count
 FROM messages m
 JOIN users u ON m.author_id = u.id
 LEFT JOIN characters c ON m.character_id = c.id
+LEFT JOIN descendant_counts dc ON dc.root_id = m.id
 WHERE m.parent_id = $1
   AND m.message_type = 'comment'
 ORDER BY m.created_at DESC;

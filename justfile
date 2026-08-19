@@ -309,6 +309,16 @@ _migration-windows action="" name="":
         Return
       }
       {{BE}} migrate create -ext sql -dir pkg/db/migrations {{name}}
+      # Seed both stubs with a guard — see the unix recipe for why. The command
+      # runs inside the Linux backend container, so it is identical on both hosts.
+      {{BE}} sh -c 'for f in $(ls -t pkg/db/migrations/*{{name}}*.sql | head -2); do \
+        printf "%s\n" \
+          "-- TODO: write this migration, then delete the guard below." \
+          "-- The guard exists so an unwritten migration cannot be silently applied" \
+          "-- and recorded as done by a backend restart." \
+          "DO \$do\$ BEGIN RAISE EXCEPTION '"'"'migration {{name}} is still a stub: write it, then remove this guard'"'"'; END \$do\$;" \
+          > "$f"; done'
+      Write-Host "✅ Created migration stubs for {{name}} (guarded — remove the guard as you write them)"
     }
     "status" { {{BE}} migrate -source file://pkg/db/migrations -database "{{DEV_DB_URL}}" version }
     "rollback" { {{BE}} migrate -source file://pkg/db/migrations -database "{{DEV_DB_URL}}" down }
@@ -335,6 +345,22 @@ _migration-unix action="" name="":
         exit 1
       fi
       {{BE}} migrate create -ext sql -dir pkg/db/migrations {{name}}
+      # Seed both stubs with a guard that fails if applied before it is written.
+      #
+      # Empty migration files are valid SQL, so a backend restart (Air rebuild,
+      # `just up`) between `create` and writing the real SQL would apply the empty
+      # file and record the version as done — after which the real SQL is never
+      # run and `just migrate` says "no change". The guard turns that silent
+      # success into a loud error naming the fix. Delete these lines as you write
+      # the migration.
+      {{BE}} sh -c 'for f in $(ls -t pkg/db/migrations/*{{name}}*.sql | head -2); do \
+        printf "%s\n" \
+          "-- TODO: write this migration, then delete the guard below." \
+          "-- The guard exists so an unwritten migration cannot be silently applied" \
+          "-- and recorded as done by a backend restart." \
+          "DO \$do\$ BEGIN RAISE EXCEPTION '"'"'migration {{name}} is still a stub: write it, then remove this guard'"'"'; END \$do\$;" \
+          > "$f"; done'
+      echo "✅ Created migration stubs for {{name}} (guarded — remove the guard as you write them)"
       ;;
     status)
       {{BE}} migrate -source file://pkg/db/migrations -database "{{DEV_DB_URL}}" version

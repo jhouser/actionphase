@@ -270,6 +270,52 @@ See `frontend/e2e/STATUS.md` for current E2E test coverage and `frontend/e2e/REA
 
 **Note on mobile testing**: `just e2e` runs both Chromium (desktop) and Pixel 5 (mobile) projects. When adding new tests, verify they pass on both projects — mobile can fail due to layout differences.
 
+**Note on `just e2e-test`**: only the `file` mode takes a path —
+`just e2e-test file e2e/games/foo.spec.ts`. Passing a path to `headless` silently
+runs the **whole suite** instead.
+
+**Some specs are flaky under parallel load**, notably
+`edge-cases/unsaved-changes-warning` and `gameplay/action-submission-flow` (tight
+3s waits plus `networkidle`). Before concluding a full-suite failure is yours:
+re-run that spec alone with `just e2e-test file …`, and check whether the failing
+*set* shifts between runs. A shifting set is flake, not regression. Playwright
+also emits `Internal error: step id not found: fixture@NN` on a clean tree.
+
+---
+
+## Hidden Elements: In the DOM, Not in the A11y Tree
+
+*Added 2026-08-19, from the game form tab split.*
+
+Tabbed forms keep inactive panels mounted and hide them with `hidden` /
+`display: none` (see ARCHITECTURE.md — unmounting breaks native validation).
+This splits query behaviour, and the distinction is the point of the test:
+
+Verified against `hidden` (i.e. `display: none`) in jsdom:
+
+| Query | Sees hidden panel? |
+|---|---|
+| `getByTestId` | ✅ yes |
+| **`getByLabelText`** | ✅ **yes** — does *not* consult the a11y tree |
+| `getByRole` (any role, incl. `tooltip`) | ❌ no — a11y tree only |
+| `getByRole(..., { hidden: true })` | ✅ yes (opt-in) |
+| `toBeVisible()` | ❌ no (correctly) |
+| Playwright `.click()` / `.fill()` | ❌ no — must open the tab first |
+| Playwright `.inputValue()` / `.isChecked()` | ✅ yes (read-only) |
+
+The trap is that `getByLabelText` and `getByRole` disagree, so a test can fill a
+field on a hidden tab and then fail to assert on it — or pass while testing
+nothing. A test asserting fields **stay mounted** must use `getByTestId` +
+`toBeInTheDocument()`. That test earns its place: without it, a later
+"optimisation" to unmount inactive tabs reintroduces the silent-submit bug with
+nothing failing.
+
+Counting elements across tabs (e.g. "all four tooltips render") must be done
+**per tab**, since role queries only ever see the open one.
+
+E2E page objects need an `openTab()` before interacting with a field on another
+tab — but *not* before reading one. See `e2e/pages/GameSettingsPage.ts`.
+
 ---
 
 ## Quick Reference: Test File Locations

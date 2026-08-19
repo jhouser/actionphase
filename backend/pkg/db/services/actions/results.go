@@ -113,7 +113,7 @@ func (as *ActionSubmissionService) publishDraftUpdates(ctx context.Context, quer
 	}
 
 	// Each draft row is a complete snapshot — write it directly to character_data.
-	// Abilities/skills/items/currency access is gated at the tab level, not by is_public.
+	// Skills/items/numbers access is gated at the tab level, not by is_public.
 	for _, draft := range drafts {
 		if !draft.FieldValue.Valid {
 			continue

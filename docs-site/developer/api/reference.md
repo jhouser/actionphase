@@ -136,9 +136,9 @@ curl http://localhost:3000/api/v1/games \
 ActionPhase includes API test scripts:
 
 ```bash
-# From backend directory
-./scripts/api-test.sh login-player
-./scripts/api-test.sh list-games
+# From the repo root
+./backend/scripts/api-test.sh login-player
+./backend/scripts/api-test.sh games
 ```
 
 ## OpenAPI Specification
