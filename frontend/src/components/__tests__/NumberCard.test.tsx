@@ -88,7 +88,7 @@ describe('NumberCard', () => {
       );
 
       await user.click(screen.getByText('✎'));
-      await user.click(screen.getByText('✓'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
 
       expect(onUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Gold', type: undefined })
@@ -108,7 +108,10 @@ describe('NumberCard', () => {
       expect(screen.getByRole('button', { name: 'Remove entry' })).toBeInTheDocument();
     });
 
-    it('labels the save and cancel buttons while editing', async () => {
+    // The editor is NumberForm, the same one SkillCard and ItemCard use, so its
+    // controls are labelled buttons rather than the ✓/✕ icons this card used to
+    // hand-roll — the only editor on the sheet that did not read as Save/Cancel.
+    it('presents the shared form\'s save and cancel buttons while editing', async () => {
       const user = userEvent.setup();
       render(
         <NumberCard entry={mockEntry} canEdit={true} onUpdate={vi.fn()} onRemove={vi.fn()} />
@@ -116,8 +119,10 @@ describe('NumberCard', () => {
 
       await user.click(screen.getByRole('button', { name: 'Edit entry' }));
 
-      expect(screen.getByRole('button', { name: 'Save entry' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Cancel edit' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+      expect(screen.queryByText('✓')).not.toBeInTheDocument();
+      expect(screen.queryByText('✕')).not.toBeInTheDocument();
     });
   });
 
@@ -180,6 +185,24 @@ describe('NumberCard', () => {
       render(
         <NumberCard
           entry={{ id: '1', name: 'HP', amount: 8, max: 10, display: 'number' }}
+          canEdit={false}
+          onUpdate={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText('/ 10')).toBeInTheDocument();
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    });
+
+    // The write path never persists 'number' — NumberForm stores undefined for it
+    // (see its `display !== 'number' ? display : undefined`), so this absent-display
+    // shape is what a real "Number" entry with a maximum looks like on disk. The
+    // literal-'number' case above passes on a shape no code path actually writes.
+    it('draws nothing for a saved Number entry with a maximum', () => {
+      render(
+        <NumberCard
+          entry={{ id: '1', name: 'HP', amount: 8, max: 10 }}
           canEdit={false}
           onUpdate={vi.fn()}
           onRemove={vi.fn()}
@@ -270,8 +293,8 @@ describe('NumberCard', () => {
 
       await user.click(screen.getByText('✎'));
 
-      expect(screen.getByText('✓')).toBeInTheDocument();
-      expect(screen.getByText('✕')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
     });
 
     it('allows editing the name', async () => {
@@ -355,7 +378,7 @@ describe('NumberCard', () => {
       await user.clear(amountInput);
       await user.type(amountInput, '5000');
 
-      await user.click(screen.getByText('✓'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
 
       expect(onUpdate).toHaveBeenCalledWith({
         name: 'Platinum',
@@ -379,9 +402,9 @@ describe('NumberCard', () => {
       );
 
       await user.click(screen.getByText('✎'));
-      await user.click(screen.getByText('✓'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
 
-      expect(screen.queryByText('✓')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
       expect(screen.getByText('✎')).toBeInTheDocument();
     });
 
@@ -402,7 +425,7 @@ describe('NumberCard', () => {
       const descInput = screen.getByDisplayValue('Standard notes');
       await user.clear(descInput);
 
-      await user.click(screen.getByText('✓'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
 
       expect(onUpdate).toHaveBeenCalledWith({
         name: 'Gold',
@@ -433,7 +456,7 @@ describe('NumberCard', () => {
       await user.clear(typeInput);
       await user.type(typeInput, 'Changed');
 
-      await user.click(screen.getByText('✕'));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
       // Should show original value
       expect(screen.getByText('Gold')).toBeInTheDocument();
@@ -458,7 +481,7 @@ describe('NumberCard', () => {
       await user.clear(typeInput);
       await user.type(typeInput, 'Changed');
 
-      await user.click(screen.getByText('✕'));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
       expect(onUpdate).not.toHaveBeenCalled();
     });
@@ -475,9 +498,9 @@ describe('NumberCard', () => {
       );
 
       await user.click(screen.getByText('✎'));
-      await user.click(screen.getByText('✕'));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
-      expect(screen.queryByText('✕')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
       expect(screen.getByText('✎')).toBeInTheDocument();
     });
   });
@@ -519,7 +542,7 @@ describe('NumberCard', () => {
       await user.clear(amountInput);
       await user.type(amountInput, '1.5');
 
-      await user.click(screen.getByText('✓'));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
 
       expect(onUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ amount: 1.5 })
@@ -606,7 +629,9 @@ describe('NumberCard', () => {
         />
       );
 
-      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+      // A closed card holds no editor, so it has nothing to report — the signal
+      // starts when NumberForm mounts. Same as SkillCard and ItemCard.
+      expect(onDirtyChange).not.toHaveBeenCalledWith(true);
     });
 
     it('reports dirty once a field diverges from the saved value', async () => {
@@ -643,18 +668,24 @@ describe('NumberCard', () => {
 
       await user.click(screen.getByText('✎'));
       await user.type(screen.getByDisplayValue('Gold'), 'en');
-      await user.click(screen.getByText('✕'));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
       expect(onDirtyChange).toHaveBeenLastCalledWith(false);
     });
 
     /**
-     * handleSave clears isEditing in the same tick it calls onUpdate, but that write
-     * is async upstream — the entry prop still holds the old value for a while.
-     * Reporting clean across that window would let the sheet close on a save that is
-     * still in flight, which is the loss this whole signal exists to prevent.
+     * The editor unmounts on save, and useReportDirty guarantees a false report on
+     * unmount, so the card reports clean as soon as Save is clicked rather than
+     * holding dirty until the parent's write lands.
+     *
+     * That in-flight window used to be guarded here, by a hand-rolled inline editor
+     * that stayed mounted across it. The guard was dropped when this card moved onto
+     * the shared NumberForm: SkillCard and ItemCard have always reported clean on
+     * save, the window is only reachable by clicking Save and then closing the sheet
+     * inside two round-trips, and the mutation has no onError, so a genuinely failed
+     * write was never actually surfaced by this flag.
      */
-    it('stays dirty after save while the parent has not yet applied the update', async () => {
+    it('reports clean once saved, without waiting for the parent to apply it', async () => {
       const user = userEvent.setup();
       const onDirtyChange = vi.fn();
       render(
@@ -670,77 +701,12 @@ describe('NumberCard', () => {
 
       await user.click(screen.getByText('✎'));
       await user.type(screen.getByDisplayValue('Gold'), 'en');
-      await user.click(screen.getByText('✓'));
-
-      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
-    });
-
-    /**
-     * A dropped write (failed mutation, or a value the parent reshapes) would otherwise
-     * leave the card comparing unequal forever: dirty, with no editor on screen to save
-     * or cancel, so every tab stays locked with nothing to click. Adopting whatever the
-     * parent settles on bounds that.
-     */
-    it('recovers when the parent settles on a different value than was saved', async () => {
-      const user = userEvent.setup();
-      const onDirtyChange = vi.fn();
-      const { rerender } = render(
-        <NumberCard
-          entry={mockEntry}
-          canEdit={true}
-          onUpdate={vi.fn()}
-          onRemove={vi.fn()}
-          onDirtyChange={onDirtyChange}
-        />
-      );
-
-      await user.click(screen.getByText('✎'));
-      await user.type(screen.getByDisplayValue('Gold'), 'en');
-      await user.click(screen.getByText('✓'));
       expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
-      // Parent settles on something else entirely — the save did not take.
-      rerender(
-        <NumberCard
-          entry={{ ...mockEntry, name: 'Silver' }}
-          canEdit={true}
-          onUpdate={vi.fn()}
-          onRemove={vi.fn()}
-          onDirtyChange={onDirtyChange}
-        />
-      );
+      await user.click(screen.getByRole('button', { name: 'Save' }));
 
       expect(onDirtyChange).toHaveBeenLastCalledWith(false);
     });
 
-    it('reports clean once the parent applies the saved value', async () => {
-      const user = userEvent.setup();
-      const onDirtyChange = vi.fn();
-      const { rerender } = render(
-        <NumberCard
-          entry={mockEntry}
-          canEdit={true}
-          onUpdate={vi.fn()}
-          onRemove={vi.fn()}
-          onDirtyChange={onDirtyChange}
-        />
-      );
-
-      await user.click(screen.getByText('✎'));
-      await user.type(screen.getByDisplayValue('Gold'), 'en');
-      await user.click(screen.getByText('✓'));
-
-      rerender(
-        <NumberCard
-          entry={{ ...mockEntry, name: 'Golden' }}
-          canEdit={true}
-          onUpdate={vi.fn()}
-          onRemove={vi.fn()}
-          onDirtyChange={onDirtyChange}
-        />
-      );
-
-      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
-    });
   });
 });

@@ -116,6 +116,27 @@ describe('CharacterSheet', () => {
     expect(updateDepthError).toBeNull();
   });
 
+  // The sheet used to print a module header above every tab, including the three
+  // that render their own heading — so a stat tab read its name twice, separated
+  // by a description that only restated it ("Skills" / "Character skills").
+  it('does not repeat the tab name above a manager that heads itself', async () => {
+    setupSheet();
+
+    renderWithProviders(<CharacterSheet characterId={CHARACTER_ID} canEdit />, {
+      gameId: 1,
+    });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('tab', { name: 'Skills' }));
+
+    // The manager's own <h3> is the one that survives; the description that used
+    // to sit under the duplicate goes with it.
+    expect(await screen.findByTestId('skills-section')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Skills' })).toHaveLength(1);
+    expect(screen.queryByText('Character skills')).not.toBeInTheDocument();
+    expect(updateDepthError).toBeNull();
+  });
+
   it('renders saved field values from the character data query', async () => {
     setupSheet();
 

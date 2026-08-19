@@ -57,6 +57,13 @@ interface CharacterSheetProps {
   sheetConfig?: CharacterSheetConfig;
 }
 
+/**
+ * Module tabs rendered by a manager component rather than the generic field
+ * list. Each manager heads itself, so the sheet skips its own module header for
+ * these — keep this in step with the manager branch in the render body.
+ */
+const MANAGED_MODULE_TYPES = new Set(['skills', 'inventory', 'numbers']);
+
 export function CharacterSheet({ characterId, canEdit = false, canEditStats = false, onClose, isAnonymous = false, userRole, gameState, portraitAvatars, sheetConfig, onDirtyChange }: CharacterSheetProps) {
   const gameContext = useOptionalGameContext();
   const portraitMode = portraitAvatars ?? gameContext?.game?.portrait_avatars ?? false;
@@ -477,10 +484,17 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
           return canViewPrivate;
         }).filter(module => module.type === activeModule).map((module) => (
           <div key={module.type} className="max-w-4xl mx-auto">
-            <div className="mb-4 md:mb-6">
-              <h3 className="text-lg md:text-xl font-semibold text-content-primary mb-2">{module.name}</h3>
-              <p className="text-sm md:text-base text-content-secondary">{module.description}</p>
-            </div>
+            {/* Only the text modules get a header here. The three stat managers
+                render their own heading (the modal embeds them without this
+                block and relies on it), so repeating the module name above them
+                printed it twice — plus a description that only restated it
+                ("Skills" / "Character skills"). */}
+            {!MANAGED_MODULE_TYPES.has(module.type) && (
+              <div className="mb-4 md:mb-6">
+                <h3 className="text-lg md:text-xl font-semibold text-content-primary mb-2">{module.name}</h3>
+                <p className="text-sm md:text-base text-content-secondary">{module.description}</p>
+              </div>
+            )}
 
             {/* One manager per stat tab. Each reports its own dirty state under its
                 own key, so a clean manager cannot clear a dirty one's flag. */}

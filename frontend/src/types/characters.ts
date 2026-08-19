@@ -243,7 +243,16 @@ export function numberEntryName(entry: Pick<NumberEntry, 'name' | 'type'>): stri
  * non-positive max for the same reason: zero boxes is not a track.
  */
 export function isBoundedTrack(entry: NumberEntry): boolean {
-  return entry.max !== undefined && entry.max > 0 && entry.display !== 'number';
+  // Requires an explicit track display rather than merely excluding 'number':
+  // absent means 'number' (see the field's doc), and the write path stores
+  // exactly that — NumberForm persists undefined for the Number option instead
+  // of the literal, so `display !== 'number'` admitted every saved Number entry
+  // that had a maximum and drew it as a bar.
+  return (
+    entry.max !== undefined &&
+    entry.max > 0 &&
+    (entry.display === 'track' || entry.display === 'boxes')
+  );
 }
 
 /**

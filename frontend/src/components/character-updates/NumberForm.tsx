@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Input, Select } from '../ui';
 import { CommentEditor } from '../CommentEditor';
+import { useReportDirty } from '@/hooks/useReportDirty';
 import type { NumberEntryDisplay } from '../../types/characters';
 
 export interface NumberFormData {
@@ -18,14 +19,21 @@ interface NumberFormProps {
   submitLabel?: string;
   variant?: 'modal' | 'inline';
   submitButtonTestId?: string;
+  /** Reports whether the form holds edits that Save has not yet committed. */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 /**
- * Shared form for adding entries on the Numbers tab, used by AddNumberModal.
+ * Shared form for adding and editing entries on the Numbers tab, used by
+ * AddNumberModal and NumberCard.
  *
- * NumberCard edits inline rather than reusing this form: its dirty reporting has
- * to survive the editor closing while the save is still in flight, which a form
- * that unmounts on submit cannot express.
+ * NumberCard previously hand-rolled its own inline editor to keep reporting
+ * dirty across the window between Save and the parent's write landing, which a
+ * form that unmounts on submit cannot express. That was dropped in favour of
+ * matching SkillCard and ItemCard, which have always unmounted on save: the
+ * window is two round-trips wide but only reachable by clicking Save and then
+ * closing the sheet inside it, and a genuinely failed write is the mutation's
+ * to surface, not a dirty flag's.
  */
 export const NumberForm: React.FC<NumberFormProps> = ({
   onSubmit,
@@ -34,12 +42,27 @@ export const NumberForm: React.FC<NumberFormProps> = ({
   submitLabel = 'Add',
   variant = 'modal',
   submitButtonTestId,
+  onDirtyChange,
 }) => {
   const [name, setName] = useState(initialValues?.name || '');
   const [amount, setAmount] = useState(initialValues?.amount?.toString() || '');
   const [max, setMax] = useState(initialValues?.max?.toString() || '');
   const [display, setDisplay] = useState<NumberEntryDisplay>(initialValues?.display || 'number');
   const [description, setDescription] = useState(initialValues?.description || '');
+
+  // Compared trimmed, because handleSubmit submits trimmed. An untrimmed
+  // comparison reports dirty for a change that Save would discard, which
+  // soft-locks the form: the tab stays locked with nothing left to commit.
+  // Numbers compare as the strings the inputs hold, so a max cleared to '' and a
+  // max that was never set both read as absent rather than differing.
+  useReportDirty(
+    name.trim() !== (initialValues?.name || '').trim() ||
+      amount.trim() !== (initialValues?.amount?.toString() || '') ||
+      max.trim() !== (initialValues?.max?.toString() || '') ||
+      display !== (initialValues?.display || 'number') ||
+      description.trim() !== (initialValues?.description || '').trim(),
+    onDirtyChange,
+  );
 
   // A maximum is what makes a track possible, so the display choice is
   // meaningless without one and the control stays hidden until a max is set.
