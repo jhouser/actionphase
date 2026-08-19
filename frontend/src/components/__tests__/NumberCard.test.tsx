@@ -96,6 +96,31 @@ describe('NumberCard', () => {
     });
   });
 
+  // See SkillCard's equivalent. Named "entry" rather than "number" because the
+  // tab is GM-renameable, so the noun the user sees is not fixed.
+  describe('Accessible names', () => {
+    it('labels the edit and remove buttons', () => {
+      render(
+        <NumberCard entry={mockEntry} canEdit={true} onUpdate={vi.fn()} onRemove={vi.fn()} />
+      );
+
+      expect(screen.getByRole('button', { name: 'Edit entry' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove entry' })).toBeInTheDocument();
+    });
+
+    it('labels the save and cancel buttons while editing', async () => {
+      const user = userEvent.setup();
+      render(
+        <NumberCard entry={mockEntry} canEdit={true} onUpdate={vi.fn()} onRemove={vi.fn()} />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Edit entry' }));
+
+      expect(screen.getByRole('button', { name: 'Save entry' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Cancel edit' })).toBeInTheDocument();
+    });
+  });
+
   describe('Bounded tracks', () => {
     it('shows the maximum alongside the amount', () => {
       render(

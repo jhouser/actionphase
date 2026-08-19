@@ -207,6 +207,7 @@ export const NumberCard: React.FC<NumberCardProps> = ({ entry, canEdit, onUpdate
                   size="sm"
                   onClick={handleSave}
                   className="p-1 text-semantic-success hover:text-semantic-success"
+                  aria-label="Save entry"
                 >
                   ✓
                 </Button>
@@ -215,6 +216,7 @@ export const NumberCard: React.FC<NumberCardProps> = ({ entry, canEdit, onUpdate
                   size="sm"
                   onClick={handleCancel}
                   className="p-1 text-content-secondary hover:text-content-primary"
+                  aria-label="Cancel edit"
                 >
                   ✕
                 </Button>
@@ -226,6 +228,7 @@ export const NumberCard: React.FC<NumberCardProps> = ({ entry, canEdit, onUpdate
                   size="sm"
                   onClick={() => setIsEditing(true)}
                   className="p-1 text-interactive-primary hover:text-interactive-primary-hover"
+                  aria-label="Edit entry"
                 >
                   ✎
                 </Button>
@@ -234,6 +237,7 @@ export const NumberCard: React.FC<NumberCardProps> = ({ entry, canEdit, onUpdate
                   size="sm"
                   onClick={onRemove}
                   className="p-1 text-semantic-danger hover:text-semantic-danger"
+                  aria-label="Remove entry"
                 >
                   🗑
                 </Button>

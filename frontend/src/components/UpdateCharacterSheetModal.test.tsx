@@ -304,7 +304,7 @@ describe('UpdateCharacterSheetModal', () => {
       expect(await screen.findByText('Magic Sword')).toBeInTheDocument();
 
       // Remove the staged item, returning the list to exactly the published contents.
-      const removeButtons = screen.getAllByRole('button', { name: '🗑' });
+      const removeButtons = screen.getAllByRole('button', { name: 'Remove item' });
       fireEvent.click(removeButtons[removeButtons.length - 1]);
 
       await waitFor(() => {
@@ -325,7 +325,7 @@ describe('UpdateCharacterSheetModal', () => {
       fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
       expect(await screen.findByText('Healing Potion')).toBeInTheDocument();
 
-      const removeButtons = screen.getAllByRole('button', { name: '🗑' });
+      const removeButtons = screen.getAllByRole('button', { name: 'Remove item' });
       fireEvent.click(removeButtons[removeButtons.length - 1]);
 
       await waitFor(() => {
@@ -371,11 +371,11 @@ describe('UpdateCharacterSheetModal', () => {
       // Edit skills, then immediately switch tabs and edit inventory. No waiting
       // between them: both edits land inside the same debounce window, which is the
       // condition that used to drop the first one.
-      fireEvent.click(screen.getAllByRole('button', { name: '🗑' })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Remove skill' })[0]);
 
       fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
       expect(await screen.findByText('Healing Potion')).toBeInTheDocument();
-      const removeItemButtons = screen.getAllByRole('button', { name: '🗑' });
+      const removeItemButtons = screen.getAllByRole('button', { name: 'Remove item' });
       fireEvent.click(removeItemButtons[removeItemButtons.length - 1]);
 
       await waitFor(() => {
@@ -412,9 +412,9 @@ describe('UpdateCharacterSheetModal', () => {
       expect(await screen.findByText('Healing Potion')).toBeInTheDocument();
 
       // Remove all three in quick succession — one field, one row, one write.
-      fireEvent.click(screen.getAllByRole('button', { name: '🗑' })[0]);
-      fireEvent.click(screen.getAllByRole('button', { name: '🗑' })[0]);
-      fireEvent.click(screen.getAllByRole('button', { name: '🗑' })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Remove item' })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Remove item' })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Remove item' })[0]);
 
       await waitFor(() => {
         expect(rows).toEqual(['inventory:items']);
@@ -435,11 +435,11 @@ describe('UpdateCharacterSheetModal', () => {
       renderWithProviders(<UpdateCharacterSheetModal {...BASE_PROPS} onClose={onClose} />);
       await waitForLoaded();
 
-      fireEvent.click(screen.getAllByRole('button', { name: '🗑' })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Remove skill' })[0]);
 
       fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
       expect(await screen.findByText('Healing Potion')).toBeInTheDocument();
-      const removeItemButtons = screen.getAllByRole('button', { name: '🗑' });
+      const removeItemButtons = screen.getAllByRole('button', { name: 'Remove item' });
       fireEvent.click(removeItemButtons[removeItemButtons.length - 1]);
 
       // Close while both edits are still inside the debounce window.
@@ -620,7 +620,7 @@ describe('UpdateCharacterSheetModal', () => {
       await waitFor(() => {
         expect(screen.getByText('Healing Potion')).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByRole('button', { name: '✎' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Edit item' }));
       await waitFor(() => {
         expect(screen.getByLabelText(/item name/i)).toBeInTheDocument();
       });

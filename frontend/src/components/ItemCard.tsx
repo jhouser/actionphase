@@ -96,6 +96,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, canEdit, onUpdate, onR
                 size="sm"
                 onClick={() => setIsEditing(true)}
                 className="p-1 text-interactive-primary hover:text-interactive-primary-hover"
+                aria-label="Edit item"
               >
                 ✎
               </Button>
@@ -104,6 +105,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, canEdit, onUpdate, onR
                 size="sm"
                 onClick={onRemove}
                 className="p-1 text-semantic-danger hover:text-semantic-danger"
+                aria-label="Remove item"
               >
                 🗑
               </Button>

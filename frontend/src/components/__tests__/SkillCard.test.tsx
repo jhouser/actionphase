@@ -132,6 +132,21 @@ describe('SkillCard', () => {
   // The parent merges updates onto the existing entry, so a save that only sets
   // `rank` leaves the legacy `level` in place — a row carrying two spellings of
   // the same value, disagreeing, with the display silently preferring one.
+  // The action buttons render as bare emoji. Without an explicit label their
+  // accessible name is the glyph itself — a screen reader announces "🗑" — which
+  // is what happened when AbilityCard (which did label them) was retired and
+  // skills inherited the surface without inheriting the labels.
+  describe('Accessible names', () => {
+    it('labels the edit and remove buttons', () => {
+      render(
+        <SkillCard skill={mockSkill} canEdit={true} onUpdate={vi.fn()} onRemove={vi.fn()} />
+      );
+
+      expect(screen.getByRole('button', { name: 'Edit skill' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove skill' })).toBeInTheDocument();
+    });
+  });
+
   describe('Legacy level key', () => {
     it('clears the legacy key when a legacy row is saved', async () => {
       const user = userEvent.setup();

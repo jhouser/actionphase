@@ -97,6 +97,19 @@ describe('ItemCard', () => {
     });
   });
 
+  // See SkillCard's equivalent: emoji-only buttons announce as the glyph unless
+  // explicitly labelled.
+  describe('Accessible names', () => {
+    it('labels the edit and remove buttons', () => {
+      render(
+        <ItemCard item={mockItem} canEdit={true} onUpdate={vi.fn()} onRemove={vi.fn()} />
+      );
+
+      expect(screen.getByRole('button', { name: 'Edit item' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove item' })).toBeInTheDocument();
+    });
+  });
+
   describe('Equipped Status (retired)', () => {
     // The badge was removed in the Phase 5 field pass: nothing could ever set
     // the flag true, so it never rendered in practice. Old rows still carry the
