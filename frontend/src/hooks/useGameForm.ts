@@ -5,7 +5,7 @@ import type { GameFormData } from '../components/GameFormFields';
 import { convertToISO8601, formatDateTimeLocal } from '../lib/utils/dates';
 import { useUploadGameBanner, useDeleteGameBanner } from './useGameBanner';
 
-export const BLANK_FORM_DATA: GameFormData = {
+const BLANK_FORM_DATA: GameFormData = {
   title: '',
   description: '',
   genre: '',
