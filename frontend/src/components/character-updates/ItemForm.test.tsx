@@ -169,13 +169,27 @@ describe('ItemForm', () => {
       expect(screen.queryByLabelText(/^mode$/i)).not.toBeInTheDocument();
     });
 
-    it('offers the mode picker when allowed inside a game', async () => {
+    it('offers the mode picker when allowed inside a game that has loot tables', async () => {
+      mockGameContext.current = { gameId: 7 };
+      mockGetLootTables.mockResolvedValue({ data: [{ id: 4, name: 'Trinkets' }] });
+      renderWithQuery(
+        <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add" allowedLootModes={['manual','loot_table','loot_table_random']} />
+      );
+      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
+    });
+
+    // This previously resolved to [] and still expected the picker, which passed
+    // only on the first paint before the narrowing effect ran — a transient frame,
+    // not a settled state. Mode availability is derived now, so an empty game
+    // never shows the picker at all, matching the sibling cases above.
+    it('offers no mode picker inside a game with no loot tables', async () => {
       mockGameContext.current = { gameId: 7 };
       mockGetLootTables.mockResolvedValue({ data: [] });
       renderWithQuery(
         <ItemForm onSubmit={vi.fn()} onCancel={vi.fn()} submitLabel="Add" allowedLootModes={['manual','loot_table','loot_table_random']} />
       );
-      await waitFor(() => expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument());
+      await waitFor(() => expect(mockGetLootTables).toHaveBeenCalled());
+      expect(screen.queryByLabelText(/^mode$/i)).not.toBeInTheDocument();
     });
 
     it('submits as a manual item when loot modes are unavailable', async () => {

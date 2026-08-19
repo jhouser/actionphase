@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button, Input, Select } from '../ui';
 import { CommentEditor } from '../CommentEditor';
 import { useOptionalGameContext } from '@/contexts/GameContext';
@@ -57,30 +57,43 @@ export const ItemForm: React.FC<ItemFormProps> = ({
   const gameContext = useOptionalGameContext();
 
   // Loot tables are game-scoped, so both a caller opt-in and a game are required.
-  // Loot Mode manual is always enabled, we disable the others if there is no game context or loot tables
-  const [lootModesEnabled, setLootModesEnabled] = useState<Record<lootModes, boolean>>({
+  // Manual is always available; the loot modes additionally need the game to
+  // actually have a non-empty loot table.
+  const lootModesAllowed = {
     manual: true,
-    loot_table: !!gameContext?.gameId && allowedLootModes.includes('loot_table') ,
+    loot_table: !!gameContext?.gameId && allowedLootModes.includes('loot_table'),
     loot_table_random: !!gameContext?.gameId && allowedLootModes.includes('loot_table_random'),
-  });
+  };
   
-  const { data: lootTables, isLoading: isLootTablesLoading, isFetched: isLootTablesFetched, isError: isLootTablesError } = useQuery({
+  const { data: lootTables, isLoading: isLootTablesLoading } = useQuery({
     queryKey: ['lootTables', gameContext?.gameId, true],
     queryFn: () => apiClient.games.getLootTables(gameContext!.gameId, true).then((res) => res.data),
-    enabled: !!gameContext?.gameId && (lootModesEnabled.loot_table || lootModesEnabled.loot_table_random)
+    enabled: !!gameContext?.gameId && (lootModesAllowed.loot_table || lootModesAllowed.loot_table_random),
+    // Always refetch on mount, matching useLootTableManagement. The global
+    // default holds a list for five minutes, and this form is usually mounted
+    // long after that list was first fetched — a GM who creates a loot table and
+    // then opens a character sheet was served the pre-creation list and saw no
+    // loot modes at all until a manual page reload. Invalidation alone does not
+    // cover it: the mutation that creates a table runs while this form is
+    // unmounted, so there is no active observer to refetch, and a table created
+    // in another tab or by a co-GM never invalidates anything here.
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
-  // Once the fetch settles, retire the loot modes if the game has no loot tables.
-  // Functional update so the effect does not depend on the state it narrows.
-  useEffect(() => {
-    if (!isLootTablesFetched && !isLootTablesError) return;
-    const hasLootTables = (lootTables?.length ?? 0) > 0;
-    setLootModesEnabled((prev) => ({
-      manual: prev.manual,
-      loot_table: prev.loot_table && hasLootTables,
-      loot_table_random: prev.loot_table_random && hasLootTables,
-    }));
-  }, [lootTables, isLootTablesFetched, isLootTablesError]);
+  // Derived, not state. This used to be a useState narrowed by an effect that
+  // could only ever clear a mode (`prev.loot_table && hasLootTables`), which
+  // latched: once a fetch returned no tables the modes stayed off for the life
+  // of the form, so a later refetch that did find tables could not restore them.
+  // That also deadlocked the query, since a cleared mode disables the very fetch
+  // that would re-enable it. Recomputing each render means the modes simply
+  // follow the current data.
+  const hasLootTables = (lootTables?.length ?? 0) > 0;
+  const lootModesEnabled: Record<lootModes, boolean> = {
+    manual: true,
+    loot_table: lootModesAllowed.loot_table && hasLootTables,
+    loot_table_random: lootModesAllowed.loot_table_random && hasLootTables,
+  };
 
   const [mode, setMode] = useState<lootModes>('manual');
   const [name, setName] = useState(initialValues?.name || '');
