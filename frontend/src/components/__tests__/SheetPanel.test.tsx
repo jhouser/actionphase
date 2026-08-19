@@ -5,16 +5,14 @@ import { SheetPanel } from '../SheetPanel';
 import type { SheetItem } from '../../hooks/useCharacterSheetItems';
 
 const items: SheetItem[] = [
-  { id: 'a1', name: 'Fire Bolt', type: 'ability', description: 'Deals fire damage', metadata: 'innate' },
   { id: 's1', name: 'Stealth', type: 'skill', metadata: 'Combat · Level 2' },
   { id: 'i1', name: 'Elvish Longbow', type: 'item', description: 'A fine bow', metadata: 'Weapon' },
-  { id: 'a2', name: 'Heal', type: 'ability', description: 'Restores health', metadata: 'learned' },
+  { id: 's2', name: 'Fire Bolt', type: 'skill', description: 'Deals fire damage', metadata: 'Evocation' },
 ];
 
 describe('SheetPanel', () => {
-  it('renders all three group headings when items exist', () => {
+  it('renders both group headings when items exist', () => {
     render(<SheetPanel items={items} onInsert={vi.fn()} />);
-    expect(screen.getByText('Abilities')).toBeInTheDocument();
     expect(screen.getByText('Skills')).toBeInTheDocument();
     expect(screen.getByText('Inventory')).toBeInTheDocument();
   });
@@ -35,7 +33,7 @@ describe('SheetPanel', () => {
     const user = userEvent.setup();
     const onInsert = vi.fn();
     render(<SheetPanel items={items} onInsert={onInsert} />);
-    await user.click(screen.getByText('Fire Bolt'));
+    await user.click(screen.getByText('Stealth'));
     expect(onInsert).toHaveBeenCalledWith(items[0]);
   });
 
@@ -61,10 +59,9 @@ describe('SheetPanel', () => {
   });
 
   it('hides groups that have no items', () => {
-    const abilitiesOnly = items.filter((i) => i.type === 'ability');
-    render(<SheetPanel items={abilitiesOnly} onInsert={vi.fn()} />);
-    expect(screen.getByText('Abilities')).toBeInTheDocument();
-    expect(screen.queryByText('Skills')).not.toBeInTheDocument();
+    const skillsOnly = items.filter((i) => i.type === 'skill');
+    render(<SheetPanel items={skillsOnly} onInsert={vi.fn()} />);
+    expect(screen.getByText('Skills')).toBeInTheDocument();
     expect(screen.queryByText('Inventory')).not.toBeInTheDocument();
   });
 });

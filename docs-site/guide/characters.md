@@ -11,14 +11,20 @@ Character creation is available once the game enters the **Character Creation** 
 
 ## The Character Sheet
 
-Open your character sheet by clicking your character's name in the **People** tab. The sheet has four tabs:
+Open your character sheet by clicking your character's name in the **People** tab. The sheet has five tabs:
 
 - **Public Profile** — Character description visible to all players
 - **Private Notes** — Your private notes, visible only to you, the GM, and audience members
-- **Abilities & Skills** — Special powers and trained skills (GM-controlled)
-- **Inventory** — Equipment, items, and currency/resources (GM-controlled)
+- **Skills** — Trained skills and special powers (GM-controlled)
+- **Inventory** — Equipment and items (GM-controlled)
+- **Numbers** — Named quantities and tracks (GM-controlled)
 
-The **Public Profile** tab is always visible to everyone. The other three tabs are only visible to the character's player, the GM, and audience members. In a completed game, all participants can view the full sheet.
+The **Public Profile** tab is always visible to everyone. The other four tabs are only visible to the character's player, the GM, and audience members. In a completed game, all participants can view the full sheet.
+
+**Your game may use different names.** The GM can rename the **Skills**,
+**Inventory**, and **Numbers** tabs to suit the game — "Talents", "Load",
+"Stress". The names below are the defaults; the tabs work the same whatever they
+are called. See [Game Settings](./game-settings.md) if you are the GM.
 
 ### Public Profile
 
@@ -26,23 +32,21 @@ The **Character Description** field holds your character's public-facing informa
 
 ### Private Notes
 
-A single **Private Notes & Secrets** field for anything you don't want other players to see — motivations, secrets, things your character knows. Supports Markdown. Visible only to you, the GM, and audience members.
+A single **Private Notes & Secrets** field for anything you don't want other players to see — motivations, secrets, things your character knows. Visible only to you, the GM, and audience members. Supports Markdown.
 
-### Abilities & Skills
+### Skills
 
-The **Abilities & Skills** tab has two sub-tabs:
-
-**Abilities** — Each ability has a name, type (Learned or Innate), and description.
-
-**Skills** — Each skill has a name, numeric level, optional category (e.g., "Combat", "Social"), and description.
+Each skill has a name, an optional **rank** (free text — "Expert", "5", "Advanced"), an optional category (e.g. "Combat", "Social"), and a description. Descriptions support Markdown and are collapsed by default; click **Description** to expand one.
 
 ### Inventory
 
-The **Inventory** tab has two sub-tabs:
+Each item has a name, quantity, and optional category, value, weight, and description. The total weight and value line appears only if a game actually uses those fields.
 
-**Items** — Each item has a name, quantity, optional category, value, weight, and description.
+### Numbers
 
-**Currency/Resources** — Tracks named resources (e.g., "Gold", "Credits", "XP") with a current amount and optional notes. Currency is private — only the character's player, the GM, and audience members can see it.
+Tracks named quantities — money, experience, stress, heat, clocks. Each entry has a name, a current amount, and an optional description.
+
+An entry can also carry a **maximum**, which turns it from a bare count into a track: "Stress 4 / 9". Entries with a maximum can display as a number, a bar, or a row of boxes.
 
 ## Avatar
 
@@ -67,14 +71,14 @@ GMs can create both player characters and NPC characters from the **Create Chara
 
 ## GM: Editing Character Sheets
 
-As GM, you can edit any character's Abilities & Skills and Inventory directly from their character sheet at any time. Players can edit their own Public Profile and Private Notes but cannot edit Abilities, Skills, Inventory, or Currency — those are GM-controlled.
+As GM, you can edit any character's Skills, Inventory, and Numbers directly from their character sheet at any time. Players can edit their own Public Profile and Private Notes but cannot edit the stat tabs — those are GM-controlled.
 
 ## GM: Draft Character Updates
 
 To prepare character sheet changes that will take effect when you publish action results:
 
 1. When writing an action result, open the **Draft Character Updates** section.
-2. Add updates specifying the module (Abilities, Skills, Inventory, Currency), field name, value, and operation (Upsert or Delete).
+2. Add updates specifying the module (Skills, Inventory, Numbers), field name, value, and operation (Upsert or Delete).
 3. Save the drafts.
 
 Draft updates are not visible to the player. When you publish the result, all associated drafts are applied to the character sheet automatically.

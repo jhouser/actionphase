@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { GameWithDetails, CreateGameRequest } from '../types/games';
+import type { CharacterSheetConfig } from '../types/characters';
 import type { GameFormData } from '../components/GameFormFields';
 import { convertToISO8601, formatDateTimeLocal } from '../lib/utils/dates';
 import { useUploadGameBanner, useDeleteGameBanner } from './useGameBanner';
@@ -16,6 +17,9 @@ const BLANK_FORM_DATA: GameFormData = {
   auto_accept_audience: false,
   allow_group_conversations: true,
   portrait_avatars: true,
+  sheet_label_skills: '',
+  sheet_label_inventory: '',
+  sheet_label_numbers: '',
   common_room_open_day: '',
   common_room_open_time: '',
   common_room_close_day: '',
@@ -35,6 +39,12 @@ export function gameToFormData(game: GameWithDetails): GameFormData {
     auto_accept_audience: game.auto_accept_audience || false,
     allow_group_conversations: game.allow_group_conversations ?? true,
     portrait_avatars: game.portrait_avatars ?? false,
+    // Only genuine overrides come back from the server, so an absent label
+    // hydrates as an empty box — which is exactly how the GM left it, and what
+    // makes the placeholder show the default again.
+    sheet_label_skills: game.character_sheet?.labels?.skills ?? '',
+    sheet_label_inventory: game.character_sheet?.labels?.inventory ?? '',
+    sheet_label_numbers: game.character_sheet?.labels?.numbers ?? '',
     common_room_open_day: game.common_room_open_day ?? '',
     common_room_open_time: game.common_room_open_time ? game.common_room_open_time.slice(0, 5) : '',
     common_room_close_day: game.common_room_close_day ?? '',
@@ -52,10 +62,42 @@ export interface UploadPendingBannerCallbacks {
   onError?: () => void;
 }
 
+/**
+ * Folds the form's three flat label fields back into the sparse `character_sheet`
+ * wire shape.
+ *
+ * Empty and whitespace-only boxes are dropped rather than sent as "": a blank
+ * box means "use the default", which on the wire is spelled *absent*. The
+ * backend would accept "" too (it trims and treats whitespace-only as "no
+ * override"), but sending it would put two spellings of the same state on the
+ * wire and store keys the GM never set. When nothing is overridden
+ * the whole key is omitted, so a game with no customisation sends nothing at
+ * all rather than an empty object.
+ */
+function buildCharacterSheetConfig(formData: GameFormData): CharacterSheetConfig | undefined {
+  const labels: NonNullable<CharacterSheetConfig['labels']> = {};
+
+  const skills = formData.sheet_label_skills?.trim();
+  if (skills) labels.skills = skills;
+
+  const inventory = formData.sheet_label_inventory?.trim();
+  if (inventory) labels.inventory = inventory;
+
+  const numbers = formData.sheet_label_numbers?.trim();
+  if (numbers) labels.numbers = numbers;
+
+  return Object.keys(labels).length > 0 ? { labels } : undefined;
+}
+
 export function useGameForm(initialData?: GameWithDetails) {
   const [formData, setFormData] = useState<GameFormData>(() =>
     initialData ? gameToFormData(initialData) : { ...BLANK_FORM_DATA }
   );
+  // The state the form was opened in, for the unsaved-edit comparison. Held in
+  // state rather than recomputed so it survives re-renders, and so Edit's
+  // re-hydration effect can move the baseline when it reloads the game — a
+  // fresh hydration is not an edit.
+  const [initialFormData, setInitialFormData] = useState<GameFormData>(formData);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [pendingBannerFile, setPendingBannerFile] = useState<File | null>(null);
@@ -164,6 +206,7 @@ export function useGameForm(initialData?: GameWithDetails) {
       auto_accept_audience: formData.auto_accept_audience,
       allow_group_conversations: formData.allow_group_conversations ?? true,
       portrait_avatars: formData.portrait_avatars ?? false,
+      character_sheet: buildCharacterSheetConfig(formData),
       common_room_open_day: hasSchedule ? Number(formData.common_room_open_day) : null,
       common_room_open_time: hasSchedule ? String(formData.common_room_open_time) : null,
       common_room_close_day: hasSchedule ? Number(formData.common_room_close_day) : null,
@@ -174,9 +217,18 @@ export function useGameForm(initialData?: GameWithDetails) {
     return { payload, error: null };
   }, [formData]);
 
+  // Replaces both the form contents and the baseline they are compared against,
+  // so re-hydrating an unedited form does not register as dirty.
+  const resetFormData = useCallback((next: GameFormData) => {
+    setFormData(next);
+    setInitialFormData(next);
+  }, []);
+
   return {
     formData,
     setFormData,
+    initialFormData,
+    resetFormData,
     handleChange,
     error,
     setError,

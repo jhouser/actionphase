@@ -8,14 +8,14 @@ describe('AddSkillModal', () => {
     it('renders modal with title', () => {
       render(<AddSkillModal onAdd={vi.fn()} onCancel={vi.fn()} />);
 
-      expect(screen.getByText('Add New Skill')).toBeInTheDocument();
+      expect(screen.getByText('Add New')).toBeInTheDocument();
     });
 
     it('renders all form fields', () => {
       render(<AddSkillModal onAdd={vi.fn()} onCancel={vi.fn()} />);
 
-      expect(screen.getByLabelText(/Skill Name/)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Level/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Name/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Rank/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Category/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Description/)).toBeInTheDocument();
     });
@@ -24,13 +24,13 @@ describe('AddSkillModal', () => {
       render(<AddSkillModal onAdd={vi.fn()} onCancel={vi.fn()} />);
 
       expect(screen.getByText('Cancel')).toBeInTheDocument();
-      expect(screen.getByText('Add Skill')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Add', exact: true })).toBeInTheDocument();
     });
 
     it('shows skill name field as required', () => {
       render(<AddSkillModal onAdd={vi.fn()} onCancel={vi.fn()} />);
 
-      const nameField = screen.getByLabelText(/Skill Name/);
+      const nameField = screen.getByLabelText(/^Name/);
       expect(nameField).toBeRequired();
     });
   });
@@ -40,30 +40,30 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={vi.fn()} onCancel={vi.fn()} />);
 
-      const nameInput = screen.getByLabelText(/Skill Name/);
+      const nameInput = screen.getByLabelText(/^Name/);
       await user.type(nameInput, 'Swordsmanship');
 
       expect(nameInput).toHaveValue('Swordsmanship');
     });
 
-    it('allows entering level as text', async () => {
+    it('allows entering rank as text', async () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={vi.fn()} onCancel={vi.fn()} />);
 
-      const levelInput = screen.getByLabelText(/Level/);
-      await user.type(levelInput, 'Expert');
+      const rankInput = screen.getByLabelText(/Rank/);
+      await user.type(rankInput, 'Expert');
 
-      expect(levelInput).toHaveValue('Expert');
+      expect(rankInput).toHaveValue('Expert');
     });
 
-    it('allows entering level as number', async () => {
+    it('allows entering rank as number', async () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={vi.fn()} onCancel={vi.fn()} />);
 
-      const levelInput = screen.getByLabelText(/Level/);
-      await user.type(levelInput, '5');
+      const rankInput = screen.getByLabelText(/Rank/);
+      await user.type(rankInput, '5');
 
-      expect(levelInput).toHaveValue('5');
+      expect(rankInput).toHaveValue('5');
     });
 
     it('allows entering category', async () => {
@@ -93,34 +93,34 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), 'Swordsmanship');
-      await user.type(screen.getByLabelText(/Level/), 'Expert');
+      await user.type(screen.getByLabelText(/^Name/), 'Swordsmanship');
+      await user.type(screen.getByLabelText(/Rank/), 'Expert');
       await user.type(screen.getByLabelText(/Category/), 'Combat');
       await user.type(screen.getByLabelText(/Description/), 'Mastery of blade combat');
 
-      await user.click(screen.getByText('Add Skill'));
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).toHaveBeenCalledWith({
         name: 'Swordsmanship',
-        level: 'Expert',
+        rank: 'Expert',
         category: 'Combat',
         description: 'Mastery of blade combat'
       });
     });
 
-    it('calls onAdd with numeric level', async () => {
+    it('calls onAdd with numeric rank', async () => {
       const onAdd = vi.fn();
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), 'Archery');
-      await user.type(screen.getByLabelText(/Level/), '3');
+      await user.type(screen.getByLabelText(/^Name/), 'Archery');
+      await user.type(screen.getByLabelText(/Rank/), '3');
 
-      await user.click(screen.getByText('Add Skill'));
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).toHaveBeenCalledWith({
         name: 'Archery',
-        level: '3',
+        rank: '3',
         category: undefined,
         description: undefined
       });
@@ -131,13 +131,13 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), 'Simple Skill');
+      await user.type(screen.getByLabelText(/^Name/), 'Simple Skill');
 
-      await user.click(screen.getByText('Add Skill'));
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).toHaveBeenCalledWith({
         name: 'Simple Skill',
-        level: undefined,
+        rank: undefined,
         category: undefined,
         description: undefined
       });
@@ -148,25 +148,25 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), '  Swordsmanship  ');
-      await user.click(screen.getByText('Add Skill'));
+      await user.type(screen.getByLabelText(/^Name/), '  Swordsmanship  ');
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Swordsmanship' })
       );
     });
 
-    it('trims whitespace from level', async () => {
+    it('trims whitespace from rank', async () => {
       const onAdd = vi.fn();
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), 'Skill');
-      await user.type(screen.getByLabelText(/Level/), '  Expert  ');
-      await user.click(screen.getByText('Add Skill'));
+      await user.type(screen.getByLabelText(/^Name/), 'Skill');
+      await user.type(screen.getByLabelText(/Rank/), '  Expert  ');
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).toHaveBeenCalledWith(
-        expect.objectContaining({ level: 'Expert' })
+        expect.objectContaining({ rank: 'Expert' })
       );
     });
 
@@ -175,9 +175,9 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), 'Skill');
+      await user.type(screen.getByLabelText(/^Name/), 'Skill');
       await user.type(screen.getByLabelText(/Category/), '  Combat  ');
-      await user.click(screen.getByText('Add Skill'));
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).toHaveBeenCalledWith(
         expect.objectContaining({ category: 'Combat' })
@@ -189,26 +189,26 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), 'Skill');
+      await user.type(screen.getByLabelText(/^Name/), 'Skill');
       await user.type(screen.getByLabelText(/Description/), '  Skill description  ');
-      await user.click(screen.getByText('Add Skill'));
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).toHaveBeenCalledWith(
         expect.objectContaining({ description: 'Skill description' })
       );
     });
 
-    it('sets empty level to undefined', async () => {
+    it('sets empty rank to undefined', async () => {
       const onAdd = vi.fn();
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), 'Skill');
-      await user.type(screen.getByLabelText(/Level/), '   ');
-      await user.click(screen.getByText('Add Skill'));
+      await user.type(screen.getByLabelText(/^Name/), 'Skill');
+      await user.type(screen.getByLabelText(/Rank/), '   ');
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).toHaveBeenCalledWith(
-        expect.objectContaining({ level: undefined })
+        expect.objectContaining({ rank: undefined })
       );
     });
 
@@ -217,9 +217,9 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), 'Skill');
+      await user.type(screen.getByLabelText(/^Name/), 'Skill');
       await user.type(screen.getByLabelText(/Category/), '   ');
-      await user.click(screen.getByText('Add Skill'));
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).toHaveBeenCalledWith(
         expect.objectContaining({ category: undefined })
@@ -231,9 +231,9 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), 'Skill');
+      await user.type(screen.getByLabelText(/^Name/), 'Skill');
       await user.type(screen.getByLabelText(/Description/), '   ');
-      await user.click(screen.getByText('Add Skill'));
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).toHaveBeenCalledWith(
         expect.objectContaining({ description: undefined })
@@ -245,7 +245,7 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.click(screen.getByText('Add Skill'));
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).not.toHaveBeenCalled();
     });
@@ -255,8 +255,8 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), '   ');
-      await user.click(screen.getByText('Add Skill'));
+      await user.type(screen.getByLabelText(/^Name/), '   ');
+      await user.click(screen.getByRole('button', { name: 'Add', exact: true }));
 
       expect(onAdd).not.toHaveBeenCalled();
     });
@@ -278,7 +278,7 @@ describe('AddSkillModal', () => {
       const user = userEvent.setup();
       render(<AddSkillModal onAdd={onAdd} onCancel={vi.fn()} />);
 
-      await user.type(screen.getByLabelText(/Skill Name/), 'Skill');
+      await user.type(screen.getByLabelText(/^Name/), 'Skill');
       await user.click(screen.getByText('Cancel'));
 
       expect(onAdd).not.toHaveBeenCalled();

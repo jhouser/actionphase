@@ -29,9 +29,25 @@ export class GameSettingsPage {
   }
 
   /**
+   * Open one of the form's tabs.
+   *
+   * The Edit Game form is tab-split. Inactive panels stay mounted (hidden with
+   * display:none) so the whole form validates and submits from any tab, and
+   * read-only checks like inputValue()/isChecked() still work on them — but
+   * Playwright will not fill or click a control it cannot see, so any
+   * interaction has to open the owning tab first.
+   */
+  async openTab(tab: 'info' | 'schedule' | 'rules' | 'appearance') {
+    // `game-form-` prefixed: the game page behind this modal has its own tab bar
+    // with an `info` tab, so a bare `tab-info` matches two elements.
+    await this.page.getByTestId(`tab-game-form-${tab}`).click();
+  }
+
+  /**
    * Update game title
    */
   async updateTitle(newTitle: string) {
+    await this.openTab('info');
     await this.page.fill('#title', newTitle);
   }
 
@@ -39,6 +55,7 @@ export class GameSettingsPage {
    * Update game description
    */
   async updateDescription(newDescription: string) {
+    await this.openTab('info');
     await this.page.fill('#description', newDescription);
   }
 
@@ -46,6 +63,7 @@ export class GameSettingsPage {
    * Update game genre
    */
   async updateGenre(newGenre: string) {
+    await this.openTab('info');
     await this.page.fill('#genre', newGenre);
   }
 
@@ -53,6 +71,7 @@ export class GameSettingsPage {
    * Update max players
    */
   async updateMaxPlayers(maxPlayers: number) {
+    await this.openTab('info');
     await this.page.fill('#max_players', maxPlayers.toString());
   }
 
@@ -62,6 +81,7 @@ export class GameSettingsPage {
    * @param dateTimeString - datetime-local format string (YYYY-MM-DDTHH:mm)
    */
   private async setDateTimeField(fieldId: string, dateTimeString: string) {
+    await this.openTab('schedule');
     const futureDate = new Date(dateTimeString);
 
     // Round to nearest 15 minutes (datepicker uses 15-minute intervals)
@@ -150,6 +170,7 @@ export class GameSettingsPage {
    * Toggle anonymous mode
    */
   async toggleAnonymous() {
+    await this.openTab('rules');
     await this.page.locator('#is_anonymous').click();
   }
 
@@ -157,6 +178,7 @@ export class GameSettingsPage {
    * Toggle auto accept audience
    */
   async toggleAutoAcceptAudience() {
+    await this.openTab('rules');
     await this.page.locator('#auto_accept_audience').click();
   }
 
@@ -171,10 +193,21 @@ export class GameSettingsPage {
   }
 
   /**
-   * Cancel and close modal
+   * Cancel and close modal, discarding any unsaved edits.
+   *
+   * Cancelling a form with unsaved edits raises an inline confirmation rather
+   * than closing outright, so the discard has to be confirmed. The bar is only
+   * shown when the form is actually dirty — hence the isVisible() check rather
+   * than an unconditional click, which would time out on a clean form.
    */
   async cancel() {
     await this.page.getByRole('button', { name: 'Cancel' }).click();
+
+    const discardButton = this.page.getByTestId('confirm-close-discard');
+    if (await discardButton.isVisible()) {
+      await discardButton.click();
+    }
+
     // Wait for the modal to close before proceeding
     await this.page.getByRole('heading', { name: 'Edit Game', level: 2 }).waitFor({ state: 'hidden' });
     await this.page.waitForLoadState('networkidle');

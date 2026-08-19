@@ -1,12 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 import type { GameWithDetails, UpdateGameRequest } from '../types/games';
 import { apiClient } from '../lib/api';
 import { Button, Alert } from './ui';
 import { Modal } from './Modal';
 import { GameFormFields } from './GameFormFields';
+import type { GameFormTabId } from './gameFormTabs';
+import { useRevealInvalidTab } from '../hooks/useRevealInvalidTab';
 import { HelpTooltip } from './ui/HelpTooltip';
 import { useGameForm, gameToFormData } from '../hooks/useGameForm';
+import { useGameFormDirty } from '../hooks/useGameFormDirty';
+import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
 
 interface EditGameModalProps {
   game: GameWithDetails;
@@ -17,9 +21,12 @@ interface EditGameModalProps {
 
 export function EditGameModal({ game, isOpen, onClose, onGameUpdated }: EditGameModalProps) {
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<GameFormTabId>('game-form-info');
+  const handleInvalid = useRevealInvalidTab(setActiveTab);
   const {
     formData,
-    setFormData,
+    initialFormData,
+    resetFormData,
     handleChange,
     error,
     setError,
@@ -36,10 +43,29 @@ export function EditGameModal({ game, isOpen, onClose, onGameUpdated }: EditGame
 
   useEffect(() => {
     if (isOpen && game) {
-      setFormData(gameToFormData(game));
+      // resetFormData, not setFormData: this moves the unsaved-edit baseline
+      // along with the contents, so reopening on fresh server data does not
+      // look like the GM edited every changed field.
+      resetFormData(gameToFormData(game));
       setError(null);
     }
-  }, [isOpen, game, setFormData, setError]);
+  }, [isOpen, game, resetFormData, setError]);
+
+  const isDirty = useGameFormDirty(formData, initialFormData, pendingBannerFile);
+  const [confirmingClose, setConfirmingClose] = useState(false);
+
+  // Drop the prompt if the edits it asks about disappear underneath it.
+  useEffect(() => {
+    if (!isDirty) setConfirmingClose(false);
+  }, [isDirty]);
+
+  const requestClose = () => {
+    if (isDirty) {
+      setConfirmingClose(true);
+      return;
+    }
+    onClose();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,18 +193,30 @@ export function EditGameModal({ game, isOpen, onClose, onGameUpdated }: EditGame
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Edit Game">
+    // onClose drives the header X, so it goes through the guard too. The backdrop
+    // is withdrawn entirely while dirty rather than routed through requestClose:
+    // a stray click out is not a decision worth raising a prompt over — matching
+    // UpdateCharacterSheetModal.
+    <Modal
+      isOpen={isOpen}
+      onClose={requestClose}
+      title="Edit Game"
+      size="5xl"
+      dismissOnBackdrop={!isDirty}
+    >
       {error && (
         <Alert variant="danger" className="mb-4" dismissible onDismiss={() => setError(null)}>
           {error}
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} onInvalid={handleInvalid} className="space-y-4">
         <GameFormFields
           formData={formData}
           onChange={handleChange}
           bannerUpload={bannerUpload}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
         />
 
         {error && (
@@ -187,25 +225,34 @@ export function EditGameModal({ game, isOpen, onClose, onGameUpdated }: EditGame
           </Alert>
         )}
 
-        <div className="flex gap-3 pt-4">
-          <Button
-            type="submit"
-            variant="primary"
-            loading={loading}
-            className="flex-1"
-          >
-            Save Changes
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={onClose}
-            disabled={loading}
-            className="flex-1"
-          >
-            Cancel
-          </Button>
-        </div>
+        {confirmingClose ? (
+          <div className="flex justify-end pt-4">
+            <ConfirmDiscardEdits
+              onDiscard={onClose}
+              onKeepEditing={() => setConfirmingClose(false)}
+            />
+          </div>
+        ) : (
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="submit"
+              variant="primary"
+              loading={loading}
+              className="flex-1"
+            >
+              Save Changes
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={requestClose}
+              disabled={loading}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
       </form>
     </Modal>
   );

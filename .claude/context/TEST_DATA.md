@@ -141,6 +141,48 @@ just test-data reload
 - **Multiple GM NPCs per game**
 - **Character data examples** (public and private fields)
 
+### Character Sheet Data
+
+Stat rows live in `character_data`, one row per tab holding a **JSON array** —
+not a row per entry. The `module_type` values the app reads are `bio`, `notes`,
+`skills`, `inventory`, `numbers`.
+
+Note `character_data.module_type` has **no DB constraint** — it is enforced only
+by application code, which is exactly why a bad fixture inserts cleanly and then
+renders as nothing. (The `check_module_type` constraint lives on
+`action_result_character_updates`, the draft-updates table, and covers only the
+three stat modules.)
+
+**The fixture rule**: element JSON must match what the app actually *writes*
+(the `Add*Modal` components), which is narrower than the TypeScript type.
+Matching the column list is not enough. A fixture writing a field no code path
+emits produces rows that render as blank or junk UI and hide real bugs — an
+audit found rows using a nonexistent `module_type`, a `proficiency` key where
+the card read `level`, and number entries keyed `name` where the card read
+`type`, none of which any test caught.
+
+Keys retired by the character sheet refactor — never write these in a new
+fixture:
+
+| Retired | Replacement | Migrated? |
+|---|---|---|
+| `abilities` module_type | folded into `skills` | n/a — module retired |
+| `currency` module_type | `numbers` | **Yes** — real migration |
+| skill `level` | `rank` | No — resolved on read |
+| number `type` | `name` | No — resolved on read |
+| item `equipped` | dropped | n/a |
+| `metadata` (skills/items) | dropped | n/a |
+
+The two read-side renames are deliberate: those keys live *inside* a JSON blob,
+so a fallback covers old rows at no coordination cost. Fixtures should use the
+new spelling, with one deliberate exception — `e2e/11_character_sheets.sql`
+keeps `skill-8` on the legacy `level` key so the fallback stays exercised
+against real data. Do not "fix" it.
+
+Numbers entries may carry `max` (turning a count into a track, "Stress 4/9") and
+`display` (`number` | `track` | `boxes`). `display` is only meaningful with
+`max` set.
+
 ### Character Types
 - `player_character` - Player-controlled characters
 - `npc_gm` - GM-controlled NPCs

@@ -569,8 +569,127 @@ describe('CreateGameForm', () => {
       const cancelButton = screen.getByRole('button', { name: /cancel/i });
       await user.click(cancelButton);
 
+      // Cancelling a form with typing in it now confirms first, so the close
+      // takes a second click. What this test is really about — that cancelling
+      // never submits — is asserted on both sides of the prompt.
+      expect(onSuccess).not.toHaveBeenCalled();
+      await user.click(screen.getByTestId('confirm-close-discard'));
+
       expect(onCancel).toHaveBeenCalled();
       expect(onSuccess).not.toHaveBeenCalled();
+    });
+  });
+  describe('Unsaved-edit guard', () => {
+    it('cancels straight out when nothing has been typed', async () => {
+      const user = userEvent.setup();
+      const onCancel = vi.fn();
+
+      renderWithProviders(<CreateGameForm onCancel={onCancel} />);
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+      // No prompt: there is nothing to lose.
+      expect(screen.queryByTestId('confirm-close-unsaved')).not.toBeInTheDocument();
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('confirms before discarding, and keeps the typed value on "Keep editing"', async () => {
+      const user = userEvent.setup();
+      const onCancel = vi.fn();
+
+      renderWithProviders(<CreateGameForm onCancel={onCancel} />);
+      await user.type(screen.getByLabelText(/game title/i), 'Half-written title');
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+      expect(screen.getByTestId('confirm-close-unsaved')).toBeInTheDocument();
+      expect(onCancel).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole('button', { name: /keep editing/i }));
+
+      // The point of the guard: the typing survives.
+      expect(onCancel).not.toHaveBeenCalled();
+      expect(screen.getByLabelText(/game title/i)).toHaveValue('Half-written title');
+      expect(screen.queryByTestId('confirm-close-unsaved')).not.toBeInTheDocument();
+    });
+
+    it('does not submit the form when discarding from the confirm bar', async () => {
+      // ConfirmDiscardEdits renders inside the <form>, and the shared Button sets
+      // no default type — so without an explicit type="button" its actions submit
+      // the form on the way out ("Form submission canceled because the form is
+      // not connected" in the console, and a create attempt the GM did not ask for).
+      const user = userEvent.setup();
+      const onCancel = vi.fn();
+      const onSuccess = vi.fn();
+
+      renderWithProviders(<CreateGameForm onCancel={onCancel} onSuccess={onSuccess} />);
+      await user.type(screen.getByLabelText(/game title/i), 'Half-written title');
+      await user.type(screen.getByLabelText(/description/i), 'Half-written description');
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+      expect(screen.getByTestId('confirm-close-discard')).toHaveAttribute('type', 'button');
+      expect(screen.getByRole('button', { name: /keep editing/i })).toHaveAttribute('type', 'button');
+
+      await user.click(screen.getByTestId('confirm-close-discard'));
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(onSuccess).not.toHaveBeenCalled();
+    });
+
+    it('closes on "Close without saving"', async () => {
+      const user = userEvent.setup();
+      const onCancel = vi.fn();
+
+      renderWithProviders(<CreateGameForm onCancel={onCancel} />);
+      await user.type(screen.getByLabelText(/game title/i), 'Half-written title');
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+      await user.click(screen.getByTestId('confirm-close-discard'));
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats a whitespace-only change as clean', async () => {
+      const user = userEvent.setup();
+      const onCancel = vi.fn();
+
+      renderWithProviders(<CreateGameForm onCancel={onCancel} />);
+      // buildApiPayload trims, so Save would discard this outright. Reporting it
+      // dirty would soft-lock the guard on an edit that cannot be committed away.
+      await user.type(screen.getByLabelText(/game title/i), '   ');
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+      expect(screen.queryByTestId('confirm-close-unsaved')).not.toBeInTheDocument();
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('counts a selected banner file as an unsaved edit on its own', async () => {
+      const user = userEvent.setup();
+      const onCancel = vi.fn();
+
+      renderWithProviders(<CreateGameForm onCancel={onCancel} />);
+
+      // The banner is not part of formData, so the field comparison alone would
+      // miss it and close a chosen-but-unuploaded banner silently.
+      const file = new File(['x'], 'banner.png', { type: 'image/png' });
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(input, file);
+
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+      expect(screen.getByTestId('confirm-close-unsaved')).toBeInTheDocument();
+      expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it('reports dirty state up so the modal can withdraw backdrop dismissal', async () => {
+      const user = userEvent.setup();
+      const onDirtyChange = vi.fn();
+
+      renderWithProviders(<CreateGameForm onDirtyChange={onDirtyChange} />);
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+      await user.type(screen.getByLabelText(/game title/i), 'x');
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+      await user.clear(screen.getByLabelText(/game title/i));
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
     });
   });
 });

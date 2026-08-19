@@ -178,6 +178,12 @@ SELECT DISTINCT
   g.state AS game_state,
   g.is_anonymous AS game_is_anonymous,
   g.portrait_avatars AS game_portrait_avatars,
+  -- The drawer renders sheets with no game in scope, so it cannot read the
+  -- config from game context the way in-game surfaces do; it has to travel with
+  -- each character. Safe in this SELECT DISTINCT: jsonb has a default btree
+  -- opclass, so it dedups directly. (Plain `json` does not, and would fail with
+  -- "could not identify an equality operator" — the column is jsonb.)
+  g.character_sheet AS game_character_sheet,
   u.username AS owner_username,
   au.username AS assigned_username,
   CASE

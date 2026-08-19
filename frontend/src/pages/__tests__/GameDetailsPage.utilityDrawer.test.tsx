@@ -21,10 +21,11 @@ import type { Character } from '../../types/characters'
  * never covered. They render GameDetailsPage, which is mounted for every tab
  * and every game state, and assert on which character sheet the drawer opens.
  *
- * WHY CharacterSheet IS MOCKED: the real component's render tree hangs under
- * jsdom (see the CommonRoom drawer tests for the same treatment). Its internals
- * are not what's under test — the wiring is: WHICH character id the drawer
- * reaches, and with what permissions. The probe reports those via the DOM.
+ * WHY CharacterSheet IS MOCKED: its internals are not what's under test — the
+ * wiring is, i.e. WHICH character id the drawer reaches and with what
+ * permissions. Those are props with no dependable rendered form, so the probe
+ * reports them via the DOM. (The mock predates the fix for the sheet's render
+ * loop; it is kept for scoping, not because the real one still hangs.)
  */
 vi.mock('../../components/CharacterSheet', () => ({
   CharacterSheet: ({ characterId, canEdit }: { characterId: number; canEdit?: boolean }) => (

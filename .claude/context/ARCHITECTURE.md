@@ -234,7 +234,50 @@ types/
 └── ...
 ```
 
-### 3. API Client Pattern
+### 3. Tabbed Forms and Native Validation
+
+*Added 2026-08-19, from the game create/edit form tab split.*
+
+When a long form is split into tabs, **render every panel and hide the inactive
+ones** with `hidden` / `display: none`. Do not unmount them.
+
+```tsx
+<div hidden={!isActive} role="tabpanel" data-testid={`my-form-panel-${id}`}>
+```
+
+- **Unmounting breaks validation silently.** A `required` control that is not in
+  the document is not validated at all, so submitting from another tab posts an
+  empty value with no error shown.
+- **Use `hidden`, not `visibility`/opacity.** A laid-out panel still contributes
+  its height to the modal's scroll — which is usually the reason for tabs.
+
+**But rendering all panels is not sufficient.** Chromium will not focus a control
+inside a `display: none` panel. Measured: a hidden control behaves exactly like a
+detached one — `willValidate` is `true` and the `invalid` event fires, but the
+console logs *"An invalid form control … is not focusable"* and **the submit does
+nothing at all**, with no message.
+
+The fix is to switch to the offending tab *before* the browser reports validity.
+`invalid` fires on each failing control before the submit is cancelled, and does
+not bubble — so listen in the capture phase via React's `onInvalid` on the form:
+
+```tsx
+<form onSubmit={handleSubmit} onInvalid={handleInvalid}>
+```
+
+See `useRevealInvalidTab.ts` + `gameFormTabs.ts` (`findFirstInvalidTab`).
+
+**Buttons inside forms need an explicit `type="button"`.** Neither the shared
+`ui/Button` nor `TabNavigation`'s tabs set a default `type`, and `<button>`
+defaults to `type="submit"` — so a tab click or a confirmation action submits the
+enclosing form. Symptom: *"Form submission canceled because the form is not
+connected"* in the console, plus a save the user never asked for.
+
+**Tab ids become testids.** `TabNavigation` derives `data-testid="tab-${id}"`, so
+a form tab named `info` collides with the game page's own `info` tab and makes
+`getByTestId('tab-info')` ambiguous. Namespace nested tab ids (`game-form-info`).
+
+### 4. API Client Pattern
 
 **Location**: `frontend/src/lib/api/` (split into domain modules)
 
@@ -264,6 +307,48 @@ CREATE TABLE games (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
+
+### Character Sheet Storage
+
+The sheet is **five flat tabs**, each one `module_type` in `character_data`.
+There is no second level — an earlier design nested sub-tabs under two parent
+modules, and code or docs still describing that is stale.
+
+`character_data.module_type` is **not** constrained in the database; the
+allowlist lives in application code (`api_data.go`). The `check_module_type`
+constraint is on `action_result_character_updates` and covers only the three
+stat modules, since a draft update never targets bio or notes.
+
+| `module_type` | Holds | Renameable |
+|---|---|---|
+| `bio` | Public description (one text row) | No — platform concept |
+| `notes` | Private notes (one text row) | No — platform concept |
+| `skills` | JSON array of skills | Yes |
+| `inventory` | JSON array of items | Yes |
+| `numbers` | JSON array of named quantities/tracks | Yes |
+
+Two invariants worth knowing before touching this:
+
+1. **Each stat tab is ONE row holding a JSON array**, not a row per entry. The
+   `field_name` equals the `module_type` for skills and numbers (`items` for
+   inventory).
+2. **`module_type` == React symbol == default label.** That equality is what
+   keeps the renaming feature a straight substitution with no mapping table.
+   Preserve it when adding a tab.
+
+GM-supplied labels live in `games.character_sheet` (JSONB), stored **sparse** —
+only genuine overrides, never defaults. An absent key means "use the frontend's
+default", so defaults have exactly one home (`useSheetLabels.ts`) and changing
+one later does not silently skip games that already stored it.
+
+Three renames shipped with the refactor and behave differently on purpose:
+
+- `currency` → `numbers` (module_type): a **real migration**, because reads are
+  keyed by `module_type` and a missed row renders an empty tab.
+- skill `level` → `rank`, number `type` → `name` (keys *inside* the JSON):
+  **no migration**, resolved on read via `skillRank()` / `numberEntryName()`. A
+  fallback covers every old row, archived payload, and rolled-back deploy at no
+  coordination cost, where a migration would need all three to line up.
 
 **See**: `/docs-site/developer/architecture/adrs/002-database-design-approach.md`
 

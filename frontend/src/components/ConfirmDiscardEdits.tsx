@@ -33,7 +33,11 @@ export function ConfirmDiscardEdits({
       >
         Unsaved edits open. Close anyway?
       </span>
+      {/* type="button" because this bar can render inside a <form> (the game
+          create/edit modals). The shared Button sets no default type, so without
+          it these act as submit buttons and closing would also fire the form. */}
       <Button
+        type="button"
         variant="danger"
         size="sm"
         onClick={onDiscard}
@@ -41,7 +45,7 @@ export function ConfirmDiscardEdits({
       >
         Close without saving
       </Button>
-      <Button variant="secondary" size="sm" onClick={onKeepEditing}>
+      <Button type="button" variant="secondary" size="sm" onClick={onKeepEditing}>
         Keep editing
       </Button>
     </div>

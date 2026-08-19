@@ -35,6 +35,20 @@ type GameWithDetails struct {
 	UserRole         string // User's role in this game, empty if not participating
 }
 
+// marshalValidatedCharacterSheet validates a per-game character sheet config and
+// renders it for storage.
+//
+// Validation lives here, not in the HTTP layer, so every caller of the service
+// gets it — the column's invariants are the service's to hold, not the
+// handler's to remember.
+func marshalValidatedCharacterSheet(config core.CharacterSheetConfig) ([]byte, error) {
+	validated, err := core.ValidateCharacterSheetConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	return core.MarshalCharacterSheetConfig(validated)
+}
+
 // CreateGame creates a new game with the specified parameters.
 // The game is initially created in "setup" state and requires the GM to
 // transition it to "recruitment" when ready to accept players.
@@ -92,6 +106,13 @@ func (gs *GameService) CreateGame(ctx context.Context, req core.CreateGameReques
 		return nil, err
 	}
 
+	// Validated and re-marshalled here rather than trusting caller bytes, so the
+	// column can only ever hold what core.CharacterSheetConfig can express.
+	characterSheet, err := marshalValidatedCharacterSheet(req.CharacterSheet)
+	if err != nil {
+		return nil, err
+	}
+
 	game, err := queries.CreateGame(ctx, models.CreateGameParams{
 		Title:                   req.Title,
 		Description:             pgtype.Text{String: req.Description, Valid: req.Description != ""},
@@ -112,6 +133,7 @@ func (gs *GameService) CreateGame(ctx context.Context, req core.CreateGameReques
 		CommonRoomCloseDay:      closeDay,
 		CommonRoomCloseTime:     closeTime,
 		ScheduleTimezone:        scheduleTimezone,
+		CharacterSheet:          characterSheet,
 	})
 
 	if err != nil {
@@ -387,6 +409,11 @@ func (gs *GameService) UpdateGame(ctx context.Context, req core.UpdateGameReques
 		return nil, err
 	}
 
+	updateCharacterSheet, err := marshalValidatedCharacterSheet(req.CharacterSheet)
+	if err != nil {
+		return nil, err
+	}
+
 	gs.Logger.Info(ctx, "Updating game",
 		"game_id", req.ID,
 		"has_schedule", req.CommonRoomOpenDay != nil,
@@ -412,6 +439,7 @@ func (gs *GameService) UpdateGame(ctx context.Context, req core.UpdateGameReques
 		CommonRoomCloseDay:      closeDay,
 		CommonRoomCloseTime:     closeTime,
 		ScheduleTimezone:        scheduleTimezone,
+		CharacterSheet:          updateCharacterSheet,
 	})
 	if err != nil {
 		return nil, err

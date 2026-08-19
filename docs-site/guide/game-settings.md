@@ -27,6 +27,26 @@ All date fields are optional and informational — they don't automatically trig
 
 **Allow Group Conversations** — Enabled by default. When on, players can start private message conversations with three or more participants. When off, private messages are limited to one-on-one conversations only.
 
+## Character Sheet
+
+Three of the character sheet's tabs can be renamed to match your game's system:
+**Skills**, **Inventory**, and **Numbers**. Leave a box blank to keep its default
+name — blank means "use the default", not "no name".
+
+Names are limited to 24 characters so they still fit the tab strip on a phone.
+
+Examples:
+
+| Default | A heist game | A survival game |
+|---|---|---|
+| Skills | Actions | Talents |
+| Inventory | Load | Gear |
+| Numbers | Stress | Conditions |
+
+Renaming a tab changes only its label. The data already on it stays exactly
+where it is, so renaming is safe at any point in a game, and you can change your
+mind later.
+
 ## Creating a Game
 
 From the **Games** page, click **Create Game**. After filling in the form and submitting, you are taken directly to your new game, which starts in **Setup** state. From there, use the game actions menu (⋮) to move to **Recruitment** when you're ready to accept applications.

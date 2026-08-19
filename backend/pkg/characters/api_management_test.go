@@ -685,10 +685,10 @@ func TestCharacterAPI_SetCharacterData(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
 
-	t.Run("player cannot set stat fields (abilities)", func(t *testing.T) {
+	t.Run("player cannot set stat fields (skills)", func(t *testing.T) {
 		body := CharacterDataRequest{
-			ModuleType: "abilities",
-			FieldName:  "abilities",
+			ModuleType: "skills",
+			FieldName:  "skills",
 			FieldValue: `{"strength": 20}`,
 			FieldType:  "json",
 			IsPublic:   false,
@@ -707,8 +707,8 @@ func TestCharacterAPI_SetCharacterData(t *testing.T) {
 
 	t.Run("GM can set stat fields", func(t *testing.T) {
 		body := CharacterDataRequest{
-			ModuleType: "abilities",
-			FieldName:  "abilities",
+			ModuleType: "skills",
+			FieldName:  "skills",
 			FieldValue: `{"strength": 18}`,
 			FieldType:  "json",
 			IsPublic:   false,
