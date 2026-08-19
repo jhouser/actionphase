@@ -1,6 +1,10 @@
 package characters
 
-import "net/http"
+import (
+	"net/http"
+
+	"actionphase/pkg/core"
+)
 
 // CreateCharacterRequest represents a request to create a new character
 type CreateCharacterRequest struct {
@@ -10,7 +14,7 @@ type CreateCharacterRequest struct {
 }
 
 func (r *CreateCharacterRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // CharacterDataRequest represents a request to set character data
@@ -23,7 +27,7 @@ type CharacterDataRequest struct {
 }
 
 func (r *CharacterDataRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // ApproveCharacterRequest represents a request to approve or reject a character
@@ -32,7 +36,7 @@ type ApproveCharacterRequest struct {
 }
 
 func (r *ApproveCharacterRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // AssignNPCRequest represents a request to assign an NPC to a user
@@ -41,7 +45,7 @@ type AssignNPCRequest struct {
 }
 
 func (r *AssignNPCRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // ReassignCharacterRequest represents a request to reassign an inactive character
@@ -50,7 +54,7 @@ type ReassignCharacterRequest struct {
 }
 
 func (r *ReassignCharacterRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // RenameCharacterRequest represents a request to rename a character
@@ -59,5 +63,5 @@ type RenameCharacterRequest struct {
 }
 
 func (r *RenameCharacterRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }

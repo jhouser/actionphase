@@ -18,9 +18,16 @@ export function EditHandoutModal({ handout, onClose, onSubmit, isSubmitting }: E
     status: handout.status
   });
 
+  // Content is marked required in the label but the browser cannot enforce it:
+  // CommentEditor is not a native input, so `required` has nothing to attach to.
+  // The backend rejects blank content at Bind with a 400, so guard here rather
+  // than let the submit round-trip into an error banner.
+  const isContentEmpty = !formData.content.trim();
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    if (isContentEmpty) return;
+    onSubmit({ ...formData, content: formData.content.trim() });
   };
 
   return (
@@ -85,7 +92,7 @@ export function EditHandoutModal({ handout, onClose, onSubmit, isSubmitting }: E
           <Button
             type="submit"
             variant="primary"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isContentEmpty}
           >
             {isSubmitting ? 'Saving...' : 'Save Changes'}
           </Button>

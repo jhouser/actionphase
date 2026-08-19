@@ -3,6 +3,8 @@ package handouts
 import (
 	"net/http"
 	"time"
+
+	"actionphase/pkg/core"
 )
 
 // CreateHandoutRequest represents the request to create a new handout
@@ -13,7 +15,7 @@ type CreateHandoutRequest struct {
 }
 
 func (r *CreateHandoutRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // UpdateHandoutRequest represents the request to update a handout
@@ -24,7 +26,7 @@ type UpdateHandoutRequest struct {
 }
 
 func (r *UpdateHandoutRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // CreateHandoutCommentRequest represents the request to create a handout comment
@@ -34,7 +36,7 @@ type CreateHandoutCommentRequest struct {
 }
 
 func (r *CreateHandoutCommentRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // UpdateHandoutCommentRequest represents the request to update a handout comment
@@ -43,7 +45,7 @@ type UpdateHandoutCommentRequest struct {
 }
 
 func (r *UpdateHandoutCommentRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // HandoutResponse represents a handout in API responses

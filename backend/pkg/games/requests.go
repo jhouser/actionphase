@@ -72,7 +72,7 @@ type UpdateGameStateRequest struct {
 }
 
 func (r *UpdateGameStateRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // UpdateGameRequest represents the request to update game details
@@ -172,7 +172,7 @@ type ApplyToGameRequest struct {
 }
 
 func (r *ApplyToGameRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // ReviewApplicationRequest represents the request to review a game application
@@ -181,7 +181,7 @@ type ReviewApplicationRequest struct {
 }
 
 func (r *ReviewApplicationRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // LootTableItemRequest is a single item within a loot table. Data is the

@@ -126,15 +126,18 @@ func (h *Handler) CreateGame(w http.ResponseWriter, r *http.Request) {
     user := middleware.GetUserFromContext(ctx)
     correlationID := middleware.GetCorrelationID(ctx)
 
-    // 2. Parse and validate request
-    var req core.CreateGameRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+    // 2. Parse and validate request.
+    //    render.Bind decodes the body, then calls the request type's Bind
+    //    method — the only hook that runs after decoding, and so the place
+    //    validation belongs. Failures render as 400.
+    data := &CreateGameRequest{}
+    if err := render.Bind(r, data); err != nil {
         core.WriteError(w, core.ErrInvalidRequest(err, correlationID))
         return
     }
 
     // 3. Call service layer
-    game, err := h.service.CreateGame(ctx, &req)
+    game, err := h.service.CreateGame(ctx, data)
     if err != nil {
         core.WriteError(w, err)
         return
@@ -144,6 +147,29 @@ func (h *Handler) CreateGame(w http.ResponseWriter, r *http.Request) {
     core.WriteJSON(w, http.StatusCreated, game)
 }
 ```
+
+**Request validation lives in `Bind`.** Tag the request struct and execute the
+tags with `core.ValidateStruct`:
+
+```go
+type RenameCharacterRequest struct {
+    Name string `json:"name" validate:"required,min=1,max=255"`
+}
+
+func (r *RenameCharacterRequest) Bind(req *http.Request) error {
+    return core.ValidateStruct(r)
+}
+```
+
+It trims string fields in place before validating (so `"   "` fails `required`)
+and names fields by their JSON key in the error. Rules the tags cannot express —
+cross-field constraints, `json.Valid` — stay as explicit checks in `Bind`
+alongside it.
+
+A `validate` tag on a struct whose `Bind` returns a bare `nil` enforces nothing,
+so wire both up in the same change. And do not rely on the service to reject bad
+input: service errors render as a 500 "unexpected error", not the 400 a bad
+payload deserves. See `.claude/planning/request-validation.md` for rollout status.
 
 ### 5. Authentication Pattern
 
