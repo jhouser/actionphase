@@ -46,8 +46,9 @@ test.describe('Loot Tables', () => {
     await expect(page.getByRole('heading', { name: 'Loot Test Char', level: 2 })).toBeVisible({ timeout: 10000 });
 
     const sheetPage = new CharacterSheetPage(page);
-    await sheetPage.goToInventoryModule();
-    await sheetPage.goToItemsTab();
+    // One call, not two: the sheet's tabs are flat now, so Inventory is a tab
+    // rather than a module with an Items sub-tab.
+    await sheetPage.goToInventoryTab();
 
     // The fixture character starts empty, so anything present afterwards came
     // from the roll rather than from seeded data.
@@ -72,8 +73,9 @@ test.describe('Loot Tables', () => {
     // would land on the still-open modal's backdrop.
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Loot Test Char', level: 2 })).toBeVisible({ timeout: 10000 });
-    await sheetPage.goToInventoryModule();
-    await sheetPage.goToItemsTab();
+    // One call, not two: the sheet's tabs are flat now, so Inventory is a tab
+    // rather than a module with an Items sub-tab.
+    await sheetPage.goToInventoryTab();
 
     await expect(page.getByRole('heading', { name: ROLLED_ITEM })).toBeVisible({ timeout: 10000 });
   });
