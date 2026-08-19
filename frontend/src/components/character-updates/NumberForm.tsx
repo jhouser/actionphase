@@ -31,7 +31,7 @@ export const NumberForm: React.FC<NumberFormProps> = ({
   onSubmit,
   onCancel,
   initialValues,
-  submitLabel = 'Add Number',
+  submitLabel = 'Add',
   variant = 'modal',
   submitButtonTestId,
 }) => {

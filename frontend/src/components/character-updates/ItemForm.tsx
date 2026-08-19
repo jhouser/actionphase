@@ -48,7 +48,7 @@ export const ItemForm: React.FC<ItemFormProps> = ({
   onSubmit,
   onCancel,
   initialValues,
-  submitLabel = 'Add Item',
+  submitLabel = 'Add',
   variant = 'modal',
   submitButtonTestId,
   allowedLootModes = ['manual'],
@@ -164,7 +164,7 @@ export const ItemForm: React.FC<ItemFormProps> = ({
   const manualForm = <div>
     <Input
         id="item-name"
-        label="Item Name *"
+        label="Name *"
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}

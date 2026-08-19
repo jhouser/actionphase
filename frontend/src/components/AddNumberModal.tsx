@@ -5,11 +5,9 @@ import { NumberForm, type NumberFormData } from './character-updates/NumberForm'
 interface AddNumberModalProps {
   onAdd: (entry: Omit<NumberEntry, 'id'>) => void;
   onCancel: () => void;
-  /** The game's label for this tab, e.g. "Numbers" or "Resources". */
-  label?: string;
 }
 
-export const AddNumberModal: React.FC<AddNumberModalProps> = ({ onAdd, onCancel, label = 'Number' }) => {
+export const AddNumberModal: React.FC<AddNumberModalProps> = ({ onAdd, onCancel }) => {
   const handleSubmit = (data: NumberFormData) => {
     onAdd({
       name: data.name,
@@ -23,7 +21,7 @@ export const AddNumberModal: React.FC<AddNumberModalProps> = ({ onAdd, onCancel,
   return (
     // dismissOnBackdrop: see AddItemModal — a stray backdrop click must not discard
     // the half-typed entry held in NumberForm's local state.
-    <Modal isOpen={true} onClose={onCancel} title={`Add ${label}`} dismissOnBackdrop={false}>
+    <Modal isOpen={true} onClose={onCancel} title="Add New" dismissOnBackdrop={false}>
       <NumberForm
         onSubmit={handleSubmit}
         onCancel={onCancel}

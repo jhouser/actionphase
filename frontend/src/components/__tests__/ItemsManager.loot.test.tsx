@@ -84,7 +84,7 @@ const renderWithoutGame = () => {
 // React's act() scope, so the resulting state update warns and — worse — may be
 // asserted on before it flushes.
 const openAddItem = async () => {
-  await userEvent.click(screen.getByRole('button', { name: /^add item$/i }));
+  await userEvent.click(screen.getByTestId('add-item'));
   return screen.findByTestId('add-item-modal');
 };
 
@@ -99,7 +99,7 @@ describe('ItemsManager loot rolls', () => {
   // a GameProvider, taking down the whole character-sheet editor subtree.
   it('renders outside a GameProvider instead of throwing', () => {
     expect(() => renderWithoutGame()).not.toThrow();
-    expect(screen.getByRole('button', { name: /^add item$/i })).toBeInTheDocument();
+    expect(screen.getByTestId('add-item')).toBeInTheDocument();
   });
 
   it('does not offer loot modes when there is no game context', async () => {
@@ -235,6 +235,6 @@ describe('ItemsManager loot rolls', () => {
       </ToastProvider>
     );
 
-    expect(screen.queryByRole('button', { name: /^add item$/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('add-item')).not.toBeInTheDocument();
   });
 });

@@ -63,8 +63,14 @@ export const SkillsManager: React.FC<SkillsManagerProps> = ({
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-medium text-content-primary">{label}</h3>
         {canEdit && (
-          <Button variant="primary" size="sm" onClick={() => setShowAddSkill(true)}>
-            Add {label}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowAddSkill(true)}
+            aria-label={`Add to ${label}`}
+            data-testid="add-skill"
+          >
+            Add New
           </Button>
         )}
       </div>
@@ -72,7 +78,7 @@ export const SkillsManager: React.FC<SkillsManagerProps> = ({
       {validatedSkills.length === 0 ? (
         <div className="text-center py-8 text-content-secondary">
           <p>No {label.toLowerCase()} yet.</p>
-          {canEdit && <p className="text-sm mt-1">Click "Add {label}" to get started.</p>}
+          {canEdit && <p className="text-sm mt-1">Click "Add New" to get started.</p>}
         </div>
       ) : (
         <div className="space-y-3">

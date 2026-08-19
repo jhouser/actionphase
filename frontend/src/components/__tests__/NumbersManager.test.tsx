@@ -90,18 +90,20 @@ describe('NumbersManager - Data Corruption Handling', () => {
 
   describe('game-specific labels', () => {
     it('names the heading and controls after the game label', () => {
-      // The tab is renameable, and this manager's copy is generated from the
-      // label rather than hardcoded — a game tracking stress must not read
-      // "Add Numbers".
+      // The tab is renameable, so this manager's copy is generated from the
+      // label rather than hardcoded.
       renderNumbers({ label: 'Stress' });
       expect(screen.getByRole('heading', { name: 'Stress' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Add Stress' })).toBeInTheDocument();
       expect(screen.getByText(/no stress tracked yet/i)).toBeInTheDocument();
+      // The button stays generic: "Add Stress" is the plural collection name on
+      // a control that adds a single entry.
+      expect(screen.getByTestId('add-number')).toHaveTextContent('Add New');
+      expect(screen.getByRole('button', { name: 'Add to Stress' })).toBeInTheDocument();
     });
 
     it('hides the add control from viewers who cannot edit', () => {
       renderNumbers({ canEdit: false, label: 'Stress' });
-      expect(screen.queryByRole('button', { name: 'Add Stress' })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('add-number')).not.toBeInTheDocument();
     });
   });
 });

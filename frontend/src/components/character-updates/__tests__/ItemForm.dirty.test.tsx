@@ -52,7 +52,7 @@ describe('ItemForm unsaved-edit reporting', () => {
     const onDirtyChange = vi.fn();
     renderForm({ onDirtyChange });
 
-    await user.type(await screen.findByLabelText(/item name/i), 'Rope');
+    await user.type(await screen.findByLabelText(/^Name/), 'Rope');
 
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
   });
@@ -67,7 +67,7 @@ describe('ItemForm unsaved-edit reporting', () => {
     const onDirtyChange = vi.fn();
     renderForm({ onDirtyChange, initialValues: { name: 'Rope', quantity: 1 } });
 
-    await user.type(await screen.findByLabelText(/item name/i), '   ');
+    await user.type(await screen.findByLabelText(/^Name/), '   ');
 
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });

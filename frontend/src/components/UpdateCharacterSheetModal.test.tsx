@@ -246,7 +246,7 @@ describe('UpdateCharacterSheetModal', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /inventory/i }));
 
-      expect(screen.getByText('No items yet.')).toBeInTheDocument();
+      expect(screen.getByText(/no inventory yet/i)).toBeInTheDocument();
     });
   });
 
@@ -622,7 +622,7 @@ describe('UpdateCharacterSheetModal', () => {
       });
       fireEvent.click(screen.getByRole('button', { name: 'Edit item' }));
       await waitFor(() => {
-        expect(screen.getByLabelText(/item name/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/^Name/)).toBeInTheDocument();
       });
     }
 
@@ -635,7 +635,7 @@ describe('UpdateCharacterSheetModal', () => {
       );
       await openItemEditor();
 
-      fireEvent.change(screen.getByLabelText(/item name/i), {
+      fireEvent.change(screen.getByLabelText(/^Name/), {
         target: { value: 'Healing Potion of Vigor' },
       });
       fireEvent.click(screen.getByRole('button', { name: /done/i }));
@@ -653,7 +653,7 @@ describe('UpdateCharacterSheetModal', () => {
       );
       await openItemEditor();
 
-      fireEvent.change(screen.getByLabelText(/item name/i), {
+      fireEvent.change(screen.getByLabelText(/^Name/), {
         target: { value: 'Healing Potion of Vigor' },
       });
       fireEvent.click(screen.getByRole('button', { name: /done/i }));
@@ -671,7 +671,7 @@ describe('UpdateCharacterSheetModal', () => {
       );
       await openItemEditor();
 
-      fireEvent.change(screen.getByLabelText(/item name/i), {
+      fireEvent.change(screen.getByLabelText(/^Name/), {
         target: { value: 'Healing Potion of Vigor' },
       });
       fireEvent.click(screen.getByRole('button', { name: /done/i }));
@@ -679,7 +679,7 @@ describe('UpdateCharacterSheetModal', () => {
 
       expect(onClose).not.toHaveBeenCalled();
       expect(screen.queryByTestId('confirm-close-unsaved')).not.toBeInTheDocument();
-      expect(screen.getByLabelText(/item name/i)).toHaveValue('Healing Potion of Vigor');
+      expect(screen.getByLabelText(/^Name/)).toHaveValue('Healing Potion of Vigor');
     });
 
     /**
@@ -695,13 +695,13 @@ describe('UpdateCharacterSheetModal', () => {
       );
       await openItemEditor();
 
-      fireEvent.change(screen.getByLabelText(/item name/i), {
+      fireEvent.change(screen.getByLabelText(/^Name/), {
         target: { value: 'Healing Potion of Vigor' },
       });
       fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
       await waitFor(() => {
-        expect(screen.queryByLabelText(/item name/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/^Name/)).not.toBeInTheDocument();
       });
 
       fireEvent.click(screen.getByRole('button', { name: /done/i }));
@@ -719,13 +719,13 @@ describe('UpdateCharacterSheetModal', () => {
       );
       await openItemEditor();
 
-      fireEvent.change(screen.getByLabelText(/item name/i), {
+      fireEvent.change(screen.getByLabelText(/^Name/), {
         target: { value: 'Healing Potion of Vigor' },
       });
       fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
       await waitFor(() => {
-        expect(screen.queryByLabelText(/item name/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/^Name/)).not.toBeInTheDocument();
       });
 
       fireEvent.click(screen.getByRole('button', { name: /done/i }));
@@ -776,13 +776,13 @@ describe('UpdateCharacterSheetModal', () => {
       );
       await openItemEditor();
 
-      fireEvent.change(screen.getByLabelText(/item name/i), {
+      fireEvent.change(screen.getByLabelText(/^Name/), {
         target: { value: 'Healing Potion of Vigor' },
       });
       clickBackdrop();
 
       expect(onClose).not.toHaveBeenCalled();
-      expect(screen.getByLabelText(/item name/i)).toHaveValue('Healing Potion of Vigor');
+      expect(screen.getByLabelText(/^Name/)).toHaveValue('Healing Potion of Vigor');
     });
 
     it('restores backdrop dismissal once the nested edit is saved', async () => {
@@ -794,13 +794,13 @@ describe('UpdateCharacterSheetModal', () => {
       );
       await openItemEditor();
 
-      fireEvent.change(screen.getByLabelText(/item name/i), {
+      fireEvent.change(screen.getByLabelText(/^Name/), {
         target: { value: 'Healing Potion of Vigor' },
       });
       fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
       await waitFor(() => {
-        expect(screen.queryByLabelText(/item name/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/^Name/)).not.toBeInTheDocument();
       });
 
       clickBackdrop();

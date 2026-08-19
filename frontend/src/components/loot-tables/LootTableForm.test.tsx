@@ -83,10 +83,10 @@ describe('LootTableForm validation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /add loot table content/i }));
 
-    fireEvent.change(await screen.findByLabelText(/item name/i), {
+    fireEvent.change(await screen.findByLabelText(/^Name/), {
       target: { value: 'Gold Coins' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /^add item$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
 
     expect(submitButton()).toBeEnabled();
 
@@ -271,14 +271,14 @@ describe('LootTableForm CSV export', () => {
     renderForm();
     fireEvent.change(screen.getByLabelText(/table name/i), { target: { value: 'Chest' } });
     fireEvent.click(screen.getByRole('button', { name: /add loot table content/i }));
-    fireEvent.change(await screen.findByLabelText(/item name/i), { target: { value: item.name } });
+    fireEvent.change(await screen.findByLabelText(/^Name/), { target: { value: item.name } });
     if (item.description !== undefined) {
       // Target the textarea by id: /description/i also matches CommentEditor's
       // preview toggle, so getByLabelText is ambiguous here.
       const descriptionField = document.getElementById('item-description')!;
       fireEvent.change(descriptionField, { target: { value: item.description } });
     }
-    fireEvent.click(screen.getByRole('button', { name: /^add item$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
     fireEvent.click(screen.getByRole('button', { name: /export loot table as csv/i }));
 
     return () => captured;
@@ -324,8 +324,8 @@ describe('LootTableForm item removal', () => {
 
   const addItem = async (name: string) => {
     fireEvent.click(screen.getByRole('button', { name: /add loot table content/i }));
-    fireEvent.change(await screen.findByLabelText(/item name/i), { target: { value: name } });
-    fireEvent.click(screen.getByRole('button', { name: /^add item$/i }));
+    fireEvent.change(await screen.findByLabelText(/^Name/), { target: { value: name } });
+    fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
   };
 
   // Regression: removal read `formData.items` from the render closure instead of

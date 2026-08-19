@@ -20,11 +20,11 @@ export const AddSkillModal: React.FC<AddSkillModalProps> = ({ onAdd, onCancel })
   return (
     // dismissOnBackdrop: see AddItemModal — a stray backdrop click must not discard
     // the half-typed skill held in SkillForm's local state.
-    <Modal isOpen={true} onClose={onCancel} title="Add New Skill" dismissOnBackdrop={false}>
+    <Modal isOpen={true} onClose={onCancel} title="Add New" dismissOnBackdrop={false}>
       <SkillForm
         onSubmit={handleSubmit}
         onCancel={onCancel}
-        submitLabel="Add Skill"
+        submitLabel="Add"
         variant="modal"
       />
     </Modal>

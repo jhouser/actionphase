@@ -129,16 +129,22 @@ export const ItemsManager: React.FC<ItemsManagerProps> = ({
           )}
         </div>
         {canEdit && (
-          <Button variant="primary" size="sm" onClick={() => setShowAddItem(true)}>
-            Add Item
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowAddItem(true)}
+            aria-label={`Add to ${label}`}
+            data-testid="add-item"
+          >
+            Add New
           </Button>
         )}
       </div>
 
       {validatedItems.length === 0 ? (
         <div className="text-center py-8 text-content-secondary">
-          <p>No items yet.</p>
-          {canEdit && <p className="text-sm mt-1">Click "Add Item" to get started.</p>}
+          <p>No {label.toLowerCase()} yet.</p>
+          {canEdit && <p className="text-sm mt-1">Click "Add New" to get started.</p>}
         </div>
       ) : (
         <div className="space-y-3">

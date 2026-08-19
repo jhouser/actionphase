@@ -29,7 +29,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({
   onSubmit,
   onCancel,
   initialValues,
-  submitLabel = 'Add Skill',
+  submitLabel = 'Add',
   variant = 'modal',
   submitButtonTestId,
   onDirtyChange,
@@ -66,7 +66,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input
         id="skill-name"
-        label="Skill Name *"
+        label="Name *"
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}

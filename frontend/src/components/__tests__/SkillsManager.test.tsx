@@ -84,13 +84,17 @@ describe('SkillsManager', () => {
       // A Blades game calls this tab "Playbook"; nothing here may say "Skills".
       renderSkills({ label: 'Playbook' });
       expect(screen.getByRole('heading', { name: 'Playbook' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Add Playbook' })).toBeInTheDocument();
       expect(screen.getByText(/no playbook yet/i)).toBeInTheDocument();
+      // The button's visible text is generic — "Add Playbook" reads wrong for a
+      // control that adds one entry, and no rule can singularise GM wording.
+      // The label reaches assistive tech through the accessible name instead.
+      expect(screen.getByTestId('add-skill')).toHaveTextContent('Add New');
+      expect(screen.getByRole('button', { name: 'Add to Playbook' })).toBeInTheDocument();
     });
 
     it('hides the add control from viewers who cannot edit', () => {
       renderSkills({ canEdit: false });
-      expect(screen.queryByRole('button', { name: /^add skills$/i })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('add-skill')).not.toBeInTheDocument();
     });
   });
 });

@@ -66,8 +66,14 @@ export const NumbersManager: React.FC<NumbersManagerProps> = ({
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-medium text-content-primary">{label}</h3>
         {canEdit && (
-          <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
-            Add {label}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowAdd(true)}
+            aria-label={`Add to ${label}`}
+            data-testid="add-number"
+          >
+            Add New
           </Button>
         )}
       </div>
@@ -75,7 +81,7 @@ export const NumbersManager: React.FC<NumbersManagerProps> = ({
       {validatedNumbers.length === 0 ? (
         <div className="text-center py-8 text-content-secondary">
           <p>No {label.toLowerCase()} tracked yet.</p>
-          {canEdit && <p className="text-sm mt-1">Click "Add {label}" to get started.</p>}
+          {canEdit && <p className="text-sm mt-1">Click "Add New" to get started.</p>}
         </div>
       ) : (
         <div className="space-y-3">
@@ -93,7 +99,7 @@ export const NumbersManager: React.FC<NumbersManagerProps> = ({
       )}
 
       {showAdd && (
-        <AddNumberModal onAdd={addNumber} onCancel={() => setShowAdd(false)} label={label} />
+        <AddNumberModal onAdd={addNumber} onCancel={() => setShowAdd(false)} />
       )}
     </div>
   );

@@ -8,15 +8,16 @@ describe('AddNumberModal', () => {
     it('renders modal with title', () => {
       render(<AddNumberModal onAdd={vi.fn()} onCancel={vi.fn()} />);
 
-      expect(screen.getByText('Add Number')).toBeInTheDocument();
+      expect(screen.getByText('Add New')).toBeInTheDocument();
     });
 
-    // The tab is GM-renameable, so a game tracking stress should not offer to
-    // "Add Number" — the title follows the game's own word for the tab.
-    it('titles itself with the game label', () => {
-      render(<AddNumberModal onAdd={vi.fn()} onCancel={vi.fn()} label="Resource" />);
+    // The title used to follow the game's label, which produced "Add Numbers"
+    // even unrenamed: the label names the whole collection, while the modal adds
+    // one entry. A generic title sidesteps needing to singularise GM wording.
+    it('keeps the title generic regardless of the game label', () => {
+      render(<AddNumberModal onAdd={vi.fn()} onCancel={vi.fn()} />);
 
-      expect(screen.getByText('Add Resource')).toBeInTheDocument();
+      expect(screen.queryByText(/Add Numbers?$/)).not.toBeInTheDocument();
     });
 
     it('renders all form fields', () => {

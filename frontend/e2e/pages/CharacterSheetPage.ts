@@ -276,8 +276,15 @@ export class CharacterSheetPage {
     return await this.moduleSelect.isVisible({ timeout: 2000 }).catch(() => false);
   }
 
+  // The three "add" triggers are found by data-testid, not by name. Their
+  // visible text is a generic "Add New" (a label-bearing "Add Skills" reads
+  // wrong, and no rule can singularise arbitrary GM wording), and their
+  // accessible name follows the GM's own label, which a test cannot predict.
+  // The testid is keyed to the stable module id instead — the same id used for
+  // storage and for tab navigation.
+
   /**
-   * Add a skill (requires the "Add Skill" button to be visible).
+   * Add a skill (requires the add trigger to be visible).
    *
    * Replaces addAbility: abilities were retired because they duplicated skills,
    * which is strictly more featured (rank, category, markdown description).
@@ -286,52 +293,44 @@ export class CharacterSheetPage {
    * @param description - Skill description
    */
   async addSkill(name: string, description: string) {
-    await this.page.getByRole('button', { name: 'Add Skill' }).click();
+    await this.page.getByTestId('add-skill').click();
     await this.page.waitForTimeout(500);
 
-    await this.page.getByRole('textbox', { name: 'Skill Name *' }).fill(name);
+    await this.page.getByRole('textbox', { name: 'Name *' }).fill(name);
     await this.page.getByRole('textbox', { name: 'Description' }).fill(description);
 
-    // The second "Add Skill" button is the form's submit; the first opened the modal.
-    await this.page.getByRole('button', { name: 'Add Skill' }).nth(1).click();
+    // The modal's submit is a bare "Add" — the noun lives in the modal title.
+    await this.page.getByRole('button', { name: 'Add', exact: true }).click();
     await this.page.waitForLoadState('networkidle');
   }
 
   /**
-   * Check if the "Add Skill" button is visible (GM/owner permission check).
+   * Check if the Skills add trigger is visible (GM/owner permission check).
    */
   async canAddSkill(): Promise<boolean> {
-    try {
-      await this.page.getByRole('button', { name: 'Add Skill' }).waitFor({ state: 'visible', timeout: 2000 });
-      return true;
-    } catch {
-      return false;
-    }
+    return await this.isAddTriggerVisible('add-skill');
   }
 
   /**
-   * Check if the "Add Item" button is visible (GM/owner permission check).
+   * Check if the Inventory add trigger is visible (GM/owner permission check).
    */
   async canAddItem(): Promise<boolean> {
-    try {
-      await this.page.getByRole('button', { name: 'Add Item' }).waitFor({ state: 'visible', timeout: 2000 });
-      return true;
-    } catch {
-      return false;
-    }
+    return await this.isAddTriggerVisible('add-item');
   }
 
   /**
-   * Check if the Numbers tab's add button is visible (GM/owner permission check).
+   * Check if the Numbers add trigger is visible (GM/owner permission check).
    *
-   * Replaces canAddCurrency. The button is labelled "Add {label}", following the
-   * game's name for the tab, so the label has to be passed when renamed.
-   *
-   * @param label - The game's label for this tab, when renamed.
+   * Replaces canAddCurrency. Takes no label: the trigger is found by testid, so
+   * a renamed tab needs no argument here.
    */
-  async canAddNumber(label = 'Numbers'): Promise<boolean> {
+  async canAddNumber(): Promise<boolean> {
+    return await this.isAddTriggerVisible('add-number');
+  }
+
+  private async isAddTriggerVisible(testId: string): Promise<boolean> {
     try {
-      await this.page.getByRole('button', { name: `Add ${label}` }).waitFor({ state: 'visible', timeout: 2000 });
+      await this.page.getByTestId(testId).waitFor({ state: 'visible', timeout: 2000 });
       return true;
     } catch {
       return false;

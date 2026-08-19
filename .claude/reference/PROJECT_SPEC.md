@@ -79,11 +79,17 @@ Games follow a cyclical pattern:
 ### Modular Character Sheets
 Character sheets use a modular system where GMs can enable/disable components:
 
-#### MVP Modules
+#### Current Modules
 - **Public Profile**: Rich text character backstory and personality
 - **Notes**: Player-private rich text notes about game and character
-- **Abilities**: Character skills, powers, or special actions
+- **Skills**: Trained skills and special powers (name, free-text rank, category, description)
 - **Inventory**: Items and equipment management
+- **Numbers**: Named quantities and tracks (amount, optional max + display mode)
+
+The three stat modules are GM-renameable per game; the names above are the
+defaults. `Abilities` was a separate module until the character sheet refactor
+retired it — it duplicated Skills, which is strictly more featured, so every
+stat feature had to be built twice.
 
 #### Phase 2 Modules
 - **Ally Status**: Player-set feelings toward other characters
