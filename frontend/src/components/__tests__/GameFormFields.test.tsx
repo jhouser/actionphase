@@ -25,9 +25,13 @@ const baseFormData: GameFormData = {
 };
 
 /**
- * The form is tab-split, and inactive panels are hidden with `display: none` —
- * so `getByRole` cannot see them. Each test opens the tab holding the fields it
- * asserts on. Settings live on Rules, avatar style on Appearance.
+ * The form is tab-split, and inactive panels are hidden with `display: none`.
+ * `getByRole` and `toBeVisible` skip them (a11y tree), while `getByTestId` and —
+ * surprisingly — `getByLabelText` still find them. So each test opens the tab
+ * holding the fields it asserts on, rather than relying on which query happens
+ * to reach a hidden field.
+ *
+ * Settings live on Rules, avatar style and sheet labels on Appearance.
  */
 function renderFields({
   formData = baseFormData,
