@@ -102,3 +102,32 @@ SET deleted_at = NOW(),
     deleted_by_user_id = $2,
     updated_at = NOW()
 WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: ListPublishedHandoutsAcrossGames :many
+-- Cross-game handout list for a user, backing surfaces with no game in scope
+-- (the global Utility Drawer). The per-game list is ListHandoutsByGame above.
+--
+-- Published only, for everyone including the GM. The drawer is a reading
+-- surface: a GM's drafts are work in progress and stay on the Handouts tab,
+-- which is where they can be edited. That also keeps this query free of any
+-- per-row role — every handout it returns is one the requester may read, so the
+-- handler has nothing further to filter.
+--
+-- Restricted to in_progress games, matching
+-- GetUserControllableCharactersAcrossGames: this backs "what am I currently
+-- playing", and a finished game's handouts stay reachable from the game itself.
+--
+-- Membership is GM, co-GM, or any non-removed participant. Audience members
+-- participate through this same table, so they receive the published handouts of
+-- games they follow, exactly as the in-game tab already shows them.
+SELECT
+  h.id, h.game_id, h.title, h.content, h.status, h.created_at, h.updated_at,
+  g.title AS game_title
+FROM handouts h
+JOIN games g ON h.game_id = g.id
+LEFT JOIN game_participants gp
+  ON gp.game_id = g.id AND gp.user_id = $1 AND gp.removed_at IS NULL
+WHERE g.state = 'in_progress'
+  AND h.status = 'published'
+  AND (g.gm_user_id = $1 OR gp.user_id IS NOT NULL)
+ORDER BY game_title, g.id, h.created_at DESC;

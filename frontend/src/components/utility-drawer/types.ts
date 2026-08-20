@@ -4,6 +4,7 @@ import type { Character, CharacterSheetConfig } from '../../types/characters';
 import type { GamePhase } from '../../types/phases';
 import type { UserGameRole } from '../../contexts/GameContext';
 import type { CommentReadMode } from '../../lib/api/auth';
+import type { Handout } from '../../types/handouts';
 
 /**
  * The parts of the Utility Drawer's context that only exist inside a game.
@@ -80,6 +81,18 @@ export interface UtilityContext {
    * so the modal stacks cleanly over the page.
    */
   openCharacterSheet: (characterId: number, options: OpenCharacterSheetOptions) => void;
+  /**
+   * Open a handout in the drawer's read-only modal. Closes the drawer first, so
+   * the modal stacks cleanly over the page.
+   *
+   * Takes no role or options: the drawer is reference material you pull up
+   * without leaving what you were writing, so it renders the same read-only
+   * view for everyone. Editing a handout, or posting and managing updates on
+   * it, stays on the game's Handouts tab. Passing a role here would only change
+   * the wording, and would change it based on which surface the handout was
+   * opened from — the drawer spans several games at once.
+   */
+  openHandout: (handout: Handout) => void;
   /** Close the Utility Drawer, e.g. after a panel action completes. */
   closeDrawer: () => void;
 }

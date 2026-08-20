@@ -57,6 +57,14 @@ type HandoutResponse struct {
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
+// HandoutWithGameResponse is a handout plus the game it belongs to, for the
+// cross-game list where the client has no game in scope to resolve the title
+// from.
+type HandoutWithGameResponse struct {
+	HandoutResponse
+	GameTitle string `json:"game_title"`
+}
+
 // HandoutCommentResponse represents a handout comment in API responses
 type HandoutCommentResponse struct {
 	ID              int32      `json:"id"`

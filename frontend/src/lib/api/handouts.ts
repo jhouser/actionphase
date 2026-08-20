@@ -1,6 +1,7 @@
 import { BaseApiClient } from './client';
 import type {
   Handout,
+  HandoutWithGame,
   HandoutComment,
   CreateHandoutRequest,
   UpdateHandoutRequest,
@@ -40,6 +41,16 @@ export class HandoutsApi extends BaseApiClient {
 
   async unpublishHandout(gameId: number, handoutId: number) {
     return this.client.post<Handout>(`/api/v1/games/${gameId}/handouts/${handoutId}/unpublish`);
+  }
+
+  /**
+   * Published handouts across every in_progress game the current user takes
+   * part in. Backs the global Utility Drawer, which has no game in scope; each
+   * entry carries its game title so the list can be grouped without a request
+   * per game.
+   */
+  async listHandoutsAcrossGames() {
+    return this.client.get<HandoutWithGame[]>('/api/v1/handouts');
   }
 
   // Handout comment endpoints

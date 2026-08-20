@@ -35,7 +35,8 @@ const baseGame: GameUtilityContext = {
 const baseCtx: UtilityContext = {
   game: baseGame,
   openCharacterSheet: vi.fn(),
-  closeDrawer: vi.fn(),
+  openHandout: vi.fn(),
+    closeDrawer: vi.fn(),
 };
 
 describe('MarkAllReadPanel', () => {

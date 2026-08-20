@@ -541,4 +541,161 @@ describe('HandoutView', () => {
       expect(screen.queryByText('Deleted comment')).not.toBeInTheDocument();
     });
   });
+
+  /**
+   * The Utility Drawer renders this inside a Modal that supplies its own title
+   * bar and X, so the tab's back-link and duplicate heading are turned off
+   * there. The Handouts tab, which has no such chrome, keeps both.
+   */
+  describe('showHeader', () => {
+    it('shows the back link and title heading by default', async () => {
+      renderWithProviders(
+        <HandoutView
+          gameId={1}
+          handout={mockHandout}
+          isGM={false}
+          onClose={mockOnClose}
+        />
+      );
+
+      expect(
+        await screen.findByRole('button', { name: /back to handouts/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'Test Handout' })
+      ).toBeInTheDocument();
+    });
+
+    it('hides the back link and title heading when showHeader is false', async () => {
+      renderWithProviders(
+        <HandoutView
+          gameId={1}
+          handout={mockHandout}
+          isGM={false}
+          onClose={mockOnClose}
+          showHeader={false}
+        />
+      );
+
+      // The content still renders, so this is not just an empty tree.
+      await waitFor(() => {
+        expect(screen.getByText('Updates & Comments')).toBeInTheDocument();
+      });
+
+      expect(
+        screen.queryByRole('button', { name: /back to handouts/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('heading', { name: 'Test Handout' })
+      ).not.toBeInTheDocument();
+      // The draft/published badge is not part of the modal's title bar, so it
+      // must survive.
+      expect(screen.getByText('Published')).toBeInTheDocument();
+    });
+
+    it('still offers the GM Edit button with the header hidden', async () => {
+      renderWithProviders(
+        <HandoutView
+          gameId={1}
+          handout={mockHandout}
+          isGM={true}
+          onClose={mockOnClose}
+          onEdit={mockOnEdit}
+          showHeader={false}
+        />
+      );
+
+      const user = userEvent.setup();
+      const editButton = await screen.findByRole('button', { name: /^edit$/i });
+      await user.click(editButton);
+      expect(mockOnEdit).toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * The Utility Drawer is reference material you pull up mid-action-submission,
+   * so its modal must not offer *any* way to change things — not the handout,
+   * and not the updates on it. Half-writable (updates but not the handout) was
+   * the inconsistency this mode exists to remove.
+   */
+  describe('readOnly', () => {
+    it('hides every GM write affordance from a GM', async () => {
+      renderWithProviders(
+        <HandoutView
+          gameId={1}
+          handout={mockHandout}
+          isGM={true}
+          onClose={mockOnClose}
+          onEdit={mockOnEdit}
+          readOnly
+        />
+      );
+
+      // The updates themselves still render — this is read-only, not hidden.
+      await waitFor(() => {
+        expect(screen.getByText('First comment')).toBeInTheDocument();
+      });
+
+      // No composer for a new update.
+      expect(
+        screen.queryByPlaceholderText(/add an update or clarification/i)
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /post update/i })
+      ).not.toBeInTheDocument();
+
+      // No editing or deleting existing updates, and no editing the handout.
+      expect(screen.queryByRole('button', { name: /^edit$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
+    });
+
+    it('keeps those affordances for a GM when not read-only', async () => {
+      renderWithProviders(
+        <HandoutView
+          gameId={1}
+          handout={mockHandout}
+          isGM={true}
+          onClose={mockOnClose}
+          onEdit={mockOnEdit}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('First comment')).toBeInTheDocument();
+      });
+
+      // Guards against the read-only assertions above passing for the wrong
+      // reason (e.g. a renamed button that never renders in either mode).
+      expect(
+        screen.getByRole('button', { name: /post update/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByRole('button', { name: /^edit$/i }).length
+      ).toBeGreaterThan(0);
+      expect(
+        screen.getAllByRole('button', { name: /delete/i }).length
+      ).toBeGreaterThan(0);
+    });
+
+    it('reads as the player-facing view for a read-only GM', async () => {
+      renderWithProviders(
+        <HandoutView
+          gameId={1}
+          handout={mockHandout}
+          isGM={true}
+          onClose={mockOnClose}
+          readOnly
+        />
+      );
+
+      // Wording that offers to add updates would be a lie here.
+      expect(
+        await screen.findByText(/gm updates and additional information/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/add updates, clarifications/i)
+      ).not.toBeInTheDocument();
+    });
+  });
+
 });

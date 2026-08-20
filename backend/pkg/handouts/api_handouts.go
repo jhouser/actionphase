@@ -188,6 +188,53 @@ func (h *Handler) ListHandouts(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, response)
 }
 
+// ListHandoutsAcrossGames returns the published handouts of every in_progress
+// game the current user takes part in. Unlike ListHandouts this takes no game
+// in the path, so it can back surfaces with no game in scope (the global
+// Utility Drawer), and each entry carries its game's title so the client can
+// group by game without a request per game.
+//
+// No membership check is needed here: the query returns only handouts from
+// games the user belongs to, and only published ones, so every row is already
+// one the caller may read.
+func (h *Handler) ListHandoutsAcrossGames(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	defer h.App.ObsLogger.LogOperation(ctx, "api_list_handouts_across_games")()
+
+	userService := h.UserService
+	userID, errResp := core.GetUserIDFromJWT(ctx, userService)
+	if errResp != nil {
+		h.renderError(ctx, w, r, errResp, "Failed to authenticate user from JWT")
+		return
+	}
+
+	handouts, err := h.HandoutService.ListPublishedHandoutsAcrossGames(ctx, userID)
+	if err != nil {
+		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to list handouts across games", "error", err, "user_id", userID)
+		return
+	}
+
+	// Built as an empty slice rather than a nil one so a user with no handouts
+	// encodes as [] rather than null.
+	response := make([]*HandoutWithGameResponse, len(handouts))
+	for i, handout := range handouts {
+		response[i] = &HandoutWithGameResponse{
+			HandoutResponse: HandoutResponse{
+				ID:        handout.ID,
+				GameID:    handout.GameID,
+				Title:     handout.Title,
+				Content:   handout.Content,
+				Status:    handout.Status,
+				CreatedAt: handout.CreatedAt,
+				UpdatedAt: handout.UpdatedAt,
+			},
+			GameTitle: handout.GameTitle,
+		}
+	}
+
+	render.JSON(w, r, response)
+}
+
 // UpdateHandout updates a handout
 func (h *Handler) UpdateHandout(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

@@ -43,6 +43,7 @@ function makeCtx(
   return {
     game: makeGameCtx(gameOverrides),
     openCharacterSheet: vi.fn(),
+    openHandout: vi.fn(),
     closeDrawer: vi.fn(),
     ...overrides,
   };
@@ -53,6 +54,7 @@ function makeGlobalCtx(overrides: Partial<UtilityContext> = {}): UtilityContext 
   return {
     game: null,
     openCharacterSheet: vi.fn(),
+    openHandout: vi.fn(),
     closeDrawer: vi.fn(),
     ...overrides,
   };
