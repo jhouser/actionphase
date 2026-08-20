@@ -80,7 +80,7 @@ function InGameHandoutsPanel({
   game: GameUtilityContext;
   openHandout: UtilityContext['openHandout'];
 }) {
-  const { handouts, isLoading } = useHandouts(game.gameId);
+  const { handouts, isLoading, isError } = useHandouts(game.gameId);
 
   // The per-game endpoint hands a GM their drafts too, since it backs the
   // Handouts tab where drafts are edited. The drawer only reads, so filter them
@@ -94,6 +94,18 @@ function InGameHandoutsPanel({
     return (
       <div className="flex justify-center py-8" data-testid="handouts-loading">
         <Spinner size="md" />
+      </div>
+    );
+  }
+
+  // Before the empty state: useHandouts coalesces a failed fetch to [], so
+  // without this a network error would read as "the GM has published nothing".
+  if (isError) {
+    return (
+      <div className="p-4">
+        <Alert variant="danger" data-testid="game-handouts-error">
+          Couldn't load this game's handouts. Please try again.
+        </Alert>
       </div>
     );
   }

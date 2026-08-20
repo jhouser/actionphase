@@ -317,6 +317,37 @@ func TestHandoutService_ListPublishedHandoutsAcrossGames(t *testing.T) {
 		core.AssertTrue(t, !hasDraft, "The drawer is a reading surface; GM drafts stay on the Handouts tab")
 	})
 
+	t.Run("unapproved audience applicant is not a member", func(t *testing.T) {
+		// An audience application to a game with auto_accept_audience = false
+		// lands as status = 'inactive' with removed_at still NULL, so removed_at
+		// alone does not distinguish an applicant from a member.
+		applicant := suite.Factory().NewUser().WithUsername("acrossapplicant").Create()
+		suite.Factory().NewGameParticipant().
+			ForGame(gameA.ID).
+			WithUser(applicant.ID).
+			WithRole("audience").
+			WithStatus("inactive").
+			Create()
+
+		handouts, err := handoutService.ListPublishedHandoutsAcrossGames(ctx, applicant.ID)
+		core.AssertNoError(t, err, "Failed to list handouts for unapproved applicant")
+		core.AssertEqual(t, 0, len(handouts), "An unapproved applicant must not receive the game's handouts")
+	})
+
+	t.Run("removed participant is not a member", func(t *testing.T) {
+		exPlayer := suite.Factory().NewUser().WithUsername("acrossexplayer").Create()
+		suite.Factory().NewGameParticipant().
+			ForGame(gameA.ID).
+			WithUser(exPlayer.ID).
+			AsPlayer().
+			WithStatus("removed").
+			Create()
+
+		handouts, err := handoutService.ListPublishedHandoutsAcrossGames(ctx, exPlayer.ID)
+		core.AssertNoError(t, err, "Failed to list handouts for removed participant")
+		core.AssertEqual(t, 0, len(handouts), "A removed participant must not receive the game's handouts")
+	})
+
 	t.Run("user with no games gets an empty list", func(t *testing.T) {
 		loner := suite.Factory().NewUser().WithUsername("acrossloner").Create()
 

@@ -117,16 +117,19 @@ WHERE id = $1 AND deleted_at IS NULL;
 -- GetUserControllableCharactersAcrossGames: this backs "what am I currently
 -- playing", and a finished game's handouts stay reachable from the game itself.
 --
--- Membership is GM, co-GM, or any non-removed participant. Audience members
+-- Membership is GM, co-GM, or any active participant. Audience members
 -- participate through this same table, so they receive the published handouts of
--- games they follow, exactly as the in-game tab already shows them.
+-- games they follow, exactly as the in-game tab already shows them. The status
+-- check is not redundant with removed_at: an audience application to a game with
+-- auto_accept_audience = false lands as status = 'inactive' with removed_at
+-- still NULL, and an unapproved applicant is not a member.
 SELECT
   h.id, h.game_id, h.title, h.content, h.status, h.created_at, h.updated_at,
   g.title AS game_title
 FROM handouts h
 JOIN games g ON h.game_id = g.id
 LEFT JOIN game_participants gp
-  ON gp.game_id = g.id AND gp.user_id = $1 AND gp.removed_at IS NULL
+  ON gp.game_id = g.id AND gp.user_id = $1 AND gp.removed_at IS NULL AND gp.status = 'active'
 WHERE g.state = 'in_progress'
   AND h.status = 'published'
   AND (g.gm_user_id = $1 OR gp.user_id IS NOT NULL)

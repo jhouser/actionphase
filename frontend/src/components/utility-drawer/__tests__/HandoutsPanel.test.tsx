@@ -170,6 +170,17 @@ describe('HandoutsPanel', () => {
         await screen.findByText('This game has no published handouts yet.')
       ).toBeInTheDocument();
     });
+
+    it('surfaces a load failure rather than claiming the game has no handouts', async () => {
+      vi.mocked(apiClient.handouts.listHandouts).mockRejectedValue(new Error('network down'));
+
+      renderWithProviders(<HandoutsPanel ctx={makeInGameCtx()} />);
+
+      expect(await screen.findByTestId('game-handouts-error')).toBeInTheDocument();
+      expect(
+        screen.queryByText('This game has no published handouts yet.')
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('outside a game', () => {
