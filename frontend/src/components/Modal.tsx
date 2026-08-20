@@ -1,4 +1,5 @@
 import React from 'react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface ModalProps {
   isOpen: boolean;
@@ -46,6 +47,16 @@ const sizeClasses: Record<ModalSize, string> = {
  * - Automatically adapts to all themes (light, dark, future themes)
  */
 export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50', dismissOnBackdrop = true, size = '4xl' }: ModalProps) => {
+  // Hold the page still while the modal is up: the panel scrolls internally, so
+  // without this a wheel or trackpad gesture past its end chains to the body and
+  // scrolls the page behind the backdrop. The lock is ref-counted, so a modal
+  // opened from the drawer (or one modal over another) keeps it held until the
+  // last overlay closes.
+  //
+  // Called before the isOpen early-return, since hooks cannot run conditionally;
+  // the hook itself no-ops when inactive.
+  useBodyScrollLock(isOpen);
+
   if (!isOpen) return null;
 
   return (
