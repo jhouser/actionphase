@@ -165,3 +165,69 @@ func TestValidateStructRejectsNonStruct(t *testing.T) {
 		t.Fatal("expected nil to produce an error")
 	}
 }
+
+func TestValidateStructRejectsNonPointer(t *testing.T) {
+	// Regression: passing a struct by value made every field unaddressable, so
+	// trimming silently no-opped and a whitespace-only name sailed past
+	// `required`. The wrong-shaped call must fail loudly rather than quietly
+	// validate nothing.
+	err := ValidateStruct(sampleRequest{Name: "   ", Content: "hello", CharID: 7, Untagged: "x"})
+	if err == nil {
+		t.Fatal("expected a by-value struct to be rejected")
+	}
+	if !strings.Contains(err.Error(), "requires a pointer") {
+		t.Errorf("expected a pointer-requirement error, got %q", err.Error())
+	}
+}
+
+type optionalStringRequest struct {
+	Name     string            `json:"name" validate:"required"`
+	Timezone *string           `json:"schedule_timezone,omitempty"`
+	Labels   map[string]string `json:"labels,omitempty"`
+	Tags     []string          `json:"tags,omitempty"`
+}
+
+func TestValidateStructTrimsPointerToString(t *testing.T) {
+	// Regression: *string fields (ScheduleTimezone, CommonRoomOpenTime,
+	// BannerURL) fell through the recursion untrimmed, because only
+	// pointer-to-struct was walked.
+	tz := "  America/Los_Angeles  "
+	req := &optionalStringRequest{Name: "x", Timezone: &tz}
+
+	if err := ValidateStruct(req); err != nil {
+		t.Fatalf("expected request to pass, got %v", err)
+	}
+	if *req.Timezone != "America/Los_Angeles" {
+		t.Errorf("expected pointer-to-string trimmed, got %q", *req.Timezone)
+	}
+}
+
+func TestValidateStructLeavesNilPointerAlone(t *testing.T) {
+	// The common case for an optional field is absent, not padded.
+	req := &optionalStringRequest{Name: "x"}
+
+	if err := ValidateStruct(req); err != nil {
+		t.Fatalf("expected omitted optional pointer to pass, got %v", err)
+	}
+	if req.Timezone != nil {
+		t.Errorf("expected nil pointer left nil, got %q", *req.Timezone)
+	}
+}
+
+func TestValidateStructTrimsMapValuesAndStringSlices(t *testing.T) {
+	req := &optionalStringRequest{
+		Name:   "x",
+		Labels: map[string]string{"role": "  gm  "},
+		Tags:   []string{"  horror  "},
+	}
+
+	if err := ValidateStruct(req); err != nil {
+		t.Fatalf("expected request to pass, got %v", err)
+	}
+	if req.Labels["role"] != "gm" {
+		t.Errorf("expected map value trimmed, got %q", req.Labels["role"])
+	}
+	if req.Tags[0] != "horror" {
+		t.Errorf("expected string slice element trimmed, got %q", req.Tags[0])
+	}
+}

@@ -43,6 +43,12 @@ type CreateGameRequest struct {
 }
 
 func (r *CreateGameRequest) Bind(req *http.Request) error {
+	// Run the `validate` tags first, so a blank title is reported as the bad
+	// field it is rather than being shadowed by a later, more specialized check.
+	if err := core.ValidateStruct(r); err != nil {
+		return err
+	}
+
 	// Parsed AND validated here, not only in the service. The service validates
 	// too (its invariants are its own to hold), but a violation surfacing there
 	// renders as a 500 "unexpected error" — so a GM typing a 25-character tab
@@ -109,6 +115,12 @@ type UpdateGameRequest struct {
 }
 
 func (r *UpdateGameRequest) Bind(req *http.Request) error {
+	// Run the `validate` tags first, so a blank title is reported as the bad
+	// field it is rather than being shadowed by a later, more specialized check.
+	if err := core.ValidateStruct(r); err != nil {
+		return err
+	}
+
 	// Parsed AND validated here, not only in the service. The service validates
 	// too (its invariants are its own to hold), but a violation surfacing there
 	// renders as a 500 "unexpected error" — so a GM typing a 25-character tab

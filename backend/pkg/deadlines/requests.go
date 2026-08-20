@@ -9,7 +9,7 @@ import (
 
 // CreateDeadlineRequest represents the request to create a new deadline
 type CreateDeadlineRequest struct {
-	Title       string    `json:"title" validate:"required,min=1,max=255"`
+	Title       string    `json:"title" validate:"required,min=1,max=100"`
 	Description string    `json:"description"`
 	Deadline    time.Time `json:"deadline" validate:"required"`
 }
@@ -20,7 +20,7 @@ func (r *CreateDeadlineRequest) Bind(req *http.Request) error {
 
 // UpdateDeadlineRequest represents the request to update a deadline
 type UpdateDeadlineRequest struct {
-	Title       string    `json:"title" validate:"required,min=1,max=255"`
+	Title       string    `json:"title" validate:"required,min=1,max=100"`
 	Description string    `json:"description"`
 	Deadline    time.Time `json:"deadline" validate:"required"`
 }

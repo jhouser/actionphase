@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,5 +91,25 @@ func TestDeadlineRequestValidation(t *testing.T) {
 		w := post(t, fmt.Sprintf(`{"title": "Valid deadline", "description": "", "deadline": %q}`, future))
 
 		core.AssertEqual(t, http.StatusCreated, w.Code, "Valid deadline should be created")
+	})
+
+	t.Run("rejects a title longer than the column", func(t *testing.T) {
+		// game_deadlines.title is VARCHAR(100). The tag said max=255, so a
+		// 150-character title passed validation and then failed on INSERT --
+		// a 500 for what is really a bad request.
+		w := post(t, fmt.Sprintf(`{"title": %q, "description": "d", "deadline": %q}`,
+			strings.Repeat("a", 150), future))
+
+		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Over-length title should be rejected")
+		if !bytes.Contains(w.Body.Bytes(), []byte("title must be at most 100 characters")) {
+			t.Errorf("expected a max-length message, got %q", w.Body.String())
+		}
+	})
+
+	t.Run("accepts a title exactly at the column limit", func(t *testing.T) {
+		w := post(t, fmt.Sprintf(`{"title": %q, "description": "d", "deadline": %q}`,
+			strings.Repeat("a", 100), future))
+
+		core.AssertEqual(t, http.StatusCreated, w.Code, "A 100-character title should be accepted")
 	})
 }

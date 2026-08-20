@@ -67,8 +67,8 @@ export function CreateDeadlineModal({
 
     if (!title.trim()) {
       errors.title = 'Title is required';
-    } else if (title.trim().length > 200) {
-      errors.title = 'Title must be 200 characters or less';
+    } else if (title.trim().length > 100) {
+      errors.title = 'Title must be 100 characters or less';
     }
 
     if (!description.trim()) {

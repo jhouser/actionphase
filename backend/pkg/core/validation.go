@@ -84,10 +84,16 @@ func newRequestValidator() *validator.Validate {
 // store. Handlers read the trimmed value, which is the value that gets
 // persisted.
 //
-// Nested structs and pointers to structs are walked so that composed request
-// types (an items slice, say) are covered too. json.RawMessage and other []byte
+// Composed request types are walked all the way down: nested structs, pointers
+// (including *string, which several request types use for optional fields),
+// slice and array elements, and map values. json.RawMessage and other []byte
 // fields are left alone: they are not text fields, and trimming them would
 // corrupt the payload.
+//
+// v must be addressable for trimming to take effect — reflect refuses to set a
+// field reached through a non-pointer value. ValidateStruct enforces that by
+// rejecting non-pointer arguments, so this helper is never handed an
+// unaddressable struct in practice.
 func trimStringFields(v reflect.Value, seen map[uintptr]bool) {
 	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
 		if v.IsNil() {
@@ -106,6 +112,13 @@ func trimStringFields(v reflect.Value, seen map[uintptr]bool) {
 	}
 
 	switch v.Kind() {
+	case reflect.String:
+		// Reached for a bare string only via a pointer, slice element, or map
+		// value; struct fields are handled in the Struct case below so that
+		// unexported fields can be skipped before we try to set them.
+		if v.CanSet() {
+			v.SetString(strings.TrimSpace(v.String()))
+		}
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Field(i)
@@ -126,11 +139,28 @@ func trimStringFields(v reflect.Value, seen map[uintptr]bool) {
 		for i := 0; i < v.Len(); i++ {
 			trimStringFields(v.Index(i), seen)
 		}
+	case reflect.Map:
+		// Map values are not addressable, so they cannot be trimmed in place;
+		// they have to be trimmed and written back under the same key. Keys are
+		// left alone: they are payload identifiers, not user-facing text.
+		for _, key := range v.MapKeys() {
+			val := v.MapIndex(key)
+			if val.Kind() == reflect.String {
+				v.SetMapIndex(key, reflect.ValueOf(strings.TrimSpace(val.String())).Convert(val.Type()))
+				continue
+			}
+			// Anything else needs an addressable copy to recurse into.
+			copied := reflect.New(val.Type()).Elem()
+			copied.Set(val)
+			trimStringFields(copied, seen)
+			v.SetMapIndex(key, copied)
+		}
 	}
 }
 
 // ValidateStruct executes the `validate` struct tags on a request type and
-// returns a client-readable error, or nil when every field passes.
+// returns a client-readable error, or nil when every field passes. It must be
+// passed a pointer — see the guard in the body for why a value is rejected.
 //
 // Request structs across the API carry `validate` tags, but go-chi/render's
 // Bind is the only hook that runs after a body is decoded — so unless a Bind
@@ -157,9 +187,20 @@ func trimStringFields(v reflect.Value, seen map[uintptr]bool) {
 // validateLootTableItems in pkg/games/requests.go. The two approaches coexist,
 // and a Bind may run both.
 func ValidateStruct(v any) error {
+	// A non-pointer argument cannot be trimmed: reflect will not set a field
+	// reached through a value copy, so CanSet is false everywhere and every
+	// trim silently no-ops. The tags would still run, which is the dangerous
+	// part — "   " would sail past `required` and the whitespace bug this
+	// function exists to close would quietly reopen. Reject it loudly instead;
+	// like the InvalidValidationError below, it is a caller bug, not a 400.
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Ptr {
+		return fmt.Errorf("validate: ValidateStruct requires a pointer to a struct, got %T", v)
+	}
+
 	// Trim before validating so that a whitespace-only string fails `required`
 	// and `min`, and so handlers see the same trimmed value the service stores.
-	trimStringFields(reflect.ValueOf(v), map[uintptr]bool{})
+	trimStringFields(rv, map[uintptr]bool{})
 
 	err := requestValidator.Struct(v)
 	if err == nil {
