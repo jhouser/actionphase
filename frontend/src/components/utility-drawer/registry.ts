@@ -1,8 +1,9 @@
-import { UserRound, Dices, CheckCheck } from 'lucide-react';
+import { UserRound, Dices, CheckCheck, FileText } from 'lucide-react';
 import type { UtilityDrawerUtility } from './types';
 import { CharacterSheetPanel } from './panels/CharacterSheetPanel';
 import { DiceRollerPanel } from './panels/DiceRollerPanel';
 import { MarkAllReadPanel } from './panels/MarkAllReadPanel';
+import { HandoutsPanel } from './panels/HandoutsPanel';
 
 /**
  * The set of utilities offered by the Utility Drawer.
@@ -37,6 +38,19 @@ export const UTILITY_DRAWER_UTILITIES: UtilityDrawerUtility[] = [
       !ctx.game ||
       (ctx.game.isGM ? ctx.game.allGameCharacters.length > 0 : ctx.game.userCharacters.length > 0),
     Panel: CharacterSheetPanel,
+  },
+  {
+    id: 'handouts',
+    label: 'Handouts',
+    description: 'Read the reference material for your games.',
+    icon: FileText,
+    // Offered unconditionally, in a game or out of it. Whether a game has any
+    // published handouts is only knowable from the list itself, which the panel
+    // fetches when opened — gating here would mean loading every game's handouts
+    // before the drawer is even opened, on every page. The panel reports an empty
+    // result instead, exactly as the character sheet's cross-game mode does.
+    isAvailable: () => true,
+    Panel: HandoutsPanel,
   },
   {
     id: 'dice-roller',

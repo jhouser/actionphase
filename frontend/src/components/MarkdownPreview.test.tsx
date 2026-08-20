@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MarkdownPreview } from './MarkdownPreview';
 import { TEXT_COLORS } from './textColors';
 
@@ -142,6 +142,191 @@ describe('MarkdownPreview', () => {
 
       // Should render as code but without syntax highlighting
       expect(screen.getByText('plain text')).toBeInTheDocument();
+    });
+  });
+
+  describe('Code Block Copy Button', () => {
+    /**
+     * jsdom has no clipboard, so each test installs its own. Returns the spy so
+     * a test can assert on what was written.
+     */
+    function stubClipboard(impl: () => Promise<void> = () => Promise.resolve()) {
+      const writeText = vi.fn(impl);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+        writable: true,
+      });
+      return writeText;
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+      // @ts-expect-error - removing the stub installed above
+      delete navigator.clipboard;
+    });
+
+    it('renders a copy button on a fenced code block', () => {
+      render(<MarkdownPreview content={'```\nconst x = 42;\n```'} />);
+      expect(screen.getByRole('button', { name: 'Copy code' })).toBeInTheDocument();
+    });
+
+    it('does not render a copy button for inline code', () => {
+      // Only fenced blocks get one; a button beside every `word` would be noise.
+      render(<MarkdownPreview content="Use the `useState` hook" />);
+      expect(screen.queryByRole('button', { name: 'Copy code' })).not.toBeInTheDocument();
+    });
+
+    it('copies the code block contents to the clipboard', async () => {
+      const writeText = stubClipboard();
+      render(<MarkdownPreview content={'```js\nconst x = 42;\n```'} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('const x = 42;'));
+    });
+
+    it('copies markup-heavy code verbatim', async () => {
+      // Pins the exact string handed to the clipboard for content full of
+      // characters the renderer escapes. Note this does not prove the handler
+      // reads the raw source rather than the rendered <code>: jsdom's
+      // textContent decodes entities, so both routes produce this same string.
+      // The guard against reading the DOM is 'ignores decoration added to the
+      // rendered block' below.
+      const writeText = stubClipboard();
+      render(<MarkdownPreview content={'```\n<div class="a">& \'quoted\'</div>\n```'} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+
+      await waitFor(() =>
+        expect(writeText).toHaveBeenCalledWith('<div class="a">& \'quoted\'</div>')
+      );
+    });
+
+    it('preserves multi-line code exactly', async () => {
+      const writeText = stubClipboard();
+      render(<MarkdownPreview content={'```\nline one\nline two\n\nline four\n```'} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+
+      await waitFor(() =>
+        expect(writeText).toHaveBeenCalledWith('line one\nline two\n\nline four')
+      );
+    });
+
+    it('confirms the copy, then returns to the idle label', async () => {
+      vi.useFakeTimers();
+      stubClipboard();
+      render(<MarkdownPreview content={'```\nhello\n```'} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+
+      // The promise callback is a microtask; flush it without advancing timers.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(screen.getByRole('button', { name: 'Copy code' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Copied' })).not.toBeInTheDocument();
+    });
+
+    it('reports a rejected clipboard write instead of claiming success', async () => {
+      // Clipboard permission can be denied; silently showing a checkmark would
+      // send the user off to paste nothing.
+      stubClipboard(() => Promise.reject(new Error('denied')));
+      render(<MarkdownPreview content={'```\nhello\n```'} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+
+      expect(await screen.findByRole('button', { name: 'Copy failed' })).toBeInTheDocument();
+    });
+
+    it('survives a missing clipboard API', async () => {
+      // Insecure origins leave navigator.clipboard undefined.
+      render(<MarkdownPreview content={'```\nhello\n```'} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+
+      expect(await screen.findByRole('button', { name: 'Copy failed' })).toBeInTheDocument();
+    });
+
+    it('stays visible without hover on small screens', () => {
+      // Touch devices have no hover state, so a hover-only reveal leaves the
+      // button undiscoverable short of an accidental tap in the corner. It is
+      // unconditionally visible below `sm`, and hover only sharpens it above.
+      render(<MarkdownPreview content={'```\nhello\n```'} />);
+      const btn = screen.getByRole('button', { name: 'Copy code' });
+
+      expect(btn.className).toContain('opacity-100');
+      expect(btn.className).toContain('sm:group-hover:opacity-100');
+      // The bare `opacity-0` of a hover-only affordance must not come back.
+      expect(btn.className).not.toMatch(/(^|\s)opacity-0(\s|$)/);
+    });
+
+    it('gives the button a 44px tap target on small screens', () => {
+      render(<MarkdownPreview content={'```\nhello\n```'} />);
+      const btn = screen.getByRole('button', { name: 'Copy code' });
+
+      expect(btn.className).toContain('min-w-[44px]');
+      expect(btn.className).toContain('min-h-[44px]');
+      // ...without inflating the icon on pointer devices.
+      expect(btn.className).toContain('sm:min-w-0');
+    });
+
+    it('ignores decoration added to the rendered block', async () => {
+      // The real reason the handler carries its own copy of the source: a
+      // mention inside a code block renders as a <mark> wrapper, and copying the
+      // block's DOM text would be at the mercy of whatever decorated it. Reading
+      // data-copy-code keeps the clipboard equal to what the author typed.
+      const writeText = stubClipboard();
+      const { container } = render(<MarkdownPreview content={'```\ngreet @Alice\n```'} />);
+
+      // Simulate post-render decoration of the code element.
+      const code = container.querySelector('code')!;
+      code.innerHTML = code.innerHTML.replace('@Alice', '<mark>@Alice</mark> (Player One)');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('greet @Alice'));
+    });
+
+    it('renders the clipboard icon', () => {
+      // The icon is injected after sanitization, so a stripped or un-hydrated
+      // icon leaves a button that is still findable by aria-label but visually
+      // empty. Assert on the glyph itself, not just the accessible name.
+      const { container } = render(<MarkdownPreview content={'```\nhello\n```'} />);
+      const btn = screen.getByRole('button', { name: 'Copy code' });
+
+      expect(btn.querySelector('svg')).toBeInTheDocument();
+      expect(container.querySelectorAll('button[data-copy-code] svg')).toHaveLength(1);
+    });
+
+    it('positions the button against an element that survives sanitization', () => {
+      // The button is absolutely/stickily placed, so it needs a positioned
+      // ancestor that DOMPurify keeps. A wrapper <div> would require
+      // allowlisting 'div' for all user markdown; if the positioning context is
+      // ever moved back to a stripped element the button escapes to the page
+      // corner while every aria-label query still passes.
+      render(<MarkdownPreview content={'```\nhello\n```'} />);
+      const btn = screen.getByRole('button', { name: 'Copy code' });
+
+      const positioned = btn.closest('.relative');
+      expect(positioned).not.toBeNull();
+      expect(positioned!.tagName).toBe('PRE');
+    });
+
+    it('tracks each code block independently', async () => {
+      const writeText = stubClipboard();
+      render(<MarkdownPreview content={'```\nfirst\n```\n\ntext\n\n```\nsecond\n```'} />);
+
+      const buttons = screen.getAllByRole('button', { name: 'Copy code' });
+      expect(buttons).toHaveLength(2);
+
+      fireEvent.click(buttons[1]);
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('second'));
+      // The untouched block keeps its idle label.
+      expect(buttons[0]).toHaveAttribute('aria-label', 'Copy code');
     });
   });
 
@@ -313,6 +498,33 @@ describe('MarkdownPreview', () => {
   });
 
   describe('XSS Protection', () => {
+    it('strips user-authored div tags', () => {
+      // Regression guard for the copy-button work: positioning it needed a
+      // containing block, and allowlisting <div> to get one would also let any
+      // markdown author emit <div class="...">. With 'class' already allowed
+      // that is enough to lay a full-viewport overlay over another user's post,
+      // so the positioning lives on the <pre> instead.
+      const { container } = render(
+        <MarkdownPreview content={'<div class="fixed inset-0 z-50">overlay</div>'} />
+      );
+
+      expect(container.querySelector('div.fixed')).toBeNull();
+      // Unwrapped, not dropped: the text stays, the tag does not.
+      expect(container.textContent).toContain('overlay');
+    });
+
+    it('strips user-authored svg tags', () => {
+      // Same reasoning as <div>: the copy icon is injected post-sanitization
+      // precisely so that <svg> need not be allowlisted for all markdown.
+      const { container } = render(
+        <MarkdownPreview content={'<svg width="10"><path d="M0 0"/></svg>'} />
+      );
+
+      // The only svg on the page belongs to a copy button, and this content has
+      // no code block.
+      expect(container.querySelector('svg')).toBeNull();
+    });
+
     it('prevents script injection via content', () => {
       const maliciousContent = '<script>alert("XSS")</script>Hello';
       const { container } = render(<MarkdownPreview content={maliciousContent} />);

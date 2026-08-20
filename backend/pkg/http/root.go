@@ -518,6 +518,34 @@ func (h *Handler) Start() {
 	})
 	apiV1Router.Mount("/deadlines", deadlinesRouter)
 
+	// Cross-game handout list for the current user. Not nested under /games
+	// because it spans every game the user is in, which is exactly what the
+	// global Utility Drawer needs when no game is in scope. Per-game handout
+	// routes remain under /games/{gameID}/handouts.
+	handoutsRouter := chi.NewRouter()
+	handoutsRouter.Route("/", func(r chi.Router) {
+		handoutHandler := &handouts.Handler{
+			App:                 h.App,
+			UserService:         &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+			GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+			HandoutService:      db.NewHandoutService(h.App.Pool),
+			NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
+		}
+
+		r.Group(func(r chi.Router) {
+			tokenAuth := h.getTokenAuth()
+			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+			r.Use(jwtauth.Verifier(tokenAuth))
+			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(h.sessionValidateMW())
+			r.Use(core.RequireAuthenticationMiddleware(userService))
+			r.Use(core.AdminModeMiddleware)
+
+			r.Get("/", handoutHandler.ListHandoutsAcrossGames)
+		})
+	})
+	apiV1Router.Mount("/handouts", handoutsRouter)
+
 	// Game archive export downloads. Not nested under /games because the export
 	// id is the addressable resource; the handler resolves the game from the
 	// export row and re-checks CanUserViewGame, so a leaked export id grants

@@ -10,7 +10,7 @@ export function useHandouts(gameId: number) {
   const queryClient = useQueryClient();
 
   // Query for all handouts
-  const { data: handoutsData, isLoading } = useQuery({
+  const { data: handoutsData, isLoading, isError } = useQuery({
     queryKey: ['handouts', gameId],
     queryFn: () => apiClient.handouts.listHandouts(gameId).then(res => res.data),
     enabled: !!gameId,
@@ -65,6 +65,7 @@ export function useHandouts(gameId: number) {
   return {
     handouts,
     isLoading,
+    isError,
     createHandoutMutation,
     updateHandoutMutation,
     deleteHandoutMutation,

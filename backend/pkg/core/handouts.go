@@ -37,3 +37,12 @@ type HandoutCommentWithAuthor struct {
 	HandoutComment
 	AuthorUsername string `json:"author_username"` // Username of comment author
 }
+
+// HandoutWithGame is a handout carrying the game it belongs to, for surfaces
+// that list handouts with no game in scope (the global Utility Drawer). The
+// game title travels with each row so the client can group by game without a
+// request per game.
+type HandoutWithGame struct {
+	Handout
+	GameTitle string `json:"game_title"` // Title of the game the handout belongs to
+}

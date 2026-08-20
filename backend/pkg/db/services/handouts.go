@@ -144,6 +144,41 @@ func (s *HandoutService) ListHandouts(ctx context.Context, gameID int32, userID 
 	return result, nil
 }
 
+// ListPublishedHandoutsAcrossGames retrieves the published handouts of every
+// in_progress game the user takes part in, for surfaces with no game in scope
+// (the global Utility Drawer).
+//
+// Membership and the published-only rule are enforced by the query, so unlike
+// ListHandouts this takes no isGM flag: there is no per-game role to resolve
+// and nothing further to filter here.
+func (s *HandoutService) ListPublishedHandoutsAcrossGames(ctx context.Context, userID int32) ([]*core.HandoutWithGame, error) {
+	queries := models.New(s.DB)
+
+	rows, err := queries.ListPublishedHandoutsAcrossGames(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list handouts across games: %w", err)
+	}
+
+	result := make([]*core.HandoutWithGame, len(rows))
+	for i, r := range rows {
+		handout := handoutToCore(models.Handout{
+			ID:        r.ID,
+			GameID:    r.GameID,
+			Title:     r.Title,
+			Content:   r.Content,
+			Status:    r.Status,
+			CreatedAt: r.CreatedAt,
+			UpdatedAt: r.UpdatedAt,
+		})
+		result[i] = &core.HandoutWithGame{
+			Handout:   *handout,
+			GameTitle: r.GameTitle,
+		}
+	}
+
+	return result, nil
+}
+
 // UpdateHandout updates a handout's title, content, and status
 func (s *HandoutService) UpdateHandout(ctx context.Context, handoutID int32, title string, content string, status string, userID int32) (*core.Handout, error) {
 	queries := models.New(s.DB)

@@ -298,6 +298,79 @@ func (q *Queries) ListHandoutsByGame(ctx context.Context, arg ListHandoutsByGame
 	return items, nil
 }
 
+const listPublishedHandoutsAcrossGames = `-- name: ListPublishedHandoutsAcrossGames :many
+SELECT
+  h.id, h.game_id, h.title, h.content, h.status, h.created_at, h.updated_at,
+  g.title AS game_title
+FROM handouts h
+JOIN games g ON h.game_id = g.id
+LEFT JOIN game_participants gp
+  ON gp.game_id = g.id AND gp.user_id = $1 AND gp.removed_at IS NULL AND gp.status = 'active'
+WHERE g.state = 'in_progress'
+  AND h.status = 'published'
+  AND (g.gm_user_id = $1 OR gp.user_id IS NOT NULL)
+ORDER BY game_title, g.id, h.created_at DESC
+`
+
+type ListPublishedHandoutsAcrossGamesRow struct {
+	ID        int32              `json:"id"`
+	GameID    int32              `json:"game_id"`
+	Title     string             `json:"title"`
+	Content   string             `json:"content"`
+	Status    string             `json:"status"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	GameTitle string             `json:"game_title"`
+}
+
+// Cross-game handout list for a user, backing surfaces with no game in scope
+// (the global Utility Drawer). The per-game list is ListHandoutsByGame above.
+//
+// Published only, for everyone including the GM. The drawer is a reading
+// surface: a GM's drafts are work in progress and stay on the Handouts tab,
+// which is where they can be edited. That also keeps this query free of any
+// per-row role — every handout it returns is one the requester may read, so the
+// handler has nothing further to filter.
+//
+// Restricted to in_progress games, matching
+// GetUserControllableCharactersAcrossGames: this backs "what am I currently
+// playing", and a finished game's handouts stay reachable from the game itself.
+//
+// Membership is GM, co-GM, or any active participant. Audience members
+// participate through this same table, so they receive the published handouts of
+// games they follow, exactly as the in-game tab already shows them. The status
+// check is not redundant with removed_at: an audience application to a game with
+// auto_accept_audience = false lands as status = 'inactive' with removed_at
+// still NULL, and an unapproved applicant is not a member.
+func (q *Queries) ListPublishedHandoutsAcrossGames(ctx context.Context, userID int32) ([]ListPublishedHandoutsAcrossGamesRow, error) {
+	rows, err := q.db.Query(ctx, listPublishedHandoutsAcrossGames, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublishedHandoutsAcrossGamesRow
+	for rows.Next() {
+		var i ListPublishedHandoutsAcrossGamesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GameID,
+			&i.Title,
+			&i.Content,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.GameTitle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const publishHandout = `-- name: PublishHandout :one
 UPDATE handouts
 SET status = 'published'
