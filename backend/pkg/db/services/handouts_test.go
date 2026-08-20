@@ -232,6 +232,131 @@ func TestHandoutService_ListHandouts(t *testing.T) {
 	}
 }
 
+func TestHandoutService_ListPublishedHandoutsAcrossGames(t *testing.T) {
+	suite := NewTestSuite(t).
+		WithTables("handout_comments", "handouts", "game_participants", "games", "users").
+		Setup()
+	defer suite.Cleanup()
+
+	gm := suite.Factory().NewUser().WithUsername("acrossgm").Create()
+	player := suite.Factory().NewUser().WithUsername("acrossplayer").Create()
+	outsider := suite.Factory().NewUser().WithUsername("acrossoutsider").Create()
+
+	// Two in_progress games the player belongs to, plus games that must not
+	// contribute: one the player has no part in, and one that has finished.
+	gameA := suite.Factory().NewGame().WithGM(gm.ID).WithTitle("Alpha Game").WithState("in_progress").Create()
+	gameB := suite.Factory().NewGame().WithGM(gm.ID).WithTitle("Beta Game").WithState("in_progress").Create()
+	otherGame := suite.Factory().NewGame().WithGM(outsider.ID).WithTitle("Not Mine").WithState("in_progress").Create()
+	doneGame := suite.Factory().NewGame().WithGM(gm.ID).WithTitle("Finished Game").WithState("completed").Create()
+
+	suite.Factory().NewGameParticipant().ForGame(gameA.ID).WithUser(player.ID).AsPlayer().Create()
+	suite.Factory().NewGameParticipant().ForGame(gameB.ID).WithUser(player.ID).AsPlayer().Create()
+	suite.Factory().NewGameParticipant().ForGame(doneGame.ID).WithUser(player.ID).AsPlayer().Create()
+
+	handoutService := suite.HandoutService()
+	ctx := context.Background()
+
+	mustCreate := func(gameID int32, title, status string) {
+		t.Helper()
+		_, err := handoutService.CreateHandout(ctx, gameID, title, "Content of "+title, status, gm.ID)
+		core.AssertNoError(t, err, "Failed to create handout "+title)
+	}
+
+	mustCreate(gameA.ID, "Alpha Published", "published")
+	mustCreate(gameA.ID, "Alpha Draft", "draft")
+	mustCreate(gameB.ID, "Beta Published", "published")
+	mustCreate(otherGame.ID, "Outsider Published", "published")
+	mustCreate(doneGame.ID, "Finished Published", "published")
+
+	titlesOf := func(handouts []*core.HandoutWithGame) map[string]*core.HandoutWithGame {
+		byTitle := make(map[string]*core.HandoutWithGame, len(handouts))
+		for _, h := range handouts {
+			byTitle[h.Title] = h
+		}
+		return byTitle
+	}
+
+	t.Run("player gets published handouts from their in_progress games only", func(t *testing.T) {
+		handouts, err := handoutService.ListPublishedHandoutsAcrossGames(ctx, player.ID)
+		core.AssertNoError(t, err, "Failed to list handouts across games")
+
+		byTitle := titlesOf(handouts)
+		core.AssertEqual(t, 2, len(handouts), "Expected exactly the two published handouts from joined active games")
+
+		alpha, ok := byTitle["Alpha Published"]
+		core.AssertTrue(t, ok, "Expected Alpha Published in results")
+		if ok {
+			// The game title is the whole reason this query exists: the drawer
+			// groups by it and has no other way to resolve it.
+			core.AssertEqual(t, "Alpha Game", alpha.GameTitle, "Game title should travel with the handout")
+			core.AssertEqual(t, gameA.ID, alpha.GameID, "Handout should report its own game")
+			core.AssertEqual(t, "Content of Alpha Published", alpha.Content, "Content should be returned for reading")
+		}
+
+		_, hasBeta := byTitle["Beta Published"]
+		core.AssertTrue(t, hasBeta, "Expected Beta Published in results")
+
+		_, hasDraft := byTitle["Alpha Draft"]
+		core.AssertTrue(t, !hasDraft, "Drafts must not appear in the cross-game list")
+
+		_, hasOutsider := byTitle["Outsider Published"]
+		core.AssertTrue(t, !hasOutsider, "Handouts from games the user has not joined must not appear")
+
+		_, hasFinished := byTitle["Finished Published"]
+		core.AssertTrue(t, !hasFinished, "Handouts from completed games must not appear")
+	})
+
+	t.Run("GM sees published handouts but not their own drafts", func(t *testing.T) {
+		handouts, err := handoutService.ListPublishedHandoutsAcrossGames(ctx, gm.ID)
+		core.AssertNoError(t, err, "Failed to list handouts across games for GM")
+
+		byTitle := titlesOf(handouts)
+		core.AssertEqual(t, 2, len(handouts), "GM should get the published handouts of their active games")
+
+		_, hasDraft := byTitle["Alpha Draft"]
+		core.AssertTrue(t, !hasDraft, "The drawer is a reading surface; GM drafts stay on the Handouts tab")
+	})
+
+	t.Run("unapproved audience applicant is not a member", func(t *testing.T) {
+		// An audience application to a game with auto_accept_audience = false
+		// lands as status = 'inactive' with removed_at still NULL, so removed_at
+		// alone does not distinguish an applicant from a member.
+		applicant := suite.Factory().NewUser().WithUsername("acrossapplicant").Create()
+		suite.Factory().NewGameParticipant().
+			ForGame(gameA.ID).
+			WithUser(applicant.ID).
+			WithRole("audience").
+			WithStatus("inactive").
+			Create()
+
+		handouts, err := handoutService.ListPublishedHandoutsAcrossGames(ctx, applicant.ID)
+		core.AssertNoError(t, err, "Failed to list handouts for unapproved applicant")
+		core.AssertEqual(t, 0, len(handouts), "An unapproved applicant must not receive the game's handouts")
+	})
+
+	t.Run("removed participant is not a member", func(t *testing.T) {
+		exPlayer := suite.Factory().NewUser().WithUsername("acrossexplayer").Create()
+		suite.Factory().NewGameParticipant().
+			ForGame(gameA.ID).
+			WithUser(exPlayer.ID).
+			AsPlayer().
+			WithStatus("removed").
+			Create()
+
+		handouts, err := handoutService.ListPublishedHandoutsAcrossGames(ctx, exPlayer.ID)
+		core.AssertNoError(t, err, "Failed to list handouts for removed participant")
+		core.AssertEqual(t, 0, len(handouts), "A removed participant must not receive the game's handouts")
+	})
+
+	t.Run("user with no games gets an empty list", func(t *testing.T) {
+		loner := suite.Factory().NewUser().WithUsername("acrossloner").Create()
+
+		handouts, err := handoutService.ListPublishedHandoutsAcrossGames(ctx, loner.ID)
+		core.AssertNoError(t, err, "Failed to list handouts for user with no games")
+		core.AssertEqual(t, 0, len(handouts), "A user in no games should receive no handouts")
+	})
+}
+
 func TestHandoutService_UpdateHandout(t *testing.T) {
 	suite := NewTestSuite(t).
 		WithTables("handouts", "games", "users").

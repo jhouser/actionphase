@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"actionphase/pkg/core"
+	"actionphase/pkg/observability"
 
 	"github.com/go-chi/render"
 )
@@ -97,12 +98,12 @@ func (h *Handler) SubmitAction(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		notifSvc := h.NotificationService
-		go func() {
+		observability.SafeGo(context.Background(), h.App.ObsLogger, "notify-action-submitted", func() {
 			notifCtx := context.Background()
 			if err := notifSvc.NotifyActionSubmitted(notifCtx, action.ID, action.GameID, int32(authUser.ID), characterName); err != nil {
 				h.App.ObsLogger.LogError(notifCtx, err, "Failed to notify GM of action submission", "action_id", action.ID)
 			}
-		}()
+		})
 	}
 
 	// Convert action model to response format

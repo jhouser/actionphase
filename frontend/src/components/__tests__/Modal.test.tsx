@@ -1,12 +1,97 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { screen, render, fireEvent } from '@testing-library/react'
 import { Modal } from '../Modal'
+import { __resetBodyScrollLockForTests } from '../../hooks/useBodyScrollLock'
 
 describe('Modal', () => {
   const mockOnClose = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
+    __resetBodyScrollLockForTests()
+    document.body.style.overflow = ''
+  })
+
+  afterEach(() => {
+    __resetBodyScrollLockForTests()
+    document.body.style.overflow = ''
+  })
+
+  describe('Body scroll lock', () => {
+    it('locks page scroll while open', () => {
+      // The panel scrolls internally; without a lock, scrolling past its end
+      // chains to the body and drags the page around behind the backdrop.
+      render(
+        <Modal isOpen onClose={mockOnClose}>
+          <div>Content</div>
+        </Modal>
+      )
+
+      expect(document.body.style.overflow).toBe('hidden')
+    })
+
+    it('does not lock while closed', () => {
+      render(
+        <Modal isOpen={false} onClose={mockOnClose}>
+          <div>Content</div>
+        </Modal>
+      )
+
+      expect(document.body.style.overflow).toBe('')
+    })
+
+    it('releases the lock on unmount', () => {
+      const { unmount } = render(
+        <Modal isOpen onClose={mockOnClose}>
+          <div>Content</div>
+        </Modal>
+      )
+      expect(document.body.style.overflow).toBe('hidden')
+
+      unmount()
+      expect(document.body.style.overflow).toBe('')
+    })
+
+    it('releases the lock when closed without unmounting', () => {
+      // Most callers keep the Modal mounted and flip isOpen, so the lock has to
+      // follow the prop rather than only the component's lifetime.
+      const { rerender } = render(
+        <Modal isOpen onClose={mockOnClose}>
+          <div>Content</div>
+        </Modal>
+      )
+      expect(document.body.style.overflow).toBe('hidden')
+
+      rerender(
+        <Modal isOpen={false} onClose={mockOnClose}>
+          <div>Content</div>
+        </Modal>
+      )
+      expect(document.body.style.overflow).toBe('')
+    })
+
+    it('keeps the page locked until the last of two stacked modals closes', () => {
+      // A handout or character sheet opened from the utility drawer stacks on an
+      // overlay that already holds the lock. Closing the inner one must not hand
+      // scrolling back to the page while the outer is still up.
+      const outer = render(
+        <Modal isOpen onClose={mockOnClose}>
+          <div>Outer</div>
+        </Modal>
+      )
+      const inner = render(
+        <Modal isOpen onClose={mockOnClose}>
+          <div>Inner</div>
+        </Modal>
+      )
+      expect(document.body.style.overflow).toBe('hidden')
+
+      inner.unmount()
+      expect(document.body.style.overflow).toBe('hidden')
+
+      outer.unmount()
+      expect(document.body.style.overflow).toBe('')
+    })
   })
 
   describe('Visibility', () => {

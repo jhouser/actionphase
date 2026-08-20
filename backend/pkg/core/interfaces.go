@@ -1408,6 +1408,16 @@ type HandoutServiceInterface interface {
 	// If isGM is false, returns only published handouts
 	ListHandouts(ctx context.Context, gameID int32, userID int32, isGM bool) ([]*Handout, error)
 
+	// ListPublishedHandoutsAcrossGames retrieves the published handouts of every
+	// in_progress game the user takes part in, for surfaces with no game in
+	// scope (the global Utility Drawer). Each entry carries its game's title so
+	// the client can group by game without a request per game.
+	//
+	// Published only, for every role including GM: the drawer is a reading
+	// surface, and drafts stay on the game's Handouts tab where they can be
+	// edited. Every row returned is therefore one the user may read.
+	ListPublishedHandoutsAcrossGames(ctx context.Context, userID int32) ([]*HandoutWithGame, error)
+
 	// UpdateHandout updates a handout's title, content, and status
 	// Only GMs can update handouts
 	// Changing status to "published" triggers notifications

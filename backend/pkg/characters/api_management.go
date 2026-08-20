@@ -2,6 +2,7 @@ package characters
 
 import (
 	"actionphase/pkg/core"
+	"actionphase/pkg/observability"
 	"context"
 	"fmt"
 	"net/http"
@@ -74,12 +75,12 @@ func (h *Handler) ApproveCharacter(w http.ResponseWriter, r *http.Request) {
 	// Notify the character owner (if there is one)
 	if updatedCharacter.UserID.Valid {
 		notifSvc := h.NotificationService
-		go func() {
+		observability.SafeGo(context.Background(), h.App.ObsLogger, "notify-character-approved", func() {
 			notifCtx := context.Background()
 			if err := notifSvc.NotifyCharacterApproved(notifCtx, updatedCharacter.UserID.Int32, updatedCharacter.GameID, updatedCharacter.ID, updatedCharacter.Name); err != nil {
 				h.App.ObsLogger.Warn(notifCtx, "Failed to send character approved notification", "error", err, "character_id", updatedCharacter.ID)
 			}
-		}()
+		})
 	}
 
 	// Convert to response format

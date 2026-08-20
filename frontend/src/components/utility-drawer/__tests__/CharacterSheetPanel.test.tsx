@@ -48,7 +48,7 @@ function makeCharacter(
 
 /** Global (no game in scope) drawer context. */
 function makeGlobalCtx(openCharacterSheet = vi.fn()): UtilityContext {
-  return { game: null, openCharacterSheet, closeDrawer: vi.fn() };
+  return { game: null, openCharacterSheet, openHandout: vi.fn(), closeDrawer: vi.fn() };
 }
 
 function makeGameCharacter(overrides: Partial<Character> = {}): Character {
@@ -87,6 +87,7 @@ function makeInGameCtx(
       ...gameOverrides,
     },
     openCharacterSheet,
+    openHandout: vi.fn(),
     closeDrawer: vi.fn(),
   };
 }

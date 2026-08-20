@@ -15,6 +15,15 @@ export interface Handout {
   updated_at?: string;
 }
 
+/**
+ * A handout together with the game it belongs to, as returned by the cross-game
+ * list. Used by the global Utility Drawer, where there is no game in scope to
+ * resolve the title from.
+ */
+export interface HandoutWithGame extends Handout {
+  game_title: string;
+}
+
 export interface HandoutComment {
   id: number;
   handout_id: number;

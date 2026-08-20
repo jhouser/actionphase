@@ -28,6 +28,25 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// Inline SVG rather than the lucide React components used elsewhere: the code
+// block is built as an HTML string inside marked's renderer, where there is no
+// React tree to mount a component into. Stroke/size match lucide's defaults so
+// these sit consistently with the icons around them.
+const SVG_ATTRS =
+  'xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" ' +
+  'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+
+const CLIPBOARD_ICON =
+  `<svg ${SVG_ATTRS} aria-hidden="true">` +
+  '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/>' +
+  '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>' +
+  '</svg>';
+
+const CHECK_ICON =
+  `<svg ${SVG_ATTRS} aria-hidden="true">` +
+  '<path d="M20 6 9 17l-5-5"/>' +
+  '</svg>';
+
 // Configure marked once at module level via marked.use()
 // This allows renderer methods to access this.parser for inline token processing
 marked.use({
@@ -81,7 +100,62 @@ marked.use({
     },
 
     code({ text }) {
-      return `<pre class="my-2 p-3 rounded bg-bg-secondary overflow-x-auto text-sm"><code>${escapeHtml(text)}</code></pre>\n`;
+      // The copy button carries its own source text rather than reading
+      // .textContent off the <code> at click time: the rendered block is the
+      // sanitized, escaped copy, and anything that later decorates the block
+      // (mention marks, sheet refs) would otherwise ride along into the
+      // clipboard. encodeURIComponent keeps quotes and newlines from breaking
+      // out of the attribute.
+      //
+      // It ships empty and is given its icon after mount (see hydrateCopyIcons):
+      // <svg> is deliberately not allowlisted, since allowing it here would also
+      // allow it in user-authored markdown.
+      // Colors use surface-overlay / border-theme-default, which are real rules
+      // in index.css. The bg-*/border-border-* names look right and are used
+      // elsewhere in the app, but their @theme tokens are unset, so those
+      // utilities generate nothing -- the <pre> above looks styled only because
+      // `prose` gives pre elements a background. Verified in the browser rather
+      // than assumed: jsdom computes no styles, so component tests cannot catch
+      // an inert class.
+      //
+      // surface-overlay is deliberately lighter than the block's own surface so
+      // the button reads as a control sitting on top of the code.
+      //
+      // Visibility follows MessageThread's row-action convention: always shown
+      // on small screens, hover-revealed from `sm` up, since touch has no hover
+      // state and a hover-only affordance is undiscoverable there. It rests at
+      // 60% on desktop rather than 0 so it can be seen before being hovered.
+      // min-w/min-h give a 44px tap target on touch without inflating the
+      // desktop icon. The background is opaque at every width because the code
+      // scrolls underneath the button.
+      const btnClass =
+        'absolute top-1 right-1 z-10 inline-flex items-center justify-center w-7 h-7 rounded surface-overlay border border-theme-default text-content-tertiary transition-all min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 opacity-100 sm:opacity-60 sm:group-hover:opacity-100 focus:opacity-100 hover:text-interactive-primary';
+
+      const copyBtn =
+        `<button type="button" data-copy-code="${encodeURIComponent(text)}"` +
+        ` class="${btnClass}"` +
+        ` title="Copy code" aria-label="Copy code"` +
+        ` data-faro-user-action-name="copy-code-block"></button>`;
+      // The button is positioned against the <pre> itself rather than a wrapper
+      // <div>: allowlisting 'div' for this would also let any user-authored
+      // markdown emit <div class="...">, and with 'class' already allowed that
+      // is enough to lay a full-viewport overlay over someone else's post.
+      // <pre> is allowlisted for code blocks regardless, so it costs nothing.
+      //
+      // The horizontal scroll lives on the <code>, not the <pre>. Scrolling the
+      // <pre> would drag the button along with the content, and holding it still
+      // with `sticky`/negative margins pushes it past the content edge, which
+      // widens the scroll area and leaves the button hanging half outside it.
+      // With overflow on the inner element the <pre> is a stable, non-scrolling
+      // positioning context, so the button can be plainly absolute and nothing
+      // overflows. Padding sits on the <code> so the scrolled content keeps its
+      // inset; the right inset clears the button.
+      return (
+        `<pre class="relative group my-2 rounded bg-bg-secondary text-sm">` +
+        copyBtn +
+        `<code class="block p-3 pr-14 sm:pr-10 overflow-x-auto">${escapeHtml(text)}</code>` +
+        `</pre>\n`
+      );
     },
   },
 });
@@ -95,7 +169,7 @@ const DOMPURIFY_CONFIG: Parameters<typeof DOMPurify.sanitize>[1] = {
   ],
   ALLOWED_ATTR: [
     'href', 'target', 'rel', 'class', 'data-mention-id', 'data-sheet-ref-id',
-    'data-color', 'data-image-expand',
+    'data-color', 'data-image-expand', 'data-copy-code',
     'src', 'alt', 'type', 'title', 'aria-label',
   ],
   ALLOW_DATA_ATTR: false,
@@ -229,6 +303,8 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   const [sheetTooltipPosition, setSheetTooltipPosition] = useState<{ top: number; left: number } | null>(null);
   const mouseOverTooltip = useRef(false);
   const sheetHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Keyed by button so several code blocks can each show their own confirmation.
+  const copyResetTimers = useRef<Map<Element, ReturnType<typeof setTimeout>>>(new Map());
 
   const hoveredCharacter = React.useMemo(() => {
     if (hoveredMentionId === null) return null;
@@ -304,6 +380,55 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
     }
   }, []);
 
+  // Event delegation for the code block copy button
+  const handleCopyClick = useCallback((e: MouseEvent) => {
+    const btn = (e.target as Element).closest('button[data-copy-code]');
+    if (!btn) return;
+    e.preventDefault();
+
+    const text = decodeURIComponent(btn.getAttribute('data-copy-code') ?? '');
+
+    const showResult = (ok: boolean) => {
+      const existing = copyResetTimers.current.get(btn);
+      if (existing !== undefined) clearTimeout(existing);
+
+      btn.innerHTML = ok ? CHECK_ICON : CLIPBOARD_ICON;
+      const label = ok ? 'Copied' : 'Copy failed';
+      btn.setAttribute('title', label);
+      btn.setAttribute('aria-label', label);
+      // The button is only visible on hover, so the confirmation also has to be
+      // announced for anyone who fired it from the keyboard.
+      btn.setAttribute('data-copy-state', ok ? 'copied' : 'error');
+
+      copyResetTimers.current.set(
+        btn,
+        setTimeout(() => {
+          // The markdown may have re-rendered and replaced this node in the
+          // meantime; writing to a detached button is harmless but pointless.
+          if (btn.isConnected) {
+            btn.innerHTML = CLIPBOARD_ICON;
+            btn.setAttribute('title', 'Copy code');
+            btn.setAttribute('aria-label', 'Copy code');
+            btn.removeAttribute('data-copy-state');
+          }
+          copyResetTimers.current.delete(btn);
+        }, 2000)
+      );
+    };
+
+    // navigator.clipboard is undefined on insecure origins. Reject explicitly
+    // rather than optional-chaining the call: `undefined` resolves, which would
+    // flash a checkmark for a copy that never happened.
+    const write = navigator.clipboard
+      ? navigator.clipboard.writeText(text)
+      : Promise.reject(new Error('Clipboard API unavailable'));
+
+    write.then(
+      () => showResult(true),
+      () => showResult(false)
+    );
+  }, []);
+
   // Event delegation for image expand/collapse
   const handleClick = useCallback((e: MouseEvent) => {
     const btn = (e.target as Element).closest('button[data-image-expand]');
@@ -353,13 +478,42 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
     el.addEventListener('mouseout', handleMouseOut);
     el.addEventListener('click', handleSheetMarkClick);
     el.addEventListener('click', handleClick);
+    el.addEventListener('click', handleCopyClick);
     return () => {
       el.removeEventListener('mouseover', handleMouseOver);
       el.removeEventListener('mouseout', handleMouseOut);
       el.removeEventListener('click', handleSheetMarkClick);
       el.removeEventListener('click', handleClick);
+      el.removeEventListener('click', handleCopyClick);
     };
-  }, [handleMouseOver, handleMouseOut, handleSheetMarkClick, handleClick]);
+  }, [handleMouseOver, handleMouseOut, handleSheetMarkClick, handleClick, handleCopyClick]);
+
+  // Give each copy button its icon. The markup is injected here rather than in
+  // the renderer because <svg> is not allowlisted: DOMPurify would strip it from
+  // the sanitized string, and allowlisting it to get it through would hand the
+  // same tag to user-authored markdown. Re-runs on htmlContent because a
+  // re-render replaces the buttons with fresh, empty ones.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.querySelectorAll('button[data-copy-code]').forEach((btn) => {
+      // A button mid-confirmation keeps its checkmark; this effect is only
+      // responsible for filling in the ones that are still empty.
+      if (btn.childElementCount === 0) {
+        btn.innerHTML = CLIPBOARD_ICON;
+      }
+    });
+  }, [htmlContent]);
+
+  // Drop pending "Copied" resets on unmount so they cannot fire against a
+  // torn-down tree.
+  useEffect(() => {
+    const timers = copyResetTimers.current;
+    return () => {
+      timers.forEach((id) => clearTimeout(id));
+      timers.clear();
+    };
+  }, []);
 
 
   // Dismiss tooltip on click/touch outside

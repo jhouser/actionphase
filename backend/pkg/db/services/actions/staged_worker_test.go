@@ -1,8 +1,12 @@
 package actions
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -129,4 +133,107 @@ func TestStagedReleaseWorker_ReleasesAgainstRealDatabase(t *testing.T) {
 	assert.Eventually(t, func() bool {
 		return env.getResult(t, chain[1].ID).ReleasedAt.Valid
 	}, 3*time.Second, 20*time.Millisecond, "worker should release the part once its delay has elapsed")
+}
+
+// syncLogBuffer is a concurrency-safe io.Writer for log capture. A bare
+// bytes.Buffer races here: the worker logs from its own goroutine while the
+// test reads the buffer to assert on it.
+type syncLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// panickingReleaseRunner panics on its first N calls, then succeeds. It exists
+// to prove recovery is per-tick: a whole-goroutine recover would survive the
+// first panic but never call ReleaseDueStagedParts again.
+type panickingReleaseRunner struct {
+	callCount  atomic.Int32
+	panicUntil int32
+}
+
+func (f *panickingReleaseRunner) ReleaseDueStagedParts(_ context.Context) (int, int, error) {
+	n := f.callCount.Add(1)
+	if n <= f.panicUntil {
+		panic("nil dereference in release path")
+	}
+	return 0, 0, nil
+}
+
+func TestStagedReleaseWorker_PanicDoesNotKillTheLoop(t *testing.T) {
+	// A panic in one tick must be recovered *per tick*. Asserting only that the
+	// process survived would also pass for a recover wrapped around the whole
+	// goroutine — which is strictly worse than crashing, because the loop would
+	// exit silently and every pending chain in every game would stall forever
+	// with no crash loop to notice. So assert that later ticks still fire.
+	runner := &panickingReleaseRunner{panicUntil: 1}
+	w := NewStagedReleaseWorker(runner, newWorkerTestLogger(), 25*time.Millisecond)
+
+	cancel := w.Start(context.Background())
+	defer cancel()
+
+	assert.Eventually(t, func() bool {
+		return runner.callCount.Load() >= 3
+	}, 2*time.Second, 10*time.Millisecond,
+		"the loop must keep ticking after a panicking tick, not exit silently")
+}
+
+func TestStagedReleaseWorker_PanicOnEveryTickStillTicks(t *testing.T) {
+	// The bad case from the plan: one poison row panics on every single tick.
+	// The worker must keep retrying rather than dying, so that fixing the data
+	// resolves it without a restart.
+	runner := &panickingReleaseRunner{panicUntil: 1 << 30}
+	w := NewStagedReleaseWorker(runner, newWorkerTestLogger(), 25*time.Millisecond)
+
+	cancel := w.Start(context.Background())
+	defer cancel()
+
+	assert.Eventually(t, func() bool {
+		return runner.callCount.Load() >= 3
+	}, 2*time.Second, 10*time.Millisecond,
+		"a persistently panicking runner must not stop the loop")
+}
+
+func TestStagedReleaseWorker_PanicOnStartupRunStillStartsTicker(t *testing.T) {
+	// The startup catch-up run is outside the ticker loop; a panic there must
+	// not prevent the ticker from ever being created.
+	runner := &panickingReleaseRunner{panicUntil: 1}
+	w := NewStagedReleaseWorker(runner, newWorkerTestLogger(), 25*time.Millisecond)
+
+	cancel := w.Start(context.Background())
+	defer cancel()
+
+	assert.Eventually(t, func() bool {
+		return runner.callCount.Load() >= 2
+	}, 2*time.Second, 10*time.Millisecond,
+		"a panic in the startup release must still leave the ticker running")
+}
+
+func TestStagedReleaseWorker_PanicIsLogged(t *testing.T) {
+	// Recovery must be loud: a silently swallowed panic is an invisible bug.
+	buf := &syncLogBuffer{}
+	logger := observability.NewLogger("test", "debug")
+	logger.ReplaceHandler(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	runner := &panickingReleaseRunner{panicUntil: 1}
+	w := NewStagedReleaseWorker(runner, logger, time.Hour)
+
+	cancel := w.Start(context.Background())
+	defer cancel()
+
+	assert.Eventually(t, func() bool {
+		return strings.Contains(buf.String(), "staged-release-tick")
+	}, 2*time.Second, 10*time.Millisecond, "the recovered panic must be logged with its unit name")
+	assert.Contains(t, buf.String(), "nil dereference in release path")
 }

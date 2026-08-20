@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 
+	authsvc "actionphase/pkg/auth"
+	"actionphase/pkg/cleanup"
 	"actionphase/pkg/core"
 	dbsvc "actionphase/pkg/db/services"
 	dbactions "actionphase/pkg/db/services/actions"
@@ -273,26 +275,30 @@ func main() {
 	cancelExportWorker := exportWorker.Start(ctx)
 	defer cancelExportWorker()
 
-	// Periodically delete expired sessions to prevent accumulation
+	// Periodic housekeeping. Each worker selects on ctx.Done() so it stops with
+	// the process, and recovers per tick so a panic prunes nothing that tick
+	// rather than taking the whole server down.
 	sessionService := &dbsvc.SessionService{DB: pool, Logger: obs.Logger}
-	go func() {
-		ticker := time.NewTicker(time.Hour)
-		defer ticker.Stop()
-		// Run once on startup to clean up any accumulated expired sessions
-		if err := sessionService.CleanupExpiredSessions(ctx); err != nil {
-			obs.Logger.LogError(ctx, err, "Startup expired session cleanup failed")
-		}
-		for {
-			select {
-			case <-ticker.C:
-				if err := sessionService.CleanupExpiredSessions(ctx); err != nil {
-					obs.Logger.LogError(ctx, err, "Periodic expired session cleanup failed")
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	cancelSessionCleanup := cleanup.NewSessionWorker(
+		sessionService, obs.Logger, cleanup.DefaultSessionInterval,
+	).Start(ctx)
+	defer cancelSessionCleanup()
+
+	cancelNotificationCleanup := cleanup.NewNotificationWorker(
+		dbsvc.NewNotificationService(pool, obs.Logger), obs.Logger, cleanup.DefaultInterval,
+	).Start(ctx)
+	defer cancelNotificationCleanup()
+
+	cancelAuthCleanup := cleanup.NewAuthWorker(
+		&authPruner{
+			password:      &authsvc.PasswordService{DB: pool, Logger: obs.Logger},
+			account:       &authsvc.AccountService{DB: pool, Logger: obs.Logger},
+			botPrevention: authsvc.NewBotPreventionService(pool),
+		},
+		obs.Logger,
+		cleanup.DefaultInterval,
+	).Start(ctx)
+	defer cancelAuthCleanup()
 
 	// Start HTTP server
 	logger.Info("Starting HTTP server",
@@ -419,4 +425,27 @@ func loadDotEnvFile() {
 	}
 
 	// No .env file found - this is okay for production or when using system env vars
+}
+
+// authPruner adapts the three independent auth services to cleanup.AuthPruner.
+// They share only a schedule, not a type, so the grouping lives here at the
+// wiring layer rather than in any one service.
+type authPruner struct {
+	password      *authsvc.PasswordService
+	account       *authsvc.AccountService
+	botPrevention *authsvc.BotPreventionService
+}
+
+var _ cleanup.AuthPruner = (*authPruner)(nil)
+
+func (p *authPruner) CleanupExpiredTokens(ctx context.Context) error {
+	return p.password.CleanupExpiredTokens(ctx)
+}
+
+func (p *authPruner) CleanupExpiredVerificationTokens(ctx context.Context) error {
+	return p.account.CleanupExpiredVerificationTokens(ctx)
+}
+
+func (p *authPruner) CleanupOldRegistrationAttempts(ctx context.Context) error {
+	return p.botPrevention.CleanupOldRegistrationAttempts(ctx)
 }

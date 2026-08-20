@@ -44,7 +44,7 @@ func TestListAllPrivateConversations(t *testing.T) {
 	core.AssertNoError(t, err, "Failed to create character 2")
 
 	// Create a private conversation using ConversationService
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	conversation, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          gameID,
 		Title:           "Private conversation between Player1 and Player2",
@@ -115,7 +115,7 @@ func TestListAllPrivateConversations_ParticipantFilter(t *testing.T) {
 	c3, err := charSvc.CreateCharacter(context.Background(), db.CreateCharacterRequest{GameID: gameID, UserID: &uid3, Name: "Gamma", CharacterType: "player_character"})
 	core.AssertNoError(t, err, "create char 3")
 
-	convSvc := db.NewConversationService(testDB.Pool)
+	convSvc := db.NewConversationService(testDB.Pool, nil)
 
 	// Conversation 1: Alpha + Beta
 	_, err = convSvc.CreateConversation(context.Background(), db.CreateConversationRequest{
@@ -178,7 +178,7 @@ func TestGetConversationParticipantNames(t *testing.T) {
 	cGamma, err := charSvc.CreateCharacter(context.Background(), db.CreateCharacterRequest{GameID: gameID, UserID: &uid3, Name: "Gamma", CharacterType: "player_character"})
 	core.AssertNoError(t, err, "create Gamma")
 
-	convSvc := db.NewConversationService(testDB.Pool)
+	convSvc := db.NewConversationService(testDB.Pool, nil)
 
 	// Alpha <-> Beta conversation
 	_, err = convSvc.CreateConversation(context.Background(), db.CreateConversationRequest{
@@ -261,7 +261,7 @@ func TestGetAudienceConversationMessages(t *testing.T) {
 	core.AssertNoError(t, err, "Failed to create character")
 
 	// Create a conversation and send a message
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	conversation, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          gameID,
 		Title:           "Test conversation",
