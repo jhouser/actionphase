@@ -53,7 +53,7 @@ func (w *StagedReleaseWorker) Start(ctx context.Context) context.CancelFunc {
 		// Release immediately on startup rather than waiting out a full tick, so
 		// parts that came due while the process was down don't sit visibly late
 		// for a player who is watching a countdown that already hit zero.
-		w.release(ctx)
+		w.safeRelease(ctx)
 
 		ticker := time.NewTicker(w.interval)
 		defer ticker.Stop()
@@ -61,7 +61,7 @@ func (w *StagedReleaseWorker) Start(ctx context.Context) context.CancelFunc {
 		for {
 			select {
 			case <-ticker.C:
-				w.release(ctx)
+				w.safeRelease(ctx)
 			case <-ctx.Done():
 				w.logger.Info(ctx, "Staged result release worker stopped")
 				return
@@ -70,6 +70,13 @@ func (w *StagedReleaseWorker) Start(ctx context.Context) context.CancelFunc {
 	}()
 
 	return cancel
+}
+
+// safeRelease runs one release tick with panic recovery. Recovery is per-tick,
+// not around the loop: a panic on one bad row must not silently stop every
+// pending chain in every game.
+func (w *StagedReleaseWorker) safeRelease(ctx context.Context) {
+	observability.SafeRun(ctx, w.logger, "staged-release-tick", func() { w.release(ctx) })
 }
 
 func (w *StagedReleaseWorker) release(ctx context.Context) {

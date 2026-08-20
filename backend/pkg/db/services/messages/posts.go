@@ -7,6 +7,7 @@ import (
 	core "actionphase/pkg/core"
 	models "actionphase/pkg/db/models"
 	db "actionphase/pkg/db/services"
+	"actionphase/pkg/observability"
 	"actionphase/pkg/validation"
 )
 
@@ -68,11 +69,13 @@ func (s *MessageService) CreatePost(ctx context.Context, req core.CreatePostRequ
 
 	// Trigger notifications for character mentions (fire-and-forget)
 	if len(mentionedIDs) > 0 {
-		go s.notifyCharacterMentions(notifCtx, mentionedIDs, req.CharacterID, req.AuthorID, req.GameID, message.ID)
+		observability.SafeGo(notifCtx, s.Logger, "notify-character-mentions", func() {
+			s.notifyCharacterMentions(notifCtx, mentionedIDs, req.CharacterID, req.AuthorID, req.GameID, message.ID)
+		})
 	}
 
 	// Notify all game participants about the new GM post (fire-and-forget)
-	go func() {
+	observability.SafeGo(notifCtx, s.Logger, "notify-common-room-post", func() {
 		notifSvc := db.NewNotificationService(s.DB, s.Logger)
 		if err := notifSvc.NotifyCommonRoomPost(notifCtx, req.GameID, message.ID, truncatePostTitle(req.Content), req.AuthorID); err != nil {
 			s.Logger.LogError(notifCtx, err, "Failed to notify common room post", "game_id", req.GameID, "post_id", message.ID)
@@ -80,7 +83,7 @@ func (s *MessageService) CreatePost(ctx context.Context, req core.CreatePostRequ
 		} else {
 			s.Logger.Debug(notifCtx, "Common room post notification sent", "game_id", req.GameID, "post_id", message.ID)
 		}
-	}()
+	})
 
 	return &message, nil
 }

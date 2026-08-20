@@ -17,7 +17,7 @@ func TestConversationService_CreateConversation(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -118,7 +118,7 @@ func TestConversationService_SendMessage(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -214,7 +214,7 @@ func TestConversationService_GetConversationMessages(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -368,7 +368,7 @@ func TestConversationService_GetUserConversations(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -447,7 +447,7 @@ func TestConversationService_MarkAsRead(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -532,7 +532,7 @@ func TestConversationService_UnreadCount(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -605,7 +605,7 @@ func TestConversationService_AddParticipant(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -710,7 +710,7 @@ func TestConversationService_GetOrCreateConversation(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -788,7 +788,7 @@ func TestConversationService_CreateConversationWithNPC(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -844,7 +844,7 @@ func TestConversationService_EdgeCases(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -937,7 +937,7 @@ func TestConversationService_MarkConversationRead(t *testing.T) {
 	defer suite.Cleanup()
 
 	ctx := context.Background()
-	service := NewConversationService(suite.Pool())
+	service := NewConversationService(suite.Pool(), nil)
 
 	// Create test users (using factory auto-generation for unique names)
 	user1 := suite.Factory().NewUser().Create()
@@ -1020,7 +1020,7 @@ func TestConversationService_GetConversationUnreadCount(t *testing.T) {
 	defer suite.Cleanup()
 
 	ctx := context.Background()
-	service := NewConversationService(suite.Pool())
+	service := NewConversationService(suite.Pool(), nil)
 
 	user1 := suite.Factory().NewUser().Create()
 	user2 := suite.Factory().NewUser().Create()
@@ -1078,7 +1078,7 @@ func TestConversationService_GetFirstUnreadMessageID(t *testing.T) {
 	defer suite.Cleanup()
 
 	ctx := context.Background()
-	service := NewConversationService(suite.Pool())
+	service := NewConversationService(suite.Pool(), nil)
 
 	user1 := suite.Factory().NewUser().Create()
 	user2 := suite.Factory().NewUser().Create()
@@ -1159,7 +1159,7 @@ func TestConversationService_GetUserConversations_UnreadCounts(t *testing.T) {
 	defer suite.Cleanup()
 
 	ctx := context.Background()
-	service := NewConversationService(suite.Pool())
+	service := NewConversationService(suite.Pool(), nil)
 
 	user1 := suite.Factory().NewUser().Create()
 	user2 := suite.Factory().NewUser().Create()
@@ -1239,7 +1239,7 @@ func TestConversationService_GetUserConversations_DeletedMessagePreview(t *testi
 	defer suite.Cleanup()
 
 	ctx := context.Background()
-	service := NewConversationService(suite.Pool())
+	service := NewConversationService(suite.Pool(), nil)
 
 	user1 := suite.Factory().NewUser().Create()
 	user2 := suite.Factory().NewUser().Create()
@@ -1302,7 +1302,7 @@ func TestConversationService_DeletePrivateMessage(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -1523,7 +1523,7 @@ func TestConversationService_UpdatePrivateMessage(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -1645,7 +1645,7 @@ func TestConversationService_NotifyPrivateMessage_DeduplicatesByUser(t *testing.
 	defer testDB.CleanupTables(t, "notifications", "conversation_reads", "private_messages", "conversation_participants", "conversations", "npc_assignments", "characters", "game_participants", "games", "sessions", "users")
 
 	ctx := context.Background()
-	convService := NewConversationService(testDB.Pool)
+	convService := NewConversationService(testDB.Pool, nil)
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	notifService := NewNotificationService(testDB.Pool, app.ObsLogger)
@@ -1717,7 +1717,7 @@ func TestConversationService_CanUserAccessConversation(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -1836,7 +1836,7 @@ func TestConversationService_DeleteConversation(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
 
-	service := NewConversationService(testDB.Pool)
+	service := NewConversationService(testDB.Pool, nil)
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
 	ctx := context.Background()

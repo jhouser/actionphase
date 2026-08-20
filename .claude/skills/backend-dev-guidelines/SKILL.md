@@ -216,24 +216,52 @@ log.Info().
 fmt.Println("Game created:", gameID)
 ```
 
-### 6. Validate All Input at Handler Layer
+### 6. Validate All Input in Bind, via `validate` Tags
+
+Tag the request struct, then execute the tags from `Bind` with
+`core.ValidateStruct`. `Bind` is the only hook `go-chi/render` runs after
+decoding a body, and its errors render as 400 through `core.ErrInvalidRequest`.
 
 ```go
-// Validate before passing to service
-if req.Title == "" {
-    return core.ErrInvalidRequest(
-        errors.New("title is required"),
-        correlationID,
-    )
+type RenameCharacterRequest struct {
+    Name string `json:"name" validate:"required,min=1,max=255"`
 }
 
-if len(req.Title) > 255 {
-    return core.ErrInvalidRequest(
-        errors.New("title too long"),
-        correlationID,
-    )
+func (r *RenameCharacterRequest) Bind(req *http.Request) error {
+    return core.ValidateStruct(r)
 }
 ```
+
+`core.ValidateStruct` trims string fields in place before validating (so `"   "`
+fails `required`, and the handler reads the value the service will store) and
+reports failures by JSON field name: `name is required`, not validator's raw
+`Key: 'RenameCharacterRequest.Name' Error:...` text.
+
+**A tag that no `Bind` executes enforces nothing.** Never add a `validate` tag
+without wiring up `Bind` in the same change — an inert tag reads as enforcement
+to the next person and is worse than no tag at all.
+
+**Never rely on the service layer to catch bad input.** Service errors render via
+`core.ErrInternalError` as a 500 "unexpected error", so a user who submits a blank
+name is told the server broke. Services still hold their own invariants; that is
+defence in depth, not the client-facing check.
+
+Keep explicit checks for rules the tags cannot express — cross-field constraints
+and semantic ones such as `json.Valid`. They coexist, and one `Bind` may run both:
+
+```go
+func (r *UpdateLootTableRequest) Bind(req *http.Request) error {
+    if err := core.ValidateStruct(r); err != nil {
+        return err
+    }
+    return validateLootTableItems(r.Items)  // per-item json.Valid
+}
+```
+
+Before enabling tags on an endpoint that already ships, check what the frontend
+actually sends: a `min=` stricter than the UI enforces will reject payloads that
+work today. See `.claude/planning/request-validation.md` for the rollout status
+and the per-package procedure.
 
 ### 7. Use Typed Errors with Context
 
@@ -356,6 +384,8 @@ postgres://postgres:example@localhost:5432/actionphase
 ❌ Missing correlation IDs
 ❌ No error handling
 ❌ No input validation
+❌ `validate` tags on a request struct whose `Bind` returns a bare `nil` (inert — enforces nothing)
+❌ Letting bad input reach the service, where it renders as a 500 instead of a 400
 ❌ fmt.Println instead of structured logging
 ❌ Direct process.env in code (use config)
 ❌ Forgetting interface definitions

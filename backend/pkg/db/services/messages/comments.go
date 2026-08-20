@@ -6,6 +6,7 @@ import (
 
 	core "actionphase/pkg/core"
 	models "actionphase/pkg/db/models"
+	"actionphase/pkg/observability"
 	"actionphase/pkg/validation"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -132,11 +133,15 @@ func (s *MessageService) CreateComment(ctx context.Context, req core.CreateComme
 
 	// Trigger notifications for character mentions (fire-and-forget)
 	if len(mentionedIDs) > 0 {
-		go s.notifyCharacterMentions(notifCtx, mentionedIDs, req.CharacterID, req.AuthorID, req.GameID, message.ID)
+		observability.SafeGo(notifCtx, s.Logger, "notify-character-mentions", func() {
+			s.notifyCharacterMentions(notifCtx, mentionedIDs, req.CharacterID, req.AuthorID, req.GameID, message.ID)
+		})
 	}
 
 	// Trigger notification for comment reply (fire-and-forget)
-	go s.notifyCommentReply(notifCtx, req.ParentID, req.CharacterID, req.AuthorID, req.GameID, message.ID)
+	observability.SafeGo(notifCtx, s.Logger, "notify-comment-reply", func() {
+		s.notifyCommentReply(notifCtx, req.ParentID, req.CharacterID, req.AuthorID, req.GameID, message.ID)
+	})
 
 	return &message, nil
 }
@@ -618,7 +623,9 @@ func (s *MessageService) UpdateComment(ctx context.Context, commentID int32, con
 			"new_mentions", len(newMentions),
 			"game_id", existingComment.GameID,
 		)
-		go s.notifyCharacterMentions(context.Background(), newMentions, notificationCharacterID, existingComment.AuthorID, existingComment.GameID, message.ID)
+		observability.SafeGo(context.Background(), s.Logger, "notify-character-mentions", func() {
+			s.notifyCharacterMentions(context.Background(), newMentions, notificationCharacterID, existingComment.AuthorID, existingComment.GameID, message.ID)
+		})
 	} else {
 		s.Logger.Info(ctx, "Comment updated successfully",
 			"comment_id", commentID,

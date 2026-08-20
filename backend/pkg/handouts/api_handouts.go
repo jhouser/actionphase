@@ -3,6 +3,7 @@ package handouts
 import (
 	"actionphase/pkg/core"
 	models "actionphase/pkg/db/models"
+	"actionphase/pkg/observability"
 	"context"
 	"fmt"
 	"net/http"
@@ -75,13 +76,13 @@ func (h *Handler) CreateHandout(w http.ResponseWriter, r *http.Request) {
 
 	// If created directly in published state, notify players
 	if handout.Status == "published" {
-		go func() {
+		notifService := h.NotificationService
+		observability.SafeGo(context.Background(), h.App.ObsLogger, "notify-handout-published", func() {
 			notifCtx := context.Background()
-			notifService := h.NotificationService
 			if err := notifService.NotifyHandoutPublished(notifCtx, handout.GameID, handout.ID, handout.Title, userID); err != nil {
 				h.App.ObsLogger.Warn(notifCtx, "Failed to send handout published notifications", "error", err, "handout_id", handout.ID)
 			}
-		}()
+		})
 	}
 
 	response := &HandoutResponse{
@@ -371,13 +372,13 @@ func (h *Handler) PublishHandout(w http.ResponseWriter, r *http.Request) {
 	h.App.ObsLogger.Info(ctx, "Handout published successfully", "handout_id", handout.ID)
 
 	// Notify players about the published handout
-	go func() {
+	notifService := h.NotificationService
+	observability.SafeGo(context.Background(), h.App.ObsLogger, "notify-handout-published", func() {
 		notifCtx := context.Background()
-		notifService := h.NotificationService
 		if err := notifService.NotifyHandoutPublished(notifCtx, handout.GameID, handout.ID, handout.Title, userID); err != nil {
 			h.App.ObsLogger.Warn(notifCtx, "Failed to send handout published notifications", "error", err, "handout_id", handout.ID)
 		}
-	}()
+	})
 
 	response := &HandoutResponse{
 		ID:        handout.ID,

@@ -84,9 +84,9 @@ func (s *PasswordService) ChangePassword(ctx context.Context, userID int, req *C
 
 	// Send notification email
 	if s.EmailService != nil {
-		go func() {
+		observability.SafeGo(context.Background(), s.Logger, "send-password-changed-email", func() {
 			_ = s.EmailService.SendPasswordChangedEmail(context.Background(), user.Email)
-		}()
+		})
 	}
 
 	return nil
@@ -210,9 +210,9 @@ func (s *PasswordService) ResetPassword(ctx context.Context, req *ResetPasswordR
 
 	// Send confirmation email
 	if s.EmailService != nil {
-		go func() {
+		observability.SafeGo(context.Background(), s.Logger, "send-password-changed-email", func() {
 			_ = s.EmailService.SendPasswordChangedEmail(context.Background(), user.Email)
-		}()
+		})
 	}
 
 	return nil
