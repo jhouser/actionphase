@@ -17,6 +17,12 @@ interface CreateActionResultFormProps {
   characterName?: string;
   actionSubmissionId?: number;
   onSuccess?: () => void;
+  /**
+   * Dismisses the composer. Passed in rather than rendered here because the
+   * Cancel control lives in the parent's header, but the discard of cached
+   * drafts must happen here — only this component knows the staged-part keys.
+   */
+  onCancel?: () => void;
 }
 
 export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
@@ -27,6 +33,7 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
   characterName,
   actionSubmissionId,
   onSuccess,
+  onCancel,
 }) => {
   const { showWarning } = useToast();
   const [content, setContent] = useState('');
@@ -47,6 +54,26 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
 
   //Content autosave id for comment textbox
   const autosaveRefId = postCachingService.createAutosaveId('action-result', actionSubmissionId);
+
+  /**
+   * Drops the head draft and every staged follow-up. Staged parts are stored
+   * under their own suffixed keys, so clearing only the head would orphan them
+   * and resurrect stale parts the next time this composer opens.
+   */
+  const clearCachedDrafts = () => {
+    if (!autosaveRefId) return;
+    postCachingService.remove(autosaveRefId);
+    for (let i = 0; i < followUpParts.length; i++) {
+      postCachingService.remove(`${autosaveRefId}-part-${i + 2}`);
+    }
+  };
+
+  const handleCancel = () => {
+    setContent('');
+    setFollowUpParts([]);
+    clearCachedDrafts();
+    onCancel?.();
+  };
 
   const addFollowUpPart = () => {
     if (!canAddPart) return;
@@ -101,14 +128,7 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
       setContent('');
       setFollowUpParts([]);
       onSuccess?.();
-      if (autosaveRefId) {
-        postCachingService.remove(autosaveRefId);
-        if (followUpParts) {
-          for(let i = 0; i < followUpParts.length; i++) {
-            postCachingService.remove(`${autosaveRefId}-part-${i+2}`);
-          }
-        }
-      }
+      clearCachedDrafts();
     } catch (error) {
       logger.error('Failed to create action result', { error, gameId, userId, userName, characterId, characterName, actionSubmissionId, isStaged });
     }
@@ -172,19 +192,32 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
         )}
       </div>
 
-      <Button
-        type="submit"
-        variant="primary"
-        disabled={activeMutation.isPending}
-        className="w-full"
-        data-faro-user-action-name="create-action-result"
-      >
-        {activeMutation.isPending
-          ? 'Creating...'
-          : isStaged
-            ? `Create Draft Result (${followUpParts.length + 1} parts)`
-            : 'Create Draft Result'}
-      </Button>
+      <div className="flex justify-end gap-2">
+        {onCancel && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={handleCancel}
+            disabled={activeMutation.isPending}
+            data-testid="cancel-action-result"
+            data-faro-user-action-name="cancel-action-result"
+          >
+            Cancel
+          </Button>
+        )}
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={activeMutation.isPending}
+          data-faro-user-action-name="create-action-result"
+        >
+          {activeMutation.isPending
+            ? 'Creating...'
+            : isStaged
+              ? `Create Draft Result (${followUpParts.length + 1} parts)`
+              : 'Create Draft Result'}
+        </Button>
+      </div>
 
       {activeMutation.isError && (
         <Alert variant="danger" className="mt-2">

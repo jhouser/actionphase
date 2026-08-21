@@ -5,6 +5,7 @@ import { simpleApi } from '../lib/simple-api';
 import type { LoginRequest, RegisterRequest, User, AuthResponse } from '../types/auth';
 import type { AxiosResponse } from 'axios';
 import { logger } from '@/services/LoggingService';
+import { postCachingService } from '@/services/PostCachingService';
 import { SessionExpiredModal } from '@/components/SessionExpiredModal';
 import { setFaroUser, clearFaroUser } from '@/lib/faro';
 
@@ -168,6 +169,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiClient.removeAuthToken();
       queryClient.setQueryData(['currentUser'], null);
       queryClient.clear();
+      // Cached post drafts are private content (actions, PMs) keyed only by
+      // post/phase id, not by user — leaving them behind would surface one
+      // user's draft in the next user's composer on a shared browser.
+      postCachingService.clearAll();
       setAuthError(null);
 
       // Clear logout flag after cleanup is complete
