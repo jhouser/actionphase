@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { useState } from 'react';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
@@ -225,6 +226,150 @@ describe('CommentEditor', () => {
       fireEvent.change(textarea, { target: { value: '**bold** and *italic*' } });
 
       expect(onChange).toHaveBeenCalledWith('**bold** and *italic*');
+    });
+  });
+
+  describe('Formatting Hotkeys', () => {
+    /**
+     * Controlled wrapper — the hotkeys read the live value and write back
+     * through onChange, so the test needs real state, not a static prop.
+     */
+    function ControlledEditor({
+      initial = '',
+      maxLength,
+    }: {
+      initial?: string;
+      maxLength?: number;
+    }) {
+      const [value, setValue] = useState(initial);
+      return <CommentEditor value={value} onChange={setValue} maxLength={maxLength} />;
+    }
+
+    /** Selects a substring of the textarea before firing the hotkey. */
+    function select(textarea: HTMLTextAreaElement, text: string) {
+      const start = textarea.value.indexOf(text);
+      textarea.setSelectionRange(start, start + text.length);
+    }
+
+    it('wraps the selected text in bold on Ctrl+B', async () => {
+      render(<ControlledEditor initial="hello world" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      select(textarea, 'world');
+      fireEvent.keyDown(textarea, { key: 'b', ctrlKey: true });
+
+      await waitFor(() => expect(textarea).toHaveValue('hello **world**'));
+    });
+
+    it('wraps the selected text in italic on Ctrl+I', async () => {
+      render(<ControlledEditor initial="hello world" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      select(textarea, 'world');
+      fireEvent.keyDown(textarea, { key: 'i', ctrlKey: true });
+
+      await waitFor(() => expect(textarea).toHaveValue('hello *world*'));
+    });
+
+    it('builds a markdown link on Ctrl+K', async () => {
+      render(<ControlledEditor initial="see the docs" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      select(textarea, 'the docs');
+      fireEvent.keyDown(textarea, { key: 'k', ctrlKey: true });
+
+      await waitFor(() => expect(textarea).toHaveValue('see [the docs](url)'));
+    });
+
+    it('responds to the macOS command key', async () => {
+      render(<ControlledEditor initial="hello world" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      select(textarea, 'world');
+      fireEvent.keyDown(textarea, { key: 'b', metaKey: true });
+
+      await waitFor(() => expect(textarea).toHaveValue('hello **world**'));
+    });
+
+    it('toggles bold back off when pressed again on the same text', async () => {
+      render(<ControlledEditor initial="hello world" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      select(textarea, 'world');
+      fireEvent.keyDown(textarea, { key: 'b', ctrlKey: true });
+      await waitFor(() => expect(textarea).toHaveValue('hello **world**'));
+
+      // The editor re-selects the inner text, so a second press unwraps it
+      select(textarea, 'world');
+      fireEvent.keyDown(textarea, { key: 'b', ctrlKey: true });
+      await waitFor(() => expect(textarea).toHaveValue('hello world'));
+    });
+
+    it('inserts a selected placeholder when nothing is selected', async () => {
+      render(<ControlledEditor initial="" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      fireEvent.keyDown(textarea, { key: 'b', ctrlKey: true });
+
+      await waitFor(() => expect(textarea).toHaveValue('**bold text**'));
+      // Placeholder is selected so typing replaces it
+      await waitFor(() => {
+        expect(textarea.selectionStart).toBe(2);
+        expect(textarea.selectionEnd).toBe(11);
+      });
+    });
+
+    it('leaves the text alone for unmapped shortcuts like Ctrl+U', () => {
+      render(<ControlledEditor initial="hello world" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      select(textarea, 'world');
+      fireEvent.keyDown(textarea, { key: 'u', ctrlKey: true });
+
+      expect(textarea).toHaveValue('hello world');
+    });
+
+    it('does not push the value past maxLength', () => {
+      // maxLength only constrains typing in the browser, so the hotkey has to
+      // enforce it itself or it can write an over-limit value.
+      render(<ControlledEditor initial="hello world" maxLength={13} />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      // Wrapping "world" adds 4 characters of markers, taking 11 -> 15.
+      select(textarea, 'world');
+      fireEvent.keyDown(textarea, { key: 'b', ctrlKey: true });
+
+      expect(textarea).toHaveValue('hello world');
+    });
+
+    it('still applies a format that fits within maxLength', async () => {
+      render(<ControlledEditor initial="hello world" maxLength={15} />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      select(textarea, 'world');
+      fireEvent.keyDown(textarea, { key: 'b', ctrlKey: true });
+
+      await waitFor(() => expect(textarea).toHaveValue('hello **world**'));
+    });
+
+    it('allows unwrapping at the limit, since removing markers shrinks the text', async () => {
+      render(<ControlledEditor initial="hello **world**" maxLength={15} />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      select(textarea, 'world');
+      fireEvent.keyDown(textarea, { key: 'b', ctrlKey: true });
+
+      await waitFor(() => expect(textarea).toHaveValue('hello world'));
+    });
+
+    it('does not format when the key is typed without a modifier', () => {
+      render(<ControlledEditor initial="hello world" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      select(textarea, 'world');
+      fireEvent.keyDown(textarea, { key: 'b' });
+
+      expect(textarea).toHaveValue('hello world');
     });
   });
 
