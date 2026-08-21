@@ -1366,6 +1366,37 @@ describe('ActionsList', () => {
       expect(detail.textContent).toContain(
         `Edited: ${new Date(editedAction.updated_at).toLocaleString()}`
       );
+      expect(detail).toHaveAttribute(
+        'title',
+        `Edited ${new Date(editedAction.updated_at).toLocaleString()}`
+      );
+    });
+
+    it('flags an edited submission on the mobile card layout', async () => {
+      setupDefaultHandlers([editedAction], [mockActionPhase1]);
+
+      renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
+
+      // The mobile stack renders alongside the desktop row (Tailwind breakpoints
+      // are CSS-only in jsdom), so it carries its own testid and needs its own
+      // assertion — otherwise a drop or rename here would go unnoticed.
+      const badge = await screen.findByTestId('action-edited-indicator-mobile');
+      expect(badge).toHaveTextContent(/Edited/i);
+      expect(badge).toHaveAttribute(
+        'title',
+        `Edited ${new Date(editedAction.updated_at).toLocaleString()}`
+      );
+    });
+
+    it('does not flag an unedited submission on the mobile card layout', async () => {
+      setupDefaultHandlers([mockActions[0]], [mockActionPhase1]);
+
+      renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
+
+      await screen.findAllByText('Hero Character');
+      expect(
+        screen.queryByTestId('action-edited-indicator-mobile')
+      ).not.toBeInTheDocument();
     });
 
     it('does not flag a submission that was never edited', async () => {

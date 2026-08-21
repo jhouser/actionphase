@@ -425,7 +425,7 @@ function ActionCard({ action, gameId, isExpanded, onToggleExpand }: ActionCardPr
             {isEdited && (
               <>
                 <span aria-hidden="true">•</span>
-                <span className="text-semantic-warning font-medium" data-testid="action-edited-detail">
+                <span className="text-semantic-warning font-medium" title={editedTitle} data-testid="action-edited-detail">
                   Edited: {new Date(action.updated_at).toLocaleString()}
                   {' '}({formatDistanceToNow(new Date(action.updated_at), { addSuffix: true })})
                 </span>

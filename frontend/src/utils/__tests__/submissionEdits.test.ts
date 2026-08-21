@@ -14,12 +14,13 @@ describe('wasSubmissionEdited', () => {
     ).toBe(true);
   });
 
-  it('ignores sub-second drift between the two columns', () => {
-    // Timestamps lose precision through JSON/Date, so an unedited row can show
-    // a few hundred microseconds of skew. That must not read as an edit.
+  it('treats a sub-second difference as a real edit', () => {
+    // No tolerance window: the backend's first-submission check is strict
+    // equality, so a resubmit landing 400ms after the first must agree with it.
+    // An unedited row cannot drift, since both columns share one NOW().
     expect(
       wasSubmissionEdited('2026-01-10T12:00:00.000Z', '2026-01-10T12:00:00.400Z')
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('treats a one-second difference as a real edit', () => {

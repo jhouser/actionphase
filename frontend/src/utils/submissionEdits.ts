@@ -24,9 +24,9 @@ export function wasSubmissionEdited(
   const updated = new Date(updatedAt).getTime();
   if (isNaN(submitted) || isNaN(updated)) return false;
 
-  // Compare at whole-second granularity. Timestamps make a lossy round trip
-  // through JSON and Date (microseconds are truncated), so an unedited row
-  // whose columns differ only below the millisecond must not read as edited.
-  // A genuine edit is a separate user action and is never this close.
-  return Math.abs(updated - submitted) >= 1000;
+  // Strict inequality, matching the backend's isFirstSubmission check exactly.
+  // No tolerance: an unedited row's two columns come from the same
+  // transaction-stable clock and are identical, so any difference at all is a
+  // real edit -- including a resubmit that lands within a second of the first.
+  return updated !== submitted;
 }
