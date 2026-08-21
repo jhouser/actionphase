@@ -281,7 +281,6 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
 
     try {
       setSending(true);
-      setNewMessage('');
 
       // Use context's sendMessage (it handles loadMessages and markAsRead)
       // Scroll position will be restored by useLayoutEffect after messages re-render
@@ -289,15 +288,16 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
         character_id: selectedCharacterId,
         content: newMessage.trim(),
       });
+      if (autosaveRefId){
+        localStorage.removeItem(autosaveRefId);
+      }
 
       // Collapse the composer only after a successful send, so the "Sending…"
       // state stays visible while the request is in flight and the composer
       // (with the user's draft) survives if the send fails.
+      setNewMessage('');
       setReplyOpen(false);
 
-      if (autosaveRefId){
-        localStorage.removeItem(autosaveRefId);
-      }
     } catch (_err) {
       // Error already handled by context
       logger.error('Failed to send message', { error: _err, gameId, conversationId });
