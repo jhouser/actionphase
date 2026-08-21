@@ -27,6 +27,14 @@ export class PostCachingService {
         return value;
     }
 
+    /**
+     * Sweeps cached drafts older than a week.
+     *
+     * Every removal is deferred to a second pass: deleting during the index
+     * walk shifts the remaining keys down and silently skips entries. A single
+     * unparseable entry must not abort the sweep either, so parse failures are
+     * collected and skipped rather than returned on.
+     */
     cleanup() {
         const staleKeys: string[] = [];
         for(let i = 0; i < localStorage.length; i++) {
@@ -36,17 +44,19 @@ export class PostCachingService {
                 if (l) {
                     try {
                         const saved = JSON.parse(l, PostCachingService.savedPostDeserializeHelper) as savedPost;
-                        if (saved.lastEdit < PostCachingService.addDays(new Date(), -7)) {
+                        if (!(saved?.lastEdit instanceof Date) || Number.isNaN(saved.lastEdit.getTime())) {
+                            logger.warn(`Found cached post with no usable lastEdit in localStorage, key: ${key}`);
+                            staleKeys.push(key);
+                        } else if (saved.lastEdit < PostCachingService.addDays(new Date(), -7)) {
                             //older than a week, mark for deletion
                             staleKeys.push(key);
-                        }                        
+                        }
                     } catch (error) {
                         logger.warn(`Found invalid cached post in localStorage, key: ${key} - ${error}`);
-                        localStorage.removeItem(key);
-                        return undefined;                        
+                        staleKeys.push(key);
                     }
                 } else {
-                    localStorage.removeItem(key);
+                    staleKeys.push(key);
                 }
             }
         }
@@ -62,9 +72,18 @@ export class PostCachingService {
         return `${type}-${id}`;
     }
 
+    /**
+     * Autosave runs on every keystroke, so a storage failure (quota exhausted,
+     * Safari private mode) must never propagate into the editor's onChange and
+     * break typing. A dropped draft is recoverable; a dead textarea is not.
+     */
     save(autosaveId: string, content: string | undefined) {
         if (content) {
-            localStorage.setItem(`${autosaveId}`, JSON.stringify({lastEdit: new Date(), content: content}));
+            try {
+                localStorage.setItem(`${autosaveId}`, JSON.stringify({lastEdit: new Date(), content: content}));
+            } catch (error) {
+                logger.warn(`Failed to autosave post to localStorage, key: ${autosaveId} - ${error}`);
+            }
         }
         else {
             this.remove(autosaveId);
@@ -94,5 +113,11 @@ export class PostCachingService {
 
 export const postCachingService = new PostCachingService();
 
-//automatic cleanup on first module load
-postCachingService.cleanup();
+// Automatic cleanup on first module load. Guarded because this runs at import
+// time: if localStorage is unavailable (disabled cookies, sandboxed iframe),
+// an unguarded throw here would break every component importing this module.
+try {
+    postCachingService.cleanup();
+} catch (error) {
+    logger.warn(`Failed to run cached post cleanup on load - ${error}`);
+}

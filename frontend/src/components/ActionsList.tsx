@@ -406,13 +406,6 @@ function ActionCard({ action, gameId, isExpanded, onToggleExpand }: ActionCardPr
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h5 className="font-semibold text-content-primary">Send Result</h5>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowResultForm(false)}
-                  >
-                    Cancel
-                  </Button>
                 </div>
                 <CreateActionResultForm
                   gameId={gameId}
@@ -425,6 +418,7 @@ function ActionCard({ action, gameId, isExpanded, onToggleExpand }: ActionCardPr
                     setShowResultForm(false);
                     // Could add a success toast here
                   }}
+                  onCancel={() => setShowResultForm(false)}
                 />
               </div>
             )}
