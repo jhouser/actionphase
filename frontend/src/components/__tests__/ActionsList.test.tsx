@@ -627,7 +627,7 @@ describe('ActionsList', () => {
       });
     });
 
-    it('shows updated timestamp when expanded', async () => {
+    it('shows the submitted timestamp when expanded', async () => {
       const user = userEvent.setup();
       setupDefaultHandlers();
 
@@ -637,8 +637,23 @@ describe('ActionsList', () => {
       await user.click(actionCards[0]);
 
       await waitFor(() => {
-        expect(screen.getByText(/Last updated:/i)).toBeInTheDocument();
+        expect(screen.getByText(/Submitted:/i)).toBeInTheDocument();
       });
+    });
+
+    it('does not show an edit timestamp for an unedited submission', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers();
+
+      renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
+
+      const actionCards = await screen.findAllByText('Hero Character');
+      await user.click(actionCards[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Submitted:/i)).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('action-edited-detail')).not.toBeInTheDocument();
     });
 
     it('shows "Send Result" button when expanded', async () => {
@@ -1300,6 +1315,75 @@ describe('ActionsList', () => {
       });
 
       expect(vi.mocked(useCharacterSheetItems)).toHaveBeenCalledWith(null);
+    });
+  });
+
+  describe('Edited Submission Indicator', () => {
+    // A player who revised their action after first submitting: submitted_at
+    // stays at the original submission, updated_at moves to the edit.
+    const editedAction: ActionWithDetails = {
+      ...mockActions[0],
+      submitted_at: '2025-01-10T12:00:00Z',
+      updated_at: '2025-01-10T18:45:00Z',
+    };
+
+    it('flags an edited submission on the collapsed card', async () => {
+      setupDefaultHandlers([editedAction], [mockActionPhase1]);
+
+      renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
+
+      // Visible without expanding — the point is scanning the list.
+      const badge = await screen.findByTestId('action-edited-indicator');
+      expect(badge).toHaveTextContent(/Edited/i);
+    });
+
+    it('exposes the exact edit time as a tooltip on the collapsed card', async () => {
+      setupDefaultHandlers([editedAction], [mockActionPhase1]);
+
+      renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
+
+      const badge = await screen.findByTestId('action-edited-indicator');
+      expect(badge).toHaveAttribute(
+        'title',
+        `Edited ${new Date(editedAction.updated_at).toLocaleString()}`
+      );
+    });
+
+    it('shows both submitted and edited times when expanded', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers([editedAction], [mockActionPhase1]);
+
+      renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
+
+      const actionCards = await screen.findAllByText('Hero Character');
+      await user.click(actionCards[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Submitted:/i)).toBeInTheDocument();
+      });
+
+      const detail = screen.getByTestId('action-edited-detail');
+      expect(detail.textContent).toContain(
+        `Edited: ${new Date(editedAction.updated_at).toLocaleString()}`
+      );
+    });
+
+    it('does not flag a submission that was never edited', async () => {
+      setupDefaultHandlers([mockActions[0]], [mockActionPhase1]);
+
+      renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
+
+      await screen.findAllByText('Hero Character');
+      expect(screen.queryByTestId('action-edited-indicator')).not.toBeInTheDocument();
+    });
+
+    it('flags only the submissions that were actually edited', async () => {
+      setupDefaultHandlers([editedAction, mockActions[1]], [mockActionPhase1]);
+
+      renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
+
+      await screen.findAllByText('Hero Character');
+      expect(screen.getAllByTestId('action-edited-indicator')).toHaveLength(1);
     });
   });
 });

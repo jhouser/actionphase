@@ -11,6 +11,8 @@ import { MarkdownPreview } from './MarkdownPreview';
 import CharacterAvatar from './CharacterAvatar';
 import { useGameContext } from '../contexts/GameContext';
 import { useCharacterSheetItems } from '../hooks/useCharacterSheetItems';
+import { wasSubmissionEdited } from '../utils/submissionEdits';
+import { formatDistanceToNow } from 'date-fns';
 
 interface ActionsListProps {
   gameId: number;
@@ -287,6 +289,14 @@ function ActionCard({ action, gameId, isExpanded, onToggleExpand }: ActionCardPr
   const avatarUrl = action.character_id
     ? (allGameCharacters.find(c => c.id === action.character_id)?.avatar_url ?? null)
     : null;
+
+  // Surfaced on the collapsed card, not just in the expanded body: a GM working
+  // through a phase needs to spot re-reads without opening every submission.
+  const isEdited = wasSubmissionEdited(action.submitted_at, action.updated_at);
+  const editedTitle = isEdited
+    ? `Edited ${new Date(action.updated_at).toLocaleString()}`
+    : undefined;
+
   return (
     <div className="border border-theme-default rounded-lg overflow-hidden hover:border-interactive-primary transition-colors" data-testid="action-card">
       <button
@@ -332,6 +342,15 @@ function ActionCard({ action, gameId, isExpanded, onToggleExpand }: ActionCardPr
             <span className="text-content-tertiary">
               {new Date(action.submitted_at).toLocaleString()}
             </span>
+            {isEdited && (
+              <span
+                className="text-semantic-warning font-medium"
+                title={editedTitle}
+                data-testid="action-edited-indicator-mobile"
+              >
+                Edited {formatDistanceToNow(new Date(action.updated_at), { addSuffix: true })}
+              </span>
+            )}
           </div>
         </div>
 
@@ -365,6 +384,19 @@ function ActionCard({ action, gameId, isExpanded, onToggleExpand }: ActionCardPr
                 <span className="text-xs text-content-secondary">
                   {new Date(action.submitted_at).toLocaleString()}
                 </span>
+                {isEdited && (
+                  <>
+                    <span className="text-xs text-content-tertiary">•</span>
+                    <Badge
+                      variant="warning"
+                      size="sm"
+                      title={editedTitle}
+                      data-testid="action-edited-indicator"
+                    >
+                      Edited {formatDistanceToNow(new Date(action.updated_at), { addSuffix: true })}
+                    </Badge>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -386,10 +418,19 @@ function ActionCard({ action, gameId, isExpanded, onToggleExpand }: ActionCardPr
           <div className="surface-base p-4 rounded border border-theme-default">
             <MarkdownPreview content={action.content} fullWidth sheetItemRefs={sheetItems} />
           </div>
-          <div className="mt-3 flex items-center justify-between text-xs text-content-tertiary">
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-content-tertiary">
             <span>
-              Last updated: {new Date(action.updated_at).toLocaleString()}
+              Submitted: {new Date(action.submitted_at).toLocaleString()}
             </span>
+            {isEdited && (
+              <>
+                <span aria-hidden="true">•</span>
+                <span className="text-semantic-warning font-medium" data-testid="action-edited-detail">
+                  Edited: {new Date(action.updated_at).toLocaleString()}
+                  {' '}({formatDistanceToNow(new Date(action.updated_at), { addSuffix: true })})
+                </span>
+              </>
+            )}
           </div>
 
           {/* GM Action: Send Result */}
