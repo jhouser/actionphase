@@ -531,6 +531,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
           {isCurrentPhase && isGM && (
             <CreatePostForm
               gameId={gameId}
+              phaseId={phaseId}
               characters={userCharacters}
               allCharacters={allGameCharacters}
               onSubmit={handleCreatePost}

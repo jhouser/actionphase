@@ -11,6 +11,7 @@ interface UnreadReplyBoxProps {
   onSubmit: (characterId: number, content: string) => void;
   isSubmitting: boolean;
   error?: string | null;
+  autosaveRefId?: string;
 }
 
 export function UnreadReplyBox({
@@ -20,6 +21,7 @@ export function UnreadReplyBox({
   onSubmit,
   isSubmitting,
   error,
+  autosaveRefId = undefined,
 }: UnreadReplyBoxProps) {
   const [characterId, setCharacterId] = useState<number | null>(defaultCharacterId);
   const [content, setContent] = useState('');
@@ -63,6 +65,7 @@ export function UnreadReplyBox({
         maxLength={10000}
         characters={mentionableCharacters}
         textareaTestId="unread-reply-textarea"
+        autosaveRefId={autosaveRefId}
       />
 
       {error && <Alert variant="danger">{error}</Alert>}

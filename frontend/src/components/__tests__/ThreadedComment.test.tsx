@@ -752,6 +752,7 @@ describe('ThreadedComment', () => {
 
       // Find the submit button by type="submit" within the form
       const textarea = screen.getByPlaceholderText(/write a reply/i);
+      await user.clear(textarea);
       const form = textarea.closest('form');
       const submitButton = form?.querySelector('button[type="submit"]') as HTMLButtonElement;
       expect(submitButton).toBeDisabled();
@@ -796,6 +797,7 @@ describe('ThreadedComment', () => {
       await user.click(screen.getByRole('button', { name: /reply/i }));
 
       const textarea = screen.getByPlaceholderText(/write a reply/i);
+      await user.clear(textarea);
       await user.type(textarea, '   ');
 
       const form = textarea.closest('form');
@@ -858,6 +860,7 @@ describe('ThreadedComment', () => {
 
       await user.click(screen.getByRole('button', { name: /reply/i }));
       const textarea = screen.getByPlaceholderText(/write a reply/i);
+      await user.clear(textarea);
       await user.type(textarea, 'Test content');
       await user.click(screen.getByRole('button', { name: /cancel/i }));
 
@@ -889,6 +892,7 @@ describe('ThreadedComment', () => {
       await user.click(screen.getByRole('button', { name: /reply/i }));
 
       const textarea = screen.getByPlaceholderText(/write a reply/i);
+      await user.clear(textarea);
       await user.type(textarea, 'Test reply');
 
       const form = textarea.closest('form');
@@ -1443,6 +1447,7 @@ describe('ThreadedComment', () => {
 
       // Type reply
       const textarea = screen.getByPlaceholderText(/write a reply/i);
+      await user.clear(textarea);
       await user.type(textarea, 'My detailed reply');
 
       // Submit
@@ -1488,6 +1493,7 @@ describe('ThreadedComment', () => {
 
       // Type and submit reply
       const textarea = screen.getByPlaceholderText(/write a reply/i);
+      await user.clear(textarea);
       await user.type(textarea, 'Nested reply');
 
       const form = textarea.closest('form'); const submitButton = form?.querySelector('button[type="submit"]') as HTMLButtonElement;

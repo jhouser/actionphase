@@ -3,6 +3,7 @@ import { Select, Button } from './ui';
 import { CommentEditor } from './CommentEditor';
 import type { StagedResultPart } from '../types/phases';
 import { DELAY_PRESETS, formatDelayLabel } from '../lib/stagedDelays';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface StagedPartsEditorProps {
   /**
@@ -12,6 +13,7 @@ interface StagedPartsEditorProps {
   parts: StagedResultPart[];
   onChange: (parts: StagedResultPart[]) => void;
   disabled?: boolean;
+  actionSubmissionId?: number;
 }
 
 /**
@@ -26,14 +28,22 @@ export const StagedPartsEditor: React.FC<StagedPartsEditorProps> = ({
   parts,
   onChange,
   disabled = false,
+  actionSubmissionId = undefined,
 }) => {
+  //Content autosave id for comment textbox
+  const autosaveRefId = postCachingService.createAutosaveId('action-result', actionSubmissionId);
+
   const updatePart = (index: number, patch: Partial<StagedResultPart>) => {
     onChange(parts.map((part, i) => (i === index ? { ...part, ...patch } : part)));
   };
 
   const removePart = (index: number) => {
     onChange(parts.filter((_, i) => i !== index));
+    if (autosaveRefId) {
+      postCachingService.remove(`${autosaveRefId}-part-${index + 2}`);
+    }
   };
+
 
   return (
     <div className="space-y-4">
@@ -89,6 +99,7 @@ export const StagedPartsEditor: React.FC<StagedPartsEditorProps> = ({
               placeholder={`Part ${partNumber} — revealed after the timer...`}
               maxLength={100000}
               showCharacterCount
+              autosaveRefId={autosaveRefId ? `${autosaveRefId}-part-${partNumber}` : undefined}
             />
           </div>
         );

@@ -394,6 +394,7 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
+      await user.clear(textarea);
       await user.type(textarea, 'Test message');
 
       expect(textarea).toHaveValue('Test message');
@@ -419,6 +420,7 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
+      await user.clear(textarea);
       await user.type(textarea, 'New test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -446,6 +448,7 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
+      await user.clear(textarea);
       await user.type(textarea, 'Message to clear');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
@@ -472,7 +475,9 @@ describe('MessageThread', () => {
 
       await openComposer(user);
 
-      await user.type(screen.getByPlaceholderText(/type your message/i), 'Test');
+      const textarea = screen.getByPlaceholderText(/type your message/i);
+      await user.clear(textarea);
+      await user.type(textarea, 'Test');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
       // The button shows "Sending..." while the POST is in flight (mock delays
@@ -507,6 +512,7 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
+      await user.clear(textarea);
       await user.type(textarea, '   '); // Only spaces
 
       const sendButton = screen.getByRole('button', { name: /^send$/i });
@@ -530,7 +536,9 @@ describe('MessageThread', () => {
 
       await openComposer(user);
 
-      await user.type(screen.getByPlaceholderText(/type your message/i), '  Trimmed message  ');
+      const textarea = screen.getByPlaceholderText(/type your message/i);
+      await user.clear(textarea);
+      await user.type(textarea, '  Trimmed message  ');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
       await waitFor(() => {
@@ -555,7 +563,9 @@ describe('MessageThread', () => {
 
       await openComposer(user);
 
-      await user.type(screen.getByPlaceholderText(/type your message/i), 'Test');
+      const textarea = screen.getByPlaceholderText(/type your message/i);
+      await user.clear(textarea);
+      await user.type(textarea, 'Test');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
       await waitFor(() => {
@@ -584,7 +594,9 @@ describe('MessageThread', () => {
       const select = screen.getByRole('combobox');
       await user.selectOptions(select, '2');
 
-      await user.type(screen.getByPlaceholderText(/type your message/i), 'Test');
+      const textarea = screen.getByPlaceholderText(/type your message/i);
+      await user.clear(textarea);
+      await user.type(textarea, 'Test');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
       await waitFor(() => {
