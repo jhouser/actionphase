@@ -208,26 +208,4 @@ describe('PostCachingService', () => {
 		});
 	});
 
-	describe('clearAll', () => {
-		it('drops cached drafts of every type', () => {
-			service.save('action-1', 'private action');
-			service.save('conversation-2', 'private message');
-			service.save('post-reply-3', 'a reply');
-
-			service.clearAll();
-
-			expect(service.get('action-1')).toBeUndefined();
-			expect(service.get('conversation-2')).toBeUndefined();
-			expect(service.get('post-reply-3')).toBeUndefined();
-		});
-
-		it('leaves unrelated keys intact', () => {
-			service.save('action-1', 'private action');
-			localStorage.setItem('app-theme', 'dark');
-
-			service.clearAll();
-
-			expect(localStorage.getItem('app-theme')).toBe('dark');
-		});
-	});
 });

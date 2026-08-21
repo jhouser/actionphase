@@ -65,24 +65,6 @@ export class PostCachingService {
         }
     }
 
-    /**
-     * Drops every cached draft. Called on logout: drafts are private content
-     * (actions, PMs) and must not survive into the next session on a shared
-     * browser.
-     */
-    clearAll() {
-        const keys: string[] = [];
-        for(let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && this._types.find(t => key.startsWith(t))) {
-                keys.push(key);
-            }
-        }
-        for(const key of keys) {
-            localStorage.removeItem(key);
-        }
-    }
-
     createAutosaveId(type: postType, id: string | number | null | undefined) : string | undefined {
         if (id === undefined || id === null){
             return undefined;
