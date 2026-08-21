@@ -9,6 +9,7 @@ import { ParentCommentPreview } from './ParentCommentPreview';
 import { useUnreadItemContext } from '../hooks/useUnreadItemContext';
 import { useReplyToUnread } from '../hooks/useReplyToUnread';
 import type { UnreadInboxItem } from '../types/unreadInbox';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface UnreadInboxItemCardProps {
   item: UnreadInboxItem;
@@ -26,7 +27,9 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
   const replyMutation = useReplyToUnread();
 
   //Content autosave id for comment textbox
-  const autosaveRefId = item.kind === 'comment' ? `post-reply-${item.commentId}` : `conversation-${item.conversationId}`;
+  const autosaveRefId = postCachingService.createAutosaveId(
+    item.kind === 'comment' ? 'post-reply' : 'conversation', 
+    item.kind === 'comment' ? item.commentId : item.conversationId);
 
   const handleSubmit = (characterId: number, content: string) => {
     replyMutation.mutate({

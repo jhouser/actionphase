@@ -10,6 +10,7 @@ import { Button, Textarea, Modal } from './ui';
 import { STICKY_BELOW_TABS } from './TabNavigation';
 import type { Character } from '../types/characters';
 import type { SheetItem } from '../hooks/useCharacterSheetItems';
+import { postCachingService } from '@/services/PostCachingService';
 
 /**
  * Inner component that calls useBlocker and renders the confirmation modal.
@@ -125,16 +126,22 @@ export const CommentEditor = memo(function CommentEditor({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const loaded = useRef(false);
+
   useEffect(() => {
+    if (loaded.current) {
+      return;
+    }
+
+    loaded.current = true;
     //fired when component mounted
     if (!value && autosaveRefId) {
-      const autosavedSerialized = localStorage.getItem(autosaveRefId);
-      if (autosavedSerialized) {
-        const autosavedContent = JSON.parse(autosavedSerialized) as {lastEdit: Date, content: string};
-        onChange(autosavedContent.content);
+      const autosavedContent = postCachingService.get(autosaveRefId);
+      if (autosavedContent) {
+        onChange(autosavedContent);
       }
     }
-  });
+  }, [loaded]);
 
   // Calculate cursor position for autocomplete dropdown
   const getCaretCoordinates = (element: HTMLTextAreaElement, position: number) => {
@@ -260,12 +267,7 @@ export const CommentEditor = memo(function CommentEditor({
     handleSheetTriggerDetect(newValue, cursorPosition);
 
     if (autosaveRefId) {
-      if (newValue) {
-        localStorage.setItem(autosaveRefId, JSON.stringify({lastEdit: new Date(), content: newValue}));
-      }
-      else {
-        localStorage.removeItem(autosaveRefId);
-      }
+      postCachingService.save(autosaveRefId, newValue);
     }
   };
 

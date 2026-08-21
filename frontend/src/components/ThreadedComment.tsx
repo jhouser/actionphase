@@ -19,6 +19,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { logger } from '@/services/LoggingService';
 import type { CommentTreeNode } from '../lib/utils/commentTree';
 import { COMMENT_MAX_DEPTH_MOBILE } from '@/config/comments';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface ThreadedCommentProps {
   comment: Message | CommentTreeNode; // Supports both individual messages and pre-loaded tree nodes
@@ -93,7 +94,7 @@ export const ThreadedComment = memo(function ThreadedComment({
   const hasLoadedRef = useRef(false);
 
   //Content autosave id for comment textbox
-  const autosaveRefId = `post-reply-${comment.id}`;
+  const autosaveRefId = postCachingService.createAutosaveId('post-reply', comment.id);
 
   // Notify parent (e.g. ThreadViewModal) when pending reply content transitions from
   // empty↔non-empty. Curried here because useReportDirty reports a bare boolean, while
@@ -352,7 +353,7 @@ export const ThreadedComment = memo(function ThreadedComment({
     setIsReplying(false);
     setReplyContent('');
     if (autosaveRefId) {
-      localStorage.removeItem(autosaveRefId);
+      postCachingService.remove(autosaveRefId);
     }
   }
 
@@ -410,7 +411,7 @@ export const ThreadedComment = memo(function ThreadedComment({
       showSuccess('Reply posted successfully');
 
       if (autosaveRefId) {
-        localStorage.removeItem(autosaveRefId);
+        postCachingService.remove(autosaveRefId);
       }
 
       // Reload replies to get the real data (with proper ID, timestamps, etc.)

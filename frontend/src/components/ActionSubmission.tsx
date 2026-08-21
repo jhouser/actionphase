@@ -13,6 +13,7 @@ import { CollapsibleMarkdown } from './CollapsibleMarkdown';
 import { useExpandedSet } from '../hooks/useExpandedSet';
 import { CommentEditor } from './CommentEditor';
 import type { GamePhase, ActionSubmissionRequest, ActionWithDetails } from '../types/phases';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface ActionSubmissionProps {
   gameId: number;
@@ -40,7 +41,7 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
   const activeCharacter = availableCharacters.find((c) => c.id === activeCharacterId);
 
   //Content autosave id for comment textbox
-  const autosaveRefId = currentPhase ? `action-${currentPhase.id}` : undefined;
+  const autosaveRefId = postCachingService.createAutosaveId('action',currentPhase?.id);
 
   const handleInsertSheetItem = (item: SheetItem) => {
     insertSheetItemRef.current?.(item);
@@ -69,7 +70,7 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
       setContent('');
       setIsExpanded(false);
       if (autosaveRefId) {
-        localStorage.removeItem(autosaveRefId);
+        postCachingService.remove(autosaveRefId);
       }
     }
   });

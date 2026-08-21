@@ -3,6 +3,7 @@ import type { Character } from '../types/characters';
 import { CommentEditor } from './CommentEditor';
 import { Button, Select, Alert } from './ui';
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface CreatePostFormProps {
   gameId: number;
@@ -21,7 +22,7 @@ export function CreatePostForm({ gameId: _gameId, phaseId = undefined, character
   const [isCollapsed, setIsCollapsed] = useState(shouldStartCollapsed);
   
   //Content autosave id for comment textbox
-  const autosaveRefId = phaseId ? `cr-main-post-${phaseId}` : undefined;
+  const autosaveRefId = postCachingService.createAutosaveId('cr-main-post', phaseId);
 
   // Auto-select first character if available
   useEffect(() => {
@@ -48,7 +49,7 @@ export function CreatePostForm({ gameId: _gameId, phaseId = undefined, character
       await onSubmit(selectedCharacterId, content.trim());
       setContent('');
       if (autosaveRefId) {
-        localStorage.removeItem(autosaveRefId);
+        postCachingService.remove(autosaveRefId);
       }
     } catch (err: unknown) {
       // Use fallback message for generic errors like "Network error"

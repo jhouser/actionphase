@@ -3,6 +3,7 @@ import { Select, Button } from './ui';
 import { CommentEditor } from './CommentEditor';
 import type { StagedResultPart } from '../types/phases';
 import { DELAY_PRESETS, formatDelayLabel } from '../lib/stagedDelays';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface StagedPartsEditorProps {
   /**
@@ -30,8 +31,8 @@ export const StagedPartsEditor: React.FC<StagedPartsEditorProps> = ({
   actionSubmissionId = undefined,
 }) => {
   //Content autosave id for comment textbox
-  const autosaveRefId = actionSubmissionId ? `action-result-${actionSubmissionId}` : undefined;
-  
+  const autosaveRefId = postCachingService.createAutosaveId('action-result', actionSubmissionId);
+
   const updatePart = (index: number, patch: Partial<StagedResultPart>) => {
     onChange(parts.map((part, i) => (i === index ? { ...part, ...patch } : part)));
   };
@@ -39,7 +40,7 @@ export const StagedPartsEditor: React.FC<StagedPartsEditorProps> = ({
   const removePart = (index: number) => {
     onChange(parts.filter((_, i) => i !== index));
     if (autosaveRefId) {
-      localStorage.removeItem(`${autosaveRefId}-part-${index + 2}`);
+      postCachingService.remove(`${autosaveRefId}-part-${index + 2}`);
     }
   };
 

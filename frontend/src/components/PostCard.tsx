@@ -20,6 +20,7 @@ import { usePostCollapseState } from '../hooks/usePostCollapseState';
 import { useInfiniteScrollSentinel } from '../hooks/useInfiniteScrollSentinel';
 import { useOptionalGameContext } from '../contexts/GameContext';
 import { useScreenshotMode } from '../hooks/useScreenshotMode';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface PostCardProps {
   post: Message;
@@ -141,7 +142,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
   const toggleCommentReadMutation = useToggleCommentRead();
 
   //Content autosave id for comment textbox
-  const autosaveRefId = `post-reply-${post.id}`;
+  const autosaveRefId = postCachingService.createAutosaveId('post-reply', post.id);
 
   const handleToggleRead = useCallback((commentId: number, currentlyRead: boolean) => {
     toggleCommentReadMutation.mutate({
@@ -340,7 +341,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
     setIsCommenting(false);
     setReplyContent('');
     if (autosaveRefId) {
-      localStorage.removeItem(autosaveRefId);
+      postCachingService.remove(autosaveRefId);
     }
   }
 
@@ -360,7 +361,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
       setShowComments(true);
       await loadComments();
       if (autosaveRefId) {
-        localStorage.removeItem(autosaveRefId);
+        postCachingService.remove(autosaveRefId);
       }
 
     } catch (_err) {

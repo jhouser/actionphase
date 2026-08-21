@@ -7,6 +7,7 @@ import { StagedPartsEditor } from './StagedPartsEditor';
 import type { StagedResultPart } from '../types/phases';
 import { DEFAULT_DELAY_MINUTES, MAX_CHAIN_PARTS } from '../lib/stagedDelays';
 import { logger } from '@/services/LoggingService';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface CreateActionResultFormProps {
   gameId: number;
@@ -45,7 +46,7 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
   const canAddPart = followUpParts.length + 1 < MAX_CHAIN_PARTS;
 
   //Content autosave id for comment textbox
-  const autosaveRefId = actionSubmissionId ? `action-result-${actionSubmissionId}` : undefined;
+  const autosaveRefId = postCachingService.createAutosaveId('action-result', actionSubmissionId);
 
   const addFollowUpPart = () => {
     if (!canAddPart) return;
@@ -101,10 +102,10 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
       setFollowUpParts([]);
       onSuccess?.();
       if (autosaveRefId) {
-        localStorage.removeItem(autosaveRefId);
+        postCachingService.remove(autosaveRefId);
         if (followUpParts) {
           for(let i = 0; i < followUpParts.length; i++) {
-            localStorage.removeItem(`${autosaveRefId}-part-${i+2}`);
+            postCachingService.remove(`${autosaveRefId}-part-${i+2}`);
           }
         }
       }

@@ -10,6 +10,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { STICKY_BELOW_TABS } from './TabNavigation';
 import type { Character } from '../types/characters';
 import { logger } from '@/services/LoggingService';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface MessageThreadProps {
   gameId: number;
@@ -70,7 +71,7 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
   const loading = loadingMessages || loadingConversation;
 
   //Content autosave id for comment textbox
-  const autosaveRefId = `conversation-${conversationId}`;
+  const autosaveRefId = postCachingService.createAutosaveId('conversation', conversationId);
 
   // Filter characters to only show conversation participants
   const participantCharacters = useMemo(() => {
@@ -289,7 +290,7 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
         content: newMessage.trim(),
       });
       if (autosaveRefId){
-        localStorage.removeItem(autosaveRefId);
+        postCachingService.remove(autosaveRefId);
       }
 
       // Collapse the composer only after a successful send, so the "Sending…"
