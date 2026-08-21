@@ -15,12 +15,12 @@ export class PostCachingService {
         'conversation' ];
 
     private static addDays(date :Date, days :number) {
-        var result = new Date(date);
+        const result = new Date(date);
         result.setDate(result.getDate() + days);
         return result;
     }
 
-    private static savedPostDeserializeHelper(key: any, value: any) {
+    private static savedPostDeserializeHelper(key: string, value: unknown) {
         if (key === 'lastEdit' && typeof value === 'string') {
             return new Date(value);
         }
@@ -41,7 +41,7 @@ export class PostCachingService {
                             staleKeys.push(key);
                         }                        
                     } catch (error) {
-                        logger.warn(`Found invalid cached post in localStorage, key: ${key}`);
+                        logger.warn(`Found invalid cached post in localStorage, key: ${key} - ${error}`);
                         localStorage.removeItem(key);
                         return undefined;                        
                     }
@@ -50,7 +50,7 @@ export class PostCachingService {
                 }
             }
         }
-        for(let key of staleKeys) {
+        for(const key of staleKeys) {
             localStorage.removeItem(key);
         }
     }
@@ -80,7 +80,7 @@ export class PostCachingService {
             const saved = JSON.parse(l, PostCachingService.savedPostDeserializeHelper) as (savedPost | undefined);
             return saved?.content;
         } catch (error) {
-            logger.warn(`Found invalid cached post in localStorage, key: ${autosaveId}`);
+            logger.warn(`Found invalid cached post in localStorage, key: ${autosaveId} - ${error}`);
             localStorage.removeItem(autosaveId);
             return undefined;
         }

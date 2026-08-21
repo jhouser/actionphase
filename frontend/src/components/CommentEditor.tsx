@@ -141,7 +141,7 @@ export const CommentEditor = memo(function CommentEditor({
         onChange(autosavedContent);
       }
     }
-  }, [loaded]);
+  }, [loaded, value, autosaveRefId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate cursor position for autocomplete dropdown
   const getCaretCoordinates = (element: HTMLTextAreaElement, position: number) => {
