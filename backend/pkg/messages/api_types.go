@@ -23,7 +23,7 @@ type CreatePostRequest struct {
 }
 
 func (r *CreatePostRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 type CreateCommentRequest struct {
@@ -34,7 +34,7 @@ type CreateCommentRequest struct {
 }
 
 func (r *CreateCommentRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 type UpdateCommentRequest struct {
@@ -43,7 +43,7 @@ type UpdateCommentRequest struct {
 }
 
 func (r *UpdateCommentRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 type UpdatePostRequest struct {
@@ -51,7 +51,7 @@ type UpdatePostRequest struct {
 }
 
 func (r *UpdatePostRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 type CreateDraftPostRequest struct {
@@ -60,7 +60,7 @@ type CreateDraftPostRequest struct {
 }
 
 func (r *CreateDraftPostRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 type UpdateDraftPostRequest struct {
@@ -68,7 +68,7 @@ type UpdateDraftPostRequest struct {
 }
 
 func (r *UpdateDraftPostRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // ManualReadCommentIDsResponse represents the manual read comment IDs for a post

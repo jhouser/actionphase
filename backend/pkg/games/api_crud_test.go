@@ -368,8 +368,9 @@ func TestCreateGame_ValidationErrors(t *testing.T) {
 				Title:       "   ",
 				Description: "A game with whitespace title",
 			},
-			expectedStatus: 201,
-			description:    "Should accept whitespace title (ValidateRequired doesn't trim)",
+			expectedStatus: 400,
+			expectedError:  "title is required",
+			description:    "Should reject whitespace-only title (Bind trims before validating)",
 		},
 		{
 			name: "valid_minimal_game",

@@ -43,6 +43,12 @@ type CreateGameRequest struct {
 }
 
 func (r *CreateGameRequest) Bind(req *http.Request) error {
+	// Run the `validate` tags first, so a blank title is reported as the bad
+	// field it is rather than being shadowed by a later, more specialized check.
+	if err := core.ValidateStruct(r); err != nil {
+		return err
+	}
+
 	// Parsed AND validated here, not only in the service. The service validates
 	// too (its invariants are its own to hold), but a violation surfacing there
 	// renders as a 500 "unexpected error" — so a GM typing a 25-character tab
@@ -72,7 +78,7 @@ type UpdateGameStateRequest struct {
 }
 
 func (r *UpdateGameStateRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // UpdateGameRequest represents the request to update game details
@@ -109,6 +115,12 @@ type UpdateGameRequest struct {
 }
 
 func (r *UpdateGameRequest) Bind(req *http.Request) error {
+	// Run the `validate` tags first, so a blank title is reported as the bad
+	// field it is rather than being shadowed by a later, more specialized check.
+	if err := core.ValidateStruct(r); err != nil {
+		return err
+	}
+
 	// Parsed AND validated here, not only in the service. The service validates
 	// too (its invariants are its own to hold), but a violation surfacing there
 	// renders as a 500 "unexpected error" — so a GM typing a 25-character tab
@@ -172,7 +184,7 @@ type ApplyToGameRequest struct {
 }
 
 func (r *ApplyToGameRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // ReviewApplicationRequest represents the request to review a game application
@@ -181,7 +193,7 @@ type ReviewApplicationRequest struct {
 }
 
 func (r *ReviewApplicationRequest) Bind(req *http.Request) error {
-	return nil
+	return core.ValidateStruct(r)
 }
 
 // LootTableItemRequest is a single item within a loot table. Data is the

@@ -209,7 +209,7 @@ func TestGameAPI_ListAllPrivateConversations(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	_, err = conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          game.ID,
 		Title:           "Secret chat",
@@ -291,7 +291,7 @@ func TestGameAPI_GetConversationParticipants(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	_, err = conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          game.ID,
 		Title:           "A conversation",
@@ -371,7 +371,7 @@ func TestGameAPI_GetAudienceConversationMessages(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	conversationService := db.NewConversationService(testDB.Pool)
+	conversationService := db.NewConversationService(testDB.Pool, nil)
 	conv, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
 		GameID:          game.ID,
 		Title:           "Private chat",

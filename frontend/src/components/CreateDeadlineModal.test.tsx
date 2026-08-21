@@ -217,7 +217,7 @@ describe('CreateDeadlineModal', () => {
       expect(mockOnSubmit).not.toHaveBeenCalled();
     });
 
-    it('should show error when title exceeds 200 characters', async () => {
+    it('should show error when title exceeds 100 characters', async () => {
       const user = userEvent.setup();
 
       render(
@@ -229,7 +229,7 @@ describe('CreateDeadlineModal', () => {
       );
 
       const titleInput = screen.getByLabelText(/^title$/i);
-      const longTitle = 'a'.repeat(201); // 201 characters
+      const longTitle = 'a'.repeat(101); // 101 characters
       // Paste rather than type: user.type fires a full event cycle + re-render
       // per character, which times out under parallel test load. The length is
       // what's under test here, not the keystrokes.
@@ -240,7 +240,7 @@ describe('CreateDeadlineModal', () => {
       await user.click(createButton);
 
       await waitFor(() => {
-        expect(screen.getByText(/title must be 200 characters or less/i)).toBeInTheDocument();
+        expect(screen.getByText(/title must be 100 characters or less/i)).toBeInTheDocument();
       });
 
       expect(mockOnSubmit).not.toHaveBeenCalled();
@@ -282,7 +282,7 @@ describe('CreateDeadlineModal', () => {
 
     // Skipped: react-datepicker interactions are complex to test in unit tests
     // This validation is covered by E2E tests
-    it.skip('should accept title of exactly 200 characters', async () => {
+    it.skip('should accept title of exactly 100 characters', async () => {
       const user = userEvent.setup();
 
       render(
@@ -297,7 +297,7 @@ describe('CreateDeadlineModal', () => {
       const descriptionInput = screen.getByLabelText(/^description$/i);
       const deadlineInput = screen.getByPlaceholderText(/select deadline date and time/i);
 
-      const exactLengthTitle = 'a'.repeat(200); // Exactly 200 characters
+      const exactLengthTitle = 'a'.repeat(100); // Exactly 100 characters
       await user.click(titleInput);
       await user.paste(exactLengthTitle);
       await user.type(descriptionInput, 'Test description');

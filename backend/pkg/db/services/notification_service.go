@@ -197,7 +197,9 @@ func (s *NotificationService) CreateNotification(ctx context.Context, req *core.
 
 	// Fire-and-forget Discord DM dispatch (does not block the API response)
 	if s.DiscordNotifier != nil {
-		go s.dispatchDiscordDM(context.Background(), notification)
+		observability.SafeGo(context.Background(), s.Logger, "dispatch-discord-dm", func() {
+			s.dispatchDiscordDM(context.Background(), notification)
+		})
 	}
 
 	return notification, nil

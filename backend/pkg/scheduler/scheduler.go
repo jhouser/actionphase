@@ -39,7 +39,7 @@ func (s *Scheduler) Start(ctx context.Context) context.CancelFunc {
 
 		// Run once immediately on startup to catch any phases that should have
 		// activated while the server was down.
-		s.runActivations(ctx)
+		s.safeRunActivations(ctx)
 
 		ticker := time.NewTicker(s.interval)
 		defer ticker.Stop()
@@ -47,7 +47,7 @@ func (s *Scheduler) Start(ctx context.Context) context.CancelFunc {
 		for {
 			select {
 			case <-ticker.C:
-				s.runActivations(ctx)
+				s.safeRunActivations(ctx)
 			case <-ctx.Done():
 				s.logger.Info(ctx, "Phase scheduler stopped")
 				return
@@ -56,6 +56,13 @@ func (s *Scheduler) Start(ctx context.Context) context.CancelFunc {
 	}()
 
 	return cancel
+}
+
+// safeRunActivations runs one activation pass with panic recovery. Recovery is
+// per-tick, not around the loop: phase activation is core game progression, and
+// a silently dead scheduler would stall every scheduled phase in every game.
+func (s *Scheduler) safeRunActivations(ctx context.Context) {
+	observability.SafeRun(ctx, s.logger, "phase-activation-tick", func() { s.runActivations(ctx) })
 }
 
 func (s *Scheduler) runActivations(ctx context.Context) {

@@ -5,6 +5,7 @@ import type {
   OpenCharacterSheetOptions,
   UtilityContext,
 } from '../components/utility-drawer/types';
+import type { Handout } from '../types/handouts';
 
 interface UtilityDrawerContextValue {
   /** Whether the drawer is currently open. */
@@ -27,6 +28,9 @@ interface UtilityDrawerContextValue {
   /** The character sheet currently open in the modal, if any. */
   openSheet: { characterId: number; options: OpenCharacterSheetOptions } | null;
   closeSheet: () => void;
+  /** The handout currently open in the modal, if any. */
+  openHandoutView: { handout: Handout } | null;
+  closeHandout: () => void;
 }
 
 const UtilityDrawerContext = createContext<UtilityDrawerContextValue | undefined>(undefined);
@@ -94,10 +98,12 @@ export function UtilityDrawerProvider({ children }: UtilityDrawerProviderProps) 
     characterId: number;
     options: OpenCharacterSheetOptions;
   } | null>(null);
+  const [openHandoutView, setOpenHandoutView] = useState<{ handout: Handout } | null>(null);
 
   const openDrawer = useCallback(() => setIsOpen(true), []);
   const closeDrawer = useCallback(() => setIsOpen(false), []);
   const closeSheet = useCallback(() => setOpenSheet(null), []);
+  const closeHandout = useCallback(() => setOpenHandoutView(null), []);
 
   // Ignore republishes whose contents haven't actually changed. Publishing
   // components re-render whenever this provider's state changes, so storing
@@ -141,9 +147,16 @@ export function UtilityDrawerProvider({ children }: UtilityDrawerProviderProps) 
     []
   );
 
+  // Opening a handout closes the drawer so the modal stacks cleanly over the
+  // page, exactly as opening a character sheet does.
+  const openHandout = useCallback((handout: Handout) => {
+    setIsOpen(false);
+    setOpenHandoutView({ handout });
+  }, []);
+
   const utilityContext = useMemo<UtilityContext>(
-    () => ({ game, openCharacterSheet, closeDrawer }),
-    [game, openCharacterSheet, closeDrawer]
+    () => ({ game, openCharacterSheet, openHandout, closeDrawer }),
+    [game, openCharacterSheet, openHandout, closeDrawer]
   );
 
   const value = useMemo<UtilityDrawerContextValue>(
@@ -155,8 +168,20 @@ export function UtilityDrawerProvider({ children }: UtilityDrawerProviderProps) 
       utilityContext,
       openSheet,
       closeSheet,
+      openHandoutView,
+      closeHandout,
     }),
-    [isOpen, openDrawer, closeDrawer, setGameContext, utilityContext, openSheet, closeSheet]
+    [
+      isOpen,
+      openDrawer,
+      closeDrawer,
+      setGameContext,
+      utilityContext,
+      openSheet,
+      closeSheet,
+      openHandoutView,
+      closeHandout,
+    ]
   );
 
   return <UtilityDrawerContext.Provider value={value}>{children}</UtilityDrawerContext.Provider>;

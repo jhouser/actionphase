@@ -87,8 +87,8 @@ func TestMessageAPI_PostCreationFlow(t *testing.T) {
 			payload: CreatePostRequest{
 				Content: "This should fail",
 			},
-			expectedStatus: 500, // TODO: Backend should validate and return 400
-			description:    "Post without character ID currently returns 500 (needs validation)",
+			expectedStatus: 400,
+			description:    "Post without character ID is rejected at Bind",
 		},
 		{
 			name: "post_missing_content",
@@ -96,8 +96,8 @@ func TestMessageAPI_PostCreationFlow(t *testing.T) {
 				CharacterID: gmCharacter.ID,
 				Content:     "",
 			},
-			expectedStatus: 201, // TODO: Backend should validate content and return 400
-			description:    "Post with empty content currently succeeds (needs validation)",
+			expectedStatus: 400,
+			description:    "Post with empty content is rejected at Bind",
 		},
 	}
 
@@ -217,8 +217,8 @@ func TestMessageAPI_CommentCreationFlow(t *testing.T) {
 			payload: CreateCommentRequest{
 				Content: "This should fail",
 			},
-			expectedStatus: 500, // TODO: Backend should validate and return 400
-			description:    "Comment without character ID currently returns 500 (needs validation)",
+			expectedStatus: 400,
+			description:    "Comment without character ID is rejected at Bind",
 		},
 		{
 			name:  "comment_missing_content",
@@ -227,8 +227,8 @@ func TestMessageAPI_CommentCreationFlow(t *testing.T) {
 				CharacterID: playerCharacter.ID,
 				Content:     "",
 			},
-			expectedStatus: 201, // TODO: Backend should validate content and return 400
-			description:    "Comment with empty content currently succeeds (needs validation)",
+			expectedStatus: 400,
+			description:    "Comment with empty content is rejected at Bind",
 		},
 	}
 

@@ -3,6 +3,7 @@ package games
 import (
 	"actionphase/pkg/core"
 	db "actionphase/pkg/db/models"
+	"actionphase/pkg/observability"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -306,12 +307,12 @@ func (h *Handler) UpdateGameState(w http.ResponseWriter, r *http.Request) {
 	isTerminal := data.State == core.GameStateCompleted || data.State == core.GameStateCancelled
 	if isPauseResume || isTerminal {
 		notifSvc := h.NotificationService
-		go func() {
+		observability.SafeGo(context.Background(), h.App.ObsLogger, "notify-game-state-changed", func() {
 			notifCtx := context.Background()
 			if err := notifSvc.NotifyGameStateChanged(notifCtx, game.ID, data.State, updatedGame.Title, user.ID); err != nil {
 				h.App.ObsLogger.Warn(notifCtx, "Failed to send game state changed notifications", "error", err, "game_id", game.ID)
 			}
-		}()
+		})
 	}
 
 	// Convert to response format (same as GetGame)
