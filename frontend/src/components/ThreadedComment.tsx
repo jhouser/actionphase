@@ -19,6 +19,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { logger } from '@/services/LoggingService';
 import type { CommentTreeNode } from '../lib/utils/commentTree';
 import { COMMENT_MAX_DEPTH_MOBILE } from '@/config/comments';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface ThreadedCommentProps {
   comment: Message | CommentTreeNode; // Supports both individual messages and pre-loaded tree nodes
@@ -91,6 +92,9 @@ export const ThreadedComment = memo(function ThreadedComment({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const isMountedRef = useRef(true);
   const hasLoadedRef = useRef(false);
+
+  //Content autosave id for comment textbox
+  const autosaveRefId = postCachingService.createAutosaveId('post-reply', comment.id);
 
   // Notify parent (e.g. ThreadViewModal) when pending reply content transitions from
   // empty↔non-empty. Curried here because useReportDirty reports a bare boolean, while
@@ -345,6 +349,13 @@ export const ThreadedComment = memo(function ThreadedComment({
     loadReplies();
   }, [loadReplies]);
 
+  const handleCancelReply = () => {
+    setIsReplying(false);
+    setReplyContent('');
+    if (autosaveRefId) {
+      postCachingService.remove(autosaveRefId);
+    }
+  }
 
   const handleSubmitReply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -398,6 +409,10 @@ export const ThreadedComment = memo(function ThreadedComment({
 
       // Show success toast
       showSuccess('Reply posted successfully');
+
+      if (autosaveRefId) {
+        postCachingService.remove(autosaveRefId);
+      }
 
       // Reload replies to get the real data (with proper ID, timestamps, etc.)
       // But skip reloading if no rendered viewport shows children at this depth
@@ -804,6 +819,7 @@ export const ThreadedComment = memo(function ThreadedComment({
                     maxLength={10000}
                     warnOnUnsavedChanges
                     showCharacterCount={true}
+                    autosaveRefId={autosaveRefId}
                   />
                 </div>
 
@@ -821,10 +837,7 @@ export const ThreadedComment = memo(function ThreadedComment({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      setIsReplying(false);
-                      setReplyContent('');
-                    }}
+                    onClick={handleCancelReply}
                     disabled={isSubmitting}
                   >
                     Cancel

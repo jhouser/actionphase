@@ -10,6 +10,7 @@ import { Button, Textarea, Modal } from './ui';
 import { STICKY_BELOW_TABS } from './TabNavigation';
 import type { Character } from '../types/characters';
 import type { SheetItem } from '../hooks/useCharacterSheetItems';
+import { postCachingService } from '@/services/PostCachingService';
 
 /**
  * Inner component that calls useBlocker and renders the confirmation modal.
@@ -69,6 +70,7 @@ interface CommentEditorProps {
   stickyTabBar?: boolean; // Stick the tab bar below the nav when scrolling (only appropriate for full-page editors, not inline edit forms)
   sheetButton?: ReactNode; // Optional node rendered in the drag-handle bar (e.g. "Character Sheet" toggle)
   insertSheetItemRef?: MutableRefObject<((item: SheetItem) => void) | null>; // Ref to expose cursor-aware insert for external callers (e.g. Drawer)
+  autosaveRefId?: string; //Ref to a localstorage key for autosave purposes. Undefined disables autosave.
 }
 
 /**
@@ -100,6 +102,7 @@ export const CommentEditor = memo(function CommentEditor({
   stickyTabBar = false,
   sheetButton,
   insertSheetItemRef,
+  autosaveRefId = undefined,
 }: CommentEditorProps) {
   const [showPreview, setShowPreview] = useState(showPreviewByDefault);
   const [showHelp, setShowHelp] = useState(false);
@@ -122,6 +125,23 @@ export const CommentEditor = memo(function CommentEditor({
   const editorRef = useRef<HTMLDivElement>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const loaded = useRef(false);
+
+  useEffect(() => {
+    if (loaded.current) {
+      return;
+    }
+
+    loaded.current = true;
+    //fired when component mounted
+    if (!value && autosaveRefId) {
+      const autosavedContent = postCachingService.get(autosaveRefId);
+      if (autosavedContent) {
+        onChange(autosavedContent);
+      }
+    }
+  }, [loaded, value, autosaveRefId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate cursor position for autocomplete dropdown
   const getCaretCoordinates = (element: HTMLTextAreaElement, position: number) => {
@@ -245,6 +265,10 @@ export const CommentEditor = memo(function CommentEditor({
     }
 
     handleSheetTriggerDetect(newValue, cursorPosition);
+
+    if (autosaveRefId) {
+      postCachingService.save(autosaveRefId, newValue);
+    }
   };
 
   // Handle character selection from autocomplete

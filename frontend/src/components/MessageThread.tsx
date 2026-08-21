@@ -10,6 +10,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { STICKY_BELOW_TABS } from './TabNavigation';
 import type { Character } from '../types/characters';
 import { logger } from '@/services/LoggingService';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface MessageThreadProps {
   gameId: number;
@@ -68,6 +69,9 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
   const savedScrollPositionRef = useRef<number | null>(null);
 
   const loading = loadingMessages || loadingConversation;
+
+  //Content autosave id for comment textbox
+  const autosaveRefId = postCachingService.createAutosaveId('conversation', conversationId);
 
   // Filter characters to only show conversation participants
   const participantCharacters = useMemo(() => {
@@ -278,7 +282,6 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
 
     try {
       setSending(true);
-      setNewMessage('');
 
       // Use context's sendMessage (it handles loadMessages and markAsRead)
       // Scroll position will be restored by useLayoutEffect after messages re-render
@@ -286,11 +289,16 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
         character_id: selectedCharacterId,
         content: newMessage.trim(),
       });
+      if (autosaveRefId){
+        postCachingService.remove(autosaveRefId);
+      }
 
       // Collapse the composer only after a successful send, so the "Sending…"
       // state stays visible while the request is in flight and the composer
       // (with the user's draft) survives if the send fails.
+      setNewMessage('');
       setReplyOpen(false);
+
     } catch (_err) {
       // Error already handled by context
       logger.error('Failed to send message', { error: _err, gameId, conversationId });
@@ -654,6 +662,7 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
                 warnOnUnsavedChanges
                 showCharacterCount={true}
                 characters={participantCharacters}
+                autosaveRefId={autosaveRefId}
               />
               <div className="flex items-center gap-2 mt-2">
                 <Button

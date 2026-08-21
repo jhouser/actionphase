@@ -22,15 +22,17 @@ vi.mock('../../hooks/useCharacterSheetItems', () => ({
   useCharacterSheetItems: vi.fn(() => []),
 }));
 
-// Mock CreateActionResultForm component
+// Mock CreateActionResultForm component. It owns its own Cancel control (so it
+// can discard cached drafts before dismissing), so the mock renders one too.
 vi.mock('../CreateActionResultForm', () => ({
-  CreateActionResultForm: ({ gameId, userId, userName, onSuccess }: unknown) => (
+  CreateActionResultForm: ({ gameId, userId, userName, onSuccess, onCancel }: unknown) => (
     <div data-testid="create-action-result-form">
       <div>Create Action Result Form</div>
       <div>Game ID: {gameId}</div>
       <div>User ID: {userId}</div>
       <div>User Name: {userName}</div>
       <button onClick={onSuccess}>Mock Submit</button>
+      {onCancel && <button onClick={onCancel}>Cancel</button>}
     </div>
   ),
 }));
