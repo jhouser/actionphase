@@ -18,9 +18,9 @@ interface CreateActionResultFormProps {
   actionSubmissionId?: number;
   onSuccess?: () => void;
   /**
-   * Dismisses the composer. Passed in rather than rendered here because the
-   * Cancel control lives in the parent's header, but the discard of cached
-   * drafts must happen here — only this component knows the staged-part keys.
+   * Dismisses the composer. When omitted no Cancel control is rendered, for
+   * hosts (e.g. the standalone composer) where the form is the whole view and
+   * there is nothing to back out to.
    */
   onCancel?: () => void;
 }
@@ -69,9 +69,9 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
   };
 
   const handleCancel = () => {
+    clearCachedDrafts();
     setContent('');
     setFollowUpParts([]);
-    clearCachedDrafts();
     onCancel?.();
   };
 
@@ -125,10 +125,12 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
         });
       }
 
+      // Before the state resets: clearCachedDrafts derives the staged-part keys
+      // from followUpParts, and onSuccess may unmount this form.
+      clearCachedDrafts();
       setContent('');
       setFollowUpParts([]);
       onSuccess?.();
-      clearCachedDrafts();
     } catch (error) {
       logger.error('Failed to create action result', { error, gameId, userId, userName, characterId, characterName, actionSubmissionId, isStaged });
     }
