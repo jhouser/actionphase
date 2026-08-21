@@ -13,6 +13,7 @@ import { CollapsibleMarkdown } from './CollapsibleMarkdown';
 import { useExpandedSet } from '../hooks/useExpandedSet';
 import { CommentEditor } from './CommentEditor';
 import type { GamePhase, ActionSubmissionRequest, ActionWithDetails } from '../types/phases';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface ActionSubmissionProps {
   gameId: number;
@@ -38,6 +39,9 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
   const activeCharacterId = selectedCharacterId ?? (availableCharacters.length === 1 ? availableCharacters[0].id : null);
   const sheetItems = useCharacterSheetItems(activeCharacterId);
   const activeCharacter = availableCharacters.find((c) => c.id === activeCharacterId);
+
+  //Content autosave id for comment textbox
+  const autosaveRefId = postCachingService.createAutosaveId('action',currentPhase?.id);
 
   const handleInsertSheetItem = (item: SheetItem) => {
     insertSheetItemRef.current?.(item);
@@ -65,6 +69,9 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
       queryClient.invalidateQueries({ queryKey: ['userActions', gameId] });
       setContent('');
       setIsExpanded(false);
+      if (autosaveRefId) {
+        postCachingService.remove(autosaveRefId);
+      }
     }
   });
 
@@ -254,6 +261,7 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
                     <span className="hidden sm:inline">Character Sheet</span>
                   </Button>
                 ) : undefined}
+                autosaveRefId={autosaveRefId}
               />
               <p className="mt-1 text-xs text-content-tertiary">This action is private and will only be visible to the GM during the game. Maximum 100,000 characters.</p>
             </div>

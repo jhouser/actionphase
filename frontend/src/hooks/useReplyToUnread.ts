@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { replyToComment, replyToPm } from '@/utils/unreadInboxApi';
 import type { UnreadInboxItem } from '@/types/unreadInbox';
+import { postCachingService } from '@/services/PostCachingService';
 
 export interface ReplyToUnreadParams {
   item: UnreadInboxItem;
@@ -41,10 +42,16 @@ export function useReplyToUnread() {
         });
       }
     },
-    onSuccess: () => {
+    onSuccess: (_, v) => {
       queryClient.invalidateQueries({ queryKey: ['unread-inbox'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      if (v.item.kind === 'comment') {
+        postCachingService.remove(postCachingService.createAutosaveId('post-reply', v.item.commentId));
+      }
+      else {
+        postCachingService.remove(postCachingService.createAutosaveId('conversation', v.item.conversationId));
+      }
     },
   });
 }

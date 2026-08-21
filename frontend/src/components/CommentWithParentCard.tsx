@@ -17,6 +17,7 @@ import { useToast } from '../contexts/ToastContext';
 import { apiClient } from '../lib/api';
 import { logger } from '@/services/LoggingService';
 import type { CommentReadMode } from '../lib/api/auth';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface CommentWithParentCardProps {
   comment: CommentWithParent;
@@ -71,6 +72,9 @@ export function CommentWithParentCard({
   const canDelete = (isAuthor || isGM || adminModeEnabled) && !comment.is_deleted && !!comment.post_id && !screenshotModeEnabled;
   const canEdit = isAuthor && !comment.is_deleted && !!comment.post_id && !screenshotModeEnabled;
   const canReply = !comment.is_deleted && userCharacters.length > 0 && !!comment.post_id;
+
+  //Content autosave id for comment textbox
+  const autosaveRefId = postCachingService.createAutosaveId('post-reply', comment.parent_id);
 
   const handleCopyLink = async () => {
     const url = `${window.location.origin}/games/${gameId}?tab=common-room&comment=${comment.id}`;
@@ -160,6 +164,9 @@ export function CommentWithParentCard({
       setIsReplying(false);
       setReplyPostedId(response.data.id);
       setTimeout(() => { if (isMountedRef.current) setReplyPostedId(null); }, 4000);
+      if (autosaveRefId){
+        postCachingService.remove(autosaveRefId);
+      }
     } catch (_err) {
       logger.error('Failed to post reply', { error: _err, commentId: comment.id, gameId });
       showError('Failed to post reply. Please try again.');
@@ -452,6 +459,7 @@ export function CommentWithParentCard({
                 characters={allGameCharacters}
                 maxLength={10000}
                 showCharacterCount
+                autosaveRefId={autosaveRefId}
               />
               <div className="flex gap-2 mt-2">
                 <Button

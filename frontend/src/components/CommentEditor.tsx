@@ -5,11 +5,14 @@ import { Pencil, Eye, HelpCircle } from 'lucide-react';
 import { MarkdownPreview } from './MarkdownPreview';
 import { TEXT_COLORS } from './textColors';
 import { CharacterAutocomplete } from './CharacterAutocomplete';
+import { applyMarkdownFormat, formatForKey } from './markdownHotkeys';
+import type { MarkdownFormat } from './markdownHotkeys';
 import { SheetItemAutocomplete } from './SheetItemAutocomplete';
 import { Button, Textarea, Modal } from './ui';
 import { STICKY_BELOW_TABS } from './TabNavigation';
 import type { Character } from '../types/characters';
 import type { SheetItem } from '../hooks/useCharacterSheetItems';
+import { postCachingService } from '@/services/PostCachingService';
 
 /**
  * Inner component that calls useBlocker and renders the confirmation modal.
@@ -69,6 +72,7 @@ interface CommentEditorProps {
   stickyTabBar?: boolean; // Stick the tab bar below the nav when scrolling (only appropriate for full-page editors, not inline edit forms)
   sheetButton?: ReactNode; // Optional node rendered in the drag-handle bar (e.g. "Character Sheet" toggle)
   insertSheetItemRef?: MutableRefObject<((item: SheetItem) => void) | null>; // Ref to expose cursor-aware insert for external callers (e.g. Drawer)
+  autosaveRefId?: string; //Ref to a localstorage key for autosave purposes. Undefined disables autosave.
 }
 
 /**
@@ -100,6 +104,7 @@ export const CommentEditor = memo(function CommentEditor({
   stickyTabBar = false,
   sheetButton,
   insertSheetItemRef,
+  autosaveRefId = undefined,
 }: CommentEditorProps) {
   const [showPreview, setShowPreview] = useState(showPreviewByDefault);
   const [showHelp, setShowHelp] = useState(false);
@@ -122,6 +127,23 @@ export const CommentEditor = memo(function CommentEditor({
   const editorRef = useRef<HTMLDivElement>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const loaded = useRef(false);
+
+  useEffect(() => {
+    if (loaded.current) {
+      return;
+    }
+
+    loaded.current = true;
+    //fired when component mounted
+    if (!value && autosaveRefId) {
+      const autosavedContent = postCachingService.get(autosaveRefId);
+      if (autosavedContent) {
+        onChange(autosavedContent);
+      }
+    }
+  }, [loaded, value, autosaveRefId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate cursor position for autocomplete dropdown
   const getCaretCoordinates = (element: HTMLTextAreaElement, position: number) => {
@@ -245,6 +267,10 @@ export const CommentEditor = memo(function CommentEditor({
     }
 
     handleSheetTriggerDetect(newValue, cursorPosition);
+
+    if (autosaveRefId) {
+      postCachingService.save(autosaveRefId, newValue);
+    }
   };
 
   // Handle character selection from autocomplete
@@ -300,8 +326,51 @@ export const CommentEditor = memo(function CommentEditor({
     }
   }, [insertSheetItemRef, handleInsertSheetItem]);
 
+  // Apply a markdown formatting hotkey to the current selection
+  const handleFormat = useCallback(
+    (format: MarkdownFormat) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const result = applyMarkdownFormat(format, {
+        value,
+        selectionStart: textarea.selectionStart ?? value.length,
+        selectionEnd: textarea.selectionEnd ?? value.length,
+      });
+
+      // maxLength only constrains typing in the browser, so a programmatic
+      // write can sail past it. Truncating would leave broken markdown
+      // (`**wor`), so an operation that doesn't fit is dropped instead —
+      // matching how the textarea silently refuses the keystroke at the cap.
+      if (maxLength !== undefined && result.value.length > maxLength) return;
+
+      onChange(result.value);
+
+      // The value lands via props on the next render, so the selection has to
+      // be restored after React commits it — same deferral the autocomplete
+      // inserts use.
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(result.selectionStart, result.selectionEnd);
+          textareaRef.current.focus();
+        }
+      }, 0);
+    },
+    [value, onChange, maxLength]
+  );
+
   // Handle keyboard navigation in autocomplete
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Formatting hotkeys, but not while an autocomplete dropdown owns the keys
+    if (!showAutocomplete && !showSheetAutocomplete) {
+      const format = formatForKey(e);
+      if (format) {
+        e.preventDefault();
+        handleFormat(format);
+        return;
+      }
+    }
+
     if (showSheetAutocomplete) {
       const filteredItems = sheetQuery
         ? sheetItems.filter((i) => i.name.toLowerCase().includes(sheetQuery.toLowerCase()))
@@ -529,6 +598,20 @@ export const CommentEditor = memo(function CommentEditor({
               </div>
               <div>
                 <code className="surface-sunken px-1 rounded">%%</code> → insert sheet item
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-theme-default text-content-primary">
+              <div className="font-semibold text-content-secondary mb-1">Shortcuts</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                <div>
+                  <code className="surface-sunken px-1 rounded">Ctrl/⌘ + B</code> → <strong>bold</strong>
+                </div>
+                <div>
+                  <code className="surface-sunken px-1 rounded">Ctrl/⌘ + I</code> → <em>italic</em>
+                </div>
+                <div>
+                  <code className="surface-sunken px-1 rounded">Ctrl/⌘ + K</code> → link
+                </div>
               </div>
             </div>
             <div className="mt-2 pt-2 border-t border-theme-default text-content-primary">

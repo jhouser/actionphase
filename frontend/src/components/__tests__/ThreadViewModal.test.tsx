@@ -266,7 +266,9 @@ describe('ThreadViewModal', () => {
 
       const replyButtons = screen.getAllByRole('button', { name: /reply to this comment/i });
       await user.click(replyButtons[replyButtons.length - 1]);
-      await user.type(screen.getByPlaceholderText('Write a reply...'), 'Half-written reply text');
+      const textarea = screen.getByPlaceholderText('Write a reply...');
+      await user.clear(textarea);
+      await user.type(textarea, 'Half-written reply text');
 
       await user.click(document.querySelector('.fixed.inset-0') as HTMLElement);
 

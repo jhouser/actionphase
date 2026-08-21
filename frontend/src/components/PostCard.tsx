@@ -20,6 +20,7 @@ import { usePostCollapseState } from '../hooks/usePostCollapseState';
 import { useInfiniteScrollSentinel } from '../hooks/useInfiniteScrollSentinel';
 import { useOptionalGameContext } from '../contexts/GameContext';
 import { useScreenshotMode } from '../hooks/useScreenshotMode';
+import { postCachingService } from '@/services/PostCachingService';
 
 interface PostCardProps {
   post: Message;
@@ -139,6 +140,9 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
   const manualReadCommentIDsRaw = usePostManualReadCommentIDs(gameId, post.id);
   const manualReadCommentIDs = allowReadTracking ? manualReadCommentIDsRaw : [];
   const toggleCommentReadMutation = useToggleCommentRead();
+
+  //Content autosave id for comment textbox
+  const autosaveRefId = postCachingService.createAutosaveId('post-reply', post.id);
 
   const handleToggleRead = useCallback((commentId: number, currentlyRead: boolean) => {
     toggleCommentReadMutation.mutate({
@@ -333,6 +337,14 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
     setThreadModalComment(comment);
   }, []);
 
+  const handleCancelComment = () => {
+    setIsCommenting(false);
+    setReplyContent('');
+    if (autosaveRefId) {
+      postCachingService.remove(autosaveRefId);
+    }
+  }
+
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -348,6 +360,9 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
       // Ensure comments are shown and reload to display the new one
       setShowComments(true);
       await loadComments();
+      if (autosaveRefId) {
+        postCachingService.remove(autosaveRefId);
+      }
 
     } catch (_err) {
       logger.error('Failed to submit comment', { error: _err, gameId, postId: post.id, characterId: selectedCharacterId });
@@ -662,6 +677,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
                     maxLength={10000}
                     warnOnUnsavedChanges
                     showCharacterCount={true}
+                    autosaveRefId={autosaveRefId}
                   />
                 </div>
 
@@ -676,10 +692,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => {
-                      setIsCommenting(false);
-                      setReplyContent('');
-                    }}
+                    onClick={handleCancelComment}
                     disabled={isSubmitting}
                   >
                     Cancel
