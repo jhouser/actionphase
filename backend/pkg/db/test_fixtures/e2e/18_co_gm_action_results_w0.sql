@@ -62,8 +62,11 @@ BEGIN
   RETURNING id INTO character_id;
 
   -- Action submission so Action Results has data to display
-  INSERT INTO action_submissions (game_id, phase_id, user_id, character_id, content, submitted_at)
-  VALUES (game_id, phase_id, player1_id, character_id, 'Test action submission for co-GM action results testing', NOW() - INTERVAL '2 days');
+  -- updated_at must match submitted_at: the backend preserves submitted_at across
+  -- edits and only moves updated_at, so leaving updated_at to its NOW() default
+  -- would make this never-edited row render an "Edited" badge in the UI.
+  INSERT INTO action_submissions (game_id, phase_id, user_id, character_id, content, submitted_at, updated_at)
+  VALUES (game_id, phase_id, player1_id, character_id, 'Test action submission for co-GM action results testing', NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days');
 
   RAISE NOTICE 'Co-GM Action Results fixture created: Game #%', game_id;
 END $$;
