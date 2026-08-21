@@ -69,6 +69,7 @@ interface CommentEditorProps {
   stickyTabBar?: boolean; // Stick the tab bar below the nav when scrolling (only appropriate for full-page editors, not inline edit forms)
   sheetButton?: ReactNode; // Optional node rendered in the drag-handle bar (e.g. "Character Sheet" toggle)
   insertSheetItemRef?: MutableRefObject<((item: SheetItem) => void) | null>; // Ref to expose cursor-aware insert for external callers (e.g. Drawer)
+  autosaveRefId?: string; //Ref to a localstorage key for autosave purposes. Undefined disables autosave.
 }
 
 /**
@@ -100,6 +101,7 @@ export const CommentEditor = memo(function CommentEditor({
   stickyTabBar = false,
   sheetButton,
   insertSheetItemRef,
+  autosaveRefId = undefined,
 }: CommentEditorProps) {
   const [showPreview, setShowPreview] = useState(showPreviewByDefault);
   const [showHelp, setShowHelp] = useState(false);
@@ -122,6 +124,17 @@ export const CommentEditor = memo(function CommentEditor({
   const editorRef = useRef<HTMLDivElement>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    //fired when component mounted
+    if (!value && autosaveRefId) {
+      const autosavedSerialized = localStorage.getItem(autosaveRefId);
+      if (autosavedSerialized) {
+        const autosavedContent = JSON.parse(autosavedSerialized) as {lastEdit: Date, content: string};
+        onChange(autosavedContent.content);
+      }
+    }
+  });
 
   // Calculate cursor position for autocomplete dropdown
   const getCaretCoordinates = (element: HTMLTextAreaElement, position: number) => {
@@ -245,6 +258,15 @@ export const CommentEditor = memo(function CommentEditor({
     }
 
     handleSheetTriggerDetect(newValue, cursorPosition);
+
+    if (autosaveRefId) {
+      if (newValue) {
+        localStorage.setItem(autosaveRefId, JSON.stringify({lastEdit: new Date(), content: newValue}));
+      }
+      else {
+        localStorage.removeItem(autosaveRefId);
+      }
+    }
   };
 
   // Handle character selection from autocomplete

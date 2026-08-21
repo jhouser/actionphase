@@ -44,6 +44,9 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
   // would throw away everything they had typed.
   const canAddPart = followUpParts.length + 1 < MAX_CHAIN_PARTS;
 
+  //Content autosave id for comment textbox
+  const autosaveRefId = actionSubmissionId ? `action-result-${actionSubmissionId}` : undefined;
+
   const addFollowUpPart = () => {
     if (!canAddPart) return;
     setFollowUpParts(parts => [...parts, { content: '', delay_minutes: DEFAULT_DELAY_MINUTES }]);
@@ -97,9 +100,18 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
       setContent('');
       setFollowUpParts([]);
       onSuccess?.();
+      if (autosaveRefId) {
+        localStorage.removeItem(autosaveRefId);
+        if (followUpParts) {
+          for(let i = 0; i < followUpParts.length; i++) {
+            localStorage.removeItem(`${autosaveRefId}-part-${i+2}`);
+          }
+        }
+      }
     } catch (error) {
       logger.error('Failed to create action result', { error, gameId, userId, userName, characterId, characterName, actionSubmissionId, isStaged });
     }
+
   };
 
   const recipientLabel = characterName ? `${characterName} (${userName})` : userName;
@@ -122,6 +134,7 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
           maxLength={100000}
           warnOnUnsavedChanges
           showCharacterCount={true}
+          autosaveRefId={autosaveRefId}
         />
         <p className="mt-1 text-xs text-content-tertiary">Maximum 100,000 characters. Result will be created as a draft.</p>
       </div>
@@ -132,6 +145,7 @@ export const CreateActionResultForm: React.FC<CreateActionResultFormProps> = ({
             parts={followUpParts}
             onChange={setFollowUpParts}
             disabled={activeMutation.isPending}
+            actionSubmissionId={actionSubmissionId}
           />
         </div>
       )}

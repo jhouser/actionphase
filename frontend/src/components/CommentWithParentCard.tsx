@@ -72,6 +72,10 @@ export function CommentWithParentCard({
   const canEdit = isAuthor && !comment.is_deleted && !!comment.post_id && !screenshotModeEnabled;
   const canReply = !comment.is_deleted && userCharacters.length > 0 && !!comment.post_id;
 
+  //Content autosave id for comment textbox
+  const autosaveRefId = comment.parent_id ? `comment-reply-${comment.parent_id}` : undefined;
+
+
   const handleCopyLink = async () => {
     const url = `${window.location.origin}/games/${gameId}?tab=common-room&comment=${comment.id}`;
     try {
@@ -160,6 +164,9 @@ export function CommentWithParentCard({
       setIsReplying(false);
       setReplyPostedId(response.data.id);
       setTimeout(() => { if (isMountedRef.current) setReplyPostedId(null); }, 4000);
+      if (autosaveRefId){
+        localStorage.removeItem(autosaveRefId);
+      }
     } catch (_err) {
       logger.error('Failed to post reply', { error: _err, commentId: comment.id, gameId });
       showError('Failed to post reply. Please try again.');
@@ -452,6 +459,7 @@ export function CommentWithParentCard({
                 characters={allGameCharacters}
                 maxLength={10000}
                 showCharacterCount
+                autosaveRefId={autosaveRefId}
               />
               <div className="flex gap-2 mt-2">
                 <Button

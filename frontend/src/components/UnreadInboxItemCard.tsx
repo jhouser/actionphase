@@ -25,6 +25,9 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
   const { data: context, isLoading, isError } = useUnreadItemContext(item, isExpanded);
   const replyMutation = useReplyToUnread();
 
+  //Content autosave id for comment textbox
+  const autosaveRefId = item.kind === 'comment' ? `post-reply-${item.commentId}` : `conversation-${item.conversationId}`;
+
   const handleSubmit = (characterId: number, content: string) => {
     replyMutation.mutate({
       item,
@@ -116,6 +119,7 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
                   onSubmit={handleSubmit}
                   isSubmitting={replyMutation.isPending}
                   error={replyMutation.isError ? 'Failed to send reply. Please try again.' : null}
+                  autosaveRefId={autosaveRefId}
                 />
               )}
             </>

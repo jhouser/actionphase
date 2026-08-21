@@ -41,10 +41,16 @@ export function useReplyToUnread() {
         });
       }
     },
-    onSuccess: () => {
+    onSuccess: (_, v) => {
       queryClient.invalidateQueries({ queryKey: ['unread-inbox'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      if (v.item.kind === 'comment') {
+        localStorage.removeItem(`post-reply-${v.item.commentId}`)
+      }
+      else {
+        localStorage.removeItem(`conversation-${v.item.conversationId}`)
+      }
     },
   });
 }

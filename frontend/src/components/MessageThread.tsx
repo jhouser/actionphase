@@ -69,6 +69,9 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
 
   const loading = loadingMessages || loadingConversation;
 
+  //Content autosave id for comment textbox
+  const autosaveRefId = `conversation-${conversationId}`;
+
   // Filter characters to only show conversation participants
   const participantCharacters = useMemo(() => {
     if (!conversation || !conversation.participants) return characters;
@@ -291,6 +294,10 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
       // state stays visible while the request is in flight and the composer
       // (with the user's draft) survives if the send fails.
       setReplyOpen(false);
+
+      if (autosaveRefId){
+        localStorage.removeItem(autosaveRefId);
+      }
     } catch (_err) {
       // Error already handled by context
       logger.error('Failed to send message', { error: _err, gameId, conversationId });
@@ -654,6 +661,7 @@ export function MessageThread({ gameId, conversationId, characters, currentPhase
                 warnOnUnsavedChanges
                 showCharacterCount={true}
                 characters={participantCharacters}
+                autosaveRefId={autosaveRefId}
               />
               <div className="flex items-center gap-2 mt-2">
                 <Button

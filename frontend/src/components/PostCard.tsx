@@ -140,6 +140,9 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
   const manualReadCommentIDs = allowReadTracking ? manualReadCommentIDsRaw : [];
   const toggleCommentReadMutation = useToggleCommentRead();
 
+  //Content autosave id for comment textbox
+  const autosaveRefId = `post-reply-${post.id}`;
+
   const handleToggleRead = useCallback((commentId: number, currentlyRead: boolean) => {
     toggleCommentReadMutation.mutate({
       gameId,
@@ -333,6 +336,14 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
     setThreadModalComment(comment);
   }, []);
 
+  const handleCancelComment = () => {
+    setIsCommenting(false);
+    setReplyContent('');
+    if (autosaveRefId) {
+      localStorage.removeItem(autosaveRefId);
+    }
+  }
+
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -348,6 +359,9 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
       // Ensure comments are shown and reload to display the new one
       setShowComments(true);
       await loadComments();
+      if (autosaveRefId) {
+        localStorage.removeItem(autosaveRefId);
+      }
 
     } catch (_err) {
       logger.error('Failed to submit comment', { error: _err, gameId, postId: post.id, characterId: selectedCharacterId });
@@ -662,6 +676,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
                     maxLength={10000}
                     warnOnUnsavedChanges
                     showCharacterCount={true}
+                    autosaveRefId={autosaveRefId}
                   />
                 </div>
 
@@ -676,10 +691,7 @@ export const PostCard = React.memo(function PostCard({ post, gameId, characters,
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => {
-                      setIsCommenting(false);
-                      setReplyContent('');
-                    }}
+                    onClick={handleCancelComment}
                     disabled={isSubmitting}
                   >
                     Cancel

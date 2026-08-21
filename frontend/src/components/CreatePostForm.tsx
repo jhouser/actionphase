@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
 
 interface CreatePostFormProps {
   gameId: number;
+  phaseId?: number;
   characters: Character[]; // Characters the user can post as
   allCharacters?: Character[]; // All characters for autocomplete mentions
   onSubmit: (characterId: number, content: string) => Promise<void>;
@@ -13,11 +14,14 @@ interface CreatePostFormProps {
   shouldStartCollapsed?: boolean; // Start collapsed when posts already exist
 }
 
-export function CreatePostForm({ gameId: _gameId, characters, allCharacters, onSubmit, isSubmitting, shouldStartCollapsed = false }: CreatePostFormProps) {
+export function CreatePostForm({ gameId: _gameId, phaseId = undefined, characters, allCharacters, onSubmit, isSubmitting, shouldStartCollapsed = false }: CreatePostFormProps) {
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
   const [content, setContent] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(shouldStartCollapsed);
+  
+  //Content autosave id for comment textbox
+  const autosaveRefId = phaseId ? `cr-main-post-${phaseId}` : undefined;
 
   // Auto-select first character if available
   useEffect(() => {
@@ -43,6 +47,9 @@ export function CreatePostForm({ gameId: _gameId, characters, allCharacters, onS
     try {
       await onSubmit(selectedCharacterId, content.trim());
       setContent('');
+      if (autosaveRefId) {
+        localStorage.removeItem(autosaveRefId);
+      }
     } catch (err: unknown) {
       // Use fallback message for generic errors like "Network error"
       const errorMessage = err instanceof Error && err.message !== 'Network error'
@@ -141,6 +148,7 @@ export function CreatePostForm({ gameId: _gameId, characters, allCharacters, onS
           showPreviewByDefault={false}
           maxLength={50000}
           showCharacterCount={true}
+          autosaveRefId={autosaveRefId}
         />
         <p className="text-xs text-content-secondary mt-1">
           Maximum 50,000 characters (longer posts will be collapsible for players)

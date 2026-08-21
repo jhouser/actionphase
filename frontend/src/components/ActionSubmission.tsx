@@ -39,6 +39,9 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
   const sheetItems = useCharacterSheetItems(activeCharacterId);
   const activeCharacter = availableCharacters.find((c) => c.id === activeCharacterId);
 
+  //Content autosave id for comment textbox
+  const autosaveRefId = currentPhase ? `action-${currentPhase.id}` : undefined;
+
   const handleInsertSheetItem = (item: SheetItem) => {
     insertSheetItemRef.current?.(item);
     setSheetDrawerOpen(false);
@@ -65,6 +68,9 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
       queryClient.invalidateQueries({ queryKey: ['userActions', gameId] });
       setContent('');
       setIsExpanded(false);
+      if (autosaveRefId) {
+        localStorage.removeItem(autosaveRefId);
+      }
     }
   });
 
@@ -254,6 +260,7 @@ export function ActionSubmission({ gameId, currentPhase, className = '' }: Actio
                     <span className="hidden sm:inline">Character Sheet</span>
                   </Button>
                 ) : undefined}
+                autosaveRefId={autosaveRefId}
               />
               <p className="mt-1 text-xs text-content-tertiary">This action is private and will only be visible to the GM during the game. Maximum 100,000 characters.</p>
             </div>

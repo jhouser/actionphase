@@ -92,6 +92,9 @@ export const ThreadedComment = memo(function ThreadedComment({
   const isMountedRef = useRef(true);
   const hasLoadedRef = useRef(false);
 
+  //Content autosave id for comment textbox
+  const autosaveRefId = `post-reply-${comment.id}`;
+
   // Notify parent (e.g. ThreadViewModal) when pending reply content transitions from
   // empty↔non-empty. Curried here because useReportDirty reports a bare boolean, while
   // this component's callers key on comment id — a thread has many comments, any of which
@@ -345,6 +348,13 @@ export const ThreadedComment = memo(function ThreadedComment({
     loadReplies();
   }, [loadReplies]);
 
+  const handleCancelReply = () => {
+    setIsReplying(false);
+    setReplyContent('');
+    if (autosaveRefId) {
+      localStorage.removeItem(autosaveRefId);
+    }
+  }
 
   const handleSubmitReply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -398,6 +408,10 @@ export const ThreadedComment = memo(function ThreadedComment({
 
       // Show success toast
       showSuccess('Reply posted successfully');
+
+      if (autosaveRefId) {
+        localStorage.removeItem(autosaveRefId);
+      }
 
       // Reload replies to get the real data (with proper ID, timestamps, etc.)
       // But skip reloading if no rendered viewport shows children at this depth
@@ -804,6 +818,7 @@ export const ThreadedComment = memo(function ThreadedComment({
                     maxLength={10000}
                     warnOnUnsavedChanges
                     showCharacterCount={true}
+                    autosaveRefId={autosaveRefId}
                   />
                 </div>
 
@@ -821,10 +836,7 @@ export const ThreadedComment = memo(function ThreadedComment({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      setIsReplying(false);
-                      setReplyContent('');
-                    }}
+                    onClick={handleCancelReply}
                     disabled={isSubmitting}
                   >
                     Cancel
