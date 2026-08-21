@@ -28,8 +28,6 @@ export class PostCachingService {
     }
 
     cleanup() {
-        console.log('CLEANING UP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-
         const staleKeys: string[] = [];
         for(let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
