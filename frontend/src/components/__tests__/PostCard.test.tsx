@@ -8,6 +8,7 @@ import { PostCard } from '../PostCard';
 import type { Message } from '../../types/messages';
 import type { Character } from '../../types/characters';
 import * as useScreenshotModeHook from '../../hooks/useScreenshotMode';
+import { postCachingService } from '../../services/PostCachingService';
 
 vi.mock('../../hooks/useScreenshotMode', () => ({
   useScreenshotMode: vi.fn(),
@@ -705,6 +706,30 @@ describe('PostCard', () => {
 
       expect(textarea).toHaveValue('Test comment content');
     });
+        
+    it('saves post to localstorage cache with the proper tag', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <PostCard
+          post={mockPost}
+          gameId={1}
+          characters={mockCharacters}
+          controllableCharacters={mockCharacters}
+          onCreateComment={mockOnCreateComment}
+          currentUserId={100}
+        />
+      );
+      
+      const autosaveId = postCachingService.createAutosaveId('post-reply', mockPost.id);
+      
+      await user.click(screen.getByRole('button', { name: /add comment/i }));
+
+      const textarea = screen.getByPlaceholderText(/write a comment\.\.\./i);
+      await user.type(textarea, 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+      expect(localStorage.getItem(autosaveId)).toContain('Hello there');
+    });
 
   });
 
@@ -955,6 +980,33 @@ describe('PostCard', () => {
         expect(mockOnCreateComment).toHaveBeenCalledWith(1, 2, 'Test', 1);
       });
     });
+    
+    it('clears localstorage cache after submission', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <PostCard
+          post={mockPost}
+          gameId={1}
+          characters={mockCharacters}
+          controllableCharacters={mockCharacters}
+          onCreateComment={mockOnCreateComment}
+          currentUserId={100}
+        />
+      );
+
+      const autosaveId = postCachingService.createAutosaveId('post-reply', mockPost.id);
+
+      await user.click(screen.getByRole('button', { name: /add comment/i }));
+
+      const textarea = screen.getByPlaceholderText(/write a comment\.\.\./i);
+      await user.type(textarea, 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+
+      await user.click(screen.getByRole('button', { name: /^comment$/i }));
+
+      expect(localStorage.getItem(autosaveId)).toBeNull();
+    });
   });
 
   describe('Comment Form - Cancel', () => {
@@ -1023,6 +1075,33 @@ describe('PostCard', () => {
       await user.click(screen.getByRole('button', { name: /cancel/i }));
 
       expect(screen.getByRole('button', { name: /add comment/i })).toBeInTheDocument();
+    });
+    
+    it('clears localstorage cache after cancel', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <PostCard
+          post={mockPost}
+          gameId={1}
+          characters={mockCharacters}
+          controllableCharacters={mockCharacters}
+          onCreateComment={mockOnCreateComment}
+          currentUserId={100}
+        />
+      );
+
+      const autosaveId = postCachingService.createAutosaveId('post-reply', mockPost.id);
+
+      await user.click(screen.getByRole('button', { name: /add comment/i }));
+
+      const textarea = screen.getByPlaceholderText(/write a comment\.\.\./i);
+      await user.type(textarea, 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+      expect(localStorage.getItem(autosaveId)).toBeNull();
     });
   });
 
@@ -1633,7 +1712,6 @@ describe('PostCard', () => {
 
       // Modify content
       const textarea = screen.getByPlaceholderText(/edit your post\.\.\./i);
-      await user.clear(textarea);
       await user.type(textarea, 'Modified content');
 
       // Click cancel
@@ -1680,7 +1758,6 @@ describe('PostCard', () => {
 
       // Modify content
       const textarea = screen.getByPlaceholderText(/edit your post\.\.\./i);
-      await user.clear(textarea);
       await user.type(textarea, updatedContent);
 
       // Click save

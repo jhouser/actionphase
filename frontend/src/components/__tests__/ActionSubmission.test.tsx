@@ -7,6 +7,7 @@ import { renderWithProviders } from '../../test-utils/render';
 import { ActionSubmission } from '../ActionSubmission';
 import type { GamePhase, ActionWithDetails } from '../../types/phases';
 import type { Character } from '../../types/characters';
+import { postCachingService } from '../../services/PostCachingService'
 
 // Mock CountdownTimer component
 vi.mock('../CountdownTimer', () => ({
@@ -143,6 +144,7 @@ describe('ActionSubmission', () => {
   beforeEach(() => {
     server.resetHandlers();
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   describe('Non-Action Phase', () => {
@@ -417,6 +419,22 @@ describe('ActionSubmission', () => {
       });
       expect(submitButton).not.toBeDisabled();
     });
+
+    it('saves post to localstorage cache with the proper tag', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers();
+
+      renderWithProviders(
+        <ActionSubmission gameId={1} currentPhase={mockActionPhase} />
+      , { gameId: 1 });
+
+      const autosaveId = postCachingService.createAutosaveId('action', mockActionPhase.id);
+      const textarea = await screen.findByRole('textbox');
+      await user.type(textarea, 'I open the mysterious door');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+      expect(localStorage.getItem(autosaveId)).toContain('I open the mysterious door');
+    });
   });
 
   describe('Action Submission', () => {
@@ -577,6 +595,28 @@ describe('ActionSubmission', () => {
       await waitFor(() => {
         expect(textarea).toBeDisabled();
       });
+    });
+
+    it('clears localstorage cache after submission', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers();
+
+      renderWithProviders(
+        <ActionSubmission gameId={1} currentPhase={mockActionPhase} />
+      , { gameId: 1 });
+
+      const autosaveId = postCachingService.createAutosaveId('action', mockActionPhase.id);
+      const textarea = await screen.findByRole('textbox');
+      await user.type(textarea, 'I open the mysterious door');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+
+      const submitButton = screen.getByRole('button', {
+        name: /submit action/i,
+      });
+      await user.click(submitButton);
+
+      expect(localStorage.getItem(autosaveId)).toBeNull();
     });
   });
 

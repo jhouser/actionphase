@@ -8,6 +8,7 @@ import { ThreadedComment } from '../ThreadedComment';
 import type { Message } from '../../types/messages';
 import type { Character } from '../../types/characters';
 import { logger } from '@/services/LoggingService';
+import { postCachingService } from '../../services/PostCachingService';
 
 describe('ThreadedComment', () => {
   const mockGameId = 1;
@@ -107,6 +108,7 @@ describe('ThreadedComment', () => {
   };
 
   beforeEach(() => {
+    localStorage.clear(); //prevents cache persistance between tests
     server.resetHandlers();
     setupDefaultHandlers();
     mockOnCreateReply.mockClear();
@@ -752,7 +754,6 @@ describe('ThreadedComment', () => {
 
       // Find the submit button by type="submit" within the form
       const textarea = screen.getByPlaceholderText(/write a reply/i);
-      await user.clear(textarea);
       const form = textarea.closest('form');
       const submitButton = form?.querySelector('button[type="submit"]') as HTMLButtonElement;
       expect(submitButton).toBeDisabled();
@@ -797,7 +798,6 @@ describe('ThreadedComment', () => {
       await user.click(screen.getByRole('button', { name: /reply/i }));
 
       const textarea = screen.getByPlaceholderText(/write a reply/i);
-      await user.clear(textarea);
       await user.type(textarea, '   ');
 
       const form = textarea.closest('form');
@@ -860,7 +860,6 @@ describe('ThreadedComment', () => {
 
       await user.click(screen.getByRole('button', { name: /reply/i }));
       const textarea = screen.getByPlaceholderText(/write a reply/i);
-      await user.clear(textarea);
       await user.type(textarea, 'Test content');
       await user.click(screen.getByRole('button', { name: /cancel/i }));
 
@@ -869,6 +868,55 @@ describe('ThreadedComment', () => {
       const newTextarea = screen.getByPlaceholderText(/write a reply/i);
 
       expect(newTextarea).toHaveValue('');
+    });
+
+    it('saves post to localstorage cache with the proper tag', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <ThreadedComment
+          comment={mockComment}
+          gameId={mockGameId}
+          characters={mockCharacters}
+          controllableCharacters={mockCharacters}
+          onCreateReply={mockOnCreateReply}
+          currentUserId={mockCurrentUserId}
+        />
+      );
+      
+      const autosaveId = postCachingService.createAutosaveId('post-reply', mockComment.id);
+      
+      await user.click(screen.getByRole('button', { name: /reply/i }));
+      const textarea = screen.getByPlaceholderText(/write a reply/i);
+      await user.type(textarea, 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+      expect(localStorage.getItem(autosaveId)).toContain('Hello there');
+    });
+
+    it('clears localstorage cache after cancel', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <ThreadedComment
+          comment={mockComment}
+          gameId={mockGameId}
+          characters={mockCharacters}
+          controllableCharacters={mockCharacters}
+          onCreateReply={mockOnCreateReply}
+          currentUserId={mockCurrentUserId}
+        />
+      );
+      
+      const autosaveId = postCachingService.createAutosaveId('post-reply', mockComment.id);
+      
+      await user.click(screen.getByRole('button', { name: /reply/i }));
+      const textarea = screen.getByPlaceholderText(/write a reply/i);
+      await user.type(textarea, 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+      expect(localStorage.getItem(autosaveId)).toBeNull();
     });
   });
 
@@ -892,7 +940,6 @@ describe('ThreadedComment', () => {
       await user.click(screen.getByRole('button', { name: /reply/i }));
 
       const textarea = screen.getByPlaceholderText(/write a reply/i);
-      await user.clear(textarea);
       await user.type(textarea, 'Test reply');
 
       const form = textarea.closest('form');
@@ -953,7 +1000,8 @@ describe('ThreadedComment', () => {
       const textarea = screen.getByPlaceholderText(/write a reply/i);
       await user.type(textarea, 'Test reply');
 
-      const form = textarea.closest('form'); const submitButton = form?.querySelector('button[type="submit"]') as HTMLButtonElement;
+      const form = textarea.closest('form'); 
+      const submitButton = form?.querySelector('button[type="submit"]') as HTMLButtonElement;
       await user.click(submitButton);
 
       await waitFor(() => {
@@ -1055,6 +1103,34 @@ describe('ThreadedComment', () => {
       await waitFor(() => {
         expect(screen.queryByText(/posting\.\.\./i)).not.toBeInTheDocument();
       });
+    });
+
+    it('clears localstorage cache after submit', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <ThreadedComment
+          comment={mockComment}
+          gameId={mockGameId}
+          characters={mockCharacters}
+          controllableCharacters={mockCharacters}
+          onCreateReply={mockOnCreateReply}
+          currentUserId={mockCurrentUserId}
+        />
+      );
+      
+      const autosaveId = postCachingService.createAutosaveId('post-reply', mockComment.id);
+      
+      await user.click(screen.getByRole('button', { name: /reply/i }));
+      const textarea = screen.getByPlaceholderText(/write a reply/i);
+      await user.type(textarea, 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+
+      const form = textarea.closest('form'); 
+      const submitButton = form?.querySelector('button[type="submit"]') as HTMLButtonElement;
+      await user.click(submitButton);
+
+      expect(localStorage.getItem(autosaveId)).toBeNull();
     });
 
   });
@@ -1447,7 +1523,6 @@ describe('ThreadedComment', () => {
 
       // Type reply
       const textarea = screen.getByPlaceholderText(/write a reply/i);
-      await user.clear(textarea);
       await user.type(textarea, 'My detailed reply');
 
       // Submit
@@ -1493,7 +1568,6 @@ describe('ThreadedComment', () => {
 
       // Type and submit reply
       const textarea = screen.getByPlaceholderText(/write a reply/i);
-      await user.clear(textarea);
       await user.type(textarea, 'Nested reply');
 
       const form = textarea.closest('form'); const submitButton = form?.querySelector('button[type="submit"]') as HTMLButtonElement;

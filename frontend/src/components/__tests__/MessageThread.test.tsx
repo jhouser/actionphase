@@ -15,6 +15,7 @@ vi.mock('../../contexts/AuthContext', () => ({
 }));
 
 import { useAuth } from '../../contexts/AuthContext'
+import { postCachingService } from '../../services/PostCachingService';
 
 describe('MessageThread', () => {
   const mockCharacters: Character[] = [
@@ -74,6 +75,8 @@ describe('MessageThread', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    localStorage.clear();
 
     // Set up authenticated user
     vi.mocked(useAuth).mockReturnValue({
@@ -394,7 +397,6 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
-      await user.clear(textarea);
       await user.type(textarea, 'Test message');
 
       expect(textarea).toHaveValue('Test message');
@@ -420,7 +422,6 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
-      await user.clear(textarea);
       await user.type(textarea, 'New test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -448,7 +449,6 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
-      await user.clear(textarea);
       await user.type(textarea, 'Message to clear');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
@@ -476,7 +476,6 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
-      await user.clear(textarea);
       await user.type(textarea, 'Test');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
@@ -512,7 +511,6 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
-      await user.clear(textarea);
       await user.type(textarea, '   '); // Only spaces
 
       const sendButton = screen.getByRole('button', { name: /^send$/i });
@@ -537,7 +535,6 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
-      await user.clear(textarea);
       await user.type(textarea, '  Trimmed message  ');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
@@ -564,7 +561,6 @@ describe('MessageThread', () => {
       await openComposer(user);
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
-      await user.clear(textarea);
       await user.type(textarea, 'Test');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
@@ -595,13 +591,54 @@ describe('MessageThread', () => {
       await user.selectOptions(select, '2');
 
       const textarea = screen.getByPlaceholderText(/type your message/i);
-      await user.clear(textarea);
       await user.type(textarea, 'Test');
       await user.click(screen.getByRole('button', { name: /^send$/i }));
 
       await waitFor(() => {
         expect(sentMessage.character_id).toBe(2);
       });
+    });
+
+    it('saves message to localstorage cache with the proper tag', async () => {
+      const user = userEvent.setup();
+      const conversationId = 1;
+      renderWithProviders(
+        <MessageThread gameId={1} conversationId={conversationId} characters={mockCharacters} currentPhaseType="common_room" />
+      );
+      
+      const autosaveId = postCachingService.createAutosaveId('conversation', conversationId);
+      
+      await openComposer(user);
+      
+      await user.type(screen.getByPlaceholderText(/type your message/i), 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+      expect(localStorage.getItem(autosaveId)).toContain('Hello there');
+    });
+    
+    it('clears localstorage cache after submission', async () => {
+      const user = userEvent.setup();
+      const conversationId = 1;
+      server.use(
+        http.post('/api/v1/games/:gameId/conversations/:conversationId/messages', () => {
+          return HttpResponse.json({ id: 3 });
+        })
+      );
+      renderWithProviders(
+        <MessageThread gameId={1} conversationId={conversationId} characters={mockCharacters} currentPhaseType="common_room" />
+      );
+      
+      const autosaveId = postCachingService.createAutosaveId('conversation', conversationId);
+      
+      await openComposer(user);
+
+      await user.type(screen.getByPlaceholderText(/type your message/i), 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+
+      await user.click(screen.getByRole('button', { name: /^send$/i }));
+
+      expect(localStorage.getItem(autosaveId)).toBeNull();
     });
   });
 
