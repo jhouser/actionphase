@@ -318,7 +318,10 @@ export function useGameTabs({
     newParams.set('tab', tabId);
     // Clear tab-specific sub-params when leaving their tab
     if (tabId !== 'messages') newParams.delete('conversation');
-    if (tabId !== 'audience') newParams.delete('audienceConversation');
+    if (tabId !== 'audience') {
+      newParams.delete('audienceConversation');
+      newParams.delete('audienceParticipants');
+    }
     if (tabId !== 'people') {
       newParams.delete('character');
       newParams.delete('peopleTab');

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test-utils';
 import { AudienceConversationCard } from './AudienceConversationCard';
@@ -24,7 +24,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={mockConversation}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -36,7 +35,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={mockConversation}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -48,7 +46,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={mockConversation}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -57,32 +54,41 @@ describe('AudienceConversationCard', () => {
     expect(screen.getByText(/This is the last message/)).toBeInTheDocument();
   });
 
-  it('calls onClick when card is clicked', async () => {
+  // Navigation is the href alone. The card previously ALSO fired an onClick that
+  // set the same param, pushing a second identical history entry and making the
+  // first browser Back press appear to do nothing.
+  it('navigates by link href, adding exactly one history entry', async () => {
     const user = userEvent.setup();
-    const handleClick = vi.fn();
 
-    const { container } = renderWithProviders(
-      <AudienceConversationCard
-        conversation={mockConversation}
-        onClick={handleClick}
-      />,
-    { gameId: 1 }
+    const { router } = renderWithProviders(
+      <AudienceConversationCard conversation={mockConversation} />,
+      { gameId: 1, initialEntries: ['/?tab=audience'] }
     );
 
-    // Click on the card (cursor-pointer div)
-    const card = container.querySelector('.cursor-pointer');
-    if (!card) throw new Error('Card not found');
+    const card = screen.getByTestId('conversation-item');
+    expect(card.getAttribute('href')).toContain(
+      `audienceConversation=${mockConversation.conversation_id}`
+    );
 
     await user.click(card);
 
-    expect(handleClick).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(router.state.location.search).toContain(
+        `audienceConversation=${mockConversation.conversation_id}`
+      );
+    });
+
+    // A single Back press must undo the click.
+    await act(async () => { await router.navigate(-1); });
+    await waitFor(() => {
+      expect(router.state.location.search).not.toContain('audienceConversation');
+    });
   });
 
   it('shows message count badge', () => {
     const { rerender } = renderWithProviders(
       <AudienceConversationCard
         conversation={{ ...mockConversation, message_count: 3 }}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -92,7 +98,6 @@ describe('AudienceConversationCard', () => {
     rerender(
       <AudienceConversationCard
         conversation={{ ...mockConversation, message_count: 25 }}
-        onClick={vi.fn()}
       />
     );
     expect(screen.getByText('25 messages')).toBeInTheDocument();
@@ -105,7 +110,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={{ ...mockConversation, last_message_at: recentTime }}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -119,7 +123,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={{ ...mockConversation, last_message_at: oldTime }}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -131,7 +134,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={mockConversation}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -150,7 +152,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={manyParticipants}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -162,7 +163,6 @@ describe('AudienceConversationCard', () => {
     const { container } = renderWithProviders(
       <AudienceConversationCard
         conversation={mockConversation}
-        onClick={vi.fn()}
         isSelected={true}
       />,
     { gameId: 1 }
@@ -177,7 +177,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={{ ...mockConversation, subject: null }}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -195,7 +194,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={noLastMessage}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -209,7 +207,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={mockConversation}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );
@@ -227,7 +224,6 @@ describe('AudienceConversationCard', () => {
     renderWithProviders(
       <AudienceConversationCard
         conversation={noParticipants}
-        onClick={vi.fn()}
       />,
     { gameId: 1 }
     );

@@ -144,6 +144,9 @@ export function renderWithProviders(
       act(() => { setRouteElement(wrapUi(newUi)) })
     },
     queryClient,
+    // Exposed so tests can drive real history navigation (router.navigate(-1))
+    // and assert what the browser Back button would do.
+    router,
   }
 }
 

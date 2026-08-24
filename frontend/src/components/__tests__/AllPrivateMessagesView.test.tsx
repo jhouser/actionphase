@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { AllPrivateMessagesView } from '../AllPrivateMessagesView'
@@ -253,6 +253,91 @@ describe('AllPrivateMessagesView - filters by character ID, not name', () => {
     // And the conversation is still found despite the rename.
     await waitFor(() => {
       expect(screen.getByText('Found by ID')).toBeInTheDocument()
+    })
+  })
+})
+
+describe('AllPrivateMessagesView - browser Back button', () => {
+  it('returns to the conversation list when Back is pressed after opening a conversation', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.get('/api/v1/games/:gameId/private-messages/all', () =>
+        HttpResponse.json({ conversations: [mockConversation], total: 1 })
+      ),
+      http.get('/api/v1/games/:gameId/private-messages/conversations/:id/messages', () =>
+        HttpResponse.json([])
+      ),
+    )
+
+    const { router } = renderWithProviders(
+      <AllPrivateMessagesView gameId={gameId} />,
+      { gameId, initialEntries: ['/?tab=audience'] }
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Secret Plans')[0]).toBeInTheDocument()
+    })
+
+    await user.click(screen.getAllByText('Secret Plans')[0])
+
+    // Conversation is open and the param is in the URL.
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /back/i })[0]).toBeInTheDocument()
+    })
+    expect(router.state.location.search).toContain('audienceConversation=7')
+
+    // Browser Back must undo exactly that navigation.
+    await act(async () => { await router.navigate(-1) })
+
+    await waitFor(() => {
+      expect(router.state.location.search).not.toContain('audienceConversation')
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /back/i })).not.toBeInTheDocument()
+      expect(screen.getAllByText(/all private messages/i)[0]).toBeInTheDocument()
+    })
+  })
+})
+
+describe('AllPrivateMessagesView - filters persist in the URL', () => {
+  it('writes the selected participant filter to the URL', async () => {
+    const user = userEvent.setup()
+    const { router } = renderWithProviders(<AllPrivateMessagesView gameId={gameId} />, {
+      gameId,
+      initialEntries: ['/?tab=audience'],
+    })
+
+    const chip = (await screen.findAllByRole('button', { name: 'Beta' }))[0]
+    await user.click(chip)
+
+    await waitFor(() => {
+      expect(router.state.location.search).toContain(`audienceParticipants=${BETA.id}`)
+    })
+  })
+
+  it('restores the filter from the URL on mount', async () => {
+    const conversationRequests: URL[] = []
+    server.use(
+      http.get('/api/v1/games/:gameId/private-messages/all', ({ request }) => {
+        conversationRequests.push(new URL(request.url))
+        return HttpResponse.json({ conversations: [], total: 0 })
+      }),
+    )
+
+    renderWithProviders(<AllPrivateMessagesView gameId={gameId} />, {
+      gameId,
+      initialEntries: [`/?tab=audience&audienceParticipants=${BETA.id}`],
+    })
+
+    // The filter is applied to the very first request, not lost on refresh.
+    await waitFor(() => {
+      const last = conversationRequests[conversationRequests.length - 1]
+      expect(last.searchParams.getAll('participant_ids')).toEqual([String(BETA.id)])
+    })
+
+    // And it is reflected in the UI as an active filter.
+    await waitFor(() => {
+      expect(screen.getAllByText(/\(filtered\)/i)[0]).toBeInTheDocument()
     })
   })
 })

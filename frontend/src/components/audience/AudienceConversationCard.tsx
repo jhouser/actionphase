@@ -8,19 +8,20 @@ import { useGameContext } from '../../contexts/GameContext';
 
 interface AudienceConversationCardProps {
   conversation: AudienceConversationListItem;
-  onClick: () => void;
   isSelected?: boolean;
 }
 
 export const AudienceConversationCard: React.FC<AudienceConversationCardProps> = ({
   conversation,
-  onClick,
   isSelected = false
 }) => {
   const { allGameCharacters, game } = useGameContext();
   const portraitAvatars = game?.portrait_avatars ?? false;
   const [searchParams] = useSearchParams();
 
+  // Navigation happens purely through this href. The card previously also
+  // called an onClick that set the same URL param, which pushed a second
+  // identical history entry — so the first Back press appeared to do nothing.
   const href = (() => {
     const params = new URLSearchParams(searchParams);
     params.set('audienceConversation', String(conversation.conversation_id));
@@ -67,10 +68,6 @@ export const AudienceConversationCard: React.FC<AudienceConversationCardProps> =
     <Link
       to={href}
       data-testid="conversation-item"
-      onClick={(e) => {
-        if (e.ctrlKey || e.metaKey) return;
-        onClick();
-      }}
       className={`
         block
         cursor-pointer

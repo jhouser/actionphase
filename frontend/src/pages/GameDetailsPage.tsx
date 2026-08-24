@@ -204,7 +204,10 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
     params.set('tab', tabId);
     // Clear tab-specific sub-params when leaving their tab
     if (tabId !== 'messages') params.delete('conversation');
-    if (tabId !== 'audience') params.delete('audienceConversation');
+    if (tabId !== 'audience') {
+      params.delete('audienceConversation');
+      params.delete('audienceParticipants');
+    }
     if (tabId !== 'people') {
       params.delete('character');
       params.delete('peopleTab');
