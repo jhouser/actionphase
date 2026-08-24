@@ -54,11 +54,15 @@ describe('useGameStateManagement', () => {
   // -----------------------------------------------------------------
 
   describe('getStateActions', () => {
-    it('setup state offers only Start Recruitment', () => {
+    it('setup state offers Start Recruitment and Cancel Game', () => {
+      // A GM most often abandons a game before recruiting anyone, so cancel
+      // must be reachable from setup without first opening recruitment.
       const { result } = renderHookWithOptions();
       const actions = result.current.getStateActions('setup');
-      expect(actions).toHaveLength(1);
-      expect(actions[0].state).toBe('recruitment');
+      const states = actions.map(a => a.state);
+      expect(states).toContain('recruitment');
+      expect(states).toContain('cancelled');
+      expect(actions).toHaveLength(2);
     });
 
     it('recruitment state offers Start Character Creation and Cancel Game', () => {
