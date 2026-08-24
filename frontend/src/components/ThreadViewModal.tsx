@@ -141,8 +141,14 @@ export function ThreadViewModal({
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="sticky top-0 surface-base border-b border-theme-default px-6 py-4 z-10">
-            <div className="flex items-center justify-between mb-2">
+          {/* Padding is inline because the mobile-only `[class*="surface-"] { padding: 5px }`
+              rule in index.css is unlayered, so it overrides Tailwind's padding utilities
+              here and squashes the header against the modal's left edge. */}
+          <div
+            className="sticky top-0 surface-base border-b border-theme-default z-10"
+            style={{ paddingLeft: '1.5rem', paddingRight: '1.5rem', paddingTop: '0.75rem', paddingBottom: '0.5rem' }}
+          >
+            <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-content-primary">Thread View</h2>
               <div className="flex items-center gap-3">
                 {/* Reach the dice roller / character sheet without leaving the

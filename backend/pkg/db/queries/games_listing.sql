@@ -29,6 +29,11 @@ SELECT
     CASE
       WHEN $1::int IS NULL OR $1 = 0 THEN NULL
       WHEN g.gm_user_id = $1 THEN 'gm'
+      -- Split by role: the badge in the games list distinguishes Player from
+      -- Audience from Co-GM, so collapsing them into 'participant' would show
+      -- an audience member "Player".
+      WHEN EXISTS(SELECT 1 FROM game_participants WHERE game_id = g.id AND user_id = $1 AND status = 'active' AND role = 'co_gm') THEN 'co_gm'
+      WHEN EXISTS(SELECT 1 FROM game_participants WHERE game_id = g.id AND user_id = $1 AND status = 'active' AND role = 'audience') THEN 'audience'
       WHEN EXISTS(SELECT 1 FROM game_participants WHERE game_id = g.id AND user_id = $1 AND status = 'active') THEN 'participant'
       WHEN EXISTS(SELECT 1 FROM game_applications WHERE game_id = g.id AND user_id = $1) THEN 'applied'
       ELSE 'none'

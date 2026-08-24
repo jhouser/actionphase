@@ -189,6 +189,11 @@ export function useGameStateManagement({
     switch (currentState) {
       case 'setup':
         actions.push({ label: 'Start Recruitment', state: 'recruitment', color: 'bg-semantic-success hover:bg-semantic-success-hover text-white' });
+        // Setup is the likeliest point for a GM to abandon a game — before
+        // anyone has been recruited. The backend has always allowed
+        // setup → cancelled; only this menu was forcing a detour through
+        // recruitment to reach it.
+        actions.push({ label: 'Cancel Game', state: 'cancelled', color: 'bg-semantic-danger hover:bg-semantic-danger-hover text-white' });
         break;
       case 'recruitment':
         actions.push({ label: 'Start Character Creation', state: 'character_creation', color: 'bg-interactive-primary hover:bg-interactive-primary-hover text-white' });
