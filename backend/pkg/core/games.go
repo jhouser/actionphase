@@ -42,7 +42,7 @@ type EnrichedGameListItem struct {
 	CurrentPlayers          int32      `json:"current_players"`
 
 	// Enrichment fields
-	UserRelationship     *string    `json:"user_relationship,omitempty"` // 'gm', 'participant', 'applied', 'none'
+	UserRelationship     *string    `json:"user_relationship,omitempty"` // 'gm', 'co_gm', 'participant', 'audience', 'applied', 'none'
 	CurrentPhaseType     *string    `json:"current_phase_type,omitempty"`
 	CurrentPhaseDeadline *time.Time `json:"current_phase_deadline,omitempty"`
 	DeadlineUrgency      string     `json:"deadline_urgency"` // 'critical', 'warning', 'normal'

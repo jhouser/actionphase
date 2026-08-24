@@ -245,7 +245,12 @@ export const APPLICATION_STATUS_COLORS: Record<ApplicationStatus, string> = {
 
 // Enhanced game listing types
 
-export type UserRelationship = 'gm' | 'participant' | 'applied' | 'none';
+/**
+ * The viewer's relationship to a game, as computed by the games-listing query.
+ * `participant` means specifically a *player*: co-GMs and audience members get
+ * their own values so the games-list badge can name the role accurately.
+ */
+export type UserRelationship = 'gm' | 'co_gm' | 'participant' | 'audience' | 'applied' | 'none';
 type DeadlineUrgency = 'critical' | 'warning' | 'normal';
 type PhaseType = 'action' | 'common_room';
 
@@ -292,9 +297,28 @@ export interface GameListingFilters {
 
 
 export const USER_RELATIONSHIP_LABELS: Record<UserRelationship, string> = {
-  gm: 'You are GM',
-  participant: 'You are playing',
-  applied: 'Application pending',
+  gm: 'GM',
+  co_gm: 'Co-GM',
+  participant: 'Player',
+  audience: 'Audience',
+  applied: 'Applied',
+  none: ''
+};
+
+/**
+ * Badge styling per relationship. Outlined on a solid background so the badge
+ * stays legible over the state tint the card carries (GAME_STATE_CARD_STYLES).
+ *
+ * Roles that confer authority (GM, Co-GM) read as primary; roles that are
+ * simply "you are in this game" read as info; a pending application reads as
+ * warning because it is the only one awaiting someone else's decision.
+ */
+export const USER_RELATIONSHIP_BADGE_STYLES: Record<UserRelationship, string> = {
+  gm: 'border-interactive-primary text-interactive-primary',
+  co_gm: 'border-interactive-primary text-interactive-primary',
+  participant: 'border-semantic-info text-semantic-info',
+  audience: 'border-semantic-info text-semantic-info',
+  applied: 'border-semantic-warning text-semantic-warning',
   none: ''
 };
 

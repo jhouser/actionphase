@@ -71,25 +71,42 @@ describe('EnhancedGameCard', () => {
   });
 
   describe('User Relationship Badges', () => {
-    it('should show "You are GM" badge for GM', () => {
+    it('should show "GM" badge for GM', () => {
       const gmGame = { ...mockGame, user_relationship: 'gm' as const };
       render(<EnhancedGameCard game={gmGame} />, { wrapper });
 
-      expect(screen.getByText('You are GM')).toBeInTheDocument();
+      expect(screen.getByText('GM')).toBeInTheDocument();
     });
 
-    it('should show "You are playing" badge for participant', () => {
+    it('should show "Co-GM" badge for co-GM', () => {
+      const coGmGame = { ...mockGame, user_relationship: 'co_gm' as const };
+      render(<EnhancedGameCard game={coGmGame} />, { wrapper });
+
+      expect(screen.getByText('Co-GM')).toBeInTheDocument();
+    });
+
+    it('should show "Player" badge for participant', () => {
       const participantGame = { ...mockGame, user_relationship: 'participant' as const };
       render(<EnhancedGameCard game={participantGame} />, { wrapper });
 
-      expect(screen.getByText('You are playing')).toBeInTheDocument();
+      expect(screen.getByText('Player')).toBeInTheDocument();
     });
 
-    it('should show "Application pending" badge for applied', () => {
+    it('should show "Audience" badge for audience, not "Player"', () => {
+      // Regression: audience members used to come back as 'participant' from
+      // the listing query and were labelled "You are playing".
+      const audienceGame = { ...mockGame, user_relationship: 'audience' as const };
+      render(<EnhancedGameCard game={audienceGame} />, { wrapper });
+
+      expect(screen.getByText('Audience')).toBeInTheDocument();
+      expect(screen.queryByText('Player')).not.toBeInTheDocument();
+    });
+
+    it('should show "Applied" badge for applied', () => {
       const appliedGame = { ...mockGame, user_relationship: 'applied' as const };
       render(<EnhancedGameCard game={appliedGame} />, { wrapper });
 
-      expect(screen.getByText('Application pending')).toBeInTheDocument();
+      expect(screen.getByText('Applied')).toBeInTheDocument();
     });
 
     it('should still show the badge on a completed game the user played in', () => {
@@ -102,15 +119,16 @@ describe('EnhancedGameCard', () => {
       };
       render(<EnhancedGameCard game={playedGame} />, { wrapper });
 
-      expect(screen.getByText('You are playing')).toBeInTheDocument();
+      expect(screen.getByText('Player')).toBeInTheDocument();
     });
 
     it('should not show badge for none relationship', () => {
       render(<EnhancedGameCard game={mockGame} />, { wrapper });
 
-      expect(screen.queryByText('You are GM')).not.toBeInTheDocument();
-      expect(screen.queryByText('You are playing')).not.toBeInTheDocument();
-      expect(screen.queryByText('Application pending')).not.toBeInTheDocument();
+      expect(screen.queryByText('GM')).not.toBeInTheDocument();
+      expect(screen.queryByText('Player')).not.toBeInTheDocument();
+      expect(screen.queryByText('Audience')).not.toBeInTheDocument();
+      expect(screen.queryByText('Applied')).not.toBeInTheDocument();
     });
   });
 

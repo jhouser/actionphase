@@ -348,6 +348,69 @@ func TestGameService_CurrentPlayersExcludesAudience(t *testing.T) {
 		"current_players should count only players, not audience members")
 }
 
+// TestGameService_UserRelationshipDistinguishesRoles verifies that the listing
+// query reports the viewer's actual participant role. It previously reported
+// every active participant as "participant", which made the games-list badge
+// tell an audience member they were playing.
+func TestGameService_UserRelationshipDistinguishesRoles(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "games", "game_participants", "sessions", "users")
+
+	fixtures := testDB.SetupFixtures(t)
+	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	game, err := gameService.CreateGame(ctx, core.CreateGameRequest{
+		Title:       "Relationship Role Test Game",
+		Description: "Test that user_relationship reflects participant role",
+		GMUserID:    int32(fixtures.TestUser.ID),
+		MaxPlayers:  5,
+		IsPublic:    true,
+	})
+	require.NoError(t, err)
+
+	player := testDB.CreateTestUser(t, "rel_test_player", "rel_player@test.com")
+	audience := testDB.CreateTestUser(t, "rel_test_audience", "rel_audience@test.com")
+	coGM := testDB.CreateTestUser(t, "rel_test_cogm", "rel_cogm@test.com")
+
+	_, err = gameService.AddGameParticipant(ctx, game.ID, int32(player.ID), "player")
+	require.NoError(t, err)
+	_, err = gameService.AddGameParticipant(ctx, game.ID, int32(audience.ID), "audience")
+	require.NoError(t, err)
+	_, err = gameService.AddGameParticipant(ctx, game.ID, int32(coGM.ID), "co_gm")
+	require.NoError(t, err)
+
+	relationshipFor := func(t *testing.T, userID int32) string {
+		t.Helper()
+		result, err := gameService.GetFilteredGames(ctx, core.GameListingFilters{
+			UserID:   &userID,
+			PageSize: 100,
+			Page:     1,
+		})
+		require.NoError(t, err)
+
+		for _, g := range result.Games {
+			if g.ID == game.ID {
+				require.NotNil(t, g.UserRelationship, "user_relationship should be populated")
+				return *g.UserRelationship
+			}
+		}
+		t.Fatalf("game %d should appear in listing", game.ID)
+		return ""
+	}
+
+	assert.Equal(t, "gm", relationshipFor(t, int32(fixtures.TestUser.ID)),
+		"the game's GM should be reported as gm")
+	assert.Equal(t, "participant", relationshipFor(t, int32(player.ID)),
+		"a player should be reported as participant")
+	assert.Equal(t, "audience", relationshipFor(t, int32(audience.ID)),
+		"an audience member must not be reported as participant")
+	assert.Equal(t, "co_gm", relationshipFor(t, int32(coGM.ID)),
+		"a co-GM should be reported as co_gm")
+}
+
 // Helper function for bool pointers
 func boolPtr(b bool) *bool {
 	return &b

@@ -6,6 +6,7 @@ import {
   GAME_STATE_COLORS,
   GAME_STATE_CARD_STYLES,
   USER_RELATIONSHIP_LABELS,
+  USER_RELATIONSHIP_BADGE_STYLES,
 } from '../types/games';
 import { Button } from './ui';
 
@@ -58,11 +59,7 @@ export function EnhancedGameCard({
           {game.user_relationship && game.user_relationship !== 'none' && (
             <span
               className={`ml-2 px-2 py-1 rounded-full border text-xs font-semibold whitespace-nowrap surface-base ${
-                game.user_relationship === 'gm'
-                  ? 'border-interactive-primary text-interactive-primary'
-                  : game.user_relationship === 'participant'
-                  ? 'border-semantic-info text-semantic-info'
-                  : 'border-semantic-warning text-semantic-warning'
+                USER_RELATIONSHIP_BADGE_STYLES[game.user_relationship]
               }`}
               data-testid={`game-relationship-${game.user_relationship}`}
             >
