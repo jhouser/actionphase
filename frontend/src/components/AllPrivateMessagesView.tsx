@@ -37,7 +37,9 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
     serialize: (v) => v ?? '',
     replace: true,
   });
-  const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(new Set());
+  // Selection is tracked by character ID, not name: names are mutable and not unique
+  // within a game, so a rename silently changed which conversations matched.
+  const [selectedParticipants, setSelectedParticipants] = useState<Set<number>>(new Set());
 
   // Fetch messages for selected conversation
   const {
@@ -47,7 +49,7 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
   } = useAudienceConversationMessages(gameId, selectedConversationId);
 
   // Fetch conversations with server-side filtering
-  const selectedNamesForConvs = useMemo(() => Array.from(selectedParticipants), [selectedParticipants]);
+  const selectedIdsForConvs = useMemo(() => Array.from(selectedParticipants), [selectedParticipants]);
   const {
     data,
     fetchNextPage,
@@ -56,7 +58,7 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
     isLoading,
     error,
   } = useAllPrivateConversations(gameId, {
-    participantNames: selectedNamesForConvs.length > 0 ? selectedNamesForConvs : undefined
+    participantCharacterIds: selectedIdsForConvs.length > 0 ? selectedIdsForConvs : undefined
   });
 
   // Infinite scroll handler
@@ -86,17 +88,17 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
 
   // Fetch valid filter options from the backend.
   // Returns all participants when nothing is selected; narrows to co-participants
-  // of all selected names when a filter is active. Backed by a dedicated SQL query
+  // of all selected characters when a filter is active. Backed by a dedicated SQL query
   // that scans ALL conversations — not just the paginated subset loaded so far.
-  const { data: filterOptions = [] } = useConversationParticipants(gameId, selectedNamesForConvs);
+  const { data: filterOptions = [] } = useConversationParticipants(gameId, selectedIdsForConvs);
 
-  const toggleParticipant = (participant: string) => {
+  const toggleParticipant = (characterId: number) => {
     setSelectedParticipants(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(participant)) {
-        newSet.delete(participant);
+      if (newSet.has(characterId)) {
+        newSet.delete(characterId);
       } else {
-        newSet.add(participant);
+        newSet.add(characterId);
       }
       return newSet;
     });
@@ -199,11 +201,11 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
           </div>
           <div className="flex flex-wrap gap-2">
             {filterOptions.map((participant) => {
-              const isSelected = selectedParticipants.has(participant);
+              const isSelected = selectedParticipants.has(participant.id);
               return (
                 <button
-                  key={participant}
-                  onClick={() => toggleParticipant(participant)}
+                  key={participant.id}
+                  onClick={() => toggleParticipant(participant.id)}
                   className={`
                     px-3 py-1.5 rounded-full text-sm font-medium transition-colors
                     ${isSelected
@@ -212,7 +214,7 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
                     }
                   `}
                 >
-                  {participant}
+                  {participant.name}
                 </button>
               );
             })}

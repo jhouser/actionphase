@@ -228,25 +228,29 @@ func (h *Handler) ListAllPrivateConversations(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	// Parse participant_names filter (comma-separated)
-	var participantNames []string
-	participantNamesStr := r.URL.Query().Get("participant_names")
-	if participantNamesStr != "" {
-		// Split by comma and trim spaces
-		for _, name := range r.URL.Query()["participant_names"] {
-			if name != "" {
-				participantNames = append(participantNames, name)
-			}
+	// Parse participant_ids filter (repeated param). Filtering is by character ID
+	// rather than name: names are mutable and non-unique, so a rename silently
+	// changed which conversations matched.
+	var participantCharacterIDs []int32
+	for _, raw := range r.URL.Query()["participant_ids"] {
+		if raw == "" {
+			continue
 		}
+		id, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrBadRequest(fmt.Errorf("participant_ids must be integers")), "Invalid participant_ids filter", "value", raw)
+			return
+		}
+		participantCharacterIDs = append(participantCharacterIDs, int32(id))
 	}
 
 	// Get all private conversations with filters
 	messageService := h.MessageService
 	conversations, err := messageService.ListAllPrivateConversations(ctx, core.ListAllPrivateConversationsParams{
-		GameID:           int32(gameID),
-		ParticipantNames: participantNames,
-		Limit:            limit,
-		Offset:           offset,
+		GameID:                  int32(gameID),
+		ParticipantCharacterIDs: participantCharacterIDs,
+		Limit:                   limit,
+		Offset:                  offset,
 	})
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to list private conversations", "error", err, "game_id", gameID)
@@ -254,7 +258,7 @@ func (h *Handler) ListAllPrivateConversations(w http.ResponseWriter, r *http.Req
 	}
 
 	// Get total count for pagination display
-	total, err := messageService.CountAllPrivateConversations(ctx, int32(gameID), participantNames)
+	total, err := messageService.CountAllPrivateConversations(ctx, int32(gameID), participantCharacterIDs)
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to count private conversations", "error", err, "game_id", gameID)
 		return
@@ -380,9 +384,11 @@ func (h *Handler) GetAudienceConversationMessages(w http.ResponseWriter, r *http
 	})
 }
 
-// GetConversationParticipants returns participant names for the filter UI.
-// When no ?selected[] params are given, returns all names that appear in any conversation.
-// When selected names are given, returns only names that share a conversation with ALL of them.
+// GetConversationParticipants returns participating characters for the filter UI.
+// When no ?selected[] params are given, returns all characters that appear in any conversation.
+// When selected character IDs are given, returns only characters that share a
+// conversation with ALL of them. Returns {id, name} so the UI can display names
+// while filtering by ID.
 // GET /api/v1/games/:id/private-messages/participants
 func (h *Handler) GetConversationParticipants(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -407,16 +413,27 @@ func (h *Handler) GetConversationParticipants(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	selectedNames := r.URL.Query()["selected[]"]
+	var selectedCharacterIDs []int32
+	for _, raw := range r.URL.Query()["selected[]"] {
+		if raw == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil {
+			h.renderError(ctx, w, r, core.ErrBadRequest(fmt.Errorf("selected[] must be character IDs")), "Invalid selected[] filter", "value", raw)
+			return
+		}
+		selectedCharacterIDs = append(selectedCharacterIDs, int32(id))
+	}
 
 	messageService := h.MessageService
-	names, err := messageService.GetConversationParticipantNames(ctx, int32(gameID), selectedNames)
+	characters, err := messageService.GetConversationParticipantCharacters(ctx, int32(gameID), selectedCharacterIDs)
 	if err != nil {
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get conversation participants", "error", err, "game_id", gameID)
 		return
 	}
 
-	render.JSON(w, r, map[string][]string{"participants": names})
+	render.JSON(w, r, map[string][]core.ConversationParticipantCharacter{"participants": characters})
 }
 
 // ListAllActionSubmissions lists all action submissions for GM/audience
