@@ -745,9 +745,12 @@
     min-height: 44px;
   }
 
-  /* Minimal padding for maximum content width on mobile */
-  .card,
-  [class*="surface-"] {
+  /* Minimal padding for maximum content width on mobile.
+     Scroll containers are excluded: a `sticky` header pins to its scrollport's
+     *padding* edge, so padding here leaves a strip above the header that
+     scrolling content shows through (e.g. ThreadViewModal's "Thread View" bar). */
+  .card:not(.overflow-y-auto):not(.overflow-auto),
+  [class*="surface-"]:not(.overflow-y-auto):not(.overflow-auto) {
     padding: 5px; /* Minimal padding for mobile */
   }
 }
