@@ -770,11 +770,13 @@ FROM conversation_messages cm
 LEFT JOIN participants_agg pa ON cm.conversation_id = pa.conversation_id
 LEFT JOIN last_messages lm ON cm.conversation_id = lm.conversation_id
 WHERE (
-  -- If participant_names filter is provided (not empty array), filter by it
-  -- Otherwise, show all conversations
+  -- Filter on character IDs, not names. Character names are mutable and not unique
+  -- within a game, so a rename or a name collision silently changed which
+  -- conversations matched. Empty/NULL filter shows all conversations.
   CASE
-    WHEN sqlc.arg(participant_names)::text[] IS NULL OR array_length(sqlc.arg(participant_names)::text[], 1) IS NULL THEN true
-    ELSE pa.participant_names::text[] @> sqlc.arg(participant_names)::text[]
+    WHEN sqlc.arg(participant_character_ids)::int[] IS NULL
+      OR array_length(sqlc.arg(participant_character_ids)::int[], 1) IS NULL THEN true
+    ELSE pa.participant_character_ids::int[] @> sqlc.arg(participant_character_ids)::int[]
   END
 )
 ORDER BY cm.latest_message_at DESC NULLS LAST
@@ -787,7 +789,7 @@ OFFSET sqlc.arg(result_offset);
 WITH participants_agg AS (
   SELECT
     cp.conversation_id,
-    array_agg(COALESCE(ch.name, u.username) ORDER BY cp.id) as participant_names
+    array_agg(cp.character_id ORDER BY cp.id) as participant_character_ids
   FROM (
     SELECT DISTINCT ON (conversation_id, character_id)
       id, conversation_id, user_id, character_id
@@ -795,7 +797,6 @@ WITH participants_agg AS (
     ORDER BY conversation_id, character_id, id
   ) cp
   JOIN users u ON cp.user_id = u.id
-  LEFT JOIN characters ch ON cp.character_id = ch.id
   GROUP BY cp.conversation_id
 )
 SELECT COUNT(*)
@@ -804,8 +805,9 @@ LEFT JOIN participants_agg pa ON c.id = pa.conversation_id
 WHERE c.game_id = sqlc.arg(game_id)
   AND (
     CASE
-      WHEN sqlc.arg(participant_names)::text[] IS NULL OR array_length(sqlc.arg(participant_names)::text[], 1) IS NULL THEN true
-      ELSE pa.participant_names::text[] @> sqlc.arg(participant_names)::text[]
+      WHEN sqlc.arg(participant_character_ids)::int[] IS NULL
+        OR array_length(sqlc.arg(participant_character_ids)::int[], 1) IS NULL THEN true
+      ELSE pa.participant_character_ids::int[] @> sqlc.arg(participant_character_ids)::int[]
     END
   );
 
@@ -828,35 +830,52 @@ FROM messages
 WHERE character_id = $1
   AND is_deleted = false;
 
--- name: GetConversationParticipantNames :many
--- Get all character/user names that appear in at least one conversation in the game,
--- optionally narrowed to only those who share a conversation with ALL of the given names.
--- When selected_names is empty, returns every participant across all conversations.
--- When selected_names is non-empty, returns names that co-appear with all selected names.
+-- name: CountPrivateMessagesByCharacter :one
+-- Count private messages sent by a specific character, plus conversations the
+-- character participates in. Used alongside CountMessagesByCharacter to decide
+-- whether a character can be deleted: deleting one with private-message history
+-- would NULL out conversation_participants.character_id and
+-- private_messages.sender_character_id via ON DELETE SET NULL, silently severing
+-- those messages from their author.
+SELECT (
+  (SELECT COUNT(*) FROM private_messages
+    WHERE sender_character_id = $1
+      AND is_deleted = false)
+  +
+  (SELECT COUNT(*) FROM conversation_participants
+    WHERE character_id = $1)
+)::bigint;
+
+-- name: GetConversationParticipantCharacters :many
+-- Get the distinct characters that appear in at least one conversation in the game,
+-- optionally narrowed to those sharing a conversation with ALL of the given character IDs.
+-- Returns IDs alongside names: the UI displays names but filters by ID, since names
+-- are mutable and non-unique.
+-- When selected_character_ids is empty, returns every participating character.
 WITH participants_per_conv AS (
   SELECT
     cp.conversation_id,
-    array_agg(COALESCE(ch.name, u.username) ORDER BY cp.id) AS names
+    array_agg(cp.character_id ORDER BY cp.id) AS character_ids
   FROM conversation_participants cp
-  JOIN users u ON cp.user_id = u.id
-  LEFT JOIN characters ch ON cp.character_id = ch.id
   JOIN conversations c ON cp.conversation_id = c.id
   WHERE c.game_id = $1
+    AND cp.character_id IS NOT NULL
   GROUP BY cp.conversation_id
 ),
 matching_convs AS (
-  -- Conversations that contain ALL of the selected names (or all if none selected)
   SELECT conversation_id
   FROM participants_per_conv
   WHERE
     CASE
-      WHEN sqlc.arg(selected_names)::text[] IS NULL
-        OR array_length(sqlc.arg(selected_names)::text[], 1) IS NULL
+      WHEN sqlc.arg(selected_character_ids)::int[] IS NULL
+        OR array_length(sqlc.arg(selected_character_ids)::int[], 1) IS NULL
       THEN true
-      ELSE names::text[] @> sqlc.arg(selected_names)::text[]
+      ELSE character_ids::int[] @> sqlc.arg(selected_character_ids)::int[]
     END
 )
-SELECT DISTINCT unnest(ppc.names) AS participant_name
+SELECT DISTINCT ch.id AS character_id, ch.name AS character_name
 FROM participants_per_conv ppc
 JOIN matching_convs mc ON ppc.conversation_id = mc.conversation_id
-ORDER BY participant_name;
+CROSS JOIN LATERAL unnest(ppc.character_ids) AS pid(character_id)
+JOIN characters ch ON ch.id = pid.character_id
+ORDER BY ch.name;

@@ -29,6 +29,7 @@ import { WithdrawApplicationConfirmationDialog } from '../components/WithdrawApp
 import { DeadlineStrip } from '../components/DeadlineStrip';
 import type { CreateDeadlineRequest, UnifiedDeadline } from '../types/deadlines';
 import { getDeadlineTarget } from '../utils/deadlineTarget';
+import { clearForeignTabParams } from '../utils/tabParams';
 import { logger } from '@/services/LoggingService';
 
 interface GameDetailsPageProps {
@@ -202,13 +203,9 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
   const getTabHref = useCallback((tabId: string) => {
     const params = new URLSearchParams(searchParams);
     params.set('tab', tabId);
-    // Clear tab-specific sub-params when leaving their tab
-    if (tabId !== 'messages') params.delete('conversation');
-    if (tabId !== 'audience') params.delete('audienceConversation');
-    if (tabId !== 'people') {
-      params.delete('character');
-      params.delete('peopleTab');
-    }
+    // Clear tab-specific sub-params when leaving their tab, so returning to a
+    // tab later opens it fresh instead of resuming a stale drill-down.
+    clearForeignTabParams(params, tabId);
     return `?${params.toString()}`;
   }, [searchParams]);
 

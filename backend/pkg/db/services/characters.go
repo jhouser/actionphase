@@ -634,17 +634,32 @@ func (cs *CharacterService) DeleteCharacter(ctx context.Context, characterID int
 	return nil
 }
 
-// characterHasMessages checks if a character has any messages (posts or comments)
+// characterHasMessages checks if a character has any messages: common room posts
+// and comments, plus private messages and conversation memberships.
+//
+// Private message history must be included. Both conversation_participants.character_id
+// and private_messages.sender_character_id are ON DELETE SET NULL, so deleting a
+// character that only ever spoke in private would silently rewrite those columns to
+// NULL, severing the messages from their author with no way to recover the link.
 func (cs *CharacterService) characterHasMessages(ctx context.Context, characterID int32) (bool, error) {
 	queries := models.New(cs.DB)
 
-	// Count messages by this character
+	// Count common room posts and comments by this character
 	count, err := queries.CountMessagesByCharacter(ctx, characterID)
 	if err != nil {
 		return false, err
 	}
+	if count > 0 {
+		return true, nil
+	}
 
-	return count > 0, nil
+	// Count private messages sent by, and conversations involving, this character
+	privateCount, err := queries.CountPrivateMessagesByCharacter(ctx, pgtype.Int4{Int32: characterID, Valid: true})
+	if err != nil {
+		return false, err
+	}
+
+	return privateCount > 0, nil
 }
 
 // characterHasActionSubmissions checks if a character has any action submissions

@@ -21,7 +21,8 @@ import type {
 } from '../../types/games';
 import type {
   AudienceConversationListItem,
-  AudienceConversationMessage
+  AudienceConversationMessage,
+  ConversationParticipantCharacter
 } from '../../types/conversations';
 import type { ActionWithDetails } from '../../types/phases';
 import type { GameStats } from '../../types/gameStats';
@@ -165,14 +166,15 @@ export class GamesApi extends BaseApiClient {
     });
   }
 
-  async listAllPrivateConversations(gameId: number, options?: { limit?: number; offset?: number; participantNames?: string[] }) {
+  async listAllPrivateConversations(gameId: number, options?: { limit?: number; offset?: number; participantCharacterIds?: number[] }) {
     const params = new URLSearchParams();
     if (options?.limit) params.append('limit', options.limit.toString());
     if (options?.offset) params.append('offset', options.offset.toString());
-    // Add each participant name as a separate parameter
-    if (options?.participantNames && options.participantNames.length > 0) {
-      options.participantNames.forEach(name => {
-        params.append('participant_names', name);
+    // Filter by character ID, not name: names are mutable and non-unique, so a
+    // rename silently changed which conversations matched.
+    if (options?.participantCharacterIds && options.participantCharacterIds.length > 0) {
+      options.participantCharacterIds.forEach(id => {
+        params.append('participant_ids', String(id));
       });
     }
 
@@ -184,16 +186,16 @@ export class GamesApi extends BaseApiClient {
     return this.client.get<{ conversations: AudienceConversationListItem[]; total: number }>(url);
   }
 
-  async getConversationParticipants(gameId: number, selectedNames?: string[]) {
+  async getConversationParticipants(gameId: number, selectedCharacterIds?: number[]) {
     const params = new URLSearchParams();
-    if (selectedNames && selectedNames.length > 0) {
-      selectedNames.forEach(name => params.append('selected[]', name));
+    if (selectedCharacterIds && selectedCharacterIds.length > 0) {
+      selectedCharacterIds.forEach(id => params.append('selected[]', String(id)));
     }
     const queryString = params.toString();
     const url = queryString
       ? `/api/v1/games/${gameId}/private-messages/participants?${queryString}`
       : `/api/v1/games/${gameId}/private-messages/participants`;
-    return this.client.get<{ participants: string[] }>(url);
+    return this.client.get<{ participants: ConversationParticipantCharacter[] }>(url);
   }
 
   async getAudienceConversationMessages(gameId: number, conversationId: string) {

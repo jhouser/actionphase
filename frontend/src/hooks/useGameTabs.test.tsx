@@ -679,8 +679,15 @@ describe('useGameTabs', () => {
           <span data-testid="audienceConversation">{searchParams.get('audienceConversation') ?? ''}</span>
           <span data-testid="character">{searchParams.get('character') ?? ''}</span>
           <span data-testid="peopleTab">{searchParams.get('peopleTab') ?? ''}</span>
+          <span data-testid="phase">{searchParams.get('phase') ?? ''}</span>
+          <span data-testid="subTab">{searchParams.get('subTab') ?? ''}</span>
+          <span data-testid="characters">{searchParams.get('characters') ?? ''}</span>
+          <span data-testid="view">{searchParams.get('view') ?? ''}</span>
+          <span data-testid="poll">{searchParams.get('poll') ?? ''}</span>
           <button onClick={() => setActiveTab('common-room')}>go-common-room</button>
           <button onClick={() => setActiveTab('messages')}>go-messages</button>
+          <button onClick={() => setActiveTab('history')}>go-history</button>
+          <button onClick={() => setActiveTab('people')}>go-people</button>
         </div>
       );
     }
@@ -725,6 +732,41 @@ describe('useGameTabs', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('audienceConversation').textContent).toBe('');
+      });
+    });
+
+    it('should clear history phase/subTab/characters params when switching away from history', async () => {
+      render(
+        <MemoryRouter initialEntries={['/games/1?tab=history&phase=12&subTab=results&characters=3,4']}>
+          <TabParamSpy tabArgs={defaultTabArgs} />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByTestId('phase').textContent).toBe('12');
+
+      act(() => { screen.getByRole('button', { name: 'go-people' }).click(); });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('phase').textContent).toBe('');
+        expect(screen.getByTestId('subTab').textContent).toBe('');
+        expect(screen.getByTestId('characters').textContent).toBe('');
+      });
+    });
+
+    it('should clear common room view/poll params when switching away from common room', async () => {
+      render(
+        <MemoryRouter initialEntries={['/games/1?tab=common-room&view=polls&poll=9']}>
+          <TabParamSpy tabArgs={defaultTabArgs} />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByTestId('view').textContent).toBe('polls');
+
+      act(() => { screen.getByRole('button', { name: 'go-history' }).click(); });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('view').textContent).toBe('');
+        expect(screen.getByTestId('poll').textContent).toBe('');
       });
     });
 
