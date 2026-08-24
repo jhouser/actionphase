@@ -74,7 +74,7 @@ export function CommentWithParentCard({
   const canReply = !comment.is_deleted && userCharacters.length > 0 && !!comment.post_id;
 
   //Content autosave id for comment textbox
-  const autosaveRefId = postCachingService.createAutosaveId('post-reply', comment.parent_id);
+  const autosaveRefId = postCachingService.createAutosaveId('post-reply', comment.id);
 
   const handleCopyLink = async () => {
     const url = `${window.location.origin}/games/${gameId}?tab=common-room&comment=${comment.id}`;
