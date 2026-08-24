@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, createElement, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { Tab } from '../components/TabNavigation';
 import type { GameState } from '../types/games';
+import { clearForeignTabParams } from '../utils/tabParams';
 
 interface UseGameTabsOptions {
   gameState: GameState | undefined;
@@ -316,13 +317,9 @@ export function useGameTabs({
     // Update URL with new tab parameter (creates history entry)
     const newParams = new URLSearchParams(searchParams);
     newParams.set('tab', tabId);
-    // Clear tab-specific sub-params when leaving their tab
-    if (tabId !== 'messages') newParams.delete('conversation');
-    if (tabId !== 'audience') newParams.delete('audienceConversation');
-    if (tabId !== 'people') {
-      newParams.delete('character');
-      newParams.delete('peopleTab');
-    }
+    // Clear tab-specific sub-params when leaving their tab, so returning to a
+    // tab later opens it fresh instead of resuming a stale drill-down.
+    clearForeignTabParams(newParams, tabId);
     setSearchParams(newParams, { replace: false });
   };
 

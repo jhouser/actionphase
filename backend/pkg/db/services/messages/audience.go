@@ -20,10 +20,10 @@ func (ms *MessageService) ListAllPrivateConversations(ctx context.Context, param
 
 	// Convert to sqlc params
 	sqlcParams := models.ListAllPrivateConversationsParams{
-		GameID:           params.GameID,
-		ParticipantNames: params.ParticipantNames,
-		ResultLimit:      params.Limit,
-		ResultOffset:     params.Offset,
+		GameID:                  params.GameID,
+		ParticipantCharacterIds: params.ParticipantCharacterIDs,
+		ResultLimit:             params.Limit,
+		ResultOffset:            params.Offset,
 	}
 
 	conversations, err := queries.ListAllPrivateConversations(ctx, sqlcParams)
@@ -36,12 +36,12 @@ func (ms *MessageService) ListAllPrivateConversations(ctx context.Context, param
 
 // CountAllPrivateConversations returns the total number of private conversations in a game,
 // applying the same participant filter as ListAllPrivateConversations.
-func (ms *MessageService) CountAllPrivateConversations(ctx context.Context, gameID int32, participantNames []string) (int64, error) {
+func (ms *MessageService) CountAllPrivateConversations(ctx context.Context, gameID int32, participantCharacterIDs []int32) (int64, error) {
 	queries := models.New(ms.DB)
 
 	count, err := queries.CountAllPrivateConversations(ctx, models.CountAllPrivateConversationsParams{
-		GameID:           gameID,
-		ParticipantNames: participantNames,
+		GameID:                  gameID,
+		ParticipantCharacterIds: participantCharacterIDs,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to count all private conversations: %w", err)
@@ -50,27 +50,28 @@ func (ms *MessageService) CountAllPrivateConversations(ctx context.Context, game
 	return count, nil
 }
 
-// GetConversationParticipantNames returns all participant names that appear in at least
+// GetConversationParticipantCharacters returns the characters that appear in at least
 // one conversation in the game, optionally narrowed to those who share a conversation
-// with all of the given selected names.
-func (ms *MessageService) GetConversationParticipantNames(ctx context.Context, gameID int32, selectedNames []string) ([]string, error) {
+// with all of the given character IDs.
+func (ms *MessageService) GetConversationParticipantCharacters(ctx context.Context, gameID int32, selectedCharacterIDs []int32) ([]core.ConversationParticipantCharacter, error) {
 	queries := models.New(ms.DB)
 
-	rows, err := queries.GetConversationParticipantNames(ctx, models.GetConversationParticipantNamesParams{
-		GameID:        gameID,
-		SelectedNames: selectedNames,
+	rows, err := queries.GetConversationParticipantCharacters(ctx, models.GetConversationParticipantCharactersParams{
+		GameID:               gameID,
+		SelectedCharacterIds: selectedCharacterIDs,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get conversation participant names: %w", err)
+		return nil, fmt.Errorf("failed to get conversation participant characters: %w", err)
 	}
 
-	names := make([]string, 0, len(rows))
+	characters := make([]core.ConversationParticipantCharacter, 0, len(rows))
 	for _, r := range rows {
-		if name, ok := r.(string); ok && name != "" {
-			names = append(names, name)
-		}
+		characters = append(characters, core.ConversationParticipantCharacter{
+			ID:   r.CharacterID,
+			Name: r.CharacterName,
+		})
 	}
-	return names, nil
+	return characters, nil
 }
 
 // GetAudienceConversationMessages retrieves all messages in a conversation (for audience/GM)

@@ -1160,7 +1160,7 @@ func TestCharacterService_DeleteCharacter(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	app := core.NewTestApp(testDB.Pool)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "messages", "action_submissions", "character_data", "npc_assignments", "characters", "game_phases", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "private_messages", "conversation_participants", "conversations", "messages", "action_submissions", "character_data", "npc_assignments", "characters", "game_phases", "games", "sessions", "users")
 
 	// Setup test fixtures
 	fixtures := testDB.SetupFixtures(t)
@@ -1211,6 +1211,61 @@ func TestCharacterService_DeleteCharacter(t *testing.T) {
 		retrieved, err := queries.GetCharacter(context.Background(), character.ID)
 		core.AssertNoError(t, err, "Character should still exist")
 		core.AssertEqual(t, character.ID, retrieved.ID, "Character should not be deleted")
+	})
+
+	t.Run("prevent deletion when character has only private messages", func(t *testing.T) {
+		// Regression: characterHasMessages only counted the `messages` table, so a
+		// character whose entire history was private messages looked inactive and was
+		// deletable. Because conversation_participants.character_id and
+		// private_messages.sender_character_id are ON DELETE SET NULL, deleting it
+		// silently severed those messages from their author, unrecoverably.
+		character, err := characterService.CreateCharacter(context.Background(), CreateCharacterRequest{
+			GameID:        fixtures.TestGame.ID,
+			UserID:        core.Int32Ptr(int32(fixtures.TestUser.ID)),
+			Name:          "Character With Private Messages Only",
+			CharacterType: "player_character",
+		})
+		core.AssertNoError(t, err, "Failed to create character")
+
+		// Give the character private-message history, and no `messages` rows at all.
+		var conversationID int32
+		err = testDB.Pool.QueryRow(context.Background(), `
+			INSERT INTO conversations (game_id, conversation_type, title, created_by_user_id)
+			VALUES ($1, 'direct', 'Private Only', $2)
+			RETURNING id
+		`, fixtures.TestGame.ID, fixtures.TestUser.ID).Scan(&conversationID)
+		core.AssertNoError(t, err, "Failed to create conversation")
+
+		_, err = testDB.Pool.Exec(context.Background(), `
+			INSERT INTO conversation_participants (conversation_id, user_id, character_id)
+			VALUES ($1, $2, $3)
+		`, conversationID, fixtures.TestUser.ID, character.ID)
+		core.AssertNoError(t, err, "Failed to add conversation participant")
+
+		_, err = testDB.Pool.Exec(context.Background(), `
+			INSERT INTO private_messages (conversation_id, sender_user_id, sender_character_id, content)
+			VALUES ($1, $2, $3, $4)
+		`, conversationID, fixtures.TestUser.ID, character.ID, "A private word")
+		core.AssertNoError(t, err, "Failed to create private message")
+
+		// Attempt to delete character - should fail
+		err = characterService.DeleteCharacter(context.Background(), character.ID)
+		core.AssertError(t, err, "Should not allow deletion of character with private messages")
+
+		// Verify character still exists
+		retrieved, err := queries.GetCharacter(context.Background(), character.ID)
+		core.AssertNoError(t, err, "Character should still exist")
+		core.AssertEqual(t, character.ID, retrieved.ID, "Character should not be deleted")
+
+		// Verify the authorship link survived (the actual damage this guards against)
+		var senderCharID *int32
+		err = testDB.Pool.QueryRow(context.Background(),
+			`SELECT sender_character_id FROM private_messages WHERE conversation_id = $1`,
+			conversationID).Scan(&senderCharID)
+		core.AssertNoError(t, err, "Failed to read back private message")
+		if senderCharID == nil || *senderCharID != character.ID {
+			t.Fatalf("private message lost its author link: got %v, want %d", senderCharID, character.ID)
+		}
 	})
 
 	t.Run("prevent deletion when character has action submissions", func(t *testing.T) {

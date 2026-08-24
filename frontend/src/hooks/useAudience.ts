@@ -6,11 +6,11 @@ import { apiClient } from '../lib/api';
  * Returns all participants when selectedNames is empty; narrows to co-participants
  * of all selected names when non-empty.
  */
-export function useConversationParticipants(gameId: number, selectedNames: string[]) {
+export function useConversationParticipants(gameId: number, selectedCharacterIds: number[]) {
   return useQuery({
-    queryKey: ['conversation-participants', gameId, selectedNames],
+    queryKey: ['conversation-participants', gameId, selectedCharacterIds],
     queryFn: async () => {
-      const response = await apiClient.games.getConversationParticipants(gameId, selectedNames);
+      const response = await apiClient.games.getConversationParticipants(gameId, selectedCharacterIds);
       return response.data.participants;
     },
     enabled: !!gameId,
@@ -22,7 +22,7 @@ export function useConversationParticipants(gameId: number, selectedNames: strin
  */
 export function useAllPrivateConversations(
   gameId: number,
-  options?: { participantNames?: string[] }
+  options?: { participantCharacterIds?: number[] }
 ) {
   return useInfiniteQuery({
     queryKey: ['all-private-conversations', gameId, options],

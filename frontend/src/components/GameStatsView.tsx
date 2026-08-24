@@ -105,6 +105,7 @@ export function GameStatsView({ gameId, gameState }: GameStatsViewProps) {
         params.set('phase', String(phaseId));
       }
       params.delete('audienceConversation');
+      params.delete('audienceParticipants');
       return `?${params.toString()}`;
     },
     [searchParams]

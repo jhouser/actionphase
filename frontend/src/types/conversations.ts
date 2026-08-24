@@ -107,3 +107,13 @@ export interface AudienceConversationMessage {
   sender_username: string;
   sender_character_name?: string | null;
 }
+
+/**
+ * A character appearing in at least one conversation, used for the audience
+ * filter controls. The UI displays `name` but filters by `id`, since character
+ * names are mutable and not unique within a game.
+ */
+export interface ConversationParticipantCharacter {
+  id: number;
+  name: string;
+}
