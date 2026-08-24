@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test-utils/render';
 import { CreatePostForm } from '../CreatePostForm';
 import type { Character } from '../../types/characters';
+import { postCachingService } from '../../services/PostCachingService';
 
 const mockCharacters: Character[] = [
   {
@@ -30,6 +31,7 @@ describe('CreatePostForm', () => {
   const mockOnSubmit = vi.fn();
 
   beforeEach(() => {
+    localStorage.clear();
     mockOnSubmit.mockClear();
   });
 
@@ -289,6 +291,28 @@ describe('CreatePostForm', () => {
 
       expect(textarea).toHaveValue(markdownContent);
     });
+    
+    it('saves post to localstorage cache with the proper tag', async () => {
+      const user = userEvent.setup();
+      const phaseId = 1;
+
+      renderWithProviders(
+        <CreatePostForm
+          gameId={1}
+          phaseId={phaseId}
+          characters={[mockCharacters[0]]}
+          onSubmit={mockOnSubmit}
+          isSubmitting={false}
+        />
+      );
+
+      const autosaveId = postCachingService.createAutosaveId('cr-main-post', phaseId);
+      
+      await user.type(screen.getByLabelText(/post content/i), 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+      expect(localStorage.getItem(autosaveId)).toContain('Hello there');
+    });
   });
 
   describe('Validation', () => {
@@ -467,6 +491,33 @@ describe('CreatePostForm', () => {
       await waitFor(() => {
         expect(mockOnSubmit).toHaveBeenCalledWith(2, 'Test content');
       });
+    });
+
+    
+    it('clears localstorage cache after submission', async () => {
+      const user = userEvent.setup();
+      const phaseId = 1;
+
+      renderWithProviders(
+        <CreatePostForm
+          gameId={1}
+          phaseId={phaseId}
+          characters={[mockCharacters[0]]}
+          onSubmit={mockOnSubmit}
+          isSubmitting={false}
+        />
+      );
+
+      const autosaveId = postCachingService.createAutosaveId('cr-main-post', phaseId);
+      
+      await user.type(screen.getByLabelText(/post content/i), 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+
+      const submitButton = screen.getByRole('button', { name: /create gm post/i });
+      await user.click(submitButton);
+
+      expect(localStorage.getItem(autosaveId)).toBeNull();
     });
   });
 

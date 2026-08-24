@@ -8,6 +8,7 @@ import { useGameContext } from '../../contexts/GameContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiClient } from '../../lib/api';
 import * as useScreenshotModeHook from '../../hooks/useScreenshotMode';
+import { postCachingService } from '../../services/PostCachingService';
 
 vi.mock('../../hooks/useScreenshotMode', () => ({
   useScreenshotMode: vi.fn(),
@@ -72,6 +73,7 @@ const mockControllableCharacter = {
 
 describe('CommentWithParentCard', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.mocked(useGameContext).mockReturnValue(mockGameContext as never);
     vi.mocked(useAuth).mockReturnValue({ currentUser: null } as never);
     vi.mocked(useScreenshotModeHook.useScreenshotMode).mockReturnValue({
@@ -394,6 +396,46 @@ describe('CommentWithParentCard', () => {
         // Confirmation banner adds a second "View in thread →" link
         expect(screen.getAllByText('View in thread →').length).toBeGreaterThanOrEqual(2);
       });
+    });
+    
+    it('saves post to localstorage cache with the proper tag', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useGameContext).mockReturnValue({
+        ...mockGameContext,
+        userCharacters: [mockControllableCharacter],
+      } as never);
+
+      renderWithProviders(<CommentWithParentCard comment={commentWithPostId} gameId={1} />, { gameId: 1 });
+
+      const autosaveId = postCachingService.createAutosaveId('post-reply', commentWithPostId.id);
+      
+      await user.click(screen.getByRole('button', { name: /reply/i }));
+      await user.type(screen.getByPlaceholderText('Write a reply...'), 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+      expect(localStorage.getItem(autosaveId)).toContain('Hello there');
+    });
+
+    it('clears localstorage cache after submission', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useGameContext).mockReturnValue({
+        ...mockGameContext,
+        userCharacters: [mockControllableCharacter],
+      } as never);
+      vi.mocked(apiClient.messages.createComment).mockResolvedValue({ data: {} } as never);
+
+      renderWithProviders(<CommentWithParentCard comment={commentWithPostId} gameId={1} />, { gameId: 1 });
+
+      const autosaveId = postCachingService.createAutosaveId('post-reply', commentWithPostId.id);
+      
+      await user.click(screen.getByRole('button', { name: /reply/i }));
+      await user.type(screen.getByPlaceholderText('Write a reply...'), 'Hello there');
+
+      expect(localStorage.getItem(autosaveId)).toBeDefined();
+
+      await user.click(screen.getByRole('button', { name: /^reply$/i }));
+
+      expect(localStorage.getItem(autosaveId)).toBeNull();
     });
   });
 
