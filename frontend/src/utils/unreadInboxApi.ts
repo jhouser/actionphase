@@ -4,19 +4,22 @@ import { logger } from '@/services/LoggingService';
 import type { Message } from '@/types/messages';
 import type { PrivateMessage } from '@/types/conversations';
 import type { Character } from '@/types/characters';
-import { classifyNotification } from './parseUnreadNotification';
+import { classifyNotification, collapseInboxItems } from './parseUnreadNotification';
 import type { UnreadInboxItem } from '@/types/unreadInbox';
 
 /**
  * Fetches unread notifications and classifies them into reply-capable inbox
  * items (comment replies/mentions and private messages). Non-repliable
- * notification types are dropped.
+ * notification types are dropped, and each conversation is collapsed to a
+ * single row so a busy group thread can't crowd out everything else.
  */
 export async function fetchUnreadInboxItems(): Promise<UnreadInboxItem[]> {
   const response = await apiClient.notifications.getNotifications({ unread: true, limit: 100 });
-  return response.data.data
+  const items = response.data.data
     .map(classifyNotification)
     .filter((item): item is UnreadInboxItem => item !== null);
+
+  return collapseInboxItems(items);
 }
 
 export interface CommentContext {

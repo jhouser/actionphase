@@ -87,6 +87,7 @@ describe('useUnreadInbox', () => {
         gameId: 12,
         conversationId: 34,
         messageId: 55,
+        unreadCount: 1,
       },
     ]);
   });
