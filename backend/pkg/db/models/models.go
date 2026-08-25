@@ -435,6 +435,8 @@ type Notification struct {
 	RelatedType pgtype.Text        `json:"related_type"`
 	RelatedID   pgtype.Int4        `json:"related_id"`
 	LinkUrl     pgtype.Text        `json:"link_url"`
+	ContextType pgtype.Text        `json:"context_type"`
+	ContextID   pgtype.Int4        `json:"context_id"`
 	IsRead      pgtype.Bool        `json:"is_read"`
 	ReadAt      pgtype.Timestamptz `json:"read_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`

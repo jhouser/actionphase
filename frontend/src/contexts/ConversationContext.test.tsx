@@ -1,6 +1,8 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test-utils/render';
 import { ConversationProvider, useConversation } from './ConversationContext';
 
 vi.mock('@/services/LoggingService', () => ({
@@ -37,8 +39,12 @@ const detailsFor = (id: number) => ({
   },
 });
 
+// ConversationProvider invalidates notification queries when a conversation is
+// marked read, so it needs a QueryClient in scope.
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <ConversationProvider>{children}</ConversationProvider>
+  <QueryClientProvider client={createTestQueryClient()}>
+    <ConversationProvider>{children}</ConversationProvider>
+  </QueryClientProvider>
 );
 
 beforeEach(() => {

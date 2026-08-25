@@ -1,6 +1,7 @@
 package notifications
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -28,6 +29,8 @@ type NotificationResponse struct {
 	RelatedType *string    `json:"related_type,omitempty"`
 	RelatedID   *int32     `json:"related_id,omitempty"`
 	LinkURL     *string    `json:"link_url,omitempty"`
+	ContextType *string    `json:"context_type,omitempty"`
+	ContextID   *int32     `json:"context_id,omitempty"`
 	IsRead      bool       `json:"is_read"`
 	ReadAt      *time.Time `json:"read_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -80,6 +83,8 @@ func notificationToResponse(notif *core.Notification) *NotificationResponse {
 		RelatedType: notif.RelatedType,
 		RelatedID:   notif.RelatedID,
 		LinkURL:     notif.LinkURL,
+		ContextType: notif.ContextType,
+		ContextID:   notif.ContextID,
 		IsRead:      notif.IsRead,
 		ReadAt:      notif.ReadAt,
 		CreatedAt:   notif.CreatedAt,
@@ -298,6 +303,16 @@ func (h *Handler) MarkNotificationAsRead(w http.ResponseWriter, r *http.Request)
 	service := h.NotificationService
 	err = service.MarkAsRead(ctx, int32(notificationID), userID)
 	if err != nil {
+		// A notification the caller doesn't own is reported as missing rather
+		// than forbidden, so IDs can't be probed.
+		if errors.Is(err, core.ErrNotificationNotFound) {
+			render.Render(w, r, &core.ErrResponse{
+				HTTPStatusCode: http.StatusNotFound,
+				StatusText:     "Not Found",
+				ErrorText:      "Notification not found",
+			})
+			return
+		}
 		render.Render(w, r, &core.ErrResponse{
 			HTTPStatusCode: http.StatusInternalServerError,
 			StatusText:     "Internal Server Error",

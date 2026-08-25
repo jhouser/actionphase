@@ -12,9 +12,9 @@ import (
 )
 
 const createNotification = `-- name: CreateNotification :one
-INSERT INTO notifications (user_id, game_id, type, title, content, related_type, related_id, link_url)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, user_id, game_id, type, title, content, related_type, related_id, link_url, is_read, read_at, created_at
+INSERT INTO notifications (user_id, game_id, type, title, content, related_type, related_id, link_url, context_type, context_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, user_id, game_id, type, title, content, related_type, related_id, link_url, context_type, context_id, is_read, read_at, created_at
 `
 
 type CreateNotificationParams struct {
@@ -26,6 +26,8 @@ type CreateNotificationParams struct {
 	RelatedType pgtype.Text `json:"related_type"`
 	RelatedID   pgtype.Int4 `json:"related_id"`
 	LinkUrl     pgtype.Text `json:"link_url"`
+	ContextType pgtype.Text `json:"context_type"`
+	ContextID   pgtype.Int4 `json:"context_id"`
 }
 
 func (q *Queries) CreateNotification(ctx context.Context, arg CreateNotificationParams) (Notification, error) {
@@ -38,6 +40,8 @@ func (q *Queries) CreateNotification(ctx context.Context, arg CreateNotification
 		arg.RelatedType,
 		arg.RelatedID,
 		arg.LinkUrl,
+		arg.ContextType,
+		arg.ContextID,
 	)
 	var i Notification
 	err := row.Scan(
@@ -50,6 +54,8 @@ func (q *Queries) CreateNotification(ctx context.Context, arg CreateNotification
 		&i.RelatedType,
 		&i.RelatedID,
 		&i.LinkUrl,
+		&i.ContextType,
+		&i.ContextID,
 		&i.IsRead,
 		&i.ReadAt,
 		&i.CreatedAt,
@@ -83,7 +89,7 @@ func (q *Queries) DeleteOldNotifications(ctx context.Context) error {
 }
 
 const getGameNotifications = `-- name: GetGameNotifications :many
-SELECT n.id, n.user_id, n.game_id, n.type, n.title, n.content, n.related_type, n.related_id, n.link_url, n.is_read, n.read_at, n.created_at, u.username
+SELECT n.id, n.user_id, n.game_id, n.type, n.title, n.content, n.related_type, n.related_id, n.link_url, n.context_type, n.context_id, n.is_read, n.read_at, n.created_at, u.username
 FROM notifications n
 JOIN users u ON n.user_id = u.id
 WHERE n.game_id = $1
@@ -107,6 +113,8 @@ type GetGameNotificationsRow struct {
 	RelatedType pgtype.Text        `json:"related_type"`
 	RelatedID   pgtype.Int4        `json:"related_id"`
 	LinkUrl     pgtype.Text        `json:"link_url"`
+	ContextType pgtype.Text        `json:"context_type"`
+	ContextID   pgtype.Int4        `json:"context_id"`
 	IsRead      pgtype.Bool        `json:"is_read"`
 	ReadAt      pgtype.Timestamptz `json:"read_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
@@ -132,6 +140,8 @@ func (q *Queries) GetGameNotifications(ctx context.Context, arg GetGameNotificat
 			&i.RelatedType,
 			&i.RelatedID,
 			&i.LinkUrl,
+			&i.ContextType,
+			&i.ContextID,
 			&i.IsRead,
 			&i.ReadAt,
 			&i.CreatedAt,
@@ -160,7 +170,7 @@ func (q *Queries) GetUnreadNotificationCount(ctx context.Context, userID int32) 
 }
 
 const getUnreadNotifications = `-- name: GetUnreadNotifications :many
-SELECT n.id, n.user_id, n.game_id, n.type, n.title, n.content, n.related_type, n.related_id, n.link_url, n.is_read, n.read_at, n.created_at, g.title as game_title
+SELECT n.id, n.user_id, n.game_id, n.type, n.title, n.content, n.related_type, n.related_id, n.link_url, n.context_type, n.context_id, n.is_read, n.read_at, n.created_at, g.title as game_title
 FROM notifications n
 LEFT JOIN games g ON n.game_id = g.id
 WHERE n.user_id = $1 AND n.is_read = false
@@ -177,6 +187,8 @@ type GetUnreadNotificationsRow struct {
 	RelatedType pgtype.Text        `json:"related_type"`
 	RelatedID   pgtype.Int4        `json:"related_id"`
 	LinkUrl     pgtype.Text        `json:"link_url"`
+	ContextType pgtype.Text        `json:"context_type"`
+	ContextID   pgtype.Int4        `json:"context_id"`
 	IsRead      pgtype.Bool        `json:"is_read"`
 	ReadAt      pgtype.Timestamptz `json:"read_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
@@ -202,6 +214,8 @@ func (q *Queries) GetUnreadNotifications(ctx context.Context, userID int32) ([]G
 			&i.RelatedType,
 			&i.RelatedID,
 			&i.LinkUrl,
+			&i.ContextType,
+			&i.ContextID,
 			&i.IsRead,
 			&i.ReadAt,
 			&i.CreatedAt,
@@ -218,7 +232,7 @@ func (q *Queries) GetUnreadNotifications(ctx context.Context, userID int32) ([]G
 }
 
 const getUserNotifications = `-- name: GetUserNotifications :many
-SELECT n.id, n.user_id, n.game_id, n.type, n.title, n.content, n.related_type, n.related_id, n.link_url, n.is_read, n.read_at, n.created_at, g.title as game_title
+SELECT n.id, n.user_id, n.game_id, n.type, n.title, n.content, n.related_type, n.related_id, n.link_url, n.context_type, n.context_id, n.is_read, n.read_at, n.created_at, g.title as game_title
 FROM notifications n
 LEFT JOIN games g ON n.game_id = g.id
 WHERE n.user_id = $1
@@ -242,6 +256,8 @@ type GetUserNotificationsRow struct {
 	RelatedType pgtype.Text        `json:"related_type"`
 	RelatedID   pgtype.Int4        `json:"related_id"`
 	LinkUrl     pgtype.Text        `json:"link_url"`
+	ContextType pgtype.Text        `json:"context_type"`
+	ContextID   pgtype.Int4        `json:"context_id"`
 	IsRead      pgtype.Bool        `json:"is_read"`
 	ReadAt      pgtype.Timestamptz `json:"read_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
@@ -267,6 +283,8 @@ func (q *Queries) GetUserNotifications(ctx context.Context, arg GetUserNotificat
 			&i.RelatedType,
 			&i.RelatedID,
 			&i.LinkUrl,
+			&i.ContextType,
+			&i.ContextID,
 			&i.IsRead,
 			&i.ReadAt,
 			&i.CreatedAt,
@@ -309,43 +327,50 @@ func (q *Queries) MarkGameNotificationsRead(ctx context.Context, arg MarkGameNot
 	return err
 }
 
-const markNotificationRead = `-- name: MarkNotificationRead :one
-UPDATE notifications
+const markNotificationAndContextRead = `-- name: MarkNotificationAndContextRead :execrows
+WITH target AS (
+  SELECT t0.id AS id, t0.context_type AS context_type, t0.context_id AS context_id
+  FROM notifications t0
+  WHERE t0.id = $1 AND t0.user_id = $2
+)
+UPDATE notifications n
 SET is_read = true, read_at = NOW()
-WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, game_id, type, title, content, related_type, related_id, link_url, is_read, read_at, created_at
+FROM target t
+WHERE n.user_id = $2
+  AND n.is_read = FALSE
+  AND (
+    n.id = t.id
+    OR (
+      t.context_type IS NOT NULL
+      AND t.context_id IS NOT NULL
+      AND n.context_type = t.context_type
+      AND n.context_id = t.context_id
+    )
+  )
 `
 
-type MarkNotificationReadParams struct {
+type MarkNotificationAndContextReadParams struct {
 	ID     int32 `json:"id"`
 	UserID int32 `json:"user_id"`
 }
 
-func (q *Queries) MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (Notification, error) {
-	row := q.db.QueryRow(ctx, markNotificationRead, arg.ID, arg.UserID)
-	var i Notification
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.GameID,
-		&i.Type,
-		&i.Title,
-		&i.Content,
-		&i.RelatedType,
-		&i.RelatedID,
-		&i.LinkUrl,
-		&i.IsRead,
-		&i.ReadAt,
-		&i.CreatedAt,
-	)
-	return i, err
+// Marks a notification read along with every other unread notification sharing
+// its context (e.g. clicking one message notification clears the whole
+// conversation). Notifications with a NULL context affect only themselves.
+// Scoped to the owning user, so a foreign notification ID matches nothing.
+func (q *Queries) MarkNotificationAndContextRead(ctx context.Context, arg MarkNotificationAndContextReadParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markNotificationAndContextRead, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markNotificationUnread = `-- name: MarkNotificationUnread :one
 UPDATE notifications
 SET is_read = false, read_at = NULL
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, game_id, type, title, content, related_type, related_id, link_url, is_read, read_at, created_at
+RETURNING id, user_id, game_id, type, title, content, related_type, related_id, link_url, context_type, context_id, is_read, read_at, created_at
 `
 
 type MarkNotificationUnreadParams struct {
@@ -366,11 +391,59 @@ func (q *Queries) MarkNotificationUnread(ctx context.Context, arg MarkNotificati
 		&i.RelatedType,
 		&i.RelatedID,
 		&i.LinkUrl,
+		&i.ContextType,
+		&i.ContextID,
 		&i.IsRead,
 		&i.ReadAt,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const markNotificationsReadByContext = `-- name: MarkNotificationsReadByContext :execrows
+UPDATE notifications
+SET is_read = true, read_at = NOW()
+WHERE user_id = $1
+  AND context_type = $2
+  AND context_id = $3
+  AND is_read = FALSE
+`
+
+type MarkNotificationsReadByContextParams struct {
+	UserID      int32       `json:"user_id"`
+	ContextType pgtype.Text `json:"context_type"`
+	ContextID   pgtype.Int4 `json:"context_id"`
+}
+
+// Marks every unread notification a user has for one container (e.g. all
+// messages in a conversation) as read. Returns the number of rows affected so
+// callers can reconcile client-side unread counts.
+func (q *Queries) MarkNotificationsReadByContext(ctx context.Context, arg MarkNotificationsReadByContextParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markNotificationsReadByContext, arg.UserID, arg.ContextType, arg.ContextID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const notificationExistsForUser = `-- name: NotificationExistsForUser :one
+SELECT EXISTS (
+  SELECT 1 FROM notifications WHERE id = $1 AND user_id = $2
+)
+`
+
+type NotificationExistsForUserParams struct {
+	ID     int32 `json:"id"`
+	UserID int32 `json:"user_id"`
+}
+
+// Ownership probe used to distinguish "already read" from "not yours", which
+// rows-affected alone cannot tell apart.
+func (q *Queries) NotificationExistsForUser(ctx context.Context, arg NotificationExistsForUserParams) (bool, error) {
+	row := q.db.QueryRow(ctx, notificationExistsForUser, arg.ID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const notifyAudienceMembers = `-- name: NotifyAudienceMembers :exec

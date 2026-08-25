@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { classifyNotification, parseConversationIdFromLinkUrl } from './parseUnreadNotification';
+import { classifyNotification, collapseInboxItems, parseConversationIdFromLinkUrl } from './parseUnreadNotification';
 import type { Notification } from '@/types/notifications';
+import type { UnreadInboxItem } from '@/types/unreadInbox';
 
 function makeNotification(overrides: Partial<Notification> = {}): Notification {
   return {
@@ -101,6 +102,7 @@ describe('classifyNotification', () => {
       gameId: 12,
       conversationId: 34,
       messageId: 77,
+      unreadCount: 1,
     });
   });
 
@@ -152,5 +154,116 @@ describe('classifyNotification', () => {
     });
 
     expect(classifyNotification(notification)).toBeNull();
+  });
+});
+
+describe('classifyNotification conversation resolution', () => {
+  it('prefers context_id over link_url for the conversation id', () => {
+    // link_url disagrees with context_id; context_id is what the backend uses
+    // to clear the conversation, so the inbox must group by the same value.
+    const notification = makeNotification({
+      type: 'private_message',
+      related_type: 'message',
+      related_id: 77,
+      link_url: '/games/12?tab=messages&conversation=34',
+      context_type: 'conversation',
+      context_id: 99,
+    });
+
+    expect(classifyNotification(notification)).toMatchObject({
+      kind: 'private_message',
+      conversationId: 99,
+    });
+  });
+
+  it('falls back to link_url for notifications created before context tracking', () => {
+    const notification = makeNotification({
+      type: 'private_message',
+      related_type: 'message',
+      related_id: 77,
+      link_url: '/games/12?tab=messages&conversation=34',
+    });
+
+    expect(classifyNotification(notification)).toMatchObject({
+      kind: 'private_message',
+      conversationId: 34,
+    });
+  });
+});
+
+describe('collapseInboxItems', () => {
+  function pmItem(conversationId: number, messageId: number, notificationId: number): UnreadInboxItem {
+    return {
+      kind: 'private_message',
+      notification: makeNotification({ id: notificationId, type: 'private_message' }),
+      gameId: 12,
+      conversationId,
+      messageId,
+      unreadCount: 1,
+    };
+  }
+
+  function commentItem(commentId: number): UnreadInboxItem {
+    return {
+      kind: 'comment',
+      notification: makeNotification({ id: commentId }),
+      gameId: 12,
+      commentId,
+    };
+  }
+
+  it('collapses a busy conversation into one row carrying the count', () => {
+    // The reported scenario: an overnight group conversation should occupy one
+    // inbox row, not one per message.
+    const collapsed = collapseInboxItems([
+      pmItem(34, 3, 103),
+      pmItem(34, 2, 102),
+      pmItem(34, 1, 101),
+    ]);
+
+    expect(collapsed).toHaveLength(1);
+    expect(collapsed[0]).toMatchObject({
+      kind: 'private_message',
+      conversationId: 34,
+      unreadCount: 3,
+      // Notifications arrive newest-first, so the newest message is previewed.
+      messageId: 3,
+    });
+  });
+
+  it('keeps separate conversations as separate rows', () => {
+    const collapsed = collapseInboxItems([
+      pmItem(34, 3, 103),
+      pmItem(99, 9, 109),
+      pmItem(34, 2, 102),
+    ]);
+
+    expect(collapsed).toHaveLength(2);
+    expect(collapsed.map((i) => i.kind === 'private_message' && i.unreadCount)).toEqual([2, 1]);
+  });
+
+  it('preserves the position of each conversation by its newest message', () => {
+    const collapsed = collapseInboxItems([
+      pmItem(99, 9, 109),
+      pmItem(34, 3, 103),
+      pmItem(34, 2, 102),
+    ]);
+
+    expect(collapsed.map((i) => i.kind === 'private_message' && i.conversationId)).toEqual([99, 34]);
+  });
+
+  it('leaves comment items untouched', () => {
+    // Each comment is a distinct thing to reply to, not repetition of one thing.
+    const collapsed = collapseInboxItems([commentItem(1), commentItem(2)]);
+
+    expect(collapsed).toHaveLength(2);
+  });
+
+  it('does not mutate the items it was given', () => {
+    const items = [pmItem(34, 2, 102), pmItem(34, 1, 101)];
+
+    collapseInboxItems(items);
+
+    expect(items[0]).toMatchObject({ unreadCount: 1 });
   });
 });

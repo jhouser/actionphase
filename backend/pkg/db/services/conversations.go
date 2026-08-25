@@ -27,6 +27,12 @@ type ConversationService struct {
 	// Logger is optional. When unset, logger() supplies a package-local
 	// fallback so callers that construct this service directly keep working.
 	Logger *observability.Logger
+
+	// Notifications clears a conversation's notifications when the user reads
+	// it. Optional: when nil, read tracking still works and notifications are
+	// simply left alone, so callers constructing this service directly keep
+	// working.
+	Notifications *NotificationService
 }
 
 // NewConversationService creates a new conversation service.
@@ -34,9 +40,10 @@ type ConversationService struct {
 // The logger may be nil; see ConversationService.Logger.
 func NewConversationService(db *pgxpool.Pool, logger *observability.Logger) *ConversationService {
 	return &ConversationService{
-		DB:      db,
-		Queries: models.New(db),
-		Logger:  logger,
+		DB:            db,
+		Queries:       models.New(db),
+		Logger:        logger,
+		Notifications: NewNotificationService(db, logger),
 	}
 }
 
@@ -389,10 +396,39 @@ func (s *ConversationService) MarkConversationAsRead(ctx context.Context, conver
 		return fmt.Errorf("failed to get messages: %w", err)
 	}
 
-	// Mark conversation as read up to the latest message
-	_, err = s.MarkConversationRead(ctx, userID, conversationID, lastMessageID)
+	// Advancing the read position and clearing the conversation's notifications
+	// are two facts about the same act of reading, so they commit together. A
+	// partial success would either strand unread notifications on a conversation
+	// the user has read, or clear notifications for messages still marked
+	// unread.
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op once the tx is committed
+
+	txQueries := models.New(tx)
+
+	// Mark conversation as read up to the latest message
+	if _, err := txQueries.UpsertConversationRead(ctx, models.UpsertConversationReadParams{
+		UserID:            userID,
+		ConversationID:    conversationID,
+		LastReadMessageID: pgtype.Int4{Int32: lastMessageID, Valid: true},
+	}); err != nil {
 		return fmt.Errorf("failed to mark conversation as read: %w", err)
+	}
+
+	// Opening a conversation dismisses every message notification it produced.
+	// A group conversation can generate dozens overnight, and clearing them one
+	// at a time is the UX this exists to avoid.
+	if s.Notifications != nil {
+		if _, err := s.Notifications.markContextAsRead(ctx, txQueries, userID, core.NotificationContextConversation, conversationID); err != nil {
+			return fmt.Errorf("failed to clear conversation notifications: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit conversation read: %w", err)
 	}
 
 	return nil

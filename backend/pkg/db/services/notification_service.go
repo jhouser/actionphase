@@ -104,6 +104,8 @@ func convertDbNotificationToCore(dbNotif models.Notification) *core.Notification
 		RelatedType: fromPgText(dbNotif.RelatedType),
 		RelatedID:   fromPgInt4(dbNotif.RelatedID),
 		LinkURL:     fromPgText(dbNotif.LinkUrl),
+		ContextType: fromPgText(dbNotif.ContextType),
+		ContextID:   fromPgInt4(dbNotif.ContextID),
 		IsRead:      fromPgBool(dbNotif.IsRead),
 		ReadAt:      fromPgTimestamp(dbNotif.ReadAt),
 		CreatedAt:   dbNotif.CreatedAt.Time,
@@ -122,6 +124,8 @@ func convertRowToCore(row models.GetUserNotificationsRow) *core.Notification {
 		RelatedType: fromPgText(row.RelatedType),
 		RelatedID:   fromPgInt4(row.RelatedID),
 		LinkURL:     fromPgText(row.LinkUrl),
+		ContextType: fromPgText(row.ContextType),
+		ContextID:   fromPgInt4(row.ContextID),
 		IsRead:      fromPgBool(row.IsRead),
 		ReadAt:      fromPgTimestamp(row.ReadAt),
 		CreatedAt:   row.CreatedAt.Time,
@@ -140,6 +144,8 @@ func convertUnreadRowToCore(row models.GetUnreadNotificationsRow) *core.Notifica
 		RelatedType: fromPgText(row.RelatedType),
 		RelatedID:   fromPgInt4(row.RelatedID),
 		LinkURL:     fromPgText(row.LinkUrl),
+		ContextType: fromPgText(row.ContextType),
+		ContextID:   fromPgInt4(row.ContextID),
 		IsRead:      fromPgBool(row.IsRead),
 		ReadAt:      fromPgTimestamp(row.ReadAt),
 		CreatedAt:   row.CreatedAt.Time,
@@ -175,6 +181,8 @@ func (s *NotificationService) CreateNotification(ctx context.Context, req *core.
 		RelatedType: toPgText(req.RelatedType),
 		RelatedID:   toPgInt4(req.RelatedID),
 		LinkUrl:     toPgText(req.LinkURL),
+		ContextType: toPgText(req.ContextType),
+		ContextID:   toPgInt4(req.ContextID),
 	}
 
 	dbNotif, err := queries.CreateNotification(ctx, params)
@@ -324,6 +332,8 @@ func (s *NotificationService) CreateBulkNotifications(ctx context.Context, userI
 			RelatedType: req.RelatedType,
 			RelatedID:   req.RelatedID,
 			LinkURL:     req.LinkURL,
+			ContextType: req.ContextType,
+			ContextID:   req.ContextID,
 		}
 
 		// Fire-and-forget: ignore errors to not block main operation
@@ -405,7 +415,27 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, notificationID, us
 
 	queries := models.New(s.DB)
 
-	_, err := queries.MarkNotificationRead(ctx, models.MarkNotificationReadParams{
+	// Rows-affected can't distinguish "already read" from "belongs to someone
+	// else", and the latter must stay a 404, so ownership is checked directly.
+	owned, err := queries.NotificationExistsForUser(ctx, models.NotificationExistsForUserParams{
+		ID:     notificationID,
+		UserID: userID,
+	})
+	if err != nil {
+		s.Logger.LogError(ctx, err, "Failed to look up notification",
+			"notification_id", notificationID,
+			"user_id", userID,
+		)
+		return fmt.Errorf("failed to look up notification: %w", err)
+	}
+	if !owned {
+		return core.ErrNotificationNotFound
+	}
+
+	// Clears any siblings sharing this notification's context as well, so
+	// dismissing one message notification dismisses the whole conversation.
+	// Notifications without a context still affect only themselves.
+	rows, err := queries.MarkNotificationAndContextRead(ctx, models.MarkNotificationAndContextReadParams{
 		ID:     notificationID,
 		UserID: userID,
 	})
@@ -417,7 +447,61 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, notificationID, us
 		return fmt.Errorf("failed to mark notification as read: %w", err)
 	}
 
+	s.Logger.Info(ctx, "Notification marked as read",
+		"notification_id", notificationID,
+		"user_id", userID,
+		"rows_affected", rows,
+	)
+
 	return nil
+}
+
+// MarkContextAsRead marks every unread notification a user has for one
+// container (e.g. all messages in a conversation) as read, returning how many
+// rows changed.
+//
+// This is the bulk counterpart to MarkAsRead: waking up to dozens of messages
+// in a group conversation produces one notification per message, and opening
+// the conversation should clear all of them rather than leaving the user to
+// dismiss each one by hand.
+//
+// A notification with no context (contextType/contextID nil in the database) is
+// never matched here and stays a one-row-at-a-time affair.
+func (s *NotificationService) MarkContextAsRead(ctx context.Context, userID int32, contextType string, contextID int32) (int64, error) {
+	return s.markContextAsRead(ctx, models.New(s.DB), userID, contextType, contextID)
+}
+
+// markContextAsRead performs the bulk clear against the supplied querier so
+// callers can enlist it in an existing transaction.
+func (s *NotificationService) markContextAsRead(ctx context.Context, queries *models.Queries, userID int32, contextType string, contextID int32) (int64, error) {
+	s.Logger.Info(ctx, "Marking context notifications as read",
+		"user_id", userID,
+		"context_type", contextType,
+		"context_id", contextID,
+	)
+
+	rows, err := queries.MarkNotificationsReadByContext(ctx, models.MarkNotificationsReadByContextParams{
+		UserID:      userID,
+		ContextType: toPgText(&contextType),
+		ContextID:   toPgInt4(&contextID),
+	})
+	if err != nil {
+		s.Logger.LogError(ctx, err, "Failed to mark context notifications as read",
+			"user_id", userID,
+			"context_type", contextType,
+			"context_id", contextID,
+		)
+		return 0, fmt.Errorf("failed to mark context notifications as read: %w", err)
+	}
+
+	s.Logger.Info(ctx, "Context notifications marked as read",
+		"user_id", userID,
+		"context_type", contextType,
+		"context_id", contextID,
+		"rows_affected", rows,
+	)
+
+	return rows, nil
 }
 
 // MarkAsUnread marks a single notification as unread.
@@ -520,6 +604,10 @@ func (s *NotificationService) NotifyPrivateMessage(ctx context.Context, recipien
 		RelatedType: stringPtr("message"),
 		RelatedID:   &messageID,
 		LinkURL:     stringPtr(fmt.Sprintf("/games/%d?tab=messages&conversation=%d", gameID, conversationID)),
+		// Scoped to the conversation so opening it clears every message
+		// notification at once, not just the one the user happened to click.
+		ContextType: stringPtr(core.NotificationContextConversation),
+		ContextID:   &conversationID,
 	})
 	return err
 }

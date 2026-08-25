@@ -334,6 +334,39 @@ CREATE TABLE games (
 );
 ```
 
+### Notification Context vs Related (added 2026-08-24)
+
+Notifications carry **two** reference pairs, and they are not interchangeable:
+
+| Pair | Meaning | Used for |
+|------|---------|----------|
+| `context_type` / `context_id` | The container a user opens (e.g. a conversation) | Bulk clear: opening the container dismisses every notification pointing at it |
+| `related_type` / `related_id` | The specific item that triggered it (e.g. one message) | Previewing the exact item in the dashboard inbox |
+
+**Why both**: a group conversation produces one notification per message. Keying
+only by the message means clicking one notification strands the rest; keying only
+by the conversation loses the ability to preview which message arrived.
+
+```go
+// Private message notification
+RelatedType: stringPtr("message"),      RelatedID: &messageID,
+ContextType: stringPtr(core.NotificationContextConversation), ContextID: &conversationID,
+```
+
+**Clearing rules**:
+- `MarkConversationAsRead` clears the conversation's notifications *in the same
+  transaction* as the `conversation_reads` upsert — both are facts about one act
+  of reading.
+- `MarkAsRead` on a single notification also clears its context siblings. A
+  notification with a NULL context clears only itself.
+- Nothing flows the other way: clearing a notification never writes
+  `conversation_reads`, which preserves the jump-to-first-unread anchor.
+  Notifications and read-position tracking stay separate systems.
+
+Both columns are nullable and were **not** backfilled, so pre-existing
+notifications keep one-at-a-time behaviour. New notification types opt in by
+setting the context pair in their `Notify*` helper.
+
 ### Character Sheet Storage
 
 The sheet is **five flat tabs**, each one `module_type` in `character_data`.
