@@ -60,6 +60,7 @@ export type GameState =
   | 'character_creation'
   | 'in_progress'
   | 'paused'
+  | 'epilogue'
   | 'completed'
   | 'cancelled';
 
@@ -184,6 +185,7 @@ export const GAME_STATE_LABELS: Record<GameState, string> = {
   character_creation: 'Character Creation',
   in_progress: 'In Progress',
   paused: 'Paused',
+  epilogue: 'Epilogue',
   completed: 'Completed',
   cancelled: 'Cancelled'
 };
@@ -196,6 +198,10 @@ export const GAME_STATE_COLORS: Record<GameState, string> = {
   // Paused is distinct from in_progress: same "live game" family, but muted,
   // because a paused game needs nothing from you.
   paused: 'surface-raised text-content-secondary',
+  // Epilogue is still a live game people can post in, so it keeps an active
+  // colour rather than the muted archive treatment. Warning family to match
+  // in_progress (it is live play); the label text carries the distinction.
+  epilogue: 'bg-semantic-warning-subtle text-content-primary',
   // Completed stays quiet so an archive never reads as a call to action.
   completed: 'surface-raised text-content-secondary',
   // Cancelled keeps danger styling: this badge is also the headline status on
@@ -224,6 +230,12 @@ export const GAME_STATE_CARD_STYLES: Record<GameState, string> = {
   paused: 'border-theme-strong',
   // Not yet open to anyone but the GM.
   setup: 'border-theme-subtle',
+  // Winding down but still writable. Shares the warning family with in_progress
+  // because it IS live play, but drops the tint to sit one step down the urgency
+  // scale: more than paused, less than an active game. Deliberately not the info
+  // family — that belongs to character_creation, and at a glance across a list
+  // two blue cards read as the same state.
+  epilogue: 'border-semantic-warning',
   // Terminal states are muted on purpose: readable, never a CTA.
   completed: 'border-theme-subtle',
   cancelled: 'border-theme-subtle'

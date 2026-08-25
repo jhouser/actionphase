@@ -6,6 +6,8 @@ import (
 	"actionphase/pkg/observability"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -232,6 +234,20 @@ func (h *Handler) UpdateGameState(w http.ResponseWriter, r *http.Request) {
 
 	updatedGame, err := gameService.UpdateGameState(ctx, game.ID, data.State)
 	if err != nil {
+		// A rejected transition is a client-side precondition failure, not a
+		// bug: the request was well formed and authorized, but the move is not
+		// legal from the game's current state (e.g. epilogue → in_progress,
+		// a deliberate one-way door). Retrying verbatim will never succeed, so
+		// answer 409 with the states involved rather than a bare 500.
+		if errors.Is(err, core.ErrInvalidStateTransition) {
+			h.renderError(ctx, w, r,
+				core.ErrWithCode(http.StatusConflict, core.ErrCodeInvalidGameState,
+					fmt.Sprintf("cannot change game state from %s to %s",
+						game.State.String, data.State)),
+				"Invalid game state transition requested",
+				"game_id", game.ID, "from_state", game.State.String, "to_state", data.State)
+			return
+		}
 		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to update game state", "error", err, "game_id", game.ID)
 		return
 	}
@@ -304,8 +320,13 @@ func (h *Handler) UpdateGameState(w http.ResponseWriter, r *http.Request) {
 
 	// Notify participants only for pause/resume/complete/cancel transitions
 	isPauseResume := data.State == core.GameStatePaused || (data.State == core.GameStateInProgress && game.State.String == core.GameStatePaused)
-	isTerminal := data.State == core.GameStateCompleted || data.State == core.GameStateCancelled
-	if isPauseResume || isTerminal {
+	// Endgame rather than "terminal": epilogue is a genuine endgame transition
+	// participants need to hear about (the whole archive just opened to them),
+	// but it is not terminal — the game is still writable.
+	isEndgame := data.State == core.GameStateEpilogue ||
+		data.State == core.GameStateCompleted ||
+		data.State == core.GameStateCancelled
+	if isPauseResume || isEndgame {
 		notifSvc := h.NotificationService
 		observability.SafeGo(context.Background(), h.App.ObsLogger, "notify-game-state-changed", func() {
 			notifCtx := context.Background()

@@ -24,7 +24,7 @@ interface StateAction {
  * Adding a state here is the only step needed to give it a confirmation gate —
  * the dialog state, confirm handler, and hook return fields are all derived.
  */
-const CONFIRMED_STATES = ['completed', 'paused', 'cancelled'] as const;
+const CONFIRMED_STATES = ['completed', 'epilogue', 'paused', 'cancelled'] as const;
 
 type ConfirmedState = (typeof CONFIRMED_STATES)[number];
 
@@ -35,6 +35,7 @@ function isConfirmedState(state: GameState): state is ConfirmedState {
 /** Human-readable verb per confirmed state, for logs and error toasts. */
 const STATE_VERBS: Record<ConfirmedState, { gerund: string; past: string }> = {
   completed: { gerund: 'complete', past: 'completed' },
+  epilogue: { gerund: 'move to epilogue', past: 'moved to epilogue' },
   paused: { gerund: 'pause', past: 'paused' },
   cancelled: { gerund: 'cancel', past: 'cancelled' },
 };
@@ -66,12 +67,21 @@ const STATE_ACTIONS: Partial<Record<GameState, StateAction[]>> = {
   character_creation: [
     { label: 'Start Game', state: 'in_progress', color: BUTTON_COLORS.primary },
   ],
+  // Two endgame options sit side by side here, so they must not read as
+  // interchangeable: epilogue takes 'primary' rather than 'success' to keep it
+  // visually distinct from Complete Game.
   in_progress: [
     { label: 'Pause Game', state: 'paused', color: BUTTON_COLORS.warning },
+    { label: 'Move to Epilogue', state: 'epilogue', color: BUTTON_COLORS.primary },
     { label: 'Complete Game', state: 'completed', color: BUTTON_COLORS.success },
   ],
   paused: [
     { label: 'Resume Game', state: 'in_progress', color: BUTTON_COLORS.primary },
+  ],
+  // No way back to in_progress: entering epilogue disclosed the whole game and
+  // players cannot un-see it. Mirrors allowedTransitions on the backend.
+  epilogue: [
+    { label: 'Complete Game', state: 'completed', color: BUTTON_COLORS.success },
   ],
 };
 
@@ -182,6 +192,11 @@ export function useGameStateManagement({
         setShow: setShowDialog('completed'),
         confirm: confirmHandlerFor('completed'),
       },
+      epilogue: {
+        show: pendingConfirmation === 'epilogue',
+        setShow: setShowDialog('epilogue'),
+        confirm: confirmHandlerFor('epilogue'),
+      },
       paused: {
         show: pendingConfirmation === 'paused',
         setShow: setShowDialog('paused'),
@@ -205,6 +220,10 @@ export function useGameStateManagement({
     showCompleteDialog: dialogs.completed.show,
     setShowCompleteDialog: dialogs.completed.setShow,
     handleConfirmComplete: dialogs.completed.confirm,
+
+    showEpilogueDialog: dialogs.epilogue.show,
+    setShowEpilogueDialog: dialogs.epilogue.setShow,
+    handleConfirmEpilogue: dialogs.epilogue.confirm,
 
     showPauseDialog: dialogs.paused.show,
     setShowPauseDialog: dialogs.paused.setShow,

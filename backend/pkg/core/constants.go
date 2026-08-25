@@ -24,6 +24,13 @@ const (
 	// Can resume to in_progress
 	GameStatePaused = "paused"
 
+	// GameStateEpilogue - Game is winding down: a WRITABLE public archive.
+	// Read permissions match completed (any authenticated user can see the whole
+	// game, including private messages and action submissions), but the write
+	// gate stays open so the GM can run epilogue and meta-discussion threads.
+	// One-way door: there is no transition back to in_progress.
+	GameStateEpilogue = "epilogue"
+
 	// GameStateCompleted - Game finished successfully
 	// No further state changes allowed
 	GameStateCompleted = "completed"
@@ -41,15 +48,16 @@ const (
 //   - allowedTransitions in pkg/db/services/games.go
 //   - the GameState union in frontend/src/types/games.ts
 //
-// TestGameStateConstantsMatchFrontend (constants_test.go) parses the frontend
-// union and asserts it against this slice, so adding a state here without
-// updating the TypeScript side fails the backend build.
+// scripts/check-game-states.sh compares all four and runs as part of
+// `just lint`. It lives on the host rather than in a test because neither the
+// backend nor the frontend container can see the other's tree.
 var ValidGameStates = []string{
 	GameStateSetup,
 	GameStateRecruitment,
 	GameStateCharacterCreation,
 	GameStateInProgress,
 	GameStatePaused,
+	GameStateEpilogue,
 	GameStateCompleted,
 	GameStateCancelled,
 }
@@ -336,6 +344,7 @@ func GetGameStateDescriptionBrief(state string) string {
 		GameStateCharacterCreation: "CHARACTER CREATION",
 		GameStateInProgress:        "IN PROGRESS",
 		GameStatePaused:            "PAUSED",
+		GameStateEpilogue:          "EPILOGUE",
 		GameStateCompleted:         "COMPLETED",
 		GameStateCancelled:         "CANCELLED",
 	}

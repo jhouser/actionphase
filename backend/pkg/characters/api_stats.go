@@ -40,8 +40,9 @@ func (h *Handler) gameLevelPrivateStatsAccess(r *http.Request, authUser *core.Au
 	ctx := r.Context()
 	isGM := core.IsUserGameMaster(r, authUser.ID, authUser.IsAdmin, game, h.App.Pool)
 	isAudience := core.IsUserAudience(ctx, h.App.Pool, game.ID, authUser.ID)
-	isCompleted := game.State.String == "completed"
-	return isGM || isAudience || isCompleted
+	// Completed AND epilogue: both disclose the archive to every viewer.
+	isArchive := core.IsPublicArchive(game.State.String)
+	return isGM || isAudience || isArchive
 }
 
 // canSeeCharacterPrivateStats combines the game-level grant with per-character

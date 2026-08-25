@@ -232,6 +232,31 @@ func TestPhaseAPI_GetGameActionResults(t *testing.T) {
 
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
+
+	t.Run("player CAN view all results once the game reaches epilogue", func(t *testing.T) {
+		// Regression: this check was written as `state != "completed"` and so
+		// kept the archive shut in epilogue. A player writing an epilogue needs
+		// to see what happened to everyone else — that is the entire reason the
+		// state exists, and History showed them nothing.
+		// Set the state directly: the fixture game is in 'setup', and walking it
+		// through the real state machine is not what this test is about.
+		_, err := testDB.Pool.Exec(context.Background(),
+			"UPDATE games SET state = $1 WHERE id = $2", core.GameStateEpilogue, game.ID)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/results", game.ID), nil)
+		req.Header.Set("Authorization", "Bearer "+playerToken)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusOK, rec.Code,
+			"player should read all results in an epilogue game (body: %s)", rec.Body.String())
+
+		var response []map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		assert.Len(t, response, 1, "the archive should expose the GM's result")
+	})
 }
 
 // TestPhaseAPI_UpdateActionResult tests PUT /api/v1/games/{gameId}/results/{resultId}

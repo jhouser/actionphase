@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
+import { isPublicArchive } from '@/lib/gamePermissions';
 import type { CharacterData, CharacterDataRequest, CharacterSkill, InventoryItem, NumberEntry, CharacterSheetConfig } from '../types/characters';
 import { buildCharacterModules } from '../types/characters';
 import { SkillsManager } from './SkillsManager';
@@ -29,7 +30,7 @@ interface CharacterSheetProps {
   onClose?: () => void;
   isAnonymous?: boolean; // Whether the game is in anonymous mode
   userRole?: string; // User's role in the game ('gm', 'player', 'audience')
-  gameState?: string; // Current game state (e.g. 'completed')
+  gameState?: string; // Current game state (e.g. 'completed', 'epilogue')
   /**
    * Reports whether an editor inside the sheet holds edits its Save has not committed.
    *
@@ -129,8 +130,12 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
   const queryClient = useQueryClient();
   const renameMutation = useRenameCharacter();
 
-  // Participants can view all private data if the game is completed or they are audience
-  const canViewPrivate = canEdit || userRole === 'audience' || gameState === 'completed';
+  // Participants can view all private data once the game is a public archive
+  // (completed OR epilogue), or if they are audience. Epilogue must be included:
+  // it opens the archive precisely so players can read each other's sheets while
+  // writing epilogues. Mirrors the backend, which keys the same disclosure on
+  // core.IsPublicArchive (characters/api_data.go, characters/api_stats.go).
+  const canViewPrivate = canEdit || userRole === 'audience' || isPublicArchive(gameState);
 
   // If user cannot view private data and is viewing a restricted module, switch to bio
   useEffect(() => {

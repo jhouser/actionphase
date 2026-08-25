@@ -105,11 +105,12 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
 
   // A COMPLETED game is a public archive: the backend serves the whole cast's
   // submissions and results to any authenticated user, not just to spectators
-  // (CanUserViewGame, and the "completed" arm of GetGameActionResults). A player
-  // looking back at a finished game therefore gets the same reach here as an
-  // audience member — reading their own rows only would hide the story they just
-  // finished playing through. Cancelled games are NOT public and keep the
-  // play-time rule, which is why this keys on completion rather than "not active".
+  // (CanUserViewGame, keyed on core.IsPublicArchive). A player looking back at a
+  // finished game therefore gets the same reach here as an audience member —
+  // reading their own rows only would hide the story they just finished playing
+  // through. Epilogue counts too: opening the archive is the entire point of
+  // that state. Cancelled games are NOT public and keep the play-time rule,
+  // which is why this keys on the archive rather than "not active".
   const hasArchiveAccess = isAudience || isGameCompleted;
 
   const { data: userActionResults, isLoading: isLoadingUserResults, error: userResultsError } = useQuery({
@@ -332,7 +333,6 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
             isCurrentPhase={false} // Always read-only in history view
             isGM={isGM}
             isAudience={isAudience}
-            isGameCompleted={isGameCompleted}
           />
         ) : (
           <div className="surface-base rounded-lg shadow-md p-6">

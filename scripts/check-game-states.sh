@@ -65,10 +65,21 @@ transition_states=$(
 # --- 4. Migrations: the newest games.state CHECK constraint -----------------
 # Later migrations may drop and recreate the constraint, so take the last
 # definition in filename (chronological) order rather than the first.
-constraint_line=$(
-    grep -rh "CHECK (state IN" "$ROOT/backend/pkg/db/migrations/"*.up.sql 2>/dev/null | tail -1 || true
-)
-constraint_states=$(echo "$constraint_line" | tr ',' '\n' | sed -n "s/.*'\([a-z_]*\)'.*/\1/p" | sort -u)
+#
+# The state list routinely wraps across lines, so match from "CHECK (state IN"
+# through the closing paren rather than grepping single lines — a line-at-a-time
+# read silently sees only the first few states and reports a false mismatch.
+constraint_block=""
+for f in $(ls "$ROOT/backend/pkg/db/migrations/"*.up.sql 2>/dev/null | sort); do
+    block=$(
+        tr '\n' ' ' < "$f" |
+        sed -n 's/.*CHECK (state IN \(([^)]*)\).*/\1/p'
+    )
+    if [ -n "$block" ]; then
+        constraint_block="$block"
+    fi
+done
+constraint_states=$(echo "$constraint_block" | tr ',' '\n' | sed -n "s/.*'\([a-z_]*\)'.*/\1/p" | sort -u)
 
 fail=0
 compare() {

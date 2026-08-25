@@ -223,10 +223,10 @@ func (h *Handler) verifyUserInGame(ctx context.Context, gameID int32, userID int
 // pollViewAccess holds the result of checking whether a user can view polls for a game.
 type pollViewAccess struct {
 	allowed               bool
-	canSeeIndividualVotes bool // true for GM, Co-GM, audience, or any user viewing a completed game
+	canSeeIndividualVotes bool // true for GM, Co-GM, audience, or any user viewing a public-archive game
 	// isPrivileged is true for GM, Co-GM and audience — the roles that may see
 	// results of a poll flagged hide_results_from_players — and for any viewer of
-	// a completed game, which is a public archive granting audience-level access.
+	// a public-archive game (completed or epilogue), which grants audience-level access.
 	isPrivileged bool
 }
 
@@ -237,7 +237,8 @@ type pollViewAccess struct {
 // Individual votes and hidden-poll results visible to:
 //   - GM / Co-GM: always
 //   - Audience: always (spectator role)
-//   - Everyone else: only after the game is completed
+//   - Everyone else: only once the game is a public archive (completed or
+//     epilogue) — see core.IsPublicArchive
 func (h *Handler) checkPollViewAccess(ctx context.Context, gameID int32, userID int32) (pollViewAccess, error) {
 	game, err := h.GameService.GetGame(ctx, gameID)
 	if err != nil {
@@ -252,11 +253,12 @@ func (h *Handler) checkPollViewAccess(ctx context.Context, gameID int32, userID 
 		return pollViewAccess{allowed: true, canSeeIndividualVotes: true, isPrivileged: true}, nil
 	}
 
-	// Completed games are a public archive: every authenticated viewer gets
-	// audience-level access to the whole game, hidden polls included. Anonymity
-	// (CanSeeUsernamesInAnonymousGame) lifts on completion for the same reason.
-	// Cancelled games are NOT public and keep the play-time rules below.
-	if game.State.String == core.GameStateCompleted {
+	// Public-archive games (completed or epilogue) give every authenticated
+	// viewer audience-level access to the whole game, hidden polls included.
+	// Anonymity (CanSeeUsernamesInAnonymousGame) lifts at the same point and for
+	// the same reason. Cancelled games are NOT public and keep the play-time
+	// rules below.
+	if core.IsPublicArchive(game.State.String) {
 		return pollViewAccess{allowed: true, canSeeIndividualVotes: true, isPrivileged: true}, nil
 	}
 

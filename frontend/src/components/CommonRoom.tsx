@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { isGameWritable } from '@/lib/gamePermissions';
 import { apiClient } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useGameContext } from '../contexts/GameContext';
@@ -34,7 +35,6 @@ interface CommonRoomProps {
   isCurrentPhase?: boolean;
   isGM?: boolean;
   isAudience?: boolean;
-  isGameCompleted?: boolean;
 }
 
 // Inner component so hooks run unconditionally with a known postId
@@ -62,7 +62,7 @@ function ThreadViewModalWithReadTracking(props: React.ComponentProps<typeof Thre
   );
 }
 
-export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, currentPhase, isCurrentPhase = true, isGM = false, isAudience = false, isGameCompleted = false }: CommonRoomProps) {
+export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, currentPhase, isCurrentPhase = true, isGM = false, isAudience = false }: CommonRoomProps) {
   // Get current user from AuthContext
   const { currentUser } = useAuth();
   const currentUserId = currentUser?.id;
@@ -70,11 +70,17 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
   const queryClient = useQueryClient();
   const commentReadMode = useCommentReadMode();
   const toggleCommentReadMutation = useToggleCommentRead();
-  const allowReadTracking = !isGameCompleted;
 
   // Read character data and game settings from GameContext — single source of truth
   const { userCharacters, allGameCharacters, userRole, game } = useGameContext();
   const gameState = game?.state ?? '';
+
+  // Read-tracking is pointless once a game is frozen, but an epilogue game is
+  // still actively read and written, so it keeps tracking. Derived from
+  // gameState directly: "the archive is open" (epilogue included) is a different
+  // question from "the game still takes writes", and read-tracking follows the
+  // latter.
+  const allowReadTracking = isGameWritable(gameState);
 
   // URL search params for deep linking to comments and sub-tab navigation
   const [searchParams, setSearchParams] = useSearchParams();
@@ -114,7 +120,9 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
       currentPhase,
       isGM,
       isAudience,
-      isGameCompleted,
+      // Same value as allowReadTracking, and for the same reason: this is the
+      // write gate, not "is the game finished". Epilogue is writable.
+      isGameWritable: allowReadTracking,
       userRole,
       gameState,
       isAnonymous,
@@ -129,7 +137,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
       currentPhase,
       isGM,
       isAudience,
-      isGameCompleted,
+      allowReadTracking,
       userRole,
       gameState,
       isAnonymous,

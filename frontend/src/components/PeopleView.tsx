@@ -11,6 +11,7 @@ import { AudienceMemberBadge } from './AudienceMemberBadge';
 import { Button } from './ui';
 import { apiClient } from '../lib/api';
 import type { GameParticipant, GameApplication } from '../types/games';
+import { isGameWritable } from '@/lib/gamePermissions';
 
 interface PeopleViewProps {
   gameId: number;
@@ -138,7 +139,7 @@ export function PeopleView({
         <>
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold text-content-primary">Game Participants</h2>
-            {isGM && gameState !== 'completed' && gameState !== 'cancelled' && (
+            {isGM && isGameWritable(gameState) && (
               <div className="flex gap-2">
                 <Button
                   variant="secondary"
@@ -234,7 +235,7 @@ export function PeopleView({
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {roleGameParticipants.map((participant) => {
                         const isCurrentUser = participant.user_id === currentUserId;
-                        const canLeaveGame = !isGM && isCurrentUser && onLeaveGame && gameState !== 'completed' && gameState !== 'cancelled';
+                        const canLeaveGame = !isGM && isCurrentUser && onLeaveGame && isGameWritable(gameState);
 
                         return (
                           <div key={participant.id} className="border border-theme-default rounded-lg p-4 surface-raised" data-testid="participant-card">
@@ -266,7 +267,7 @@ export function PeopleView({
                                   )}
                                 </div>
                               </div>
-                              {isGM && !isCurrentUser && gameState !== 'completed' && gameState !== 'cancelled' && (
+                              {isGM && !isCurrentUser && isGameWritable(gameState) && (
                                 <ParticipantActionsMenu
                                   gameId={gameId}
                                   participant={participant}
@@ -297,7 +298,7 @@ export function PeopleView({
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {formerPlayers.map((participant) => {
                         const isCurrentUser = participant.user_id === currentUserId;
-                        const canLeaveGame = !isGM && isCurrentUser && onLeaveGame && gameState !== 'completed' && gameState !== 'cancelled';
+                        const canLeaveGame = !isGM && isCurrentUser && onLeaveGame && isGameWritable(gameState);
                         return (
                           <div key={participant.id} className="border border-theme-default rounded-lg p-4 surface-raised" data-testid="participant-card">
                             <div className="flex items-start justify-between gap-3">
@@ -328,7 +329,7 @@ export function PeopleView({
                                   )}
                                 </div>
                               </div>
-                              {isGM && !isCurrentUser && gameState !== 'completed' && gameState !== 'cancelled' && (
+                              {isGM && !isCurrentUser && isGameWritable(gameState) && (
                                 <ParticipantActionsMenu
                                   gameId={gameId}
                                   participant={participant}
@@ -357,7 +358,7 @@ export function PeopleView({
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {audienceMembers.map((participant) => {
                         const isCurrentUser = participant.user_id === currentUserId;
-                        const canLeaveGame = !isGM && isCurrentUser && onLeaveGame && gameState !== 'completed' && gameState !== 'cancelled';
+                        const canLeaveGame = !isGM && isCurrentUser && onLeaveGame && isGameWritable(gameState);
                         return (
                           <div key={participant.id} className="border border-theme-default rounded-lg p-4 surface-raised" data-testid="participant-card">
                             <div className="flex items-start justify-between gap-3">
@@ -389,7 +390,7 @@ export function PeopleView({
                                   )}
                                 </div>
                               </div>
-                              {isGM && !isCurrentUser && gameState !== 'completed' && gameState !== 'cancelled' && (
+                              {isGM && !isCurrentUser && isGameWritable(gameState) && (
                                 <ParticipantActionsMenu
                                   gameId={gameId}
                                   participant={participant}
@@ -407,7 +408,7 @@ export function PeopleView({
             </div>
           )}
 
-          {isGM && gameState !== 'completed' && gameState !== 'cancelled' && (
+          {isGM && isGameWritable(gameState) && (
             <div className="mt-8">
               <InactiveCharactersList gameId={gameId} />
             </div>

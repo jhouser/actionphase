@@ -8,6 +8,7 @@ import { CreateHandoutModal } from './CreateHandoutModal';
 import { EditHandoutModal } from './EditHandoutModal';
 import { HandoutView } from './HandoutView';
 import type { Handout, CreateHandoutRequest, UpdateHandoutRequest } from '../types/handouts';
+import { isGameWritable } from '@/lib/gamePermissions';
 
 interface HandoutsListProps {
   gameId: number;
@@ -136,7 +137,7 @@ export function HandoutsList({ gameId, isGM, gameState }: HandoutsListProps) {
       <Card variant="elevated" padding="lg" data-testid="handouts-list">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-content-primary">Handouts</h2>
-          {isGM && gameState !== 'completed' && gameState !== 'cancelled' && (
+          {isGM && isGameWritable(gameState) && (
             <Button
               variant="primary"
               onClick={() => setShowCreateModal(true)}
@@ -156,7 +157,7 @@ export function HandoutsList({ gameId, isGM, gameState }: HandoutsListProps) {
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {visibleHandouts.map(handout => {
-              const canEditHandout = isGM && gameState !== 'completed' && gameState !== 'cancelled';
+              const canEditHandout = isGM && isGameWritable(gameState);
               return (
                 <HandoutCard
                   key={handout.id}
