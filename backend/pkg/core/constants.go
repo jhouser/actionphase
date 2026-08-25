@@ -33,6 +33,27 @@ const (
 	GameStateCancelled = "cancelled"
 )
 
+// ValidGameStates contains every valid game state, in lifecycle order.
+//
+// Mirrors ValidPhaseTypes / ValidParticipantRoles. Three things must agree on
+// this list and none of them can check the others at compile time:
+//   - the games.state CHECK constraint (see pkg/db/migrations/)
+//   - allowedTransitions in pkg/db/services/games.go
+//   - the GameState union in frontend/src/types/games.ts
+//
+// TestGameStateConstantsMatchFrontend (constants_test.go) parses the frontend
+// union and asserts it against this slice, so adding a state here without
+// updating the TypeScript side fails the backend build.
+var ValidGameStates = []string{
+	GameStateSetup,
+	GameStateRecruitment,
+	GameStateCharacterCreation,
+	GameStateInProgress,
+	GameStatePaused,
+	GameStateCompleted,
+	GameStateCancelled,
+}
+
 // PhaseTypes defines all valid game phase types.
 const (
 	PhaseTypeCommonRoom = "common_room"

@@ -617,9 +617,15 @@ _vet-unix:
   fi
 
 
-# Run backend linters (fmt + vet)
-lint: fmt vet
+# Run backend linters (fmt + vet) plus cross-tree consistency checks
+lint: fmt vet check-game-states
   @echo "Go linting complete"
+
+# Verify the game state list agrees across constants, transitions, the
+# migration CHECK constraint, and the frontend union. Runs on the host: no
+# single container can see both the backend and frontend trees.
+check-game-states:
+  @./scripts/check-game-states.sh
 
 # Find unreachable/dead code in backend (excludes test helpers and mocks)
 dead-code:
