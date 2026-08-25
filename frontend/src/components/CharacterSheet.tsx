@@ -296,8 +296,16 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
   }
 
   return (
-    <div className="surface-base rounded-lg shadow-lg min-h-[600px] flex flex-col max-w-full overflow-hidden">
-      <div className="border-b border-theme-default">
+    <div className="surface-base rounded-lg shadow-lg min-h-[600px] flex flex-col max-w-full">
+      {/* Pinned to the top of the modal's scroll container so the close button
+          and module tabs stay reachable on a long sheet — on mobile a bio full
+          of text otherwise scrolls the only way out of the sheet off screen.
+          Sticky resolves against the nearest scrolling ancestor, which is the
+          Modal panel (max-h-[90vh] overflow-y-auto), not this component: the
+          sheet root is sized by its content and never scrolls itself. That is
+          also why the root can carry no `overflow-hidden` — it would become
+          that ancestor and pin the header to a box that never moves. */}
+      <div className="sticky top-0 z-10 surface-base rounded-t-lg border-b border-theme-default">
         <div className="flex justify-between items-start p-2 sm:p-4 md:p-8 gap-2 sm:gap-3">
           <div className="flex items-start gap-3 md:gap-6 min-w-0 flex-1">
             {/* Character Avatar */}
