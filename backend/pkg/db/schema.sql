@@ -389,6 +389,8 @@ CREATE TABLE notifications (
     related_type VARCHAR(50),
     related_id INTEGER,
     link_url VARCHAR(500),
+    context_type TEXT,
+    context_id INTEGER,
     is_read BOOLEAN DEFAULT FALSE,
     read_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

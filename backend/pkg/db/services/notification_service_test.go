@@ -826,3 +826,227 @@ func TestNotificationService_NotifyActionResult(t *testing.T) {
 	assert.Contains(t, notifs[0].Title, "Storm the Castle")
 	assert.Contains(t, notifs[0].Title, "result")
 }
+
+// contextNotificationFor builds an unread notification scoped to a conversation.
+func contextNotificationFor(userID int32, conversationID int32, messageID int32, title string) *core.CreateNotificationRequest {
+	return &core.CreateNotificationRequest{
+		UserID:      userID,
+		Type:        core.NotificationTypePrivateMessage,
+		Title:       title,
+		RelatedType: stringPtr("message"),
+		RelatedID:   &messageID,
+		ContextType: stringPtr(core.NotificationContextConversation),
+		ContextID:   &conversationID,
+	}
+}
+
+// unreadTitles returns the titles of a user's unread notifications, which is
+// enough to identify which rows a bulk clear left behind.
+func unreadTitles(t *testing.T, ctx context.Context, service *NotificationService, userID int32) []string {
+	t.Helper()
+
+	unread, err := service.GetUnreadNotifications(ctx, userID, 100)
+	require.NoError(t, err)
+
+	titles := make([]string, 0, len(unread))
+	for _, n := range unread {
+		titles = append(titles, n.Title)
+	}
+	return titles
+}
+
+func TestNotificationService_MarkContextAsRead_ClearsOnlyThatContext(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	ctx := context.Background()
+	app := core.NewTestApp(testDB.Pool)
+	service := &NotificationService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	user := testDB.CreateTestUser(t, "reader", "reader@example.com")
+	userID := int32(user.ID)
+
+	// Three messages in the conversation being read, one in another
+	// conversation, and one unrelated notification with no context at all.
+	for i, title := range []string{"msg one", "msg two", "msg three"} {
+		_, err := service.CreateNotification(ctx, contextNotificationFor(userID, 42, int32(100+i), title))
+		require.NoError(t, err)
+	}
+	_, err := service.CreateNotification(ctx, contextNotificationFor(userID, 99, 200, "other conversation"))
+	require.NoError(t, err)
+	_, err = service.CreateNotification(ctx, &core.CreateNotificationRequest{
+		UserID: userID,
+		Type:   core.NotificationTypeHandoutPublished,
+		Title:  "no context",
+	})
+	require.NoError(t, err)
+
+	rows, err := service.MarkContextAsRead(ctx, userID, core.NotificationContextConversation, 42)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), rows, "should clear exactly the three notifications for conversation 42")
+
+	// The untouched rows are the ones a user would otherwise have to dismiss by
+	// hand; the bug being fixed is precisely that they got over-cleared or
+	// under-cleared.
+	assert.ElementsMatch(t, []string{"other conversation", "no context"}, unreadTitles(t, ctx, service, userID))
+}
+
+func TestNotificationService_MarkContextAsRead_LeavesOtherUsersAlone(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	ctx := context.Background()
+	app := core.NewTestApp(testDB.Pool)
+	service := &NotificationService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	reader := testDB.CreateTestUser(t, "reader", "reader@example.com")
+	other := testDB.CreateTestUser(t, "other", "other@example.com")
+
+	// Both users are in the same group conversation and each got a notification.
+	_, err := service.CreateNotification(ctx, contextNotificationFor(int32(reader.ID), 42, 100, "reader copy"))
+	require.NoError(t, err)
+	_, err = service.CreateNotification(ctx, contextNotificationFor(int32(other.ID), 42, 100, "other copy"))
+	require.NoError(t, err)
+
+	rows, err := service.MarkContextAsRead(ctx, int32(reader.ID), core.NotificationContextConversation, 42)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), rows)
+
+	// One participant reading the conversation must not dismiss it for everyone.
+	assert.Empty(t, unreadTitles(t, ctx, service, int32(reader.ID)))
+	assert.Equal(t, []string{"other copy"}, unreadTitles(t, ctx, service, int32(other.ID)))
+}
+
+func TestNotificationService_MarkContextAsRead_IsIdempotent(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	ctx := context.Background()
+	app := core.NewTestApp(testDB.Pool)
+	service := &NotificationService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	user := testDB.CreateTestUser(t, "reader", "reader@example.com")
+	userID := int32(user.ID)
+
+	_, err := service.CreateNotification(ctx, contextNotificationFor(userID, 42, 100, "msg one"))
+	require.NoError(t, err)
+
+	rows, err := service.MarkContextAsRead(ctx, userID, core.NotificationContextConversation, 42)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), rows)
+
+	// Re-opening an already-read conversation should be a no-op rather than
+	// re-stamping read_at.
+	rows, err = service.MarkContextAsRead(ctx, userID, core.NotificationContextConversation, 42)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), rows)
+}
+
+func TestNotificationService_MarkAsRead_ClearsWholeConversation(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	ctx := context.Background()
+	app := core.NewTestApp(testDB.Pool)
+	service := &NotificationService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	user := testDB.CreateTestUser(t, "reader", "reader@example.com")
+	userID := int32(user.ID)
+
+	// The reported scenario: waking up to a pile of messages in one group
+	// conversation, plus unrelated notifications that must survive.
+	var first *core.Notification
+	for i, title := range []string{"msg one", "msg two", "msg three"} {
+		n, err := service.CreateNotification(ctx, contextNotificationFor(userID, 42, int32(100+i), title))
+		require.NoError(t, err)
+		if i == 0 {
+			first = n
+		}
+	}
+	_, err := service.CreateNotification(ctx, &core.CreateNotificationRequest{
+		UserID: userID,
+		Type:   core.NotificationTypeHandoutPublished,
+		Title:  "unrelated",
+	})
+	require.NoError(t, err)
+
+	// Clicking a single notification clears every sibling in its conversation.
+	require.NoError(t, service.MarkAsRead(ctx, first.ID, userID))
+
+	assert.Equal(t, []string{"unrelated"}, unreadTitles(t, ctx, service, userID))
+}
+
+func TestNotificationService_MarkAsRead_WithoutContextClearsOnlyOne(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	ctx := context.Background()
+	app := core.NewTestApp(testDB.Pool)
+	service := &NotificationService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	user := testDB.CreateTestUser(t, "reader", "reader@example.com")
+	userID := int32(user.ID)
+
+	// Notifications predating context tracking share no context, so they must
+	// keep the original one-at-a-time behaviour rather than clearing each other.
+	target, err := service.CreateNotification(ctx, &core.CreateNotificationRequest{
+		UserID: userID,
+		Type:   core.NotificationTypeHandoutPublished,
+		Title:  "first",
+	})
+	require.NoError(t, err)
+	_, err = service.CreateNotification(ctx, &core.CreateNotificationRequest{
+		UserID: userID,
+		Type:   core.NotificationTypeHandoutPublished,
+		Title:  "second",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, service.MarkAsRead(ctx, target.ID, userID))
+
+	assert.Equal(t, []string{"second"}, unreadTitles(t, ctx, service, userID))
+}
+
+func TestNotificationService_MarkAsRead_IgnoresOtherUsersNotification(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	ctx := context.Background()
+	app := core.NewTestApp(testDB.Pool)
+	service := &NotificationService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	owner := testDB.CreateTestUser(t, "owner", "owner@example.com")
+	attacker := testDB.CreateTestUser(t, "attacker", "attacker@example.com")
+
+	notification, err := service.CreateNotification(ctx, contextNotificationFor(int32(owner.ID), 42, 100, "owner msg"))
+	require.NoError(t, err)
+
+	// Marking someone else's notification read must not touch it. It reports
+	// not-found rather than forbidden so notification IDs can't be probed.
+	err = service.MarkAsRead(ctx, notification.ID, int32(attacker.ID))
+	require.ErrorIs(t, err, core.ErrNotificationNotFound)
+
+	assert.Equal(t, []string{"owner msg"}, unreadTitles(t, ctx, service, int32(owner.ID)))
+}
+
+func TestNotificationService_MarkAsRead_AlreadyReadIsNotAnError(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+
+	ctx := context.Background()
+	app := core.NewTestApp(testDB.Pool)
+	service := &NotificationService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	user := testDB.CreateTestUser(t, "reader", "reader@example.com")
+	userID := int32(user.ID)
+
+	notification, err := service.CreateNotification(ctx, contextNotificationFor(userID, 42, 100, "msg one"))
+	require.NoError(t, err)
+
+	require.NoError(t, service.MarkAsRead(ctx, notification.ID, userID))
+
+	// Clicking a notification that a previous action already cleared is
+	// ordinary, not a missing notification: affecting zero rows must not be
+	// mistaken for the row not existing.
+	require.NoError(t, service.MarkAsRead(ctx, notification.ID, userID))
+}

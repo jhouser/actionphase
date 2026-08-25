@@ -239,6 +239,16 @@ var ValidNotificationTypes = []string{
 	NotificationTypeHandoutPublished,
 }
 
+// NotificationContextTypes identify the container a notification belongs to.
+// They scope bulk mark-read operations: opening the container clears every
+// notification pointing at it. See core.Notification for how these differ from
+// the RelatedType/RelatedID pair.
+const (
+	// NotificationContextConversation - the notification belongs to a private
+	// message conversation; the context ID is the conversation ID.
+	NotificationContextConversation = "conversation"
+)
+
 // IsValidNotificationType checks if the given type is a valid notification type.
 func IsValidNotificationType(notifType string) bool {
 	for _, validType := range ValidNotificationTypes {

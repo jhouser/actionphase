@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -525,6 +526,101 @@ func TestConversationService_MarkAsRead(t *testing.T) {
 
 		require.NoError(t, err)
 	})
+}
+
+// TestConversationService_MarkAsRead_ClearsConversationNotifications covers the
+// reported scenario: a user in a different time zone wakes to a group
+// conversation full of overnight messages, each of which produced its own
+// notification. Opening the conversation must dismiss all of them at once,
+// while leaving unrelated notifications alone so "mark all as read" is not the
+// only escape.
+func TestConversationService_MarkAsRead_ClearsConversationNotifications(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+
+	ctx := context.Background()
+	service := NewConversationService(testDB.Pool, app.ObsLogger)
+	notificationService := &NotificationService{DB: testDB.Pool, Logger: app.ObsLogger}
+	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	charService := &CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
+
+	gm := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	sender := testDB.CreateTestUser(t, "sender", "sender@example.com")
+	sleeper := testDB.CreateTestUser(t, "sleeper", "sleeper@example.com")
+
+	game := testDB.CreateTestGame(t, int32(gm.ID), "Test Game")
+	_, err := gameService.AddGameParticipant(ctx, game.ID, int32(sender.ID), "player")
+	require.NoError(t, err)
+	_, err = gameService.AddGameParticipant(ctx, game.ID, int32(sleeper.ID), "player")
+	require.NoError(t, err)
+
+	senderChar, err := charService.CreateCharacter(ctx, CreateCharacterRequest{
+		GameID:        game.ID,
+		UserID:        int32Ptr(int32(sender.ID)),
+		Name:          "Sender",
+		CharacterType: "player_character",
+	})
+	require.NoError(t, err)
+	sleeperChar, err := charService.CreateCharacter(ctx, CreateCharacterRequest{
+		GameID:        game.ID,
+		UserID:        int32Ptr(int32(sleeper.ID)),
+		Name:          "Sleeper",
+		CharacterType: "player_character",
+	})
+	require.NoError(t, err)
+
+	conversation, err := service.CreateConversation(ctx, CreateConversationRequest{
+		GameID:          game.ID,
+		CreatedByUserID: int32(sender.ID),
+		ParticipantIDs:  []int32{senderChar.ID, sleeperChar.ID},
+	})
+	require.NoError(t, err)
+
+	// An unrelated notification that must survive: the whole point is that the
+	// user should not have to reach for "mark all as read".
+	_, err = notificationService.CreateNotification(ctx, &core.CreateNotificationRequest{
+		UserID: int32(sleeper.ID),
+		GameID: &game.ID,
+		Type:   core.NotificationTypeHandoutPublished,
+		Title:  "unrelated handout",
+	})
+	require.NoError(t, err)
+
+	// Overnight traffic, one notification per message.
+	const overnightMessages = 5
+	for i := 0; i < overnightMessages; i++ {
+		_, err = service.SendMessage(ctx, SendMessageRequest{
+			ConversationID:    conversation.ID,
+			SenderUserID:      int32(sender.ID),
+			SenderCharacterID: senderChar.ID,
+			Content:           fmt.Sprintf("overnight message %d", i),
+		})
+		require.NoError(t, err)
+	}
+
+	// SendMessage dispatches notifications in a fire-and-forget goroutine, so
+	// wait for them to land rather than racing the assertion.
+	var unread []*core.Notification
+	require.Eventually(t, func() bool {
+		var err error
+		unread, err = notificationService.GetUnreadNotifications(ctx, int32(sleeper.ID), 100)
+		return err == nil && len(unread) == overnightMessages+1
+	}, 5*time.Second, 25*time.Millisecond, "each message should notify the sleeping participant")
+
+	// Opening the conversation.
+	require.NoError(t, service.MarkConversationAsRead(ctx, conversation.ID, int32(sleeper.ID)))
+
+	unread, err = notificationService.GetUnreadNotifications(ctx, int32(sleeper.ID), 100)
+	require.NoError(t, err)
+	require.Len(t, unread, 1, "opening the conversation should clear every message notification it produced")
+	assert.Equal(t, "unrelated handout", unread[0].Title)
+
+	// Read tracking still works: notifications and conversation_reads stay
+	// separate systems, and this path drives both.
+	count, err := service.GetConversationUnreadCount(ctx, int32(sleeper.ID), conversation.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count)
 }
 
 func TestConversationService_UnreadCount(t *testing.T) {

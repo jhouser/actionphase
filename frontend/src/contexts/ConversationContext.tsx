@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
 import { useToast } from './ToastContext';
 import { logger } from '@/services/LoggingService';
@@ -60,6 +61,7 @@ interface ConversationProviderProps {
 
 export function ConversationProvider({ children }: ConversationProviderProps) {
   const { showError, showSuccess } = useToast();
+  const queryClient = useQueryClient();
 
   // State
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
@@ -222,11 +224,18 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
 
       // Refresh conversations list to update unread counts
       await loadConversations(gameId);
+
+      // Opening a conversation also clears every notification it produced, so
+      // the bell, dashboard and inbox counts are now stale by as many rows as
+      // there were unread messages.
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['unread-inbox'] });
     } catch (_err) {
       logger.error('Failed to mark conversation as read', { error: _err, gameId, conversationId });
       // Don't show error to user - this is a background operation
     }
-  }, [loadConversations]);
+  }, [loadConversations, queryClient]);
 
   const sendMessage = useCallback(async (
     gameId: number,

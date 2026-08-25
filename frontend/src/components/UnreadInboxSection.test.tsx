@@ -239,6 +239,41 @@ describe('UnreadInboxSection', () => {
     expect(screen.getByText('New message from Alex')).toBeInTheDocument();
   });
 
+  it('shows one row per conversation with a count, not one row per message', async () => {
+    // The reported scenario: waking to a group conversation full of overnight
+    // messages should not bury the rest of the inbox under one row each.
+    const burst = [3, 4, 5].map((id) => ({
+      ...pmNotification,
+      id,
+      related_id: 50 + id,
+      context_type: 'conversation',
+      context_id: 34,
+    }));
+
+    server.use(
+      http.get('/api/v1/notifications', () => {
+        const data = [commentNotification, ...burst];
+        return HttpResponse.json({ data, pagination: { total: data.length, limit: 100, offset: 0 } });
+      })
+    );
+
+    renderWithProviders(<UnreadInboxSection />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('unread-inbox-item')).toHaveLength(2);
+    });
+    expect(screen.getByTestId('unread-inbox-item-count')).toHaveTextContent('3 new');
+  });
+
+  it('does not show a count badge for a conversation with a single unread message', async () => {
+    renderWithProviders(<UnreadInboxSection />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('unread-inbox-item')).toHaveLength(2);
+    });
+    expect(screen.queryByTestId('unread-inbox-item-count')).not.toBeInTheDocument();
+  });
+
   it('collapses and expands the section on header click', async () => {
     const user = userEvent.setup();
     renderWithProviders(<UnreadInboxSection />);
