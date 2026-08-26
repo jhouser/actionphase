@@ -316,7 +316,7 @@
       "type": "domain",
       "enforcement": "suggest",
       "priority": "high",
-      "description": "Small feature implementation guide for ActionPhase \u2014 end-to-end from database migration through backend service, API handler, frontend hook, and component, following the test pyramid at each layer",
+      "description": "Small feature implementation guide for ActionPhase \u2014 end-to-end from database migration through backend service, API handler, frontend hook, and component, following the test pyramid at each layer. NOTE: this is a COMMAND (.claude/commands/implement-feature.md), not a skill directory under .claude/skills/. It is listed here only so the activation hook can suggest it; Claude Code resolves the name to the command file.",
       "promptTriggers": {
         "keywords": [
           "implement feature",

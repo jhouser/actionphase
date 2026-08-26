@@ -4,7 +4,7 @@
 **Goal:** For each doc, assess accuracy against the actual state of the codebase and bring it back up to date.
 **Scope:** Internal/dev-facing docs only. 152 tracked `.md` files (excludes `frontend/dist/`, `node_modules/`).
 
-**Progress:** Batches 1–3 complete (47 docs). Next up: **Batch 4** — commands & agents.
+**Progress:** Batches 1–4 complete (62 docs). Next up: **Batch 5** — ADRs & architecture.
 One doc remains PENDING in Batch 2: `.claude/planning-doc.md`.
 
 ## How to use this file
@@ -243,7 +243,7 @@ creates a new session row without deleting the old; orphans are swept within
 | PENDING | `.../resources/e2e-testing.md` | 583 | 2025-10-31 | Mechanical sweeps clean; deep content review deferred to Batch 6 (testing docs). |
 | PENDING | `.../resources/e2e-patterns-reference.md` | 474 | 2025-10-31 | As above. |
 | UPDATED | `.claude/skills/route-tester/SKILL.md` | 662 | 2025-10-30 | **Third copy of the 15-min/refresh-token fiction** — rewrote the auth overview (one 7-day session-backed token; `sub`/`session_id`/`exp`) and the 401 troubleshooting cause. Deleted a fabricated "justfile integrates api-test.sh" block (`just api-login`, `api-games`, `api-game` — none exist) and replaced it with the real 14 script subcommands. `just psql` → `just sh backend` + psql; `just dev` → `just up`; `core/models.go` → `core/*.go`. |
-| UPDATED | `.claude/skills/skill-rules.json` | 398 | — | **Two activation bugs.** `backend/cmd/**/*.go` → `backend/main.go` (no `cmd/` dir). `game-domain`'s three frontend globs (`components/{games,phases,characters}/**`) matched **zero** files — components are flat, not subdirectoried; replaced with name globs + `character-updates/` + `pages/Game*`, now matching **61** files. |
+| UPDATED | `.claude/skills/skill-rules.json` | 398 | — | **Two activation bugs.** `backend/cmd/**/*.go` → `backend/main.go` (no `cmd/` dir). `game-domain`'s three frontend globs (`components/{games,phases,characters}/**`) matched **zero** files — components are flat, not subdirectoried; replaced with name globs + `character-updates/` + `pages/Game*`, now matching **61** files. **Superseded by Batch 4 finding #3:** `fileTriggers` is read by no hook, so these were real config bugs but fixing them changed no runtime behavior. |
 | DELETED | `testing-patterns/resources/` ×8 stubs | 7 each | — | `anti-patterns`, `backend-testing`, `bug-fix-workflow`, `coverage-targets`, `frontend-testing`, `real-examples`, `test-commands`, `testing-pyramid`. Content-free filler ("*(Detailed documentation to be added)*"); 7 of 8 had zero inbound links. |
 | KEPT | `game-domain/resources/` ×7 stubs | 19 each | — | **Deliberately kept.** Unlike the above, these warn loudly ("⚠️ STUB — not yet written… do not infer rules from it") and redirect to specific source files. That is useful behavior, not noise. |
 
@@ -476,21 +476,79 @@ that disagrees with its value.
 
 | Status | Doc | Lines | Last Commit | Notes |
 |---|---|---|---|---|
-| PENDING | `.claude/commands/review-changes.md` | 255 | 2025-11-06 | |
-| PENDING | `.claude/commands/audit-test.md` | 197 | 2026-04-22 | |
-| PENDING | `.claude/commands/challenge-assumptions.md` | 128 | 2025-10-27 | |
-| PENDING | `.claude/commands/implement-feature.md` | 100 | 2026-08-18 | |
-| PENDING | `.claude/commands/audit-test-init.md` | 86 | 2026-04-22 | |
-| PENDING | `.claude/commands/dev-docs.md` | 68 | 2025-10-30 | |
-| PENDING | `.claude/commands/dev-docs-update.md` | 68 | 2025-10-30 | |
-| PENDING | `.claude/commands/fix-bug.md` | 62 | 2026-03-09 | |
-| PENDING | `.claude/commands/implement-features.md` | 58 | 2025-10-27 | Overlaps `implement-feature.md` — consolidate? |
-| PENDING | `.claude/commands/debug-e2e-test.md` | 57 | 2025-10-27 | |
-| PENDING | `.claude/agents/README.md` | 300 | 2025-10-30 | |
-| PENDING | `.claude/agents/web-research-specialist.md` | 78 | 2025-10-30 | |
-| PENDING | `.claude/agents/refactor-planner.md` | 62 | 2025-10-30 | |
-| PENDING | `.claude/agents/plan-reviewer.md` | 52 | 2025-10-30 | |
-| PENDING | `.claude/hooks/README.md` | 116 | 2026-04-22 | Verify vs. actual hook scripts + settings.json. |
+| UPDATED | `.claude/commands/review-changes.md` | 255 | 2025-11-06 | 6-step plan lookup where 5 paths could never match → real flat layout. `/docs/adrs/`, `/docs/testing/` → `docs-site/developer/…`. `just make_migration` → `just migration create`. Examples used fictional plans → real ones. Added `text-text-*` to retired tokens. |
+| OK | `.claude/commands/audit-test.md` | 197 | 2026-04-22 | Self-consistent; V&V criteria are sound. |
+| OK | `.claude/commands/challenge-assumptions.md` | 128 | 2025-10-27 | Generic protocol, no project claims. |
+| UPDATED | `.claude/commands/implement-feature.md` | 100 | 2026-08-18 | `just make_migration`→`migration create`; `test-frontend`→`test-fe run`; `just dev`+`run-frontend`→`just up`; `lib/api.ts` (split up)→`lib/api/`. Verified `core.NewTestDatabase`, `api-test.sh`, `interfaces.go` all real. |
+| OK | `.claude/commands/audit-test-init.md` | 86 | 2026-04-22 | All 3 globs resolve (244 FE / 144 BE / 49 e2e). |
+| UPDATED | `.claude/commands/dev-docs.md` | 68 | 2025-10-30 | Prescribed `planning/active/<name>/` dirs, a 3-file split, and `FEATURE_PLAN_TEMPLATE.md` — **none exist**. Real practice is one flat file. Rewritten to match. |
+| UPDATED | `.claude/commands/dev-docs-update.md` | 68 | 2025-10-30 | Same fictional structure; `just test-frontend`→`test-fe run`. |
+| OK | `.claude/commands/fix-bug.md` | 62 | 2026-03-09 | Accurate; correctly states the no-commit rule. |
+| UPDATED | `.claude/commands/implement-features.md` | 58 | 2025-10-27 | **Told Claude to "Commit with descriptive message"**, contradicting CLAUDE.md's critical git rule. |
+| OK | `.claude/commands/debug-e2e-test.md` | 57 | 2025-10-27 | Playwright MCP tool names all real. |
+| REWRITTEN | `.claude/agents/README.md` | 300→69 | 2025-10-30 | Documented **10 agents; 7 do not exist**. Referenced a `showcase/` dir that doesn't exist. Claimed "JWT cookie auth" (4th instance of that fiction — it's `Authorization: Bearer`). |
+| OK | `.claude/agents/web-research-specialist.md` | 78 | 2025-10-30 | Project-agnostic, no false claims. |
+| OK | `.claude/agents/refactor-planner.md` | 62 | 2025-10-30 | Project-agnostic. |
+| OK | `.claude/agents/plan-reviewer.md` | 52 | 2025-10-30 | Project-agnostic. |
+| UPDATED | `.claude/hooks/README.md` | 116 | 2026-04-22 | Listed 8 skills, **6 nonexistent**. Build-check section rewritten for the new `just verify-quick` delegation. |
+
+### Batch 4 findings (completed 2026-08-26)
+
+**15 docs reviewed: 1 rewritten, 8 updated, 6 verified OK. Plus 7
+`skill-developer` files corrected and 2 code fixes.**
+
+1. **The Stop hook was a no-op that reported success.** All three of its branches
+   were dead: `go build ./backend/cmd/server` (path doesn't exist, and `go.mod`
+   lives in `backend/` so the root-level build fails regardless); `go mod verify`
+   (guarded on a root `go.mod` that doesn't exist); and host `npx tsc`/`npm run
+   build` (breaks the moment host `node_modules` is deleted, which is the stated
+   direction of the repo). Worse, it piped `go build` into `tee` and tested the
+   **pipeline** status, so failures were swallowed and it printed
+   "✅ All build checks passed! • Backend (Go build + vet)".
+
+   Replaced with a thin wrapper over a new **`just verify-quick`**.
+
+2. **`just type-check` was passing vacuously.** It ran `tsc --noEmit` against the
+   root `tsconfig.json`, which is solution-style (`"files": []` + project
+   references) — so it type-checked **zero files**. Caught by canary: a real
+   `const x: number = "bad"` passed. Now `tsc -b --force`. This is a live
+   correctness fix, not a doc fix.
+
+3. **`fileTriggers` is inert.** The only skill hook is `UserPromptSubmit`, which
+   reads `promptTriggers` only — its TypeScript interface doesn't even declare
+   `fileTriggers`. Six skills carry file-trigger config that activates nothing.
+   **This corrects Batch 3 finding #7**: the zero-matching globs I fixed there
+   were real bugs, but fixing them changed no behavior.
+
+4. **`skill-developer` documented two hooks that don't exist** — a PreToolUse
+   verification guard and a Stop error-handling reminder — across 3 files,
+   including a 306-line `HOOK_MECHANISMS.md` where half the content described a
+   blocking-enforcement architecture this project has never had. No `PreToolUse`
+   hook is registered at all. Also fictional: `skipConditions`,
+   `SKIP_SKILL_GUARDRAILS`, `SKIP_DB_VERIFICATION`, `.claude/hooks/state/`.
+
+5. **`skill-developer` was vendored from another codebase.** Same class as Batch
+   3's `frontend-dev-guidelines`: examples throughout referenced **Prisma**,
+   `PrismaService`, `@project/database`, `schema.prisma`, and a `form/src/`
+   tree with a workflow engine. Replaced with verified ActionPhase equivalents
+   (`backend/pkg/db/services/**/*.go`, `import.*pkg/db/models`,
+   `\.GetDraftCharacterUpdates\(`) — each confirmed to match real files
+   (23 and 7 respectively).
+
+6. **`.claude/settings.json` does not exist**; the real file is
+   `settings.local.json`. Corrected in 3 files (carried over from Batch 3).
+
+7. **`implement-feature` in `skill-rules.json` is a command, not a skill** — no
+   directory under `.claude/skills/`. It *does* resolve, because Claude Code
+   surfaces `.claude/commands/*.md` as invocable skills, so the trigger works.
+   Annotated rather than deleted.
+
+**New justfile recipes** (`verify` rewritten, `verify-quick`, `build`,
+`build-backend`, `build-frontend`, `tidy-check`, `fmt-check`): `verify` is now
+the pre-push gate (all checks + both production builds, parallel, ~27s);
+`verify-quick` is the Stop-hook bundle (6 non-mutating checks, parallel,
+~8-11s, exits 0 silently when the stack is down). Both canary-verified to fail
+on real errors and to report every failing parallel job independently.
 
 ## Batch 5 — ADRs & architecture (`docs-site/developer/`)
 

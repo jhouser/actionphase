@@ -32,7 +32,7 @@ You are working on the ActionPhase platform, a turn-based gaming web application
 Follow the test pyramid bottom-up. **Do not skip layers.**
 
 ### 1. Database (if schema changes needed)
-- Create migration: `just make_migration <name>`
+- Create migration: `just migration create <name>`
 - Write `.up.sql` and `.down.sql`
 - Add SQL queries to `backend/pkg/db/queries/`
 - Regenerate: `just sqlgen`
@@ -49,18 +49,18 @@ Follow the test pyramid bottom-up. **Do not skip layers.**
 - **Verify with curl** using `backend/scripts/api-test.sh`
 
 ### 4. Frontend Hook
-- Add API client method to `frontend/src/lib/api.ts`
+- Add API client method to the right domain file in `frontend/src/lib/api/` (e.g. `games.ts`, `characters.ts`; `client.ts` holds the axios instance)
 - Add React Query hook in `frontend/src/hooks/`
 - **Write hook test** — verify query key, loading state, returned data shape
 
 ### 5. Frontend Component
 - Implement UI using components from `@/components/ui` (no raw HTML elements)
-- Use semantic tokens (`surface-base`, `text-content-primary`, `border-theme-default`) for layout — no hardcoded colors, and never `bg-bg-*`/`border-border-*` (retired, emit no CSS)
+- Use semantic tokens (`surface-base`, `text-content-primary`, `border-theme-default`) for layout — no hardcoded colors, and never the retired `bg-bg-*` / `border-border-*` / `text-text-*` families (they emit no CSS or resolve to the wrong color)
 - **Write component test** using React Testing Library — test what the user sees, not internals
-- Run: `just test-frontend` — must pass before proceeding
+- Run: `just test-fe run` — must pass before proceeding
 
 ### 6. Manual Verification
-- Start servers: `just dev` + `just run-frontend`
+- Start the stack: `just up` (frontend :5173, backend :3000; both hot-reload)
 - Walk through the feature manually
 - Check browser console for errors
 - Verify in both light and dark mode

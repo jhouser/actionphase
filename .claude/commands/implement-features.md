@@ -39,7 +39,8 @@ Good todos:
 After completing each feature:
 1. Run relevant tests
 2. Verify in browser if UI feature
-3. Commit with descriptive message
+3. Summarize what changed and suggest a commit message — **do not run git
+   commands.** The user handles all git operations (see CLAUDE.md).
 4. Update TodoWrite before moving to next
 
 ## Example:

@@ -7,21 +7,19 @@ We're approaching context limits. Please update the development documentation to
 
 ## Required Updates
 
-### 1. Update Active Task Documentation
-For each task in `.claude/planning/active/`:
-- Update `[task-name]-context.md` with:
-  - Current implementation state
-  - Key decisions made this session
-  - Files modified and why
-  - Any blockers or issues discovered
-  - Next immediate steps
-  - Last Updated timestamp
+### 1. Update the Relevant Planning Doc
+Plans live as **flat markdown files** in `.claude/planning/` (one per topic,
+kebab-case — there is no `active/` subdirectory or per-task file split).
 
-- Update `[task-name]-tasks.md` with:
-  - Mark completed tasks as ✅
-  - Add any new tasks discovered
-  - Update in-progress tasks with current status
-  - Reorder priorities if needed
+For each plan touched this session, update it in place with:
+- Current implementation state
+- Key decisions made this session, and *why*
+- Files modified, with concrete anchors (`pkg/core/config.go:244`)
+- Any blockers or issues discovered
+- Next immediate steps
+- Absolute dates (`2026-08-26`), never "today" or "last week"
+
+If the session's work has no plan file yet and is worth resuming, create one.
 
 ### 2. Capture Session Context
 Include any relevant information about:
@@ -34,7 +32,8 @@ Include any relevant information about:
 
 ### 3. Update ActionPhase Documentation
 - Update `.claude/context/` files if patterns changed
-- Add to `.claude/planning/completed/` if tasks finished
+- If a plan's work is fully finished, delete the file or mark it done in place —
+  there is no `completed/` directory
 - Update `CLAUDE.md` if workflow improvements discovered
 - Document new patterns in appropriate context files
 
@@ -51,7 +50,7 @@ If switching to a new conversation:
 - Any uncommitted changes that need attention
 - Test commands to verify work:
   - Backend: `just test`, `just test-mocks`
-  - Frontend: `just test-frontend`
+  - Frontend: `just test-fe run`
   - E2E: `just e2e`
 
 ## Additional Context: $ARGUMENTS

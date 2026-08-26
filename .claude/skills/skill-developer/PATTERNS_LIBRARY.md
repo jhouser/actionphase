@@ -19,7 +19,7 @@ Ready-to-use regex and glob patterns for skill triggers. Copy and customize for 
 ### Database Work
 ```regex
 (add|create|modify|update).*?(user|table|column|field|schema|migration)
-(database|prisma).*?(change|update|query)
+(database|sqlc|migration).*?(change|update|query)
 ```
 
 ### Error Handling
@@ -57,7 +57,7 @@ frontend/src/components/**   # Only components directory
 
 ### Backend Services
 ```glob
-form/src/**/*.ts            # Form service
+backend/pkg/**/*.go            # Form service
 email/src/**/*.ts           # Email service
 users/src/**/*.ts           # Users service
 projects/src/**/*.ts        # Projects service
@@ -65,15 +65,15 @@ projects/src/**/*.ts        # Projects service
 
 ### Database
 ```glob
-**/schema.prisma            # Prisma schema (anywhere)
+**/*.sql            # SQL query files (anywhere)
 **/migrations/**/*.sql      # Migration files
 database/src/**/*.ts        # Database scripts
 ```
 
 ### Workflows
 ```glob
-form/src/workflow/**/*.ts              # Workflow engine
-form/src/workflow-definitions/**/*.json # Workflow definitions
+backend/pkg/db/services/phases/**/*.go              # Workflow engine
+backend/pkg/db/queries/**/*.sql # Workflow definitions
 ```
 
 ### Test Exclusions
@@ -87,12 +87,12 @@ form/src/workflow-definitions/**/*.json # Workflow definitions
 
 ## Content Patterns (Regex)
 
-### Prisma/Database
+### sqlc / Database
 ```regex
-import.*[Pp]risma                # Prisma imports
-PrismaService                    # PrismaService usage
-prisma\.                         # prisma.something
-\.findMany\(                     # Prisma query methods
+import.*pkg/db/models                # sqlc imports
+Queries\.                  # generated Queries method calls
+sqlc\.                         # sqlc.something
+\.findMany\(                     # generated query methods
 \.create\(
 \.update\(
 \.delete\(
