@@ -1,17 +1,24 @@
 -- E2E Test Fixture: Epilogue Game State
 --
--- Game IDs: 348, 349 (offset by worker: Worker 1 = 10348/10349, etc.)
+-- Game IDs: 390, 391 (offset by worker: Worker 1 = 10390/10391, etc.)
+--
+-- 390/391 rather than the adjacent-looking 348/349: 349 is already owned by
+-- 18_co_gm_action_results_w*.sql. Fixtures are applied in filename order, so
+-- this file's DELETE FROM games would silently destroy that game and leave
+-- co-gm-management.spec.ts failing its fixture lookup. The 39x block is free.
+-- The conversation IDs (9948/9949) are unrelated to the game numbering and are
+-- left alone; they collide with nothing.
 --
 -- Backs epilogue-flow.spec.ts. Two games, because the spec asks two different
 -- kinds of question:
 --
---   * Game 348 (TRANSITION, starts in_progress) — driven through
+--   * Game 390 (TRANSITION, starts in_progress) — driven through
 --     in_progress -> epilogue -> completed by the transition tests. It exists
 --     to prove the *change*: content hidden before the move is visible after.
 --     It must start in_progress, since seeding it already open would assert
 --     only that the open state renders, which is the half that never broke.
 --
---   * Game 349 (STEADY-STATE, seeded in epilogue) — never mutated. The
+--   * Game 391 (STEADY-STATE, seeded in epilogue) — never mutated. The
 --     read-side tests point here so they assert what an epilogue game looks
 --     like without depending on another test having run first.
 --
@@ -82,8 +89,8 @@ BEGIN
   -- nothing else.
   FOR spec IN
     SELECT * FROM (VALUES
-      (348, 'in_progress', 'E2E Test: Epilogue Transition', 9948),
-      (349, 'epilogue',    'E2E Test: Epilogue Steady',     9949)
+      (390, 'in_progress', 'E2E Test: Epilogue Transition', 9948),
+      (391, 'epilogue',    'E2E Test: Epilogue Steady',     9949)
     ) AS t(gid, gstate, gtitle, cid)
   LOOP
     game_id    := spec.gid + worker_game_id_offset;

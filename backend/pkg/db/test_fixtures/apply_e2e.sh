@@ -20,6 +20,15 @@ run_psql() {
     PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$1" --quiet
 }
 
+# Pre-flight: fail fast if two fixtures claim the same game ID. Cheap to run and
+# catches the "Fixture game not found" class of failure at its source instead of
+# in whichever unrelated spec loses the race.
+echo "🔎 Checking fixture game ID uniqueness..."
+if ! python3 "$SCRIPT_DIR/check_fixture_ids.py"; then
+    echo "❌ Aborting: fix the duplicate game IDs above before applying fixtures."
+    exit 1
+fi
+
 # First load common data
 echo "📦 Loading common base data..."
 "$SCRIPT_DIR/apply_common.sh"

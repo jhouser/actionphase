@@ -26,10 +26,10 @@ import { assertTextVisible } from '../utils/assertions';
  *
  * Two fixture games, for two different kinds of question:
  *
- *   * E2E_EPILOGUE_STEADY (#349, seeded in epilogue, never mutated) backs the
+ *   * E2E_EPILOGUE_STEADY (#391, seeded in epilogue, never mutated) backs the
  *     read-side tests. They run in any order, in parallel, and survive retries.
  *
- *   * E2E_EPILOGUE_TRANSITION (#348, starts in_progress) backs the transition
+ *   * E2E_EPILOGUE_TRANSITION (#390, starts in_progress) backs the transition
  *     tests, which must run serially because they advance shared state.
  *
  * Every probe targets content owned by TestPlayer2/3, never TestPlayer1 — a

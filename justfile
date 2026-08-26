@@ -557,7 +557,14 @@ _load-e2e-unix:
   echo "🔧 Applying worker-specific fixtures..."
   for i in 0 1 2 3 4 5; do
     echo "  Worker $i..."
-    {{BE}} env DB_HOST=db DB_NAME=actionphase bash pkg/db/test_fixtures/apply_e2e_worker.sh $i > /dev/null 2>&1
+    # Output is captured rather than sent to /dev/null so a failure (e.g. the
+    # duplicate-game-ID pre-flight check) prints its diagnostic instead of
+    # failing with a bare exit code.
+    if ! worker_log=$({{BE}} env DB_HOST=db DB_NAME=actionphase bash pkg/db/test_fixtures/apply_e2e_worker.sh $i 2>&1); then
+      echo "$worker_log" >&2
+      echo "❌ Worker $i fixture load failed." >&2
+      exit 1
+    fi
   done
   echo "✅ E2E fixtures loaded for 6 parallel workers (isolated test games)"
 

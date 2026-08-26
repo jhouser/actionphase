@@ -202,6 +202,15 @@ with open('$temp_file', 'w') as f:
     rm "$temp_file"
 }
 
+# Pre-flight: fail fast if two fixtures claim the same game ID. Cheap to run and
+# catches the "Fixture game not found" class of failure at its source instead of
+# in whichever unrelated spec loses the race.
+echo "🔎 Checking fixture game ID uniqueness..."
+if ! python3 "$SCRIPT_DIR/check_fixture_ids.py"; then
+    echo "❌ Aborting: fix the duplicate game IDs above before applying fixtures."
+    exit 1
+fi
+
 # First, apply worker setup to create helper functions
 echo "  📄 Applying worker setup (creates helper functions)..."
 if ! PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$SCRIPT_DIR/e2e/00_worker_setup.sql"; then
@@ -213,8 +222,8 @@ fi
 for file in "$SCRIPT_DIR"/e2e/*.sql; do
     filename=$(basename "$file")
 
-    # Skip worker setup (already applied) and worker-specific files that don't match this worker
-    if [ -f "$file" ] && [ "$filename" != "00_worker_setup.sql" ] && [ "$filename" != "21_audience_private_messages.sql" ]; then
+    # Skip worker setup (already applied); worker-specific files are filtered below.
+    if [ -f "$file" ] && [ "$filename" != "00_worker_setup.sql" ]; then
         # For private message deletion, co-GM management, and co-GM action results, use worker-specific file (no transformation needed)
         if [[ "$filename" == 17_private_message_deletion_w*.sql ]] || [[ "$filename" == 18_co_gm_management_w*.sql ]] || [[ "$filename" == 18_co_gm_action_results_w*.sql ]] || [[ "$filename" == 19_player_multiple_characters_w*.sql ]] || [[ "$filename" == 21_audience_private_messages_w*.sql ]] || [[ "$filename" == 23_private_message_editing_w*.sql ]] || [[ "$filename" == 26_player_to_audience_w*.sql ]]; then
             # Only process if it matches our worker index
