@@ -219,7 +219,7 @@ curl -s -H "Authorization: Bearer $(cat /tmp/api-token.txt)" "http://localhost:3
 **Frontend Development**:
 ```bash
 # The frontend container serves Vite with HMR (started by `just up`).
-just test-frontend            # Run frontend tests (in container)
+just test-fe run              # Run frontend tests (in container)
 just test-fe watch            # Watch mode for development
 just lint-frontend            # eslint (in container)
 ```
@@ -228,7 +228,7 @@ just lint-frontend            # eslint (in container)
 ```bash
 just migration create <name> # Create new migration
 just migrate                  # Apply migrations to actionphase database
-just migrate_test             # Apply migrations to test database
+just reset-test-db            # Rebuild the test DB if it gets into a dirty state
 
 # ⚠️ CRITICAL: Always use 'actionphase' database name
 # Inside the compose network the host is `db`, not localhost:
@@ -259,19 +259,21 @@ just migrate_test             # Apply migrations to test database
 ```
 
 **Backend**:
+- Each test package clones its own database from a migrated template, so packages
+  run in parallel safely. Set `TEST_P=1` to serialize if debugging.
 - Unit tests with mocks: `just test-mocks` (FAST - run first)
-- Integration tests with DB: `SKIP_DB_TESTS=false just test`
+- Integration tests with DB: `just test` (sets `SKIP_DB_TESTS=false` itself) or `just test-integration`
 - API verification: `curl http://localhost:3000/api/v1/endpoint | jq`
 - Target: >80% coverage on service layer
 
 **Frontend**:
-- Component tests: `just test-frontend` (run before E2E)
+- Component tests: `just test-fe run` (run before E2E)
 - Watch mode: `just test-fe watch`
 - Test user interactions, not implementation
 
 **E2E Tests**:
 - **ONLY after unit + API + component tests pass**
-- Run synchronously: `npx playwright test --reporter=list` (NO `&`)
+- Run via `just e2e-desktop` / `just e2e-mobile` / `just e2e`, synchronously (NO `&`)
 - One concern per test
 - Use `data-testid` selectors, not class names
 - See `.claude/context/TESTING.md` E2E section for rules
@@ -303,12 +305,12 @@ just migrate_test             # Apply migrations to test database
 8. Run tests → `just test`
 
 **Frontend Flow**:
-1. API client method → `frontend/src/lib/api.ts`
+1. API client method → `frontend/src/lib/api/<domain>.ts`
 2. Custom hooks → `frontend/src/hooks/*.ts`
 3. **Write hook tests** → `*.test.ts`
 4. Implement components → `frontend/src/components/*.tsx`
 5. **Write component tests** → `*.test.tsx`
-6. Run tests → `just test-frontend`
+6. Run tests → `just test-fe run`
 
 **Then**: Test complete feature in UI before moving on
 
@@ -320,7 +322,8 @@ just migrate_test             # Apply migrations to test database
 
 ### Backend Core
 - `backend/pkg/core/interfaces.go` - All service interfaces
-- `backend/pkg/core/models.go` - Domain models
+- `backend/pkg/core/*.go` - Domain models, split per bounded context
+  (`games.go`, `characters.go`, `phases.go`, `notifications.go`, `constants.go`, `permissions.go`, ...)
 - `backend/pkg/http/root.go` - API routing and middleware
 - `backend/pkg/db/queries/` - SQL queries (generates code via sqlc)
 - `backend/pkg/db/services/` - Service implementations
@@ -330,7 +333,8 @@ just migrate_test             # Apply migrations to test database
   - Other services (games, characters, users, sessions, notifications)
 
 ### Frontend Core
-- `frontend/src/lib/api.ts` - API client with JWT interceptors
+- `frontend/src/lib/api/` - API client, split per domain (`client.ts` holds the
+  axios instance + JWT/refresh interceptors; `games.ts`, `characters.ts`, etc.)
 - `frontend/src/contexts/AuthContext.tsx` - Centralized auth state
 - `frontend/src/App.tsx` - Application setup
 - `frontend/src/hooks/` - Custom hooks

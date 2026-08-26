@@ -479,6 +479,75 @@ import { Label } from '@/components/ui';
 
 ---
 
+### 13. **Modal** - Dialog with Overlay
+
+```tsx
+import { Modal, Button } from '@/components/ui';
+
+<Modal
+  isOpen={isOpen}
+  onClose={() => setIsOpen(false)}
+  title="Confirm deletion"
+  size="md"                 // 'sm' | 'md' | 'lg' | 'xl' (default 'md')
+  showCloseButton           // optional
+  footer={
+    <>
+      <Button variant="secondary" onClick={close}>Cancel</Button>
+      <Button variant="danger" onClick={confirm}>Delete</Button>
+    </>
+  }
+>
+  This cannot be undone.
+</Modal>
+```
+
+### 14. **Drawer** - Sidebar / Bottom Sheet
+
+Responsive by default: a right sidebar at `lg+`, a bottom sheet below `lg`.
+
+```tsx
+import { Drawer } from '@/components/ui';
+
+<Drawer
+  open={open}
+  onClose={close}
+  title="Filters"
+  side="responsive"         // 'responsive' (default) | 'right' | 'bottom'
+>
+  {children}
+</Drawer>
+```
+
+`zIndexClass` sets the stacking tier — it defaults to the modal tier; the utility
+drawer passes `LAYERS.drawer` to sit above modals. Use the prop that suppresses
+the drawer's own backdrop when opening over an already-dimmed overlay.
+
+### 15. **HelpTooltip** - Inline Help Icon
+
+Use instead of parenthetical clarifications in labels.
+
+```tsx
+import { HelpTooltip } from '@/components/ui';
+
+<label className="flex items-center gap-1">
+  Deadline
+  <HelpTooltip text="When actions stop being accepted." align="left" />
+</label>
+```
+
+`align="right"` when the icon sits near the right edge — a left-anchored panel
+would overflow the container there.
+
+### 16. **MetadataItem** - Icon + Label + Value
+
+For information-dense areas: game cards, post headers.
+
+```tsx
+import { MetadataItem } from '@/components/ui';
+
+<MetadataItem icon={<ClockIcon />} label="Deadline" value="2 hours" />
+```
+
 ## Common Component Patterns
 
 ### Login Form
@@ -677,22 +746,39 @@ For **layout-only elements** (flexbox containers, grids, spacers), use CSS varia
 <span className="text-text-secondary">Secondary text</span>
 ```
 
-**Available CSS Variable Classes:**
+**Available CSS Variable Classes**
+
+These are the semantic tokens declared in the `@theme` block of
+`frontend/src/index.css` (Tailwind v4 CSS-first config — there is no
+`tailwind.config.js`). The full set:
 
 **Backgrounds:**
 - `bg-bg-page` - Page background
 - `bg-bg-primary` - Primary container
 - `bg-bg-secondary` - Secondary/subtle background
+- `bg-bg-tertiary` - Third-level background
+- `bg-bg-input` - Form input surfaces
 - `bg-bg-hover` - Hover state
+- `bg-bg-active` - Active/pressed state
 
 **Text:**
 - `text-text-heading` - Headings
 - `text-text-primary` - Body text
 - `text-text-secondary` - Secondary text
 - `text-text-muted` - Muted text
+- `text-text-disabled` - Disabled text
 
 **Borders:**
 - `border-border-primary` - Standard borders
+- `border-border-secondary` - Secondary borders
+- `border-border-default` - Default borders
+- `border-border-subtle` - Low-emphasis dividers
+- `border-border-strong` - High-emphasis borders
+- `border-border-input` - Form input borders
+- `border-border-focus` - Focus rings
+
+If you need a token that isn't listed here, add it to `@theme` in
+`src/index.css` rather than reaching for a hardcoded Tailwind color.
 
 ---
 

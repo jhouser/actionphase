@@ -2,7 +2,7 @@
 
 **IMPORTANT: Read this file before implementing new features or making architectural changes.**
 
-**Last Verified**: May 2026
+**Last Verified**: August 2026
 
 ## Core Architectural Principles
 
@@ -17,19 +17,19 @@ ActionPhase follows **Clean Architecture** with clear separation of concerns:
 ## Technology Stack
 
 ### Backend
-- **Language**: Go 1.21+
+- **Language**: Go 1.25
 - **Router**: Chi (HTTP routing and middleware)
 - **Database**: PostgreSQL with JSONB for flexible game data
 - **Query Builder**: sqlc (type-safe SQL → Go code generation)
-- **Authentication**: JWT + Refresh Tokens
+- **Authentication**: JWT bearer tokens backed by server-side sessions
 - **Migrations**: golang-migrate
 
 ### Frontend
-- **Framework**: React 18 + TypeScript
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS
+- **Framework**: React 19 + TypeScript 5.9
+- **Build Tool**: Vite 7
+- **Styling**: Tailwind CSS v4 (CSS-first config: `@import "tailwindcss"` + `@theme` in `src/index.css`; there is no `tailwind.config.js`)
 - **State Management**: React Query + Context API (see STATE_MANAGEMENT.md)
-- **HTTP Client**: Axios with JWT interceptors
+- **HTTP Client**: Axios with JWT interceptors (`src/lib/api/client.ts`)
 
 **See**: `/docs-site/developer/architecture/adrs/001-technology-stack-selection.md` for rationale
 
@@ -77,7 +77,9 @@ func (s *GameService) CreateGame(ctx context.Context, req *CreateGameRequest) (*
 
 ### 2. Domain Models in Core
 
-**Location**: `backend/pkg/core/models.go`
+**Location**: `backend/pkg/core/*.go` — split per bounded context
+(`games.go`, `characters.go`, `phases.go`, `notifications.go`, `conversations.go`,
+`handouts.go`, `application.go`, ...). There is no single `models.go`.
 
 - Define business entities here
 - Keep separate from database models
@@ -93,7 +95,11 @@ db/
 ├── queries/        # SQL query files (*.sql)
 ├── models/         # Generated Go types (from sqlc)
 ├── migrations/     # Database schema migrations
-└── services/       # Service implementations using queries
+├── services/       # Service implementations using queries
+│                   #   (phases/, actions/, messages/ are multi-file subpackages)
+├── test_fixtures/  # Seed SQL + apply scripts (common/, demo/, e2e/, perf/)
+├── schema.sql      # Full generated schema
+└── sqlc.yaml       # sqlc configuration
 ```
 
 **Pattern**:
@@ -117,7 +123,7 @@ RETURNING id, title, description, gm_user_id, state, created_at;
 
 **Location**: `backend/pkg/*/api.go` (one handler package per domain)
 
-Current handler packages: `admin`, `auth`, `avatars`, `characters`, `conversations`, `dashboard`, `deadlines`, `games`, `handouts`, `messages`, `notifications`, `phases`, `polls`, `users`
+Current handler packages (each has an `api.go`): `admin`, `auth`, `avatars`, `characters`, `conversations`, `dashboard`, `deadlines`, `exports`, `games`, `handouts`, `notifications`, `phases`, `polls`, `users`
 
 ```go
 func (h *Handler) CreateGame(w http.ResponseWriter, r *http.Request) {
@@ -169,20 +175,32 @@ alongside it.
 A `validate` tag on a struct whose `Bind` returns a bare `nil` enforces nothing,
 so wire both up in the same change. And do not rely on the service to reject bad
 input: service errors render as a 500 "unexpected error", not the 400 a bad
-payload deserves. See `.claude/planning/request-validation.md` for rollout status.
+payload deserves.
 
 ### 5. Authentication Pattern
 
-**JWT Access Tokens** (15 minutes) + **Refresh Tokens** (7 days)
+**A single JWT bearer token, valid 7 days, backed by a server-side session.**
 
-- Access tokens for API requests
-- Refresh tokens stored in database sessions
-- Automatic refresh via axios interceptors
-- User ID **NOT in JWT** - fetched from `/api/v1/auth/me`
+Issued by `JWTHandler.CreateToken` (`backend/pkg/auth/jwt.go`). Claims are:
+
+| Claim | Contents |
+|---|---|
+| `sub` | User ID, stringified via `strconv.Itoa` |
+| `session_id` | FK to the `sessions` row |
+| `exp` | Issued time + 7 days |
+
+Token creation is two-phase: a temporary token (`sub` + `exp`) is signed to
+create the session row, then the final token is re-signed with `session_id`
+added and written back to the session.
+
+Because the session is stored server-side, tokens can be revoked by deleting the
+session — that, not a short expiry, is the containment mechanism.
 
 **See**: `/docs-site/developer/architecture/adrs/003-authentication-strategy.md`
 
-**Security Note**: JWT payload only contains `sub` (username), `exp`, `iat`, `jti`. User ID fetched server-side after token validation to prevent client-side manipulation.
+> **Note**: earlier revisions of this doc described 15-minute access tokens plus
+> separate 7-day refresh tokens, and a `sub` holding the *username*. Neither
+> matches the code: `sub` is the user ID, and there is one token type.
 
 ### 6. Error Handling Pattern
 
@@ -445,23 +463,29 @@ log.Info().
 
 **Backend Core**:
 - `backend/pkg/core/interfaces.go` - All service contracts
-- `backend/pkg/core/models.go` - Business entities
+- `backend/pkg/core/*.go` - Business entities, split per domain (games, characters, phases, ...)
 - `backend/pkg/core/errors.go` - Error types
 - `backend/pkg/http/root.go` - API routing and middleware
 
 **Backend Services**:
 - `backend/pkg/db/services/` - Service implementations
-  - `phases/` - Phase service (crud, transitions, validation, history, converters, scheduler)
-  - `actions/` - Action submission service (submissions, results, validation, queries, draft_updates)
-  - `messages/` - Message service (posts, comments, reactions, validation, read_tracking, audience, character_messages)
+  - `phases/` - Phase service (service, crud, transitions, validation, history, scheduler)
+  - `actions/` - Action submission service (service, submissions, results, validation, queries,
+    draft_updates, staged, staged_worker)
+  - `messages/` - Message service (service, posts, draft_posts, comments, reactions, validation,
+    read_tracking, audience, character_messages)
   - `*.go` - Other services (games, characters, users, sessions, notifications, conversations, handouts, dashboard, deadlines, polls, user_preferences)
 - `backend/pkg/db/queries/*.sql` - SQL queries (generates models/)
 - `backend/pkg/db/migrations/*.sql` - Database migrations
 
 **Frontend Core**:
 - `frontend/src/lib/api/` - API client (split into domain modules; `index.ts` re-exports all)
-- `frontend/src/contexts/AuthContext.tsx` - Authentication state
-- `frontend/src/contexts/GameContext.tsx` - Game state + permissions
+- `frontend/src/contexts/` - React contexts:
+  - `AuthContext.tsx` - Authentication state
+  - `GameContext.tsx` - Game state + permissions
+  - `ThemeContext.tsx` - Light/dark/system theme
+  - `ToastContext.tsx`, `UtilityDrawerContext.tsx`, `ConversationContext.tsx`,
+    `AdminModeContext.tsx`, `ScreenshotModeContext.tsx`
 - `frontend/src/App.tsx` - Application setup
 
 ## Development Workflow
@@ -486,7 +510,7 @@ log.Info().
    - Write hook tests
    - Components
    - Write component tests
-   - Run tests: `just test-frontend`
+   - Run tests: `just test-fe run`
 
 3. **Manual Testing**: Test complete feature in UI before moving on
 

@@ -29,8 +29,36 @@ This directory contains all AI-specific context and instructions for working wit
 **Detailed protocols for common tasks**
 
 - **debug-e2e-test.md** - Mandatory protocol for debugging E2E test failures using Playwright MCP
+- **implement-feature.md** - Structured single-feature implementation session
 - **implement-features.md** - Structured approach for implementing multiple features with TodoWrite
 - **challenge-assumptions.md** - Protocol for clarifying ambiguous requirements before implementation
+- **fix-bug.md** - Bug/UI fix session protocol
+- **review-changes.md** - Review uncommitted changes
+- **audit-test.md** / **audit-test-init.md** - Test audit protocols
+- **dev-docs.md** / **dev-docs-update.md** - Dev documentation planning and updates
+
+### `/skills/` - Model-Invoked Skills
+**Progressive-disclosure guides loaded on demand. Activation is driven by `skill-rules.json`.**
+
+- **backend-dev-guidelines** - Go/Chi/PostgreSQL Clean Architecture patterns
+- **frontend-dev-guidelines** - React/TypeScript patterns (+ `resources/` deep dives)
+- **game-domain** - Game lifecycle, phases, characters, messaging (+ `resources/`)
+- **testing-patterns** - V&V criteria and test patterns (+ `resources/`)
+- **route-tester** - Authenticated API route testing
+- **skill-developer** - Meta-skill for authoring skills and trigger rules
+
+Note: several `resources/` files under `game-domain` and `testing-patterns` are
+unwritten stubs. They are placeholders, not authoritative — read the source
+instead. See `.claude/DOC_AUDIT_INVENTORY.md`.
+
+### `/agents/` - Subagent Definitions
+
+- **plan-reviewer.md**, **refactor-planner.md**, **web-research-specialist.md**
+- See `agents/README.md` for usage guidance.
+
+### `/hooks/` - Hook Scripts
+**Shell/TypeScript hooks wired up via `settings.json`** (skill activation, build
+checks, tsc checks, tool-use tracking). See `hooks/README.md`.
 
 ### `/planning/` - Session Planning & Task Tracking
 **Persistent planning documents that survive across sessions:**
@@ -42,6 +70,8 @@ Use this directory to:
 - Store design decisions and exploration notes
 
 This allows for continuity between AI sessions and provides historical context for planning decisions.
+
+**Note**: `/planning/` is gitignored — these are local, untracked working notes.
 
 ## External Documentation References
 
@@ -118,14 +148,15 @@ Active documentation files (not in docs-site yet):
 ### Before Writing E2E Tests (CRITICAL)
 **⚠️ E2E tests are the LAST step, NEVER the first!**
 
-**Mandatory Pre-E2E Checklist:**
-1. ✅ Backend unit test passes: `SKIP_DB_TESTS=true go test ./pkg/... -v`
+**Mandatory Pre-E2E Checklist** (dev stack is containerized — use `just`, not host tools):
+1. ✅ Backend unit test passes: `just test-mocks`
 2. ✅ API returns correct data: `curl http://localhost:3000/api/v1/... | jq`
-3. ✅ Component test passes: `npm test -- Component.test.tsx`
-4. ✅ Systems running: `curl http://localhost:3000/health && curl http://localhost:5173`
+3. ✅ Component test passes: `just test-fe run <file>`
+4. ✅ Systems running: `just ps` (or `curl http://localhost:3000/health`)
 
 **E2E Test Rules:**
-- Run synchronously: `npx playwright test --reporter=list` (NO `&`)
+- Run via `just e2e-desktop` / `just e2e-mobile` / `just e2e` (runs in the playwright container)
+- Run synchronously — never background with `&`
 - One concern per test
 - Use `data-testid` selectors
 - Wait for specific conditions, not arbitrary timeouts
@@ -143,8 +174,9 @@ When starting a coding task:
 
 ## Maintenance
 
-- Keep context files concise (< 500 lines)
-- Update this README when adding new context files
+- Prefer concise context files; split into `.claude/reference/` when they grow past ~500 lines
+  (several currently exceed this — see `.claude/DOC_AUDIT_INVENTORY.md`)
+- Update this README when adding new context files, skills, commands, or agents
 - Move detailed implementation guides to `.claude/reference/`
 - Keep ADRs in `/docs-site/developer/architecture/adrs/` (single source of truth)
 - Update CLAUDE.md to reference new context files

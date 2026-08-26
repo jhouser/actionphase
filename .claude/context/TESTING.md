@@ -196,9 +196,9 @@ When reviewing coverage output:
 
 Run coverage to **find gaps to evaluate**, not to hit a number:
 ```bash
-TEST_DATABASE_URL="postgres://postgres:example@localhost:5432/actionphase_test?sslmode=disable" \
-  SKIP_DB_TESTS=false go test -p=1 ./... -coverprofile=/tmp/coverage.out -covermode=atomic
-go tool cover -func=/tmp/coverage.out | grep "0.0%"
+just test-coverage                       # writes backend/coverage.out, prints the total
+just sh backend                          # then, inside the container:
+go tool cover -func=coverage.out | grep "0.0%"
 ```
 
 ---
@@ -215,14 +215,18 @@ just test-mocks
 # Backend — integration tests only
 just test-integration
 
-# Backend — specific package
-TEST_DATABASE_URL="postgres://..." SKIP_DB_TESTS=false go test -p=1 ./pkg/games/... -v
+# Backend — specific test by name (pattern is passed to `go test -run`)
+just test-run TestGameAPI_ListAll
 
-# Backend — specific test
-TEST_DATABASE_URL="postgres://..." SKIP_DB_TESTS=false go test -p=1 ./pkg/games/... -run TestGameAPI_ListAll -v
+# Backend — specific package (use the container shell)
+just sh backend
+#   then: go test ./pkg/games/... -v
 
 # Frontend — all
-just test-frontend
+just test-fe run
+
+# Frontend — a single file
+just test-fe run src/components/Foo.test.tsx
 
 # Frontend — watch mode
 just test-fe watch
@@ -265,7 +269,7 @@ E2E tests (Playwright) are slow (~20-30s each), hard to debug, and provide poor 
 
 See `frontend/e2e/STATUS.md` for current E2E test coverage and `frontend/e2e/README.md` for the complete testing guide.
 
-**Current E2E coverage** (41 spec files in `frontend/e2e/`):
+**Current E2E coverage** (49 spec files, organized into subdirectories under `frontend/e2e/`):
 - Auth, Games (lifecycle/applications/settings/co-GM), Gameplay (actions/phases/characters/handouts/polls/deadlines), Messaging (common room/private messages/mentions), Notifications, Settings, Admin, Security, Smoke, Edge cases
 
 **Note on mobile testing**: `just e2e` runs both Chromium (desktop) and Pixel 5 (mobile) projects. When adding new tests, verify they pass on both projects — mobile can fail due to layout differences.
