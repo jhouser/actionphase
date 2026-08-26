@@ -142,16 +142,21 @@ All cron jobs log to `/opt/actionphase/logs/` or `/var/log/`.
 ## Log Retention
 
 ### Application Logs
-- **Retention**: 30 days
-- **Rotation**: Daily
-- **Compression**: Yes (after 1 day)
-- **Location**: `/opt/actionphase/logs/`
+- **Retention**: 14 days (`rotate 14` in `terraform/user-data.sh`)
+- **Rotation**: Daily, `copytruncate` (Go holds the file open)
+- **Compression**: Yes, `delaycompress` (after 1 day)
+- **Location**: `/opt/actionphase/logs/{backend,nginx,frontend}/`
 
 ### Docker Container Logs (json-file)
-- **Max Size**: 50-100MB per file
-- **Max Files**: 5-10 files
-- **Total**: ~500MB-1GB per container
-- **Rotation**: Automatic
+
+Per `docker-compose.logging.yml`:
+
+| Service | max-size | max-file |
+|---|---|---|
+| backend | 100m | 10 |
+| nginx | 100m | 10 |
+| frontend | 50m | 5 |
+| db | 20m | 5 |
 
 ### Backup Logs
 - **Retention**: 4 weeks

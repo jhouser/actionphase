@@ -1,5 +1,21 @@
 # API Documentation Automation
 
+> ⚠️ **`just api-docs-validate` is currently broken and its numbers are
+> meaningless.** It reports `Total registered routes: 9` and
+> `Coverage: 700.0%`.
+>
+> Cause: `listRoutes` in `backend/pkg/http/debug.go` walks `ctx.Routes` — the
+> *matched* subrouter, not the root — and its walk function skips any route
+> containing `/*`. `chi.Walk` therefore never descends into the mounted API
+> subrouters. `/api/v1/games` returns 200 but does not appear in
+> `/api/v1/debug/routes`; the real count is ~184 routes registered in
+> `backend/pkg/http/root.go`.
+>
+> Until `debug.go` is fixed, treat the "documented but not registered" list as
+> noise and the coverage percentage as invalid.
+
+
+
 **Status**: ✅ Implemented
 **Last Updated**: 2025-11-15
 
@@ -73,7 +89,7 @@ Generates basic OpenAPI YAML for undocumented routes.
 
 **Usage**:
 ```bash
-just api-docs-generate > /tmp/skeleton.yaml
+docker compose -f docker-compose.dev.yml exec -T backend go run scripts/generate-doc-skeleton.go > /tmp/skeleton.yaml
 ```
 
 **Example Output**:
@@ -131,7 +147,7 @@ just api-docs-generate > /tmp/skeleton.yaml
 
 4. **Generate** skeleton for new route:
    ```bash
-   just api-docs-generate > /tmp/skeleton.yaml
+   docker compose -f docker-compose.dev.yml exec -T backend go run scripts/generate-doc-skeleton.go > /tmp/skeleton.yaml
    ```
 
 5. **Enhance** the skeleton:
@@ -229,7 +245,7 @@ This will fail CI if routes are added without documentation.
 
 **Solution**:
 ```bash
-just dev
+just up
 ```
 
 ### "server returned status 404"

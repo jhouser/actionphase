@@ -15,7 +15,6 @@ host — no host Go, Node, psql, or migrate:
 - **git**
 
 (For reference, the containers run Go 1.25 and Node 24.)
-- **git** - For version control
 
 ### Get Running Immediately
 

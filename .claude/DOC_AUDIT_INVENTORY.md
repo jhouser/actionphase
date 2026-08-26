@@ -4,7 +4,7 @@
 **Goal:** For each doc, assess accuracy against the actual state of the codebase and bring it back up to date.
 **Scope:** Internal/dev-facing docs only. 152 tracked `.md` files (excludes `frontend/dist/`, `node_modules/`).
 
-**Progress:** Batches 1–6 complete (87 docs). Next up: **Batch 7** — `docs/` tree (deployment, operations, legacy).
+**Progress:** Batches 1–7 complete (102 docs; 3 deleted in Batch 7). Next up: **Batch 8** — component-level READMEs & misc.
 One doc remains PENDING in Batch 2: `.claude/planning-doc.md`.
 
 ## How to use this file
@@ -663,27 +663,40 @@ unanchored.
 
 **Method note for Batch 7:** verifying commands by *running* them caught three errors that reading could not — the `games.name` column, the `e2e-test headless <file>` signature, and the tag-usage claim above. Prefer execution over inspection wherever a command or query is cheap to run.
 
-## Batch 7 — `docs/` tree (deployment, operations, legacy)
+## Batch 7 — `docs/` tree (deployment, operations, legacy) — ✅ COMPLETE
 
-Entirely Oct–Nov 2025. Overlaps `docs-site/` and `.claude/reference/` — a consolidation candidate as much as an accuracy audit.
+**This tree is not published.** VitePress builds only `docs-site/`; `docs/` is
+reachable only via `CLAUDE.md` and the root `README.md`.
 
-| Status | Doc | Lines | Last Commit | Notes |
-|---|---|---|---|---|
-| PENDING | `docs/features/STATE_MANAGEMENT.md` | 1606 | 2025-10-17 | Huge + stale. Overlaps context + ADR-005. Strong merge/delete candidate. |
-| PENDING | `docs/operations/LOGGING_STRATEGY.md` | 465 | 2025-11-08 | |
-| PENDING | `docs/getting-started/DEVELOPER_ONBOARDING.md` | 449 | 2025-10-27 | Duplicates `docs-site/.../onboarding.md`. |
-| PENDING | `docs/features/IMPLEMENTATION_SUMMARY.md` | 416 | 2025-10-17 | Point-in-time; likely DELETE. |
-| PENDING | `docs/operations/DEPLOYMENT_SCRIPT_UPDATES.md` | 382 | 2025-11-08 | Point-in-time; likely DELETE. |
-| PENDING | `docs/operations/LOGGING_QUICK_REFERENCE.md` | 355 | 2025-11-08 | |
-| PENDING | `docs/operations/DEPLOYMENT_IMPROVEMENTS.md` | 347 | 2025-11-08 | Point-in-time; likely DELETE. |
-| PENDING | `docs/deployment/PRODUCTION_ENV_CHECKLIST.md` | 339 | 2025-11-16 | Verify vs. `.env.example`. |
-| PENDING | `docs/deployment/ROUTE53_SSL_SETUP.md` | 292 | 2025-11-07 | |
-| PENDING | `docs/deployment/SSL_BOOTSTRAP_GUIDE.md` | 281 | 2025-11-07 | |
-| PENDING | `docs/development/API_DOCS_PRODUCTION.md` | 300 | 2025-11-16 | |
-| PENDING | `docs/development/API_DOCS_QUICK_START.md` | 284 | 2025-11-16 | |
-| PENDING | `docs/development/API_DOCS_PROGRESS.md` | 281 | 2025-11-16 | Progress tracker; likely DELETE. |
-| PENDING | `docs/development/API_DOCS_AUTOMATION.md` | 263 | 2025-11-16 | |
-| PENDING | `docs/README.md` | 148 | 2025-10-27 | Index for this tree. |
+| Status | Doc | Lines | Notes |
+|---|---|---|---|
+| DELETED | `docs/features/IMPLEMENTATION_SUMMARY.md` | 416 | Completion report for state-management work integrated Oct 2025 ("Implementation completed by: Claude Code", "Next Step: Review with team"). Superseded by `STATE_MANAGEMENT.md` + ADR-005. **0 inbound links.** |
+| DELETED | `docs/operations/DEPLOYMENT_SCRIPT_UPDATES.md` | 382 | Pure changelog of a single 2025-11-08 edit, down to "**Line 20**: Added `LOG_DIR`". Content is the script itself. **0 inbound links.** |
+| DELETED | `docs/development/API_DOCS_PROGRESS.md` | 281 | "Achievements Today" progress log with a stale metrics table. Its one inbound link removed. |
+| REWRITTEN | `docs/README.md` | 147 | **41 of 46 relative links broken.** Indexed `docs/architecture/` and `docs/adrs/` — moved to `docs-site/` long ago. Also linked `../backend/README.md`, `../frontend/docs/STATE_MANAGEMENT.md`, and `.claude/planning/completed/MVP_STATUS.md`, none of which exist. Rewritten as an index of what this tree actually holds, with a pointer to `docs-site/`. Now **0 broken of 15**. |
+| REPLACED | `docs/getting-started/DEVELOPER_ONBOARDING.md` | 449→24 | Near-duplicate of the `docs-site` onboarding guide rewritten in Batch 5, but still carrying **11 invalid recipes** (`just dev`, `db_up`, `db_down`, `db_reset`, `db_exec`, `make_migration`, `migrate_test`, `run-frontend`, `test-frontend`, `test-e2e`, `docs`) and host Go/Node prerequisites. Replaced with a pointer to the maintained copy. |
+| UPDATED | `docs/deployment/PRODUCTION_ENV_CHECKLIST.md` | 339 | **Would have broken a production deploy.** Claimed `CORS_ORIGINS` was "Auto-configured by user-data.sh" — it is not; `.env.docker` ships `CORS_ORIGINS=https://localhost` and nothing overrides it. Also conflated two mechanisms: `user-data.sh` generates only `JWT_SECRET`/`DOMAIN`/`ADMIN_EMAIL`, everything else comes from committed `.env.docker` defaults (incl. the `example` DB password). Added the missing OTel/Faro section and a note that `VITE_*` are build-time. Added compose-file guidance. |
+| UPDATED | `docs/operations/LOGGING_STRATEGY.md` | 465 | Reads as an open proposal for something **already shipped** (Option 2, 2025-11-08). Added a status banner + divergence table: proposed `rotate 30` vs deployed **`rotate 14`**; per-directory logrotate blocks rather than a single glob; `db` container (20m×5) not covered by the proposal. |
+| UPDATED | `docs/operations/DEPLOYMENT_IMPROVEMENTS.md` | 347 | Retention documented as **30 days**; actual is **14**. Docker log sizes given as a vague "50-100MB / 5-10 files" range; replaced with the real per-service table from `docker-compose.logging.yml`. Kept — unlike the other point-in-time docs, it carries real operational reference content. |
+| UPDATED | `docs/operations/LOGGING_QUICK_REFERENCE.md` | 355 | Framed log persistence as opt-in "Option 2"; it has been the **default** in `deploy-production.sh` since 2025-11-08. All 9 `docker-compose` commands lacked compose-file flags, so they silently targeted `docker-compose.yml` alone. |
+| UPDATED | `docs/development/API_DOCS_AUTOMATION.md` | 263 | Documented `just api-docs-generate`, which **does not exist** (only `api-docs-validate` does); the script is real but unwired. Added a warning that the validator itself is broken (see finding #2). `just dev` → `just up`. |
+| UPDATED | `docs/development/API_DOCS_QUICK_START.md` | 284 | Same invalid recipe ×2, `just dev` ×2, plus the dangling `API_DOCS_PROGRESS.md` reference. |
+| UPDATED | `docs/features/STATE_MANAGEMENT.md` | 1606 | Largest doc in the tree and the **most accurate** — all 7 file references and all hook exports verified. Fixed 4 instances of **TanStack Query v4 positional syntax** (`invalidateQueries(['games'])`); v5 requires the object form, which is what the real hooks use. Same defect Batch 5 fixed in ADR-005. |
+| OK | `docs/deployment/SSL_BOOTSTRAP_GUIDE.md` | 281 | One broken link (`./DEPLOYMENT.md`) fixed; added a note that `scripts/renew-ssl.sh` is **generated by `setup-ssl.sh`**, not committed. Cron schedule and renewal logic verified correct. |
+| OK | `docs/deployment/ROUTE53_SSL_SETUP.md` | 292 | All script references resolve. No changes. |
+| OK | `docs/development/API_DOCS_PRODUCTION.md` | 300 | References resolve. No changes. |
+| FIXED | `docs-site/.../onboarding.md` | — | *(Batch 5 file)* Removed a duplicated `git` bullet I left in the prerequisites list. |
+
+### Batch 7 findings (completed 2026-08-26)
+
+1. **A production-breaking doc error.** `PRODUCTION_ENV_CHECKLIST.md` told operators `CORS_ORIGINS` was auto-configured. It is not — the committed default is `https://localhost`, which would block every browser request from the real domain. The same section conflated Terraform-generated vars with committed `.env.docker` defaults, obscuring that the DB password ships as `example`.
+2. **Live bug: `just api-docs-validate` is structurally broken.** It reports `Total registered routes: 9` and `Coverage: 700.0%`. `listRoutes` (`backend/pkg/http/debug.go:37`) walks `ctx.Routes` — the *matched* subrouter, not the root — and its walk function skips any route containing `/*`, so `chi.Walk` never descends into mounted subrouters. Verified: `/api/v1/games` returns 200 but is absent from `/api/v1/debug/routes`; ~184 routes are registered in `root.go`. **Code fix, not a doc fix.**
+3. **`docs/README.md` was a near-total loss as an index** — 41 of 46 links broken, pointing at a `docs/architecture/` + `docs/adrs/` layout that moved to `docs-site/` long ago.
+4. **Point-in-time changelogs, deleted.** Three docs (1,079 lines) recorded completed work as "Changes Made" / "Achievements Today" with line-number references. Two had zero inbound links.
+5. **Documented config drifted from deployed config** in both logging docs: `rotate 30` vs actual `rotate 14`, and a vague size range instead of the real per-service values.
+6. **A recipe documented but never created.** `just api-docs-generate` appears in 3 docs; the underlying script works, but no justfile recipe was ever added — the validator's own tip points at the bare `go run` instead.
+7. **`docs/` overlaps `docs-site/` and loses.** The onboarding duplicate had 11 invalid recipes while the `docs-site` copy (fixed in Batch 5) was correct. Consolidation, not parallel maintenance, is the fix.
+8. **Correction to my own work:** I reported `terraform/` as nonexistent early on — a zsh `nomatch` failure on a glob, not a real absence. It exists and is where the cron and logrotate config live.
 
 ## Batch 8 — Component-level READMEs & misc
 

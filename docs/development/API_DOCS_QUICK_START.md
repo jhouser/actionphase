@@ -6,7 +6,7 @@
 
 ```bash
 # Ensure backend server is running
-just dev
+just up
 
 # Or manually:
 cd backend
@@ -40,7 +40,7 @@ Coverage: 39.3%
 
 ```bash
 cd backend
-just api-docs-generate > /tmp/skeleton.yaml
+docker compose -f docker-compose.dev.yml exec -T backend go run scripts/generate-doc-skeleton.go > /tmp/skeleton.yaml
 ```
 
 Then review `/tmp/skeleton.yaml` and copy relevant sections to `pkg/docs/openapi.yaml`.
@@ -183,7 +183,7 @@ open http://localhost:3000/api/v1/docs/
 
 ```bash
 just api-docs-validate    # Check documentation coverage
-just api-docs-generate     # Generate skeleton YAML
+just sh backend            # then: go run scripts/generate-doc-skeleton.go
 ```
 
 ## Direct Script Usage
@@ -247,7 +247,7 @@ python3 -c "import yaml; yaml.safe_load(open('pkg/docs/openapi.yaml'))"
 
 Server isn't running. Start it:
 ```bash
-just dev
+just up
 ```
 
 ### "Coverage: 480%"
@@ -281,4 +281,3 @@ Add to `.github/workflows/ci.yml`:
 **See Also**:
 - Full automation guide: `/docs/development/API_DOCS_AUTOMATION.md`
 - Technical details: `/backend/scripts/README.md`
-- Progress tracking: `/docs/development/API_DOCS_PROGRESS.md`
