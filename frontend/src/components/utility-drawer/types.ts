@@ -16,10 +16,17 @@ export interface GameUtilityContext {
   currentPhase?: GamePhase | null;
   isGM: boolean;
   isAudience: boolean;
-  isGameCompleted: boolean;
+  /**
+   * Whether the game still accepts new content. False for completed and
+   * cancelled; TRUE for epilogue, which is a public archive that is still
+   * writable. Named for the write gate rather than "completed" because that is
+   * the only question the drawer asks of it — Mark All Read exists while people
+   * can still comment. Mirrors isGameWritable / core.ValidateGameNotCompleted.
+   */
+  isGameWritable: boolean;
   /** User's role in the game — used to compute sheet view/edit permissions. */
   userRole: UserGameRole;
-  /** Current game state, e.g. 'in_progress' | 'completed'. */
+  /** Current game state, e.g. 'in_progress' | 'epilogue' | 'completed'. */
   gameState: string;
   /** Whether the game is in anonymous mode. */
   isAnonymous: boolean;

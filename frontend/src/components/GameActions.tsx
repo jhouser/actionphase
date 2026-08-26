@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { Game, GameApplication, GameState } from '../types/games';
 import type { UserGameRole } from '../contexts/GameContext';
 import { Button } from './ui';
+import { isGameWritable } from '@/lib/gamePermissions';
 
 interface StateAction {
   label: string;
@@ -75,7 +76,7 @@ export function GameActions({
   }, [showMenu]);
 
   // Count menu items to determine if we should show the menu
-  const hasEditAction = canEditGame && game.state !== 'completed' && game.state !== 'cancelled';
+  const hasEditAction = canEditGame && isGameWritable(game.state);
   const hasStateActions = isGM && stateActions.length > 0;
   const hasDeleteAction = isGM && game.state === 'cancelled' && onDeleteGame;
   const hasMenuItems = hasEditAction || hasStateActions || hasDeleteAction;

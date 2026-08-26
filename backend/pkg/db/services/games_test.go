@@ -1146,6 +1146,23 @@ func TestGameService_CanUserViewGame(t *testing.T) {
 		core.AssertTrue(t, canView, "GM should be able to view completed game")
 	})
 
+	t.Run("epilogue game allows ANY user to view (writable public archive)", func(t *testing.T) {
+		// Epilogue grants the same read access as completed. Creating the game
+		// also exercises the games_state_check constraint, so this fails loudly
+		// if the migration and the Go constant ever disagree.
+		epilogueGame := testDB.CreateTestGameWithState(t, int32(gmUser.ID), "Epilogue Game", core.GameStateEpilogue)
+
+		// A total stranger can read an epilogue game — this is the disclosure
+		// the state exists to perform.
+		canView, err := gameService.CanUserViewGame(ctx, epilogueGame.ID, int32(randomUser.ID))
+		core.AssertNoError(t, err, "Failed to check view access")
+		core.AssertTrue(t, canView, "Random user should be able to view epilogue game (public archive)")
+
+		canView, err = gameService.CanUserViewGame(ctx, epilogueGame.ID, int32(gmUser.ID))
+		core.AssertNoError(t, err, "Failed to check GM view access")
+		core.AssertTrue(t, canView, "GM should be able to view epilogue game")
+	})
+
 	t.Run("cancelled game does NOT allow non-participants to view (private)", func(t *testing.T) {
 		// Create a cancelled game
 		cancelledGame := testDB.CreateTestGameWithState(t, int32(gmUser.ID), "Cancelled Game", core.GameStateCancelled)

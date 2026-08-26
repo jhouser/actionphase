@@ -245,14 +245,17 @@ func (h *Handler) GetGameActionResults(w http.ResponseWriter, r *http.Request) {
 	// Check if user is audience member
 	isAudience := core.IsUserAudience(ctx, h.App.Pool, int32(gameID), int32(authUser.ID))
 
-	// Allow access if: GM, audience, or the game is completed.
+	// Allow access if: GM, audience, or the game is a public archive.
 	//
-	// The completed branch deliberately has no membership check — a completed game
-	// is a public archive readable by any authenticated user, matching how exports
-	// and game stats treat it. It is broader than the other two arms, which are
-	// scoped to a role: this one admits non-participants.
-	if !canManage && !isAudience && game.State.String != "completed" {
-		h.renderError(ctx, w, r, core.ErrForbidden("only the GM, audience, or any user of a completed game can view all action results"), "Get game action results forbidden")
+	// The archive branch deliberately has no membership check — a public-archive
+	// game (completed OR epilogue) is readable by any authenticated user. It is
+	// broader than the other two arms, which are scoped to a role: this one
+	// admits non-participants.
+	//
+	// Epilogue must be included: a player writing an epilogue needs to see what
+	// happened to everyone else, which is the whole reason that state exists.
+	if !canManage && !isAudience && !core.IsPublicArchive(game.State.String) {
+		h.renderError(ctx, w, r, core.ErrForbidden("only the GM, audience, or any user of a public archive game can view all action results"), "Get game action results forbidden")
 		return
 	}
 

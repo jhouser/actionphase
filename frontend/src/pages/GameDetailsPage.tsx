@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
+import { isGameWritable, isPublicArchive } from '@/lib/gamePermissions';
 import { useAuth } from '../contexts/AuthContext';
 import { useGameContext } from '../contexts/GameContext';
 import { useGameApplication } from '../hooks/useGameApplication';
@@ -21,6 +22,7 @@ import { GameTabContent } from '../components/GameTabContent';
 import { ApplyToGameModal } from '../components/ApplyToGameModal';
 import { EditGameModal } from '../components/EditGameModal';
 import { CompleteGameConfirmationDialog } from '../components/CompleteGameConfirmationDialog';
+import { EpilogueGameConfirmationDialog } from '../components/EpilogueGameConfirmationDialog';
 import { PauseGameConfirmationDialog } from '../components/PauseGameConfirmationDialog';
 import { CancelGameConfirmationDialog } from '../components/CancelGameConfirmationDialog';
 import { LeaveGameConfirmationDialog } from '../components/LeaveGameConfirmationDialog';
@@ -69,7 +71,10 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
   const { data: currentPhaseData, isLoading: isLoadingPhase } = useQuery({
     queryKey: ['currentPhase', gameId],
     queryFn: () => apiClient.phases.getCurrentPhase(gameId).then(res => res.data),
-    enabled: !!gameId && game?.state === 'in_progress',
+    // Epilogue has a live phase too — the GM runs epilogue threads in a
+    // common_room phase. Leaving this disabled left currentPhaseType undefined
+    // forever, so the Common Room tab never appeared for players.
+    enabled: !!gameId && (game?.state === 'in_progress' || game?.state === 'epilogue'),
     refetchInterval: 180000,
   });
 
@@ -114,6 +119,9 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
     showCompleteDialog,
     setShowCompleteDialog,
     handleConfirmComplete,
+    showEpilogueDialog,
+    setShowEpilogueDialog,
+    handleConfirmEpilogue,
     showPauseDialog,
     setShowPauseDialog,
     handleConfirmPause,
@@ -173,7 +181,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
       currentPhase: currentPhaseData?.phase ?? null,
       isGM,
       isAudience,
-      isGameCompleted: game?.state === 'completed',
+      isGameWritable: isGameWritable(game?.state),
       userRole,
       gameState: game?.state ?? '',
       isAnonymous: game?.is_anonymous ?? false,
@@ -393,8 +401,10 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
 
   const stateActions = isGM ? getStateActions(game.state) : [];
 
-  // Check if user is viewing as public (completed game, not a participant)
-  const isPublicViewer = game?.state === 'completed' && userRole === 'none';
+  // Check if user is viewing as public (public-archive game, not a participant).
+  // Epilogue counts: a non-participant can read an epilogue game in full, so
+  // they are a public viewer there for exactly the same reason.
+  const isPublicViewer = isPublicArchive(game?.state) && userRole === 'none';
 
   return (
     <div className="min-h-screen surface-page">
@@ -622,6 +632,16 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
           isOpen={showCompleteDialog}
           onClose={() => setShowCompleteDialog(false)}
           onConfirm={handleConfirmComplete}
+          gameTitle={game.title}
+        />
+      )}
+
+      {/* Epilogue Confirmation Dialog */}
+      {game && (
+        <EpilogueGameConfirmationDialog
+          isOpen={showEpilogueDialog}
+          onClose={() => setShowEpilogueDialog(false)}
+          onConfirm={handleConfirmEpilogue}
           gameTitle={game.title}
         />
       )}

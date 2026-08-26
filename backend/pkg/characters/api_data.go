@@ -142,8 +142,9 @@ func (h *Handler) GetCharacterData(w http.ResponseWriter, r *http.Request) {
 							"user_id", *userID,
 							"game_id", character.GameID,
 						)
-					} else if gameErr == nil && game.State.Valid && game.State.String == "completed" {
-						// All participants (players, co-GMs) get full visibility in completed games
+					} else if gameErr == nil && game.State.Valid && core.IsPublicArchive(game.State.String) {
+						// All participants (players, co-GMs) get full visibility once the
+						// game is a public archive — completed or epilogue.
 						canViewPrivate = true
 						h.App.ObsLogger.Debug(ctx, "Participant viewing character data in completed game",
 							"character_id", characterID,

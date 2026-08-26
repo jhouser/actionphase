@@ -16,6 +16,7 @@ import CharacterAvatar from './CharacterAvatar';
 import { logger } from '@/services/LoggingService';
 import { useCharacterOwnership } from '../hooks/useCharacterOwnership';
 import { useCharacterSheetPermissions } from '../hooks/useCharacterSheetPermissions';
+import { isGameWritable } from '@/lib/gamePermissions';
 
 interface CharactersListProps {
   gameId: number;
@@ -151,7 +152,7 @@ export function CharactersList({
 
   // Check if user can create characters
   const canCreateCharacter = () => {
-    if (gameState === 'completed' || gameState === 'cancelled') return false;
+    if (!isGameWritable(gameState)) return false;
     if (userRole === 'gm') return true;
     // Players must be active participants to create characters
     if (userRole === 'player' && isParticipant && (gameState === 'character_creation' || gameState === 'in_progress')) return true;
@@ -162,7 +163,7 @@ export function CharactersList({
   // This is GM-only functionality
   const canDeleteCharacter = () => {
     // No deleting in completed or cancelled games
-    if (gameState === 'completed' || gameState === 'cancelled') return false;
+    if (!isGameWritable(gameState)) return false;
     return userRole === 'gm';
   };
 

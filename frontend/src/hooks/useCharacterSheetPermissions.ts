@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useCharacterOwnership } from './useCharacterOwnership';
 import type { Character } from '../types/characters';
+import { isGameWritable } from '@/lib/gamePermissions';
 
 export interface CharacterSheetPermissions {
   /**
@@ -27,7 +28,7 @@ export interface CharacterSheetPermissions {
  * from drifting on which states count as finished.
  */
 export function isEditableGameState(gameState: string | undefined): boolean {
-  return gameState !== 'completed' && gameState !== 'cancelled';
+  return isGameWritable(gameState);
 }
 
 /**

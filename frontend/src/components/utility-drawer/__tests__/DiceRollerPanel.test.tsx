@@ -14,7 +14,7 @@ const baseGame: GameUtilityContext = {
   currentPhase: null,
   isGM: false,
   isAudience: false,
-  isGameCompleted: false,
+  isGameWritable: true,
   userRole: 'player',
   gameState: 'in_progress',
   isAnonymous: false,

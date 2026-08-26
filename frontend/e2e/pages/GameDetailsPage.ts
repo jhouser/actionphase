@@ -175,6 +175,25 @@ export class GameDetailsPage {
   }
 
   /**
+   * Move the game to epilogue (GM only)
+   * Handles confirmation modal with text input
+   */
+  async moveToEpilogue() {
+    await this.clickMenuButton('Move to Epilogue');
+
+    // Epilogue is a one-way door (it discloses the whole archive), so the
+    // dialog requires the word typed out, same as Complete Game.
+    const confirmInput = this.page.getByPlaceholder('epilogue');
+    await confirmInput.waitFor({ state: 'visible', timeout: 5000 });
+    await confirmInput.fill('epilogue');
+
+    const confirmButton = this.page.getByTestId('epilogue-game-confirm-button');
+    await confirmButton.click();
+    // Wait for the modal to close — confirms the API call completed
+    await confirmInput.waitFor({ state: 'hidden', timeout: 10000 });
+  }
+
+  /**
    * Cancel the game (GM only)
    * Handles confirmation modal
    */

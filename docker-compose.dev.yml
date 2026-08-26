@@ -69,6 +69,11 @@ services:
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
       - backend-tmp:/app/tmp
+      # Read-only view of the whole repo. Cross-tree checks (e.g.
+      # scripts/check-game-states.sh) need to read backend *and* frontend
+      # sources at once; this is the only place both are visible, and it keeps
+      # those checks off the host so they run the same on Windows.
+      - .:/repo:ro
     depends_on:
       db:
         condition: service_healthy

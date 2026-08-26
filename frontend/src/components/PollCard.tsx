@@ -6,6 +6,7 @@ import { PollVotingForm } from './PollVotingForm';
 import { PollResults } from './PollResults';
 import { ConfirmModal } from './ConfirmModal';
 import type { Poll } from '../types/polls';
+import { isGameWritable } from '@/lib/gamePermissions';
 
 interface PollCardProps {
   poll: Poll;
@@ -210,7 +211,7 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
               </Button>
             )}
             {/* Delete button: GM only, not in completed/cancelled games */}
-            {isGM && gameState !== 'completed' && gameState !== 'cancelled' && (
+            {isGM && isGameWritable(gameState) && (
               <Button
                 variant="danger"
                 onClick={() => setShowDeleteConfirm(true)}

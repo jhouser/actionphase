@@ -6,6 +6,7 @@ import { DeleteGameConfirmationDialog } from '../DeleteGameConfirmationDialog';
 import { CancelGameConfirmationDialog } from '../CancelGameConfirmationDialog';
 import { PauseGameConfirmationDialog } from '../PauseGameConfirmationDialog';
 import { CompleteGameConfirmationDialog } from '../CompleteGameConfirmationDialog';
+import { EpilogueGameConfirmationDialog } from '../EpilogueGameConfirmationDialog';
 import { LeaveGameConfirmationDialog } from '../LeaveGameConfirmationDialog';
 import { WithdrawApplicationConfirmationDialog } from '../WithdrawApplicationConfirmationDialog';
 
@@ -218,6 +219,68 @@ describe('CompleteGameConfirmationDialog', () => {
     await user.type(screen.getByRole('textbox'), 'completed');
     await user.click(screen.getByTestId('complete-game-cancel-button'));
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe('EpilogueGameConfirmationDialog', () => {
+  // The dialog mechanics (typed gate, submit failure, reset on close) are
+  // covered once against ConfirmActionDialog. What matters here is the
+  // epilogue-specific wiring: the right confirmation word and testids, and copy
+  // that distinguishes this door from "Complete Game".
+  const render = (props: Partial<React.ComponentProps<typeof EpilogueGameConfirmationDialog>> = {}) =>
+    renderWithProviders(
+      <EpilogueGameConfirmationDialog
+        isOpen
+        onClose={vi.fn()}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        gameTitle="Final Chapter"
+        {...props}
+      />
+    );
+
+  it('renders the game title behind a disabled confirm button', () => {
+    render();
+    expect(screen.getByText('Final Chapter')).toBeInTheDocument();
+    expect(screen.getByTestId('epilogue-game-confirm-button')).toBeDisabled();
+  });
+
+  it('gates confirmation on typing "epilogue", not "completed"', async () => {
+    // Wiring the wrong word here would let a GM confirm the wrong action from
+    // muscle memory, and this transition cannot be undone.
+    const user = userEvent.setup();
+    render();
+    const input = screen.getByRole('textbox');
+
+    await user.type(input, 'completed');
+    expect(screen.getByTestId('epilogue-game-confirm-button')).toBeDisabled();
+
+    await user.clear(input);
+    await user.type(input, 'epilogue');
+    expect(screen.getByTestId('epilogue-game-confirm-button')).not.toBeDisabled();
+  });
+
+  it('calls onConfirm once the word is typed', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn().mockResolvedValue(undefined);
+    const onClose = vi.fn();
+    render({ onConfirm, onClose });
+
+    await user.type(screen.getByRole('textbox'), 'epilogue');
+    await user.click(screen.getByTestId('epilogue-game-confirm-button'));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledOnce();
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it('tells the GM the game stays writable and the reveal is irreversible', () => {
+    // The two facts that distinguish epilogue from completing the game. If the
+    // copy stops saying them, the GM cannot tell the two options apart.
+    render();
+    expect(screen.getByText(/cannot be undone/i)).toBeInTheDocument();
+    expect(screen.getByText(/writable/i)).toBeInTheDocument();
+    expect(screen.getByText(/private messages/i)).toBeInTheDocument();
   });
 });
 

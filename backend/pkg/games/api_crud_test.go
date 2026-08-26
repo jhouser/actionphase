@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -520,6 +521,109 @@ func TestUpdateGameState_NonGMForbidden(t *testing.T) {
 
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected 403 for non-GM state update, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+// TestUpdateGameState_InvalidTransitionReturns409 verifies that a rejected state
+// transition answers 409 with the invalid-state app code, not a bare 500.
+//
+// The request is well formed and authorized — the move is simply not legal from
+// where the game is. Answering 500 told clients "we broke, retry", which is
+// wrong twice: nothing broke, and retrying can never succeed. This mattered
+// enough to fix once epilogue introduced a one-way door a GM can actually hit.
+func TestUpdateGameState_InvalidTransitionReturns409(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupGameTestRouter(app, testDB)
+
+	gm := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	gmToken, err := core.CreateTestJWTTokenForUser(app, gm)
+	if err != nil {
+		t.Fatalf("failed to create token: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		from    string
+		to      string
+		because string
+	}{
+		{
+			name:    "epilogue back to in_progress",
+			from:    core.GameStateEpilogue,
+			to:      core.GameStateInProgress,
+			because: "the one-way door: players cannot un-see the disclosed archive",
+		},
+		{
+			name:    "completed is terminal",
+			from:    core.GameStateCompleted,
+			to:      core.GameStateInProgress,
+			because: "completed games are immutable",
+		},
+		{
+			name:    "cannot skip recruitment",
+			from:    core.GameStateSetup,
+			to:      core.GameStateInProgress,
+			because: "pre-existing rule, previously also a 500",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			game := testDB.CreateTestGameWithState(t, int32(gm.ID), "Transition Test Game", tt.from)
+
+			body := fmt.Sprintf(`{"state":%q}`, tt.to)
+			req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/games/%d/state", game.ID), bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+gmToken)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusConflict {
+				t.Fatalf("expected 409 for %s → %s (%s), got %d (body: %s)",
+					tt.from, tt.to, tt.because, rec.Code, rec.Body.String())
+			}
+
+			var resp struct {
+				Code  int64  `json:"code"`
+				Error string `json:"error"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("failed to decode error response: %v (body: %s)", err, rec.Body.String())
+			}
+
+			if resp.Code != core.ErrCodeInvalidGameState {
+				t.Errorf("expected app code %d (ErrCodeInvalidGameState), got %d",
+					core.ErrCodeInvalidGameState, resp.Code)
+			}
+
+			// The message must name both states — a GM who sees this needs to
+			// know what the game's state actually is, not just that it refused.
+			if !strings.Contains(resp.Error, tt.from) || !strings.Contains(resp.Error, tt.to) {
+				t.Errorf("error message should name both states, got %q", resp.Error)
+			}
+
+			// The rejected transition must not have partially applied.
+			after, err := testDB.Pool.Query(context.Background(),
+				"SELECT state FROM games WHERE id = $1", game.ID)
+			if err != nil {
+				t.Fatalf("failed to re-read game: %v", err)
+			}
+			defer after.Close()
+			if !after.Next() {
+				t.Fatal("game row disappeared")
+			}
+			var state string
+			if err := after.Scan(&state); err != nil {
+				t.Fatalf("failed to scan state: %v", err)
+			}
+			if state != tt.from {
+				t.Errorf("game state changed to %q despite rejected transition; want %q", state, tt.from)
+			}
+		})
 	}
 }
 
