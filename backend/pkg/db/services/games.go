@@ -191,7 +191,9 @@ func (gs *GameService) UpdateGameState(ctx context.Context, gameID int32, newSta
 			"from_state", currentState,
 			"to_state", newState,
 		)
-		return nil, fmt.Errorf("invalid game state transition: %s → %s", currentState, newState)
+		// Wrapped so the handler can answer 409 via errors.Is rather than
+		// treating a rejected transition as a server fault.
+		return nil, fmt.Errorf("%w: %s → %s", core.ErrInvalidStateTransition, currentState, newState)
 	}
 
 	game, err := queries.UpdateGameState(ctx, models.UpdateGameStateParams{
@@ -234,19 +236,29 @@ func (gs *GameService) UpdateGameState(ctx context.Context, gameID int32, newSta
 		}
 	}
 
-	// When a game is completed, disable anonymous mode so players can see who played which character
-	if newState == core.GameStateCompleted {
+	// When a game becomes a public archive, disable anonymous mode so players can
+	// see who played which character. This fires on entry to epilogue as well as
+	// completed, so it covers both the direct in_progress → completed path and the
+	// two-step in_progress → epilogue → completed path. Running twice on the
+	// latter is harmless: DisableAnonymousMode is an unconditional
+	// `SET is_anonymous = false`, so the second run only bumps updated_at.
+	if core.IsPublicArchive(newState) {
 		if err := queries.DisableAnonymousMode(ctx, gameID); err != nil {
 			// Log the error but don't fail the state change
-			// The game is already completed at this point
+			// The game state has already changed at this point
 			if gs.Logger != nil {
-				gs.Logger.Warn(ctx, "Failed to disable anonymous mode for completed game",
+				gs.Logger.Warn(ctx, "Failed to disable anonymous mode for public archive game",
 					"error", err,
-					"game_id", gameID)
+					"game_id", gameID,
+					"new_state", newState)
 			}
 		}
+	}
 
-		// Clean up manual comment read records — they serve no purpose once a game is archived
+	// Clean up manual comment read records — they serve no purpose once a game is
+	// archived. Kept on completed only: an epilogue game is still actively read
+	// and written, so read-tracking still does its job there.
+	if newState == core.GameStateCompleted {
 		if err := queries.DeleteManualCommentReadsForGame(ctx, gameID); err != nil {
 			if gs.Logger != nil {
 				gs.Logger.Warn(ctx, "Failed to clean up manual comment reads for completed game",
@@ -343,14 +355,25 @@ func (gs *GameService) IsUserInGame(ctx context.Context, gameID, userID int32) (
 //
 // State Transition Rules:
 //
-//	setup → recruitment → character_creation → in_progress ↔ paused → completed
+//	setup → recruitment → character_creation → in_progress ↔ paused
+//	                                                │
+//	                                    ┌───────────┴───────────┐
+//	                                    ▼                       ▼
+//	                               epilogue ────────────►  completed
+//
 //	Any non-terminal state → cancelled (emergency cancellation)
+//
+// epilogue → in_progress is deliberately absent. Entering epilogue discloses
+// every private message and action submission to every participant, and that
+// cannot be undone — players can't un-see it. Offering a way "back" would let a
+// GM believe they had restored a secrecy that no longer exists.
 var allowedTransitions = map[string][]string{
 	"setup":              {"recruitment", "cancelled"},
 	"recruitment":        {"character_creation", "cancelled"},
 	"character_creation": {"in_progress", "cancelled"},
-	"in_progress":        {"paused", "completed", "cancelled"},
+	"in_progress":        {"paused", "epilogue", "completed", "cancelled"},
 	"paused":             {"in_progress", "cancelled"},
+	"epilogue":           {"completed", "cancelled"},
 	"completed":          {},
 	"cancelled":          {},
 }
@@ -1050,10 +1073,14 @@ func (gs *GameService) CheckAudienceAccess(ctx context.Context, gameID, userID i
 	return result.Bool, nil
 }
 
-// CanUserViewGame checks if a user can view a game's content (read-only access).
-// Public Archive Mode: Completed games are viewable by ANY user (not just participants).
+// CanUserViewGame checks if a user can view a game's content (read access).
+// Public Archive Mode: completed AND epilogue games are viewable by ANY user
+// (not just participants) — see core.IsPublicArchive.
 // Active Games: Follows normal permission rules (GM, participants, audience).
 // Cancelled Games: Follow normal permission rules (NOT public).
+//
+// This grants READ access only. Whether a game accepts writes is a separate
+// question answered by core.ValidateGameNotCompleted, which epilogue passes.
 func (gs *GameService) CanUserViewGame(ctx context.Context, gameID, userID int32) (bool, error) {
 	queries := models.New(gs.DB)
 
@@ -1063,12 +1090,12 @@ func (gs *GameService) CanUserViewGame(ctx context.Context, gameID, userID int32
 		return false, fmt.Errorf("failed to get game: %w", err)
 	}
 
-	// Public Archive Mode: Completed games are viewable by anyone
-	if game.State.Valid && game.State.String == core.GameStateCompleted {
+	// Public Archive Mode: completed and epilogue games are viewable by anyone
+	if game.State.Valid && core.IsPublicArchive(game.State.String) {
 		return true, nil
 	}
 
-	// For non-completed games (including cancelled), use normal permission checks
+	// For non-archive games (including cancelled), use normal permission checks
 	// Check if user is GM or any type of participant (player, audience, co_gm)
 	isParticipant, err := gs.IsUserInGame(ctx, gameID, userID)
 	if err != nil {

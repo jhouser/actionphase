@@ -747,6 +747,7 @@ func (s *NotificationService) NotifyPhaseCreated(ctx context.Context, gameID int
 var gameStateDisplayNames = map[string]string{
 	core.GameStatePaused:     "paused",
 	core.GameStateInProgress: "resumed",
+	core.GameStateEpilogue:   "moved to epilogue",
 	core.GameStateCompleted:  "completed",
 	core.GameStateCancelled:  "cancelled",
 }

@@ -8,6 +8,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// IsPublicArchive reports whether a game in this state is readable by ANY
+// authenticated user, participant or not.
+//
+// Two states qualify, for different reasons:
+//   - GameStateCompleted: terminal and read-only.
+//   - GameStateEpilogue: still writable, so the GM can run epilogue and
+//     meta-discussion threads with the whole archive open.
+//
+// GameStateCancelled is deliberately NOT a public archive; cancelled games
+// follow normal participant permission rules.
+//
+// This is the read gate. It is a separate concern from the write gate
+// (ValidateGameNotCompleted, pkg/core/validation.go) — a state can be one, the
+// other, both, or neither, and epilogue exists precisely because those two
+// questions have different answers.
+func IsPublicArchive(state string) bool {
+	return state == GameStateCompleted || state == GameStateEpilogue
+}
+
 // IsUserCoGM checks if a user is a co-GM for a specific game.
 // This function queries the database to check if the user has the 'co_gm' role
 // for the given game.
@@ -119,11 +138,11 @@ func IsUserGameMasterCtx(ctx context.Context, userID int32, isAdmin bool, game m
 // Rule: players cannot see each other's usernames in anonymous games.
 // GMs, co-GMs, and audience members can always see usernames.
 //
-// Anonymity is a play-time protection, not a permanent one. Once a game is
-// COMPLETED it becomes a public archive readable by any authenticated user
-// (CanUserViewGame), so usernames are disclosed to everyone — mirroring how
-// completion lifts the individual-vote restriction on polls
-// (checkPollViewAccess, pkg/polls/api_polls.go). Cancelled games are NOT
+// Anonymity is a play-time protection, not a permanent one. Once a game is a
+// public archive (COMPLETED or EPILOGUE — see IsPublicArchive) it is readable
+// by any authenticated user (CanUserViewGame), so usernames are disclosed to
+// everyone — mirroring how the archive lifts the individual-vote restriction on
+// polls (checkPollViewAccess, pkg/polls/api_polls.go). Cancelled games are NOT
 // public and keep the play-time rule.
 //
 // If the game is not anonymous, always returns true.
@@ -132,8 +151,8 @@ func CanSeeUsernamesInAnonymousGame(ctx context.Context, db *pgxpool.Pool, game 
 		return true
 	}
 
-	// Completed games are a public archive: anonymity no longer applies.
-	if game.State.Valid && game.State.String == GameStateCompleted {
+	// Public archive (completed or epilogue): anonymity no longer applies.
+	if game.State.Valid && IsPublicArchive(game.State.String) {
 		return true
 	}
 

@@ -70,18 +70,20 @@ GET /api/v1/games/{gameID}/messages/{messageId}/thread-context   -- ancestor cha
 `ListAllPrivateConversations` and `GetAudienceConversationMessages`
 (`backend/pkg/db/queries/messages.sql:673,781`) apply no participant filter.
 
-Once a game is `completed`, all of the above is readable by any authenticated
-user via public archive mode. Use `CanUserViewGame` for read authorization.
+Once a game is `completed` **or `epilogue`**, all of the above is readable by
+any authenticated user via public archive mode. Use `CanUserViewGame` for read
+authorization (it keys on `core.IsPublicArchive`).
 
 ## Anonymous Games
 
 When `games.is_anonymous = true`, players cannot see each other's usernames.
 GMs, co-GMs, and audience always can.
 
-⚠️ **Anonymity is play-time only.** Once the game is `completed`, public archive
-mode discloses usernames to everyone, including non-participants — the same way
-completion lifts the individual-vote restriction on polls. Cancelled games are
-not public and keep the play-time rule.
+⚠️ **Anonymity is play-time only.** Once the game is `completed` **or
+`epilogue`**, public archive mode discloses usernames to everyone, including
+non-participants — the same way it lifts the individual-vote restriction on
+polls. Entering `epilogue` also disables `is_anonymous` outright. Cancelled
+games are not public and keep the play-time rule.
 
 See `CanSeeUsernamesInAnonymousGame` (`backend/pkg/core/permissions.go`).
 

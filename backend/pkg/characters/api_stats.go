@@ -40,8 +40,9 @@ func (h *Handler) gameLevelPrivateStatsAccess(r *http.Request, authUser *core.Au
 	ctx := r.Context()
 	isGM := core.IsUserGameMaster(r, authUser.ID, authUser.IsAdmin, game, h.App.Pool)
 	isAudience := core.IsUserAudience(ctx, h.App.Pool, game.ID, authUser.ID)
-	isCompleted := game.State.String == "completed"
-	return isGM || isAudience || isCompleted
+	// Completed AND epilogue: both disclose the archive to every viewer.
+	isArchive := core.IsPublicArchive(game.State.String)
+	return isGM || isAudience || isArchive
 }
 
 // canSeeCharacterPrivateStats combines the game-level grant with per-character
@@ -57,7 +58,8 @@ func canSeeCharacterPrivateStats(gameLevelAccess bool, authUser *core.Authentica
 //   - GMs and co-GMs always see it
 //   - Audience members always see it
 //   - The character's owner always sees their own count
-//   - Any authenticated user sees it when the game is completed
+//   - Any authenticated user sees it when the game is a public archive
+//     (completed or epilogue — see core.IsPublicArchive)
 //   - Other players in active/in-progress games do NOT see others' private counts
 func (h *Handler) GetCharacterStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

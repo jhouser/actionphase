@@ -67,13 +67,14 @@ export const UTILITY_DRAWER_UTILITIES: UtilityDrawerUtility[] = [
     description: 'Mark every comment in this phase as read.',
     icon: CheckCheck,
     // Needs a phase to scope the bulk mark-read to, there's nothing to catch
-    // up on once the game (and thus commenting) is over, and this only means
+    // up on once the game (and thus commenting) is over — note epilogue is
+    // still writable, so it keeps this — and this only means
     // anything in manual read-tracking mode — 'auto' mode has no per-comment
     // read state for this to bulk-set. Outside a game there is no phase at all.
     isAvailable: (ctx) =>
       !!ctx.game &&
       !!ctx.game.currentPhase &&
-      !ctx.game.isGameCompleted &&
+      ctx.game.isGameWritable &&
       ctx.game.commentReadMode === 'manual',
     Panel: MarkAllReadPanel,
   },

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiClient } from '../lib/api';
 import type { GameApplication } from '../types/games';
 import { useToast } from '../contexts/ToastContext';
+import { isPublicArchive } from '@/lib/gamePermissions';
 
 interface UseGameApplicationOptions {
   gameId: number;
@@ -29,11 +30,12 @@ export function useGameApplication({
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
 
   // Fetch user's application if not GM and not already in the game.
-  // Skip for completed games — applications are no longer possible.
+  // Skip once the game is a public archive (completed or epilogue) — a game
+  // that is winding down is not accepting applications either way.
   // Wait for participants to load to avoid race condition.
   useEffect(() => {
     const fetchUserApplication = async () => {
-      if (!isGM && !isInGame && !isLoadingParticipants && currentUserId && gameState !== 'completed') {
+      if (!isGM && !isInGame && !isLoadingParticipants && currentUserId && !isPublicArchive(gameState)) {
         try {
           const applicationResponse = await apiClient.games.getMyGameApplication(gameId);
           setUserApplication(applicationResponse.data);
@@ -49,7 +51,7 @@ export function useGameApplication({
   }, [gameId, isGM, isInGame, isLoadingParticipants, currentUserId, gameState]);
 
   const refetchUserApplication = async () => {
-    if (!isGM && !isInGame && currentUserId && gameState !== 'completed') {
+    if (!isGM && !isInGame && currentUserId && !isPublicArchive(gameState)) {
       try {
         const applicationResponse = await apiClient.games.getMyGameApplication(gameId);
         setUserApplication(applicationResponse.data);

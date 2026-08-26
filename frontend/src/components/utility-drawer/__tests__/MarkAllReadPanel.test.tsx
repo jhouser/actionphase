@@ -23,7 +23,7 @@ const baseGame: GameUtilityContext = {
   currentPhase: { id: 5, phase_type: 'action' } as GameUtilityContext['currentPhase'],
   isGM: false,
   isAudience: false,
-  isGameCompleted: false,
+  isGameWritable: true,
   userRole: 'player',
   gameState: 'in_progress',
   isAnonymous: false,

@@ -44,6 +44,17 @@ func TestValidateGameNotCompleted(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			// The load-bearing case for the epilogue feature. Epilogue grants the
+			// READ access of completed while leaving the write gate open — that
+			// separation is the entire point of the state. If someone "fixes"
+			// the apparent omission in ValidateGameNotCompleted by adding
+			// epilogue to it, posting silently breaks and epilogue collapses
+			// into a second name for completed. This test fails first.
+			name:      "epilogue game allows writes despite being a public archive",
+			gameState: GameStateEpilogue,
+			wantErr:   false,
+		},
+		{
 			name:      "completed game blocks writes",
 			gameState: GameStateCompleted,
 			wantErr:   true,
