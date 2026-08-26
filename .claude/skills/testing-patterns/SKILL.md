@@ -172,8 +172,11 @@ just test-fe run           # All frontend tests
 just test-fe watch         # Watch mode
 
 # E2E
-just e2e                   # Headless
-just e2e-test headed       # Visible browser
+just e2e                   # Desktop + mobile
+just e2e-desktop           # chromium only
+just e2e-mobile            # Pixel 5 only
+just e2e-test file <spec>  # One spec file
+just e2e-test report       # HTML report
 just load-e2e              # Load E2E fixtures
 ```
 

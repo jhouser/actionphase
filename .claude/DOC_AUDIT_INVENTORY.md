@@ -4,7 +4,7 @@
 **Goal:** For each doc, assess accuracy against the actual state of the codebase and bring it back up to date.
 **Scope:** Internal/dev-facing docs only. 152 tracked `.md` files (excludes `frontend/dist/`, `node_modules/`).
 
-**Progress:** Batches 1–5 complete (75 docs). Next up: **Batch 6** — testing docs.
+**Progress:** Batches 1–6 complete (87 docs). Next up: **Batch 7** — `docs/` tree (deployment, operations, legacy).
 One doc remains PENDING in Batch 2: `.claude/planning-doc.md`.
 
 ## How to use this file
@@ -633,18 +633,35 @@ but never built.
 recipes embedded in prose and inside CI YAML blocks. Batch 6 should grep
 unanchored.
 
-## Batch 6 — Testing docs (`docs-site/developer/testing/`)
+## Batch 6 — Testing docs (`docs-site/developer/testing/`) — ✅ COMPLETE
 
 | Status | Doc | Lines | Last Commit | Notes |
 |---|---|---|---|---|
-| PENDING | `TEST_DATA.md` | 1256 | 2026-08-18 | Largest doc in repo. Verify vs. fixture SQL. |
-| PENDING | `COVERAGE_STATUS.md` | 732 | 2025-11-15 | Coverage numbers are certainly stale — regenerate. |
-| PENDING | `E2E_QUICK_START.md` | 462 | 2025-11-15 | |
-| PENDING | `E2E_FIXTURES.md` | 203 | 2025-11-15 | |
-| PENDING | `TEST_COVERAGE_REFERENCE.md` | 50 | 2025-11-15 | |
-| PENDING | `frontend/e2e/README.md` | 659 | 2026-07-16 | |
-| PENDING | `frontend/e2e/pages/README.md` | 444 | 2025-10-26 | Page objects — verify vs. actual files. |
-| PENDING | `frontend/e2e/STATUS.md` | 348 | 2025-10-25 | Coverage status; note mobile E2E gap. |
+| UPDATED | `TEST_DATA.md` | 1256 | 2026-08-18 | **Fixture paths are no longer flat.** Files moved into `common/`, `demo/`, `e2e/`, `perf/`; every documented path (`test_fixtures/00_reset.sql` etc.) was wrong. Replaced a stale inline copy of `apply_all.sh` and a "add this to your justfile" block (inventing `reset-test-data`) with the real recipes. **Demo game IDs are sequence-assigned (50700+), not 1–10** — replaced the fictional 10-game table with the verified 8, keyed by title, and relabelled "Game #1–9" as scenario slots A–I. Users 7→10. Action counts corrected against the live DB (Heist 4 submissions; Starfall 8 published + 1 draft). Noted `action_submissions` has **no draft column**. |
+| UPDATED | `COVERAGE_STATUS.md` | 732 | 2025-11-15 | Every metric ~10 months stale, and **self-contradictory** (claimed both 75.0% and 69.5% backend coverage). Measured: **58.4%** overall, **78–83%** service layer. Test files 16→144, test funcs 467→1131, frontend files 38→244, frontend tests 1,022→3,857. Dropped the "users.go 0.0% / No Tests" row (`users_test.go` exists). Fixed `just test-frontend`/`-watch`. |
+| UPDATED | `E2E_QUICK_START.md` | 462 | 2025-11-15 | Told readers to `npm install -D @playwright/test` + `npx playwright install` — wrong for the containerized stack. Rewrote for `just e2e-*`. **Fixture claim was doubly wrong**: global-setup no longer runs `apply_all.sh` (it applies per-worker fixtures) and in the container path skips entirely via `E2E_SKIP_FIXTURE_SETUP`. Dead ref to `docs/E2E_TEST_CATALOG.md`. |
+| UPDATED | `E2E_FIXTURES.md` | 203 | 2025-11-15 | Listed **10** fixture files; there are **66** (31 families). **Worker offset documented as +1000; actual is +10000.** All hardcoded game IDs (#608, #600–604, #334–338) return zero rows. 6 of 8 referenced spec files don't exist. Replaced ID tables with title-keyed `FIXTURE_GAMES` constants; corrected the `getFixtureGameId` example (resolves by **title**, not arithmetic). Fixed maintenance step claiming the loader needs editing — it globs `e2e/*.sql`. |
+| UPDATED | `TEST_COVERAGE_REFERENCE.md` | 50 | 2025-11-15 | Self-declared "authoritative source" carrying stale numbers, host `npm`/`go` commands, and 2 wrong doc paths. Rewritten against measured data with container-based regeneration commands. |
+| UPDATED | `frontend/e2e/README.md` | 659 | 2026-07-16 | **Deleted the 80-line Visual Regression section** — `e2e/visual/` was removed in `a439acc0` (2025-11-01), yet the doc carried a "✅ Current Coverage" checklist for it. Replaced host `npm run test:e2e*` / `npx playwright` throughout. Fixed `just dev` (doesn't exist). Fixed a `psql` example using a nonexistent `games.name` column (it's `title`) — caught by running it. |
+| UPDATED | `frontend/e2e/pages/README.md` | 444 | 2025-10-26 | Documented 7 of **26** page objects with no index for the rest. **`CharacterSheetPage`'s entire documented API was obsolete** — 8 of its methods don't exist; the real API uses Notes/Skills/Inventory/Numbers tabs taking a **label**, not Abilities/Currency modules taking a count. Added a full POM index; fixed 2 dead doc links. |
+| REWRITTEN | `frontend/e2e/STATUS.md` | 348 | 2025-10-25 | Point-in-time "Day 1 / Day 2 / Phase 3" progress log, structurally stale. Claimed **43** tests; actual is **345** across 49 files. Every "target for next quarter" already exceeded. Rewrote as a live status doc with generated counts + a Known Gaps section. |
+| UPDATED | `.claude/skills/testing-patterns/resources/e2e-testing.md` | 583 | 2025-10-31 | *(deferred here from Batch 3)* Documented `just e2e-test headed|ui|debug` — the recipe accepts only **`headless|report|file`**. Dead spec path `e2e/journeys/critical/`. CI block replaced with the real `.github/workflows/e2e.yml` flow. |
+| UPDATED | `.claude/skills/testing-patterns/resources/e2e-patterns-reference.md` | 474 | 2025-10-31 | *(deferred here from Batch 3)* Stale hardcoded `// Game #164` comment. |
+| UPDATED | `.claude/skills/testing-patterns/SKILL.md` | — | — | Same invalid `just e2e-test headed`. |
+| UPDATED | `.claude/context/TESTING.md` | — | — | *(Batch 1 file, invalidated by this batch's ground truth)* `just e2e-test headed`, plus `just e2e-test headless <file>` — `headless` mode takes no file argument; `file` mode does. |
+
+### Batch 6 findings (completed 2026-08-26)
+
+1. **Coverage numbers were ~10 months stale and internally inconsistent.** `COVERAGE_STATUS.md` asserted 75.0% and 69.5% backend coverage in the same document. Measured reality: 58.4% overall, 78–83% in the service layer. Test counts were off by 3–8×.
+2. **Fixtures were reorganised into subdirectories and no doc followed.** Every `test_fixtures/NN_*.sql` path in `TEST_DATA.md` was broken; files now live under `common/`, `demo/`, `e2e/`, `perf/`.
+3. **Hardcoded fixture game IDs are systematically wrong** and were the batch's most-repeated error. Demo IDs are sequence-assigned (50700+ after a reload) and E2E IDs shift by `worker * 10000`. Fixed by pointing everything at title-based resolution (`getFixtureGameId`). The convention also appears in `CLAUDE.md`, `.claude/context/TEST_DATA.md`, and `.claude/reference/API_TESTING_WITH_CURL.md` — **not yet fixed, carry to Batch 7/8**.
+4. **Documented-but-deleted subsystem.** `e2e/visual/` was removed in `a439acc0` (2025-11-01); the README kept an 80-line guide with a "✅ Current Coverage" checklist. Deleted per the standing rule that annotation doesn't protect a grep-landing reader. **The `test:e2e:visual` / `:visual:update` npm scripts in `frontend/package.json` still point at the deleted directory and will fail — a code cleanup, not a doc fix.**
+5. **`just e2e-test` modes were wrong in 4 files.** The recipe supports `headless|report|file`; docs advertised `headed`, `ui`, and `debug` (which need a display and can't run in the container at all).
+6. **`CharacterSheetPage`'s documented API was entirely obsolete** — 8 nonexistent methods, and a module vocabulary (Abilities/Currency) the component no longer uses.
+7. **Live bug found: `tags.REGRESSION` is undefined.** `auth/registration.spec.ts:53` references it but `test-tags.ts` never defines it. `tagTest()` filters the `undefined`, so the name silently renders `@auth  registration errors…` with a double space instead of a second tag. Recorded in `STATUS.md` Known Gaps.
+8. **Correction to my own first pass:** I initially reported tags as entirely unused, having grepped for literal `@smoke` strings. They are applied through the `tagTest()` helper, so no literal appears in source. Real figure: **2 of 49** spec files tagged; `--grep "@smoke"` matches 6 tests. Caught by running `--list` against the container.
+
+**Method note for Batch 7:** verifying commands by *running* them caught three errors that reading could not — the `games.name` column, the `e2e-test headless <file>` signature, and the tag-usage claim above. Prefer execution over inspection wherever a command or query is cheap to run.
 
 ## Batch 7 — `docs/` tree (deployment, operations, legacy)
 

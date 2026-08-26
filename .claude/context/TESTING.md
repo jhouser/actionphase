@@ -240,9 +240,9 @@ just e2e-desktop
 # E2E — mobile only
 just e2e-mobile
 
-# E2E — specific file or headed mode
-just e2e-test headed
-just e2e-test headless messaging/common-room.spec.ts
+# E2E — specific file (modes: headless | report | file)
+just e2e-test file e2e/messaging/common-room.spec.ts
+just e2e-test report
 ```
 
 ---

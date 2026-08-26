@@ -18,9 +18,45 @@ Page Object Models (POMs) encapsulate page interactions into reusable, maintaina
 
 ## Available POMs
 
+There are **26** page objects in this directory. The sections below document
+seven of them in detail; the rest follow the same conventions — read the source,
+which is short and self-describing.
+
+<details>
+<summary>Full list of page objects (26)</summary>
+
+Documented in detail below: `CharacterSheetPage`, `GameSettingsPage`, `ParticipantsPage`, `AvatarManagementPage`, `GameDetailsPage`, `HistoryPage`, `MessagingPage`
+
+Also available:
+
+| File |
+|---|
+| `ActionResultsPage.ts` |
+| `ActionSubmissionPage.ts` |
+| `AdminDashboardPage.ts` |
+| `AudiencePage.ts` |
+| `CharacterWorkflowPage.ts` |
+| `CommonRoomPage.ts` |
+| `ConversationPage.ts` |
+| `DashboardPage.ts` |
+| `GameApplicationsPage.ts` |
+| `GameHandoutsPage.ts` |
+| `GamesListPage.ts` |
+| `LoginPage.ts` |
+| `NotificationsPage.ts` |
+| `PhaseManagementPage.ts` |
+| `PollsPage.ts` |
+| `PostPage.ts` |
+| `RegistrationPage.ts` |
+| `SettingsPage.ts` |
+| `UserSettingsPage.ts` |
+
+</details>
+
+
 ### CharacterSheetPage
 **File**: `CharacterSheetPage.ts`
-**Purpose**: Character sheet viewing, editing, and module navigation
+**Purpose**: Character sheet viewing, editing, renaming, and tab navigation
 
 **Constructor**: `new CharacterSheetPage(page: Page)`
 
@@ -29,37 +65,47 @@ Page Object Models (POMs) encapsulate page interactions into reusable, maintaina
 // Navigation
 async goto(gameId: number, characterId: number)
 async goToBioModule()
-async goToAbilitiesModule()
-async goToInventoryModule()
-
-// Tab Navigation
-async goToAbilitiesTab(count?: number)
-async goToSkillsTab(count?: number)
-async goToCurrencyTab(count?: number)
+async goToNotesTab()
+async goToSkillsTab(label = 'Skills')
+async goToInventoryTab(label = 'Inventory')
+async goToNumbersTab(label = 'Numbers')
 
 // Workflows
-async addAbility(name: string, description: string)
+async editField(field: string, value: string)
+async addSkill(name: string, description: string)
+async uploadAvatar(filePath: string)
+async deleteCharacter()
 
-// Permission Checks
-async canAddAbility(): Promise<boolean>
+// Rename flow
+async startRename()
+getRenameInput(): Locator
+async renameCharacter(newName: string)
+async startAndCancelRename(tempName?: string)
+
+// Permission / state checks
+async canEdit(): Promise<boolean>
+async canRename(): Promise<boolean>
 async canAddSkill(): Promise<boolean>
 async canAddItem(): Promise<boolean>
-async canAddCurrency(): Promise<boolean>
+async canAddNumber(): Promise<boolean>
+async isSaveButtonEnabled(): Promise<boolean>
 async isModuleVisible(moduleName: string): Promise<boolean>
 
 // Data Access
 async getCharacterName(): Promise<string>
-async getAbilities(): Promise<string[]>
 async getInventoryItems(): Promise<string[]>
 ```
+
+> Tab methods take a **label string**, not a count, and handle the mobile
+> `<select>` fallback internally — see `goToSkillsTab` in the source.
 
 **Usage Example**:
 ```typescript
 const sheetPage = new CharacterSheetPage(page);
-await sheetPage.goToAbilitiesModule();
-await sheetPage.goToAbilitiesTab(2);
-expect(await sheetPage.canAddAbility()).toBe(true);
-await sheetPage.addAbility('Fireball', 'Powerful spell');
+await sheetPage.goto(2, 5);
+await sheetPage.goToSkillsTab();
+expect(await sheetPage.canAddSkill()).toBe(true);
+await sheetPage.addSkill('Fireball', 'Powerful spell');
 ```
 
 ---
@@ -435,8 +481,9 @@ await settingsPage.saveChanges();
 ## Documentation
 
 For more information:
-- **E2E Quick Start**: `/docs/testing/E2E_QUICK_START.md`
-- **POM Implementation Plan**: `/.claude/planning/REMAINING_POM_IMPLEMENTATION_PLAN.md`
+- **E2E Quick Start**: `/docs-site/developer/testing/E2E_QUICK_START.md`
+- **E2E Guide**: `/frontend/e2e/README.md`
+- **Coverage status**: `/frontend/e2e/STATUS.md`
 - **Playwright Docs**: https://playwright.dev/docs/pom
 
 ---

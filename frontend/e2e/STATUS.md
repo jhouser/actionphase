@@ -1,348 +1,80 @@
 # E2E Testing Status
 
-**Last Updated**: 2025-10-24
+**Last verified**: 2026-08-26 (counts generated from the tree, not hand-maintained)
 
----
+## Current Coverage
 
-## ✅ Phase 3 Complete
+**345 E2E tests across 49 spec files**, plus **26 page objects**.
 
-The E2E testing framework has **completed Phase 3** (Critical Journeys) with expanded coverage and infrastructure.
+| Area | Spec files | Tests |
+|---|---|---|
+| `admin/` | 1 | 6 |
+| `auth/` | 2 | 18 |
+| `characters/` | 5 | 23 |
+| `common-room/` | 2 | 11 |
+| `edge-cases/` | 2 | 16 |
+| `gameplay/` | 13 | 82 |
+| `games/` | 8 | 80 |
+| `messaging/` | 10 | 67 |
+| `notifications/` | 2 | 10 |
+| `security/` | 1 | 15 |
+| `settings/` | 2 | 11 |
+| `smoke/` | 1 | 6 |
+| **Total** | **49** | **345** |
 
-### What's Been Implemented
-
-**Phase 1-2 (Weeks 1-3)**: ✅ **COMPLETE** - Foundation & Test Data
-**Phase 3 (Weeks 4-5)**: ✅ **COMPLETE** - Critical Journeys & Priority 1
-
----
-
-## 📊 Current Status
-
-### Test Coverage
-
-**Total Tests**: 43 E2E tests (+17 from Priority 1)
-
-**By Category**:
-- **Smoke Tests**: 8 tests (< 5 min deployment validation)
-- **Critical Tests**: 9 tests (must-pass for release)
-- **Standard Tests**: 26 tests (important user journeys)
-
-**By Feature**:
-- Authentication: 5 tests
-- Game Management: 22 tests (+7 state transitions)
-- Phase Management: 11 tests
-- Character Management: 5 tests (NEW)
-- Messaging/Communication: 6 tests (+5 new)
-- User Onboarding: 3 tests
-- Multi-user Collaboration: 2 tests
-
-### Test Infrastructure
-
-**Page Objects**: 8 complete (+3 from Priority 1)
-- ✅ CharacterSheetPage
-- ✅ RegistrationPage
-- ✅ UserSettingsPage
-- ✅ AdminDashboardPage
-- ✅ GameHandoutsPage
-- ✅ **PostPage (NEW)**
-- ✅ **ConversationPage (NEW)**
-- ✅ **NotificationsPage (NEW)**
-
-**Test Helpers**:
-- ✅ Test tagging system (10 tags)
-- ✅ Auth helpers (loginAs)
-- ✅ Test data factory (comprehensive)
-
-**Organization**:
-- ✅ Hierarchical directory structure (smoke/journeys/regression)
-- ✅ Test categorization by priority
-- ✅ npm scripts for filtered execution
-
-**Documentation**:
-- ✅ Complete testing guide (e2e/README.md)
-- ✅ Future enhancements roadmap (e2e/FUTURE_ENHANCEMENTS.md)
-- ✅ Test data reference (.claude/context/TEST_DATA.md)
-
----
-
-## 🎯 Completed Implementation Details
-
-### Day 1: Infrastructure (✅ Complete)
-
-**1. Test Tagging System** ✅
-- File: `e2e/fixtures/test-tags.ts`
-- 10 tags: @smoke, @critical, @auth, @game, @character, @message, @phase, @slow, @flaky, @integration, @e2e
-- tagTest() helper function
-
-**2. Page Objects** ✅
-- Created 5 Page Objects covering critical workflows
-- Reusable, maintainable patterns
-- Full TypeScript typing
-
-**3. Directory Structure** ✅
-```
-e2e/
-├── fixtures/
-├── pages/
-├── smoke/
-└── journeys/
-    ├── critical/
-    ├── standard/
-    └── regression/
-```
-
-**4. Smoke Test Suite** ✅
-- 8 tests covering:
-  - Frontend loads
-  - API health
-  - Login accessible
-  - Dashboard auth required
-  - Games list loads
-  - Registration accessible
-  - Static assets load
-  - 404 handling
-
-**5. Critical Journey Tests** ✅
-- Game lifecycle (2 tests)
-- User onboarding (3 tests)
-- Multi-user collaboration (2 tests)
-
-**6. npm Scripts** ✅
-- `test:e2e` - All tests
-- `test:e2e:smoke` - Quick validation
-- `test:e2e:critical` - Deployment blockers
-- `test:e2e:auth` - Auth tests
-- `test:e2e:game` - Game tests
-- `test:e2e:ui` - Interactive debugging
-- `test:e2e:debug` - Step-through debugging
-- `test:e2e:headed` - Visible browser
-- `test:e2e:report` - View results
-
-**7. data-testid Attributes** ✅
-- RegisterForm: 5 attributes
-- LoginForm: 4 attributes
-- CreateGameForm + GameFormFields: 5 attributes
-- ApplyToGameModal: 2 attributes
-- GameActions: 1 attribute (dynamic)
-
-### Day 2: Test Data & Coverage (✅ Complete)
-
-**1. Test Data Factory** ✅
-- File: `e2e/fixtures/test-data-factory.ts`
-- Pre-defined test users (GM, 5 Players, Audience)
-- Fixture game constants (10 games)
-- Generation functions (users, games, characters, posts, actions)
-- Helper utilities (waitFor, retry, sleep, retryWithBackoff)
-- Data validation functions
-
-**2. Standard Journey Tests** ✅
-
-**Phase Management** (5 tests):
-- GM views current phase and history
-- GM views different phase types
-- Players view current phase
-- GM creates new phase
-- Players view phase history
-
-**Action Submission** (6 tests):
-- Player views action phase
-- Player creates draft action
-- Player views submitted actions
-- GM views all submissions
-- Deadline enforcement
-- Edit draft before finalizing
-
-**3. Documentation** ✅
-- Complete testing guide (e2e/README.md):
-  - Quick start
-  - Test organization
-  - Writing tests
-  - Test data usage
-  - Page Objects
-  - Running tests
-  - Best practices (8 patterns)
-  - Troubleshooting
-
----
-
-## 🚀 How to Use
-
-### Quick Start
+Regenerate these numbers with:
 
 ```bash
-# Run smoke tests (< 5 min)
-npm run test:e2e:smoke
-
-# Run critical tests (deployment validation)
-npm run test:e2e:critical
-
-# Run all tests
-npm run test:e2e
-
-# Debug interactively
-npm run test:e2e:ui
+find frontend/e2e -name '*.spec.ts' | wc -l
+grep -rhoE '^\s*test(\.\w+)?\(' frontend/e2e --include='*.spec.ts' | wc -l
 ```
 
-### For Developers
+## Projects
 
-**Before committing**:
-```bash
-npm run test:e2e:critical
-```
+Two Playwright projects run the same specs against different viewports:
 
-**Before deploying**:
-```bash
-npm run test:e2e:smoke
-npm run test:e2e:critical
-```
+| Project | Recipe | Device |
+|---|---|---|
+| `chromium` | `just e2e-desktop` | Desktop Chrome |
+| `mobile-chrome` | `just e2e-mobile` | Pixel 5 |
 
-**When adding features**:
-1. Read `e2e/README.md`
-2. Add tests using existing patterns
-3. Use Page Objects for reusability
-4. Tag tests appropriately
-5. Run tests locally before PR
+`just e2e` runs both **sequentially** — they share fixture data, so running them
+concurrently causes interference.
 
----
+## Infrastructure
 
-## 📋 What's Next
+- **Page objects** — 26 in `e2e/pages/`; see `e2e/pages/README.md`. POM-first is
+  a hard rule: no inline selectors in specs.
+- **Fixtures** — per-worker E2E fixtures loaded by `just load-e2e`
+  (`apply_e2e_worker.sh`, workers 0–5, game ID offset `worker * 10000`).
+  Resolve game IDs by title via `getFixtureGameId()`, never hardcode them.
+- **Auth helpers** — `loginAs(page, 'GM' | 'PLAYER_1' | ...)` in
+  `e2e/fixtures/auth-helpers.ts`.
+- **Containerized** — tests run in a one-shot `playwright` compose service
+  (`--profile e2e`) that carries its own browsers.
 
-See `e2e/FUTURE_ENHANCEMENTS.md` for the complete roadmap.
+## Known Gaps
 
-### ✅ Priority 1: Essential Coverage - **COMPLETE**
+- **Test tags are barely applied.** `e2e/fixtures/test-tags.ts` declares 14
+  tags, but only **2 of 49** spec files use them (via the `tagTest()` helper):
+  `smoke/health-check.spec.ts` and `auth/registration.spec.ts`. `--grep "@smoke"`
+  selects 6 tests; `@game`, `@character`, and `@message` select none.
+- **`tags.REGRESSION` is undefined.** `auth/registration.spec.ts:53` references
+  it, but `test-tags.ts` never defines it. `tagTest()` filters the resulting
+  `undefined`, so the test name silently renders with a double space
+  (`@auth  registration errors…`) instead of a second tag. Either add
+  `REGRESSION` to `test-tags.ts` or drop it from that call.
+- **Mobile project instability.** Adding the Pixel 5 project surfaced a large
+  batch of mobile-specific failures; treat `just e2e-mobile` as less stable than
+  `just e2e-desktop`.
+- **No visual regression tests.** The `e2e/visual/` suite was removed in
+  `a439acc0` (2025-11-01). The `test:e2e:visual` npm scripts in
+  `frontend/package.json` still point at the deleted directory and will fail.
 
-**Completed Journey Tests** ✅:
-- ✅ Character management (5 tests)
-- ✅ Conversation/messaging (5 tests)
-- ✅ Game state transitions (7 tests)
+## Related Documentation
 
-**Completed Page Objects** ✅:
-- ✅ PostPage (game posts/timeline)
-- ✅ ConversationPage (messaging)
-- ✅ NotificationsPage
-
-**Effort**: ~12 hours (completed October 24, 2025)
-
-### 🔄 Priority 2: Visual Regression Testing (CURRENT - 1-2 months)
-
-**Approach**: Playwright Screenshots (free, built-in)
-
-**Phase 1: Critical Pages** (~4 hours):
-- Home page (light + dark mode)
-- Login/Registration forms
-- Game details page
-- Dashboard
-- Settings page
-
-**Phase 2: Component Variations** (~6 hours):
-- Buttons (all variants)
-- Cards (default, elevated, bordered)
-- Forms (inputs with errors)
-- Modals
-- Alerts
-
-**Phase 3: Complex Layouts** (~8 hours):
-- Game page with all tabs
-- Character sheet
-- Phase history view
-- Admin dashboard
-
-**Estimated Effort**: ~18 hours implementation + 4 hours CI integration
-
-### Priority 3: Performance & Reliability (Ongoing)
-
-- Load time benchmarks (5 tests)
-- Flaky test detection and fixing
-- Test parallelization for faster CI
-
-**Estimated Effort**: ~12 hours
-
-### Priority 4: Advanced Features (Future)
-
-- API contract testing
-- Accessibility testing (a11y)
-- Mobile/responsive testing
-- Cross-browser testing (Firefox, WebKit)
-- Test data management improvements
-
----
-
-## 📈 Success Metrics
-
-### Current Metrics
-
-**Test Reliability**: Not yet measured (new implementation)
-- Target: >95% pass rate
-- Flaky test count: 0 (target: <5%)
-
-**Coverage**:
-- Critical paths: 7 tests ✅
-- Smoke tests: 8 tests ✅
-- Standard journeys: 11 tests ✅
-
-**Execution Time**:
-- Smoke tests: < 5 minutes (target) ✅
-- Critical tests: ~10 minutes
-- Full suite: ~15 minutes
-
-### Targets for Next Quarter
-
-**Coverage Goals**:
-- Total tests: 50+ (currently 26)
-- Critical journeys: 15+ (currently 7)
-- Page Objects: 10+ (currently 5)
-
-**Reliability Goals**:
-- Pass rate: >95%
-- Flaky tests: <2
-- Average execution: <20 minutes for full suite
-
-**Developer Experience**:
-- Tests added per new feature: 100%
-- PR feedback time: <10 minutes
-- Test debugging time: <5 minutes per failure
-
----
-
-## 🔗 Related Documentation
-
-**Essential Reading**:
-- `e2e/README.md` - Complete testing guide
-- `e2e/FUTURE_ENHANCEMENTS.md` - Roadmap and priorities
-- `.claude/context/TEST_DATA.md` - Test fixtures reference
-- `.claude/context/TESTING.md` - Testing philosophy
-
-**Planning Documents**:
-- `.claude/planning/E2E_COMPREHENSIVE_REWORK_PLAN.md` - Original 9-week plan
-- `.claude/planning/E2E_IMMEDIATE_ACTIONS.md` - Quick win tasks (completed)
-
-**Development Guides**:
-- `/docs/testing/E2E_QUICK_START.md` - Quick reference (if exists)
-- `/docs/testing/COVERAGE_STATUS.md` - Overall test coverage
-
----
-
-## ✅ Completion Checklist
-
-### Day 1 Tasks
-- [x] Test tagging system
-- [x] Page Objects (CharacterSheet, Registration)
-- [x] Additional Page Objects (Settings, Admin, Handouts)
-- [x] Smoke test suite
-- [x] Directory structure
-- [x] Critical journey tests
-- [x] npm scripts
-- [x] data-testid attributes
-
-### Day 2 Tasks
-- [x] Test data factory
-- [x] Standard journey tests (phase management)
-- [x] Standard journey tests (action submission)
-- [x] Documentation (README.md)
-- [x] Future enhancements roadmap
-- [ ] Visual regression setup (deferred to Priority 2)
-
-### Foundation Complete ✅
-
-The E2E testing framework is ready for production use. All critical infrastructure is in place, and the system is ready to scale with additional test coverage as needed.
-
-**Next Steps**: See `FUTURE_ENHANCEMENTS.md` for Priority 1 tasks.
+- `e2e/README.md` — complete E2E guide
+- `e2e/pages/README.md` — page object reference
+- `docs-site/developer/testing/E2E_QUICK_START.md` — quick reference
+- `docs-site/developer/testing/E2E_FIXTURES.md` — fixture reference
+- `.claude/context/TESTING.md` — testing philosophy

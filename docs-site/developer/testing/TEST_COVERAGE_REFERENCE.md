@@ -1,50 +1,55 @@
 # Test Coverage Reference
 
-**Single Source of Truth for Test Coverage Metrics**
+**Single source of truth for test coverage metrics.** Other docs should link
+here rather than duplicating numbers.
 
-⚠️ **IMPORTANT**: This is the authoritative source for test coverage information. All other documentation should reference this file rather than duplicating metrics.
+**Last measured**: 2026-08-26
 
-**Last Updated**: October 27, 2025
-**Last Verified**: October 27, 2025
+## Current Metrics
 
-## Current Test Metrics
+| Metric | Value |
+|---|---|
+| Backend statement coverage | **58.4%** overall; **78–83%** in the service layer |
+| Backend test files | 144 |
+| Backend `Test*` functions | 1,131 |
+| Frontend test files | 244 |
+| Frontend tests | 3,857 passing, 14 skipped |
+| E2E tests | 345 across 49 spec files |
+| Pass rate | 100% |
 
-### Overall Summary
-- **Total Tests**: 1,489 passing tests (100% pass rate)
-- **Backend**: 467 tests across 45 test files (75.0% line coverage)
-- **Frontend**: 1,022 tests across 75 test files (~60% estimated coverage)
-- **E2E Tests**: Comprehensive suite with parallel execution support
+The service-layer band (`pkg/db/services/actions|messages|phases`) is the number
+to track against the >80% target. The overall 58.4% includes thin HTTP wiring,
+generated code, and integration-shaped packages exercised through E2E instead.
 
-### How to Update These Metrics
+## How to Regenerate
+
+All commands run against the containerized stack — no host Go or Node needed.
 
 ```bash
-# Backend test count
-find backend -name "*_test.go" | wc -l  # Files
-go test -v ./... 2>&1 | grep -c "^--- PASS:"  # Test functions
+# Backend coverage (prints the total)
+just test-coverage
 
-# Frontend test count
-find frontend/src -name "*.test.tsx" -o -name "*.test.ts" | wc -l  # Files
-npm test -- --reporter=json | jq '.numPassedTests'  # Test count
+# Backend counts
+find backend -name '*_test.go' | wc -l
+grep -rhoE '^func Test[A-Za-z0-9_]+' backend --include='*_test.go' | wc -l
 
-# Coverage
-just test-coverage  # Backend coverage
-npm run test:coverage  # Frontend coverage
+# Frontend
+just test-fe run
+find frontend/src -name '*.test.ts*' | wc -l
+
+# E2E
+find frontend/e2e -name '*.spec.ts' | wc -l
+grep -rhoE '^\s*test(\.\w+)?\(' frontend/e2e --include='*.spec.ts' | wc -l
 ```
 
-## Files That Reference This Document
+## Related Documentation
 
-The following files should link here instead of duplicating metrics:
-- `.claude/context/TESTING.md` → Links here for current metrics
-- `docs/testing/COVERAGE_STATUS.md` → Detailed breakdown and history
-- `.claude/reference/TESTING_GUIDE.md` → Implementation details
-- `docs/adrs/007-testing-strategy.md` → Strategic decisions
-
-## Quick Reference Links
-
-- **Detailed Coverage Report**: [COVERAGE_STATUS.md](./COVERAGE_STATUS.md)
-- **Testing Context**: [.claude/context/TESTING.md](../../.claude/context/TESTING.md)
-- **Testing Strategy**: [ADR-007](../adrs/007-testing-strategy.md)
+- **Detailed breakdown**: [COVERAGE_STATUS.md](./COVERAGE_STATUS.md)
+- **Testing strategy**: [ADR-007](../architecture/adrs/007-testing-strategy.md)
+- **Testing context**: `.claude/context/TESTING.md`
+- **Implementation guide**: `.claude/reference/TESTING_GUIDE.md`
+- **E2E coverage**: `frontend/e2e/STATUS.md`
 
 ---
 
-*When updating metrics, also update the "Last Updated" date and verify the counts are accurate.*
+*When updating metrics, re-run the commands above and update the "Last measured" date.*
