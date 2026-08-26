@@ -4,7 +4,7 @@
 **Goal:** For each doc, assess accuracy against the actual state of the codebase and bring it back up to date.
 **Scope:** Internal/dev-facing docs only. 152 tracked `.md` files (excludes `frontend/dist/`, `node_modules/`).
 
-**Progress:** Batches 1–4 complete (62 docs). Next up: **Batch 5** — ADRs & architecture.
+**Progress:** Batches 1–5 complete (75 docs). Next up: **Batch 6** — testing docs.
 One doc remains PENDING in Batch 2: `.claude/planning-doc.md`.
 
 ## How to use this file
@@ -556,21 +556,82 @@ Most are 2025-11-15 and predate major architectural work.
 
 | Status | Doc | Lines | Last Commit | Notes |
 |---|---|---|---|---|
-| PENDING | `adrs/007-testing-strategy.md` | 843 | 2026-05-07 | |
-| PENDING | `adrs/005-frontend-state-management.md` | 719 | 2025-11-15 | |
-| PENDING | `adrs/006-observability-approach.md` | 483 | 2025-11-15 | Predates all Faro work — likely very stale. |
-| PENDING | `adrs/004-api-design-principles.md` | 316 | 2025-11-15 | |
-| PENDING | `adrs/003-authentication-strategy.md` | 258 | 2026-05-07 | |
-| PENDING | `adrs/002-database-design-approach.md` | 203 | 2025-11-15 | |
-| PENDING | `adrs/001-technology-stack-selection.md` | 117 | 2025-11-15 | |
-| PENDING | `adrs/README.md` | 49 | 2025-11-15 | |
-| PENDING | `architecture/components.md` | 632 | 2025-11-15 | |
-| PENDING | `architecture/overview.md` | 285 | 2025-11-15 | |
-| PENDING | `getting-started/onboarding.md` | 449 | 2025-11-15 | Predates containerized dev — likely wrong setup steps. |
-| PENDING | `api/reference.md` | 156 | 2026-08-18 | |
-| PENDING | `developer/index.md` | 50 | 2026-04-22 | |
+| UPDATED | `adrs/007-testing-strategy.md` | 843 | 2026-05-07 | Strategy sound. Fixed: `just test-bench` / `test-frontend` / `test-e2e` (all nonexistent, incl. inside the CI YAML block); directory structure listed `pkg/testutil/`, `backend/tests/`, `__tests__/integration/`, `__tests__/e2e/` — **none exist**. Rewrote from the real co-located layout; added `verify`/`verify-quick`. |
+| UPDATED | `adrs/005-frontend-state-management.md` | 719 | 2025-11-15 | Decision holds. Samples used **TanStack Query v4 syntax** (`invalidateQueries(['games'])`) — v5 requires the object form, so copy-paste type-errors. Real QueryClient config differs (`retry: 1`, plus a deliberate `refetchOnWindowFocus: false` the ADR omitted). `AuthContextType.user` → real shape is `currentUser` + `isCheckingAuth`. |
+| UPDATED | `adrs/006-observability-approach.md` | 483→540 | 2025-11-15 | **Decision superseded.** ADR rejected APM vendors (cost/lock-in) and OTel ("overkill"); project adopted **both** on 2026-06-04 (`ab76cdd1`) — full OTel stack → **Grafana Cloud**, plus Faro on the frontend. Logging design survived intact. `ObservabilityHandler` + `/metrics` endpoint **deleted**; `PrometheusHandler` is built but never mounted (dead code). Status → Superseded; evolution section added. |
+| UPDATED | `adrs/004-api-design-principles.md` | 316 | 2025-11-15 | Principles hold; **the documented response envelope was never implemented**. No `data` wrapper (collections key on the resource name), pagination is `metadata` with different field names, errors are a flat `{status, error}` with no code/details[], and some 401s return plain text. All replaced with responses captured live. Also `{id}`→`{gameID}`, and `/auth/refresh` is **GET**. |
+| UPDATED | `adrs/003-authentication-strategy.md` | 258→~310 | 2026-05-07 | **Origin of the "15-minute token" fiction** corrected 3× in Batch 3. Reality: **7 days** (`SessionLifetime`), `sub` **is** the user ID (ADR claimed it was excluded "for security"), no `iat`/`jti`, and **no separate refresh token** — `sessions.data` holds the JWT. Fabricated `sessions` schema replaced. Logout **only clears the cookie**; it does not delete the session row. Flagged `Secure: true` commented out unconditionally. |
+| UPDATED | `adrs/002-database-design-approach.md` | 203→~290 | 2025-11-15 | **3 of 4 named JSONB columns do not exist.** Schema has exactly **two** JSONB columns. `character_data` is an **EAV table**, not a column; `game_config` and `action_data` never existed. All sample DDL and every JSONB query rewritten from `schema.sql` and verified against the live DB. Core decision still holds. |
+| UPDATED | `adrs/001-technology-stack-selection.md` | 117 | 2025-11-15 | Choices all still hold; only versions drifted. Added a current-versions note (Go 1.25, React 19, PG 17, Vite 7, Tailwind 4, TanStack Query 5, RR7) while keeping the historical record. |
+| UPDATED | `adrs/README.md` | 49 | 2025-11-15 | Index said ADR-006 "Accepted" (now Superseded); flagged 002/003 as diverged. Added a "Keeping ADRs honest" policy: never rewrite history, add a divergence section instead. |
+| UPDATED | `architecture/components.md` | 632 | 2025-11-15 | **Documented a repository layer that does not exist** — `GameRepositoryInterface`/`GameRepository`, plus "Repository" in the diagram and request-flow list. Services hold the pgx pool and call sqlc directly. Also `game_config` field, `characters.character_data` INSERT, and a handler-level `validator.New()` — real validation runs in `Bind` via `core.ValidateStruct` (a service-layer reject renders as 500). |
+| UPDATED | `architecture/overview.md` | 285 | 2025-11-15 | React 18→19; "JWT with refresh tokens"→single-token reality; JSONB overstated (2 columns, not a general strategy); `/metrics` endpoint → OTLP/Grafana Cloud. |
+| UPDATED | `getting-started/onboarding.md` | 449 | 2025-11-15 | **Worst doc in the batch — quick start failed at step 3.** 10 of 19 `just` recipes did not exist (`just dev`, `run-frontend`, `make_migration`, `db_up`…). Also: host Go/Node prerequisites (stack is containerized), Go 1.21 (→1.25), React 18 (→19), `/ping` returns `ponger` not JSON, `cd backend` before a root-level justfile, fabricated `GameServiceInterface`/repository-layer example, `api.games.list()`, `game_config` SQL, `routes.go`, `core/models.go`, `lib/api.ts`, `/metrics`, wrong container name, and React Query DevTools recommended twice while not installed. All recipes now valid; SQL verified against the live DB. |
+| UPDATED | `api/reference.md` | 156 | 2026-08-18 | `POST /auth/refresh`→**GET**; `PUT /phases/{id}/activate`→**POST**; `/actions/me`→**`/actions/mine`** (same for results); no bare `PUT /characters/{id}` (it's `/rename`, `/reassign`, `/data`); `{id}`→`{gameID}` on game routes. All verified live against the running API. |
+| UPDATED | `developer/index.md` | 50 | 2026-04-22 | Linked `/developer/testing/overview` twice — **does not exist**. Repointed to real testing docs + ADR-007. |
 
 **ADR note:** ADRs record decisions *as made at the time*. Where reality diverged, prefer adding a "Superseded / Evolution" section over rewriting history.
+
+
+### Batch 5 findings (completed 2026-08-26)
+
+**13 docs reviewed: all 13 updated.** Mechanically this batch looked the
+cleanest so far — every `just` recipe at line-start resolved and every file path
+existed. The damage was **semantic**: docs describing systems that were designed
+but never built.
+
+1. **ADR-006's decision was reversed.** It rejected APM vendors on cost and
+   OpenTelemetry as "overkill"; on 2026-06-04 the project adopted **both** — full
+   OTel → **Grafana Cloud**, plus Faro on the frontend. Status set to Superseded.
+   The logging design survived intact, but `ObservabilityHandler` and the
+   `/metrics` endpoint were deleted, and `PrometheusHandler` is still constructed
+   with a comment claiming it "serves /metrics" while being **mounted on no
+   route** — dead code.
+
+2. **ADR-003 is the source of the "15-minute token" fiction** I corrected three
+   separate times in Batch 3 without knowing where it came from. Reality: **7
+   days**. Also wrong: `sub` is the **user ID** (the ADR claims it is excluded
+   "for security"), there is no `iat`/`jti`, the documented `sessions` schema is
+   fabricated, and **no separate refresh token exists**. The single-token design
+   is deliberate and well-reasoned (`pkg/core/config.go:115-127`) — revocation
+   via per-request session revalidation, not short expiry — it was simply never
+   written down here.
+
+   Two things worth acting on: `Secure: true` is **commented out
+   unconditionally** on the JWT cookie, and **logout does not delete the session
+   row** (it only clears the cookie), so a captured token stays valid up to 7 days.
+
+3. **ADR-002 named four JSONB columns; three do not exist.** The schema has
+   exactly **two**. `character_data` is an **EAV table**, not a JSONB column —
+   a materially different design whose real trade-offs (per-field `is_public`
+   visibility, application-level typing, multi-row sheet reads) the ADR never
+   analyses.
+
+4. **ADR-004's response envelope was never implemented.** No `data` wrapper,
+   pagination is `metadata` with different field names, and errors are a flat
+   `{status, error}` string rather than structured `details[]` — so clients
+   cannot attribute a validation failure to a field. Replaced with responses
+   captured live from the running API.
+
+5. **A repository layer is documented across three docs and does not exist.**
+   `components.md` had a full `GameRepositoryInterface`/`GameRepository`
+   implementation section; services actually hold the pgx pool and call sqlc
+   directly. sqlc's generated types *are* the domain models, so there is no
+   conversion step either.
+
+6. **`onboarding.md` was the worst doc in the batch** — the quick start failed at
+   step 3. **10 of 19 `just` recipes did not exist**, prerequisites listed host
+   Go/Node for a fully containerized stack, and it recommended React Query
+   DevTools twice while the package is not installed.
+
+7. **Live-verified rather than assumed.** API shapes, status codes, SQL queries,
+   and route methods in this batch were checked against the running stack and
+   database, not inferred from source reading. That is how the `/actions/me` →
+   `/actions/mine` and `PUT` → `POST /activate` errors surfaced.
+
+**Method note:** grepping `just <recipe>` only at line-start missed invalid
+recipes embedded in prose and inside CI YAML blocks. Batch 6 should grep
+unanchored.
 
 ## Batch 6 — Testing docs (`docs-site/developer/testing/`)
 

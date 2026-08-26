@@ -176,28 +176,31 @@ We implemented a **Hybrid State Management Strategy** using specialized tools fo
 
 ### React Query Setup
 ```typescript
-// Query client configuration
+// Query client configuration — ACTUAL, from src/App.tsx:37
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      retry: 1,
       staleTime: 5 * 60 * 1000, // 5 minutes
-      retry: (failureCount, error) => {
-        // Don't retry on authentication errors
-        if (error.status === 401) return false;
-        return failureCount < 3;
-      },
-    },
-    mutations: {
-      retry: false, // Don't retry mutations by default
+      // Deliberate: prevents refetch on tab switch, which would otherwise
+      // discard in-progress user input and scroll position.
+      refetchOnWindowFocus: false,
     },
   },
 });
 
-// Custom hooks for server state
-export function useGames() {
+// Custom hooks for server state. Note the client is `apiClient`, and the
+// listing hook is `useGameListing` (it reads its filters from URL params).
+export function useGameListing() {
+  const [searchParams] = useSearchParams();
+  const filters = useMemo(() => parseFiltersFrom(searchParams), [searchParams]);
+
   return useQuery({
-    queryKey: ['games'],
-    queryFn: () => api.games.list(),
+    queryKey: ['games', 'filtered', filters],
+    queryFn: async () => {
+      const response = await apiClient.games.getFilteredGames(filters);
+      return response.data;
+    },
   });
 }
 
@@ -205,14 +208,15 @@ export function useCreateGame() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: api.games.create,
+    mutationFn: apiClient.games.createGame,
     onSuccess: () => {
-      // Invalidate games list to refetch
-      queryClient.invalidateQueries(['games']);
+      // NOTE: TanStack Query v5 takes an OBJECT here. The bare-array form
+      // `invalidateQueries(['games'])` is v4 syntax and does not work.
+      queryClient.invalidateQueries({ queryKey: ['games'] });
     },
     // Optimistic update
     onMutate: async (newGame) => {
-      await queryClient.cancelQueries(['games']);
+      await queryClient.cancelQueries({ queryKey: ['games'] });
       const previousGames = queryClient.getQueryData(['games']);
 
       queryClient.setQueryData(['games'], (old) => [
@@ -229,14 +233,24 @@ export function useCreateGame() {
 }
 ```
 
+> **Version note:** this project is on **TanStack Query 5**. All the
+> `cancelQueries` / `invalidateQueries` / `removeQueries` filter APIs take an
+> object (`{ queryKey: [...] }`), not a positional array. Older v4-style
+> snippets will type-error.
+
 ### Authentication Context
 ```typescript
-interface AuthContextType {
-  user: User | null;
-  login: (credentials: LoginCredentials) => Promise<void>;
-  logout: () => void;
+// ACTUAL shape, from src/contexts/AuthContext.tsx. Note `currentUser`
+// (not `user`) and the separate `isCheckingAuth` flag — see the
+// "Recent Architectural Evolution" section on why that distinction exists.
+interface AuthContextValue {
+  currentUser: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isCheckingAuth: boolean;
+  login: (data: LoginRequest) => Promise<void>;
+  register: (data: RegisterRequest) => Promise<AxiosResponse<AuthResponse>>;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);

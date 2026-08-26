@@ -1,7 +1,9 @@
 # ADR-006: Observability Approach
 
 ## Status
-Accepted
+**Superseded (2026-06-04)** — the in-house-only decision was replaced by
+OpenTelemetry + Grafana Cloud (backend) and Grafana Faro (frontend). The logging
+design survives. See [Recent Architectural Evolution](#recent-architectural-evolution-june-2026).
 
 ## Context
 ActionPhase requires comprehensive observability to support:
@@ -465,8 +467,8 @@ func (m *Metrics) PrometheusFormat() string {
 ## Future Enhancements
 
 ### Advanced Observability
-- **Distributed Tracing**: OpenTelemetry integration
-- **Custom Dashboards**: Grafana integration for visualization
+- ~~**Distributed Tracing**: OpenTelemetry integration~~ — **done** (2026-06-04)
+- ~~**Custom Dashboards**: Grafana integration for visualization~~ — **done** (Grafana Cloud)
 - **Alerting**: Threshold-based alerting on key metrics
 - **Log Analysis**: Machine learning for anomaly detection
 
@@ -475,6 +477,61 @@ func (m *Metrics) PrometheusFormat() string {
 - **A/B Testing Integration**: Experiment metrics and analysis
 - **Performance Profiling**: Code-level performance insights
 - **Predictive Analytics**: Capacity planning and scaling predictions
+
+## Recent Architectural Evolution (June 2026)
+
+> **The core decision on this page was superseded on 2026-06-04** (commit
+> `ab76cdd1`). The original ADR rejected both APM vendors ("significant ongoing
+> cost", "vendor lock-in") and OpenTelemetry ("overkill for current application
+> size") in favour of a custom in-house system. The project subsequently adopted
+> **both**: a full OpenTelemetry stack exporting to **Grafana Cloud**.
+>
+> The text above is retained as the record of the original decision. What
+> actually ships today is below.
+
+### What replaced it
+
+**Backend — OpenTelemetry → Grafana Cloud** (`backend/pkg/observability/`)
+
+| File | Role |
+|---|---|
+| `tracing.go` | OTLP trace export |
+| `metrics_otel.go` | `OTELMetrics`, OTLP metric push |
+| `logging_otel.go` | slog → OTel log bridge (`otelslog`) |
+| `middleware.go` | HTTP instrumentation (`otelhttp`) |
+
+Postgres queries are traced via `otelpgx`. The OTLP endpoint is configured by
+`OTELEndpoint` (`pkg/core/config.go`); auth uses the SDK's standard
+`OTEL_EXPORTER_OTLP_HEADERS` env var.
+
+**Frontend — Grafana Faro** (`frontend/src/lib/faro.ts`), which the original ADR
+did not contemplate at all: `@grafana/faro-web-sdk`, `faro-react`, and
+`faro-web-tracing` provide RUM, web-vitals, and browser tracing.
+
+### What survived
+
+The original logging design was **kept, not replaced**. `observability/logging.go`
+still provides the `Logger` type, `WithContext`, and `LogOperation` exactly as
+documented above, and correlation-ID propagation still works as described. The
+in-memory `Metrics` struct also still exists and is still called from
+`middleware.go:107` — it now runs *alongside* `OTELMetrics` rather than instead
+of it.
+
+### Corrections to the code samples above
+
+- **`ObservabilityHandler` and the `/metrics` endpoint no longer exist.** The
+  "Metrics Endpoint" sample documents a deleted API. There is **no `/metrics`
+  route** in the backend; metrics reach Grafana by OTLP push only.
+- `metrics_otel.go` constructs a `PrometheusHandler` whose comment claims it
+  "serves /metrics in Prometheus text format for local scraping", but it is
+  **never mounted on any route** — currently dead code.
+
+### Cost rationale no longer applies
+
+"In-memory metrics avoid external service costs" under *Cost Efficiency* is no
+longer true: telemetry is shipped to a paid third-party platform. That trade-off
+was made deliberately and should be re-documented in a new ADR if the reasoning
+matters; this section only records that it changed.
 
 ## References
 - [Structured Logging Best Practices](https://blog.golang.org/slog)
