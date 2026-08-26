@@ -1,5 +1,9 @@
 # AI-Friendly Codebase Improvements
 
+> ⚠️ **HISTORICAL PROGRESS TRACKER (October 2025).** A status list of
+> AI-comprehensibility work, not a specification. Items marked ✅/🚧/⏳ reflect
+> that date only and have not been re-verified.
+
 This document tracks our progress on making ActionPhase more comprehensible for AI agents as the codebase scales.
 
 ## Status Legend

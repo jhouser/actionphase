@@ -1,5 +1,12 @@
 # Reference Directory Verification Report
 
+> ⚠️ **HISTORICAL ARTIFACT — do not treat as current.**
+> This is a point-in-time verification pass from **October 2025**, marked
+> "In Progress" and never finished. Its conclusions have been superseded by the
+> documentation audit tracked in `.claude/DOC_AUDIT_INVENTORY.md`, which found
+> several docs this report marked ✅ to be materially wrong.
+> **Recommended: delete.** Nothing links to it.
+
 **Date**: October 27, 2025
 **Status**: In Progress
 

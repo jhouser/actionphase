@@ -2,6 +2,8 @@
 
 This document provides a comprehensive overview of the ActionPhase Go backend architecture, designed to be highly AI-friendly for development and maintenance.
 
+**Last Verified**: August 2026
+
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
@@ -50,37 +52,63 @@ ActionPhase follows **Clean Architecture** principles with clear separation of c
 ```
 backend/
 ├── main.go                          # Application entry point
-├── pkg/                            # Package-based organization
-│   ├── core/                       # Domain layer - business entities & interfaces
-│   │   ├── doc.go                  # Package documentation
+├── pkg/
+│   ├── core/                       # Domain layer — entities, interfaces, middleware
 │   │   ├── interfaces.go           # Service interfaces & contracts
-│   │   ├── users.go               # User domain model
-│   │   ├── config.go              # Configuration management
-│   │   ├── constants.go           # Application constants & enums
-│   │   ├── middleware.go          # HTTP middleware components
-│   │   ├── api_errors.go          # Structured error handling
-│   │   ├── test_utils.go          # Testing utilities
-│   │   ├── test_factories.go      # Test data factories
-│   │   ├── repositories.go        # Repository interfaces
-│   │   └── repository_mocks.go    # Mock implementations
-│   ├── db/                        # Data access layer
-│   │   ├── migrations/            # Database schema migrations
-│   │   ├── models/               # Generated SQLC models
-│   │   ├── queries/              # SQL query definitions
-│   │   └── services/             # Repository implementations
-│   ├── auth/                      # Authentication & authorization
-│   │   ├── doc.go                # Package documentation
-│   │   ├── api.go                # HTTP handlers
-│   │   ├── jwt.go                # JWT token management
-│   │   ├── registration.go       # User registration logic
-│   │   ├── login.go              # Authentication logic
-│   │   └── refresh_token.go      # Token refresh logic
-│   ├── games/                     # Game management
-│   │   ├── doc.go                # Package documentation
-│   │   └── api.go                # Game HTTP handlers
-│   └── http/                      # HTTP routing & middleware
-│       └── root.go               # Router setup
-└── go.mod                        # Go module definition
+│   │   ├── constants.go            # Application constants & enums
+│   │   ├── permissions.go          # Permission helpers (IsUserGameMaster, ...)
+│   │   ├── middleware.go           # Auth middleware + AuthenticatedUser
+│   │   ├── config.go               # Configuration management
+│   │   ├── api_errors.go           # Structured error handling
+│   │   ├── games.go, characters.go, phases.go, notifications.go, ...
+│   │   │                           # Domain models, one file per bounded context
+│   │   │                           # (there is no single models.go)
+│   │   ├── repositories.go         # Repository interfaces
+│   │   └── test_utils.go, test_factories.go, repository_mocks.go
+│   ├── db/                         # Data access layer
+│   │   ├── migrations/             # Versioned schema migrations
+│   │   ├── models/                 # Generated sqlc models
+│   │   ├── queries/                # SQL query definitions
+│   │   ├── services/               # Service implementations
+│   │   │   ├── phases/             # Decomposed: service, crud, transitions,
+│   │   │   │                       #   validation, history, scheduler
+│   │   │   ├── actions/            # Decomposed: service, submissions, results,
+│   │   │   │                       #   validation, queries, draft_updates,
+│   │   │   │                       #   staged, staged_worker
+│   │   │   ├── messages/           # Decomposed: service, posts, draft_posts,
+│   │   │   │                       #   comments, reactions, validation,
+│   │   │   │                       #   read_tracking, audience, character_messages
+│   │   │   └── *.go                # games, characters, users, sessions,
+│   │   │                           #   notifications, conversations, handouts,
+│   │   │                           #   dashboard, deadlines, polls, ...
+│   │   ├── test_fixtures/          # Seed SQL + apply scripts
+│   │   ├── schema.sql              # Full generated schema
+│   │   └── sqlc.yaml               # sqlc configuration
+│   ├── auth/                       # Authentication
+│   │   ├── api.go, jwt.go, login.go, registration.go, refresh_token.go
+│   │   ├── password*.go, account_*.go, session_handlers.go
+│   │   ├── discord_handlers.go     # Discord OAuth
+│   │   └── bot_prevention_service.go
+│   ├── http/                       # HTTP routing & middleware
+│   │   └── root.go                 # Router setup — the routing source of truth
+│   │
+│   │   # Handler packages (each exposes api.go):
+│   ├── admin/  auth/  avatars/  characters/  conversations/  dashboard/
+│   ├── deadlines/  exports/  games/  handouts/  notifications/  phases/
+│   ├── polls/  users/
+│   │
+│   │   # Supporting packages:
+│   ├── observability/              # Logging, tracing, metrics middleware
+│   ├── middleware/                 # Shared HTTP middleware
+│   ├── validation/                 # Request validation helpers
+│   ├── scheduler/                  # Background scheduled jobs
+│   ├── cleanup/                    # Retention / sweep workers
+│   ├── email/                      # Transactional email
+│   ├── discord/                    # Discord integration
+│   ├── storage/                    # File/blob storage
+│   ├── messages/                   # Message domain (service-backed, no api.go)
+│   └── docs/                       # Embedded VitePress docs handler
+└── go.mod
 ```
 
 ## Design Patterns
@@ -204,16 +232,20 @@ func (q *Queries) CreateGame(ctx context.Context, arg CreateGameParams) (Game, e
 
 Database schema changes are managed through versioned migrations:
 
+All migration operations go through the single `migration` recipe (runs in the
+backend container):
+
 ```bash
-# Create new migration
-just make_migration add_user_preferences
+just migration create add_user_preferences   # create up/down pair
+just migration status                        # show current version
+just migration rollback                      # roll back the last migration
+just migration test                          # apply migrations to the test database
 
-# Apply migrations
-just migrate
-
-# Check migration status
-just migrate_status
+just migrate                                 # apply to the dev database
+just reset-test-db                           # rebuild test DB + migrated template
 ```
+
+> Note: `just make_migration` and `just migrate_status` do **not** exist.
 
 ### Repository Implementation
 
@@ -371,44 +403,77 @@ type GameResponse struct {
 
 ### JWT Token Management
 
-```go
-// Generate access token
-token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-    "username": user.Username,
-    "exp":      time.Now().Add(config.JWT.AccessTokenExpiry).Unix(),
-    "iat":      time.Now().Unix(),
-})
+A **single bearer token, valid 7 days, backed by a server-side session row**.
+There is no separate refresh token. Issued by `JWTHandler.CreateToken`
+(`backend/pkg/auth/jwt.go`) in two phases: sign a temporary token to create the
+session, then re-sign with `session_id` attached and write it back.
 
-tokenString, err := token.SignedString([]byte(config.JWT.Secret))
+```go
+// Final token — see backend/pkg/auth/jwt.go
+finalToken := jwt.NewWithClaims(jwt.SigningMethodHS256,
+    jwt.MapClaims{
+        "sub":        strconv.Itoa(user.ID), // user ID, NOT username
+        "session_id": session.ID,
+        "exp":        time.Now().Add(time.Hour * 24 * 7).Unix(),
+    })
 ```
+
+Because the session lives in the database, **revocation is by deleting the
+session** — that, not a short expiry, is the containment mechanism.
+
+> ⚠️ `JWTConfig.AccessTokenExpiry` (15m) and `JWTConfig.RefreshTokenExpiry` (7d)
+> exist in `core/config.go` with those defaults, but **nothing reads them** —
+> `jwt.go` hardcodes the 7-day lifetime. Treat them as dead config; do not
+> document or tune them as if they were live. This dead config is most likely
+> what earlier revisions of this doc were describing.
 
 ### Middleware-Based Authorization
 
-```go
-// Require authentication for all routes in group
-r.Group(func(r chi.Router) {
-    r.Use(jwtauth.Verifier(tokenAuth))
-    r.Use(core.RequireAuthenticationMiddleware(userService))
+Authentication is middleware; **GM authorization is not**. There is no
+`RequireGameMasterMiddleware`. Instead `games.Handler.GameMiddleware()` loads the
+game and precomputes permissions into the request context, and handlers branch on
+the result.
 
-    // User must be GM of the game for these routes
-    r.Route("/games/{id}", func(r chi.Router) {
-        r.Use(core.RequireGameMasterMiddleware(gameService))
-        r.Put("/state", handler.UpdateGameState)
-        r.Delete("/", handler.DeleteGame)
+```go
+// backend/pkg/http/root.go
+r.Group(func(r chi.Router) {
+    r.Use(core.RequireAuthenticationMiddleware(userService))
+    r.Use(core.AdminModeMiddleware)
+
+    r.Route("/games/{gameID}", func(r chi.Router) {
+        r.Use(gameHandler.GameMiddleware())  // loads game + is_gm into ctx
+        r.Put("/state", gameHandler.UpdateGameState)
+
+        // Some routes additionally require a verified email:
+        r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).
+            Post("/characters", characterHandler.CreateCharacter)
     })
 })
 ```
 
+`GameMiddleware` puts `game`, `gameID`, and `is_gm` on the context, deriving
+`is_gm` from `core.IsUserGameMaster(...)` (which honours admin mode). Note the
+URL param is **`{gameID}`**, not `{id}`. A missing game renders 404 while a
+database failure renders 500 — deliberately distinguished so alerting is not
+misled by a blanket 404.
+
 ### Context-Based User Access
+
+`core.GetAuthenticatedUser` is the only accessor — there is no
+`GetAuthenticatedUserID` or `GetAuthenticatedUsername`. Read the fields off the
+returned struct, and **nil-check it**.
 
 ```go
 func (h *Handler) MyProtectedHandler(w http.ResponseWriter, r *http.Request) {
-    // Get authenticated user from context
-    user := core.GetAuthenticatedUser(r.Context())
-    userID := core.GetAuthenticatedUserID(r.Context())
-    username := core.GetAuthenticatedUsername(r.Context())
-
-    // Use user information for business logic
+    user := core.GetAuthenticatedUser(r.Context())  // *core.AuthenticatedUser
+    if user == nil {
+        render.Render(w, r, core.ErrUnauthorized())
+        return
+    }
+    _ = user.ID       // int32
+    _ = user.Username // string
+    _ = user.Email    // string
+    _ = user.IsAdmin  // bool
 }
 ```
 
@@ -473,16 +538,40 @@ if err != nil {
 
 ### Required Environment Variables
 
+**`.env.example` is the authoritative list** (~75 variables). It is kept current;
+this section only orients you to the groups. Do not treat the sample below as
+complete.
+
 ```bash
 # Required
 DATABASE_URL="postgres://postgres:example@localhost:5432/actionphase?sslmode=disable"
 JWT_SECRET="your-super-secret-jwt-signing-key"
 
-# Optional with defaults
+# Common optional (with defaults)
 ENVIRONMENT="development"  # development, staging, production
-LOG_LEVEL="info"          # debug, info, warn, error
-PORT="3000"               # HTTP server port
+LOG_LEVEL="info"           # debug, info, warn, error
+PORT="3000"                # HTTP server port
+RUN_MIGRATIONS="true"      # auto-apply migrations on backend boot
 ```
+
+Other groups you will encounter in `.env.example`:
+
+| Group | Prefix / examples |
+|---|---|
+| Server tuning | `HOST`, `SERVER_READ_TIMEOUT`, `SERVER_WRITE_TIMEOUT`, `SERVER_IDLE_TIMEOUT` |
+| CORS | `CORS_ENABLED`, `CORS_ORIGINS`, `FRONTEND_URL` |
+| Email | `EMAIL_PROVIDER`, `RESEND_API_KEY`, `SMTP_*`, `MAILHOG_*` |
+| Registration / anti-bot | `HCAPTCHA_*`, `REQUIRE_EMAIL_VERIFICATION`, `MAX_REGISTRATIONS_PER_IP_PER_DAY`, `BLOCK_DISPOSABLE_EMAILS` |
+| Discord | `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URL` |
+| Storage | `STORAGE_BACKEND`, `STORAGE_LOCAL_PATH`, `STORAGE_S3_*`, `STORAGE_ARCHIVE_PATH` |
+| Observability | `OTEL_*`, `GRAFANA_FARO_*`, `VITE_FARO_*` |
+| Testing | `SKIP_DB_TESTS`, `TEST_DATABASE_URL`, `TEST_PARALLEL`, `TEST_CLEANUP` |
+
+Note the `VITE_`-prefixed entries are consumed by the **frontend** build, not the
+Go backend, though both read the same `.env`.
+
+> ⚠️ `JWT_ACCESS_TOKEN_EXPIRY` / `JWT_REFRESH_TOKEN_EXPIRY` appear here and parse
+> into `JWTConfig`, but nothing reads them — see the JWT section above.
 
 ### Configuration Validation
 
@@ -511,6 +600,18 @@ func (c *Config) Validate() error {
 1. **Unit Tests**: Test individual functions/methods with mocks
 2. **Integration Tests**: Test with real database
 3. **API Tests**: Test HTTP endpoints end-to-end
+
+### Test Database Isolation
+
+Each test **package** clones its own database from a migrated template
+(`actionphase_test_template`), so packages run in parallel safely. Consequences:
+
+- Do **not** add `-p=1`; the isolation exists precisely to avoid serializing.
+  Set `TEST_P=1` only when debugging.
+- Cross-package fixture collisions (duplicate keys, FK surprises) should not
+  happen. If they do, the template is stale — run `just reset-test-db`.
+- Run with `just test` / `just test-integration`, which set `TEST_ENV`
+  (including `SKIP_DB_TESTS=false`) for you.
 
 ### Mock-Based Unit Testing
 
@@ -662,7 +763,8 @@ if game.State != core.GameStateRecruitment {
 
 1. **Setup Development Environment** (first time):
    ```bash
-   just dev-setup && just migrate && just dev
+   just dev-setup      # .env + build images + start the stack
+   # migrations auto-run on backend boot; code hot-reloads via Air/Vite
    ```
 
 2. **Define Domain Model**: Add types to `pkg/core/`

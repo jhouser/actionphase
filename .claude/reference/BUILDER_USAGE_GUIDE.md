@@ -583,7 +583,7 @@ post := factory.NewPost().
 
 - **Full examples**: See `backend/pkg/core/test_builders_test.go`
 - **Builder code**: See `backend/pkg/core/test_factories.go`
-- **Analysis document**: See `.claude/planning/TEST_UTILITIES_ANALYSIS.md`
+- **Test suite builder**: See `backend/pkg/db/services/test_suite.go`
 
 ---
 

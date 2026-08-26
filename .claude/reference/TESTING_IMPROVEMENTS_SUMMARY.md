@@ -1,5 +1,11 @@
 # Testing Improvements Implementation Summary
 
+> ⚠️ **HISTORICAL ARTIFACT.** A changelog of testing work done in **August 2025**,
+> not a guide to current practice. The test infrastructure has since moved to
+> per-package database cloning from a migrated template.
+> For how to write and run tests today, see `.claude/context/TESTING.md`,
+> `.claude/reference/TESTING_GUIDE.md`, and the `testing-patterns` skill.
+
 **Date**: 2025-08-06
 **Scope**: ActionPhase Backend Testing Infrastructure
 

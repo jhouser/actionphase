@@ -1,5 +1,10 @@
 # E2E Testing Learnings - Codified for Future Sessions
 
+> ⚠️ **HISTORICAL ARTIFACT (October 2025).** Its two "see also" links point at
+> `.claude/planning/` files that no longer exist (that directory is gitignored).
+> Current E2E guidance lives in `frontend/e2e/README.md`, `.claude/context/TESTING.md`,
+> and the `testing-patterns` skill. **Merge anything still valuable into those, then delete.**
+
 **Date**: 2025-10-18
 **Context**: Phase 7 of FEATURE_COMMENT_EDITOR_IMPROVEMENTS.md revealed significant challenges with E2E testing in an AI-driven development context.
 

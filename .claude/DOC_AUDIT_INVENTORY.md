@@ -4,7 +4,8 @@
 **Goal:** For each doc, assess accuracy against the actual state of the codebase and bring it back up to date.
 **Scope:** Internal/dev-facing docs only. 152 tracked `.md` files (excludes `frontend/dist/`, `node_modules/`).
 
-**Progress:** Batch 1 complete (7/7). Next up: **Batch 2** — stale `.claude/reference/` docs.
+**Progress:** Batches 1 and 2 complete (26 docs). Next up: **Batch 3** — skills.
+One doc remains PENDING in Batch 2: `.claude/planning-doc.md`.
 
 ## How to use this file
 
@@ -92,30 +93,89 @@ Nearly a year untouched while the backend was decomposed and the dev stack conta
 
 | Status | Doc | Lines | Last Commit | Notes |
 |---|---|---|---|---|
-| PENDING | `.claude/reference/BACKEND_ARCHITECTURE.md` | 736 | 2025-10-16 | Predates service decomposition (phases/actions/messages split). |
-| PENDING | `.claude/reference/API_DOCUMENTATION.md` | 522 | 2025-11-07 | Verify every endpoint vs. `backend/pkg/http/root.go`. |
-| PENDING | `.claude/reference/BUILDER_USAGE_GUIDE.md` | 593 | 2025-10-21 | |
-| PENDING | `.claude/reference/LOGGING_STANDARDS.md` | 430 | 2025-10-16 | |
-| PENDING | `.claude/reference/FRONTEND_ERROR_HANDLING.md` | 434 | 2025-10-16 | |
-| PENDING | `.claude/reference/API_TESTING_WITH_CURL.md` | 340 | 2025-10-27 | Cross-check with `route-tester` skill — likely overlap. |
-| PENDING | `.claude/reference/ERROR_HANDLING.md` | 263 | 2025-10-16 | |
-| PENDING | `.claude/reference/TESTING_PARALLEL_EXECUTION.md` | 230 | 2025-10-16 | Likely superseded by test-DB isolation work. |
-| PENDING | `.claude/reference/TESTING_GUIDE.md` | 200 | 2025-10-27 | Overlaps `testing-patterns` skill. |
-| PENDING | `.claude/reference/JUSTFILE_QUICK_REFERENCE.md` | 193 | 2025-10-27 | Diff directly against `justfile`. |
-| PENDING | `.claude/reference/GAME_APPLICATIONS_IMPLEMENTATION.md` | 157 | 2025-10-16 | |
-| PENDING | `.claude/reference/GAME_APPLICATIONS_DESIGN.md` | 67 | 2025-10-16 | |
-| PENDING | `.claude/reference/DEVELOPMENT_SETUP.md` | 549 | 2026-07-16 | Newer — covers containerized stack. Verify only. |
-| PENDING | `.claude/reference/PROJECT_SPEC.md` | 275 | 2026-08-18 | Newer; verify only. |
+| UPDATED | `.claude/reference/BACKEND_ARCHITECTURE.md` | 736 | 2025-10-16 | **Same wrong auth model as ARCHITECTURE.md** (`username` claim + `AccessTokenExpiry`) — rewrote with real `sub`/`session_id`/7d. Discovered **`JWTConfig.AccessTokenExpiry`/`RefreshTokenExpiry` are dead config**: defined + defaulted (15m/7d) but never read. Removed fabricated `RequireGameMasterMiddleware` and `GetAuthenticatedUserID`/`GetAuthenticatedUsername` (none exist) — documented real `GameMiddleware()` + `IsUserGameMaster` + `GetAuthenticatedUser`. Fixed `just make_migration`/`just migrate_status` (neither exists). Rewrote project tree for service decomposition + 27 pkg dirs. Env section listed 5 of ~75 vars → pointed at `.env.example` + group table. Added test-DB isolation section. |
+| UPDATED | `.claude/reference/API_DOCUMENTATION.md` | 522 | 2025-11-07 | Narrative curl guide, not an endpoint reference (router has 195 routes; doc covers ~14). **`/games/public` does not exist** — fixed 4 occurrences to `GET /games` (`GetFilteredGames`, auth-optional). Added "one token, not two" note so the `/auth/refresh` examples aren't read as a two-token model. All other documented paths + methods verified against `root.go` (incl. `GET /auth/refresh`, `PUT .../applications/{id}/review`). Pointed readers at Swagger UI `/api/v1/docs/` for the full list. |
+| OK | `.claude/reference/BUILDER_USAGE_GUIDE.md` | 593 | 2025-10-21 | Verified against `backend/pkg/db/services/test_suite.go` — every claimed builder method (`NewTestSuite`, `WithCleanup`, `WithTables`, `WithFixtures`, `Setup`, `Cleanup`, service accessors, `AddParticipant`, `TransitionGameTo`) exists. Only defect: one link to a nonexistent `.claude/planning/TEST_UTILITIES_ANALYSIS.md`. |
+| OK | `.claude/reference/LOGGING_STANDARDS.md` | 430 | 2025-10-16 | No command drift, no broken paths, logger API claims check out. Not deeply re-derived against the observability package — flag if logging is refactored. |
+| OK | `.claude/reference/FRONTEND_ERROR_HANDLING.md` | 434 | 2025-10-16 | No command drift, no broken paths. Content-level review deferred to the frontend batch (Batch 3) where it overlaps the skill resources. |
+| UPDATED | `.claude/reference/API_TESTING_WITH_CURL.md` | 340 | 2025-10-27 | All endpoints and both `api-test.sh` subcommands verified against `root.go` / the script. Added a "Last Verified" header and documented the other 12 script subcommands (`health`, `status`, `games`, `posts`, `create-post`, `test-mentions`, ...) the doc never mentioned. Overlap with `route-tester` skill still to reconcile in Batch 3. |
+| OK | `.claude/reference/ERROR_HANDLING.md` | 263 | 2025-10-16 | Every `core.*` error helper referenced exists in `backend/pkg/core/`. |
+| BANNERED | `.claude/reference/TESTING_PARALLEL_EXECUTION.md` | 230 | 2025-10-16 | Confirmed a **historical changelog**, not current guidance — the named tests still exist, but isolation is now per-package DB cloning. Added a banner pointing to `.claude/context/TESTING.md`. Does not contradict current practice, so not deleted. |
+| UPDATED | `.claude/reference/TESTING_GUIDE.md` | 200 | 2025-10-27 | Setup premise was pre-container: `brew install postgresql`, host `createdb`, `just db_up`, and a nonexistent `just test-db-setup` as the central one-time step (×5). Replaced with the real model — test recipes prepare the migrated template themselves and each package clones its own DB. Go test-code sections verified accurate and left as-is. |
+| UPDATED | `.claude/reference/JUSTFILE_QUICK_REFERENCE.md` | 193 | 2025-10-27 | **Regenerated wholesale.** Described the pre-container workflow: 5 nonexistent recipes (`just dev`, `just build`, `install-frontend`, `preview-frontend`, `test-frontend`) and a trailing "from `just --list`" snapshot listing 31 recipes when 57 exist. Rewrote around the container lifecycle, added `db`/`migration`/`test-fe`/`e2e-test` subcommand forms and the `e2e-test file` path gotcha. Every recipe named now validates against `just --list`. |
+| OK | `.claude/reference/GAME_APPLICATIONS_IMPLEMENTATION.md` | 157 | 2025-10-16 | No command drift or broken paths. Application endpoints verified live in `root.go` (`/apply`, `/application`, `/applications`, `PUT .../review`). |
+| OK | `.claude/reference/GAME_APPLICATIONS_DESIGN.md` | 67 | 2025-10-16 | Design rationale; no stale commands or paths. |
+| UPDATED | `.claude/reference/DEVELOPMENT_SETUP.md` | 549 | 2026-07-16 | Newer and mostly container-aware, but carried **16 invalid recipe names** — old underscore forms (`db_up`, `db_create`, `db_setup`, `reset_test_db`, `migrate_test`, `make_migration`, `migrate_status`) plus `test-db-setup`, `test-parallel`, `dev-restart`, `just dev`, `just build`. All mapped to real equivalents. |
+| OK | `.claude/reference/PROJECT_SPEC.md` | 275 | 2026-08-18 | Recent; no drift found on scan. |
 
 ### Likely-obsolete point-in-time artifacts (recommend DELETE unless still useful)
 
 | Status | Doc | Lines | Last Commit | Notes |
 |---|---|---|---|---|
-| PENDING | `.claude/reference/VERIFICATION_REPORT.md` | 89 | 2025-11-07 | Snapshot report, not living doc. |
-| PENDING | `.claude/reference/TESTING_IMPROVEMENTS_SUMMARY.md` | 309 | 2025-10-16 | Historical summary. |
-| PENDING | `.claude/reference/AI_FRIENDLY_IMPROVEMENTS.md` | 168 | 2025-10-16 | Historical summary. |
-| PENDING | `.claude/reference/E2E_TESTING_LEARNINGS_CODIFIED.md` | 161 | 2025-10-18 | May fold into `testing-patterns`. |
-| PENDING | `.claude/planning-doc.md` | 81 | 2026-05-07 | Purpose unclear; confirm still relevant. |
+| BANNERED — **recommend DELETE** | `.claude/reference/VERIFICATION_REPORT.md` | 89 | 2025-11-07 | An unfinished Oct 2025 audit of these same reference docs, still marked "In Progress". **Zero inbound references**, and it is the *only* referrer to 3 other artifact docs. It marked ✅ several docs this audit found materially wrong, so leaving it discoverable is actively misleading. |
+| BANNERED | `.claude/reference/TESTING_IMPROVEMENTS_SUMMARY.md` | 309 | 2025-10-16 | Aug 2025 changelog. Only referrer is `VERIFICATION_REPORT.md`. Delete alongside it. |
+| BANNERED | `.claude/reference/AI_FRIENDLY_IMPROVEMENTS.md` | 168 | 2025-10-16 | Oct 2025 progress tracker (✅/🚧/⏳ never re-verified). Referred to by `VERIFICATION_REPORT.md` and `docs/README.md`. |
+| BANNERED | `.claude/reference/E2E_TESTING_LEARNINGS_CODIFIED.md` | 161 | 2025-10-18 | Both its "see also" links point at gitignored `.claude/planning/` files that no longer exist. Merge anything still valuable into `frontend/e2e/README.md` / `testing-patterns`, then delete. |
+| PENDING | `.claude/planning-doc.md` | 81 | 2026-05-07 | Not yet reviewed — carried into the next session. |
+
+### Batch 2 findings (completed 2026-08-26)
+
+**19 docs reviewed: 7 updated, 7 verified OK, 5 bannered as historical.**
+
+1. **The wrong auth model was duplicated, not isolated.**
+   `BACKEND_ARCHITECTURE.md` carried the same fiction as `ARCHITECTURE.md` — a
+   `username` claim and `config.JWT.AccessTokenExpiry`. Root cause found:
+   **`JWTConfig.AccessTokenExpiry` (15m) and `RefreshTokenExpiry` (7d) genuinely
+   exist in `core/config.go` with those defaults, but nothing ever reads them.**
+   `jwt.go` hardcodes 7 days. The docs were describing dead config. Both docs now
+   say so explicitly. *Worth deciding separately whether to delete the dead
+   config — it will keep re-seeding this error.*
+
+2. **`BACKEND_ARCHITECTURE.md` documented three APIs that do not exist:**
+   `RequireGameMasterMiddleware`, `GetAuthenticatedUserID`, and
+   `GetAuthenticatedUsername`. Real pattern: `games.Handler.GameMiddleware()`
+   loads game + `is_gm` into context; authorization is the `core.IsUserGameMaster`
+   *helper*, not middleware; and `GetAuthenticatedUser` returns a struct you read
+   fields off (and must nil-check). Also fixed `{id}` → `{gameID}`.
+
+3. **`JUSTFILE_QUICK_REFERENCE.md` — the doc most likely to be trusted verbatim —
+   was the most wrong.** It described the pre-container workflow: 5 nonexistent
+   recipes and a trailing "from `just --list`" block listing 31 recipes when 57
+   exist. Regenerated from the real `just --list`.
+
+4. **Invalid `just` recipes were the dominant defect class.** A mechanical sweep
+   of every `just <recipe>` mention against `just --list` found **16 invalid names
+   in `DEVELOPMENT_SETUP.md` alone** (old underscore forms like `db_up`,
+   `reset_test_db`, `migrate_test`), 5 in `JUSTFILE_QUICK_REFERENCE.md`, 2 in
+   `TESTING_GUIDE.md`, plus stragglers in `BACKEND_ARCHITECTURE.md` and — missed
+   in Batch 1 — `just reset-test-data` in `context/TEST_DATA.md`.
+   **This sweep is now the cheapest high-yield check available; run it every batch.**
+
+5. **`TESTING_GUIDE.md`'s entire setup premise was pre-container** — `brew install
+   postgresql`, host `createdb`, and a nonexistent `just test-db-setup` presented
+   as the mandatory one-time step (×5). No such step exists now.
+
+6. **`API_DOCUMENTATION.md` is a narrative curl guide, not a reference.** It
+   covers ~14 of 195 routes. `/games/public` (used 4×) does not exist — the real
+   listing endpoint is `GET /games`. Readers now get pointed at Swagger UI
+   (`/api/v1/docs/`, verified live) for the complete list.
+
+7. **A cluster of dead historical artifacts, self-referentially linked.**
+   `VERIFICATION_REPORT.md` is an unfinished Oct 2025 audit of these same docs
+   with **zero inbound references** — and it is the *only* referrer to three other
+   artifact docs. It marked ✅ several docs this audit found materially wrong.
+   All five bannered rather than deleted; **deletion is your call.**
+
+**Verified accurate (no changes):** `BUILDER_USAGE_GUIDE.md` (full `TestSuite`
+builder surface checked method-by-method), `ERROR_HANDLING.md` (all `core.*`
+helpers exist), `LOGGING_STANDARDS.md`, `GAME_APPLICATIONS_*`, `PROJECT_SPEC.md`.
+
+**Carried forward:**
+- Dead `JWTConfig` expiry fields — delete or wire up.
+- `.claude/planning/` links persist in 2 docs though the dir is gitignored.
+- `API_TESTING_WITH_CURL.md` vs the `route-tester` skill overlap — reconcile in Batch 3.
+
+---
 
 ## Batch 3 — Skills
 

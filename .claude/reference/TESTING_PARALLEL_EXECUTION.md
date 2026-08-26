@@ -1,5 +1,11 @@
 # Safe Parallel Test Execution
 
+> ⚠️ **HISTORICAL ARTIFACT.** Records the **October 2025** work that first made
+> parallel test execution safe. Accurate as history — the named tests still
+> exist — but it is not the current model: tests now achieve isolation by having
+> each **package clone its own database** from `actionphase_test_template`.
+> For current practice see `.claude/context/TESTING.md`.
+
 This document outlines the improvements made to enable safe parallel test execution in the ActionPhase backend.
 
 ## Overview

@@ -423,7 +423,7 @@ const gameId = await getFixtureGameId(page, 'MY_FEATURE');
 ### Updating Fixtures
 
 1. Modify appropriate SQL file in `test_fixtures/`
-2. Run: `just reset-test-data && just test-fixtures`
+2. Run: `just test-data reload`
 3. Verify changes in application
 4. Update this documentation if needed
 
@@ -459,7 +459,7 @@ chmod +x backend/pkg/db/test_fixtures/apply_all.sh
 
 **Unique Constraint Errors**: Reset first:
 ```bash
-just reset-test-data && just test-fixtures
+just test-data reload
 ```
 
 ## Integration with Tests
