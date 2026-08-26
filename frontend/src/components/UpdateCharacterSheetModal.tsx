@@ -370,7 +370,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
           Modal's own max-h-[90vh] minus its padding. */}
       <div className="flex flex-col gap-4 max-h-[calc(90vh-3rem)]">
         {/* Header */}
-        <div className="shrink-0 flex items-center justify-between border-b border-border-primary pb-4">
+        <div className="shrink-0 flex items-center justify-between border-b border-theme-default pb-4">
           <div>
             <h2 className="text-2xl font-semibold text-content-primary">
               Update Character Sheet
@@ -396,7 +396,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
 
         {/* Section Navigation — locked while an editor holds uncommitted edits, since
             switching unmounts that editor and destroys them. See EditorLockNotice. */}
-        <div className="border-b border-border-primary">
+        <div className="border-b border-theme-default">
           <nav className="flex items-center space-x-1" aria-label="Sections">
             {(['skills', 'inventory', 'numbers'] as ActiveSection[]).map((section) => (
               <button
@@ -407,8 +407,8 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
                   px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
                   disabled:opacity-50 disabled:cursor-not-allowed
                   ${activeSection === section
-                    ? 'bg-bg-primary text-interactive-primary border-b-2 border-interactive-primary'
-                    : 'text-content-secondary hover:text-content-primary hover:bg-bg-secondary'
+                    ? 'surface-base text-interactive-primary border-b-2 border-interactive-primary'
+                    : 'text-content-secondary hover:text-content-primary hover:surface-raised'
                   }
                 `}
               >
@@ -466,7 +466,7 @@ export const UpdateCharacterSheetModal: React.FC<UpdateCharacterSheetModalProps>
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 flex justify-between items-center border-t border-border-primary pt-4">
+        <div className="shrink-0 flex justify-between items-center border-t border-theme-default pt-4">
           <div>
             {hasStagedUpdates && (
               confirmingDiscard ? (

@@ -114,7 +114,7 @@ export function RecentResultsSection({
                 key={result.id}
                 variant="default"
                 padding="sm"
-                className="border border-border-primary"
+                className="border border-theme-default"
               >
                 <div
                   className="flex items-start justify-between cursor-pointer"
@@ -152,7 +152,7 @@ export function RecentResultsSection({
 
                 {/* Full Content */}
                 {isResultExpanded && (
-                  <div className="mt-3 pt-3 border-t border-border-primary">
+                  <div className="mt-3 pt-3 border-t border-theme-default">
                     <MarkdownPreview content={result.content} />
                   </div>
                 )}

@@ -730,52 +730,73 @@ import { MarkdownPreview } from '@/components/MarkdownPreview';
 
 ## When You Can't Use UI Components
 
-For **layout-only elements** (flexbox containers, grids, spacers), use CSS variables:
+For **layout-only elements** (flexbox containers, grids, spacers), use semantic tokens:
 
 ```tsx
 // Layout container
-<div className="bg-bg-page min-h-screen">
-  <div className="bg-bg-primary border-border-primary rounded-lg p-4">
+<div className="surface-page min-h-screen">
+  <div className="surface-base border border-theme-default rounded-lg p-4">
     {/* UI components here */}
   </div>
 </div>
 
 // Text elements
-<h1 className="text-text-heading text-2xl font-bold">Heading</h1>
-<p className="text-text-primary">Body text</p>
-<span className="text-text-secondary">Secondary text</span>
+<h1 className="text-content-primary text-2xl font-bold">Heading</h1>
+<p className="text-content-secondary">Body text</p>
+<span className="text-content-tertiary">Secondary text</span>
 ```
 
-**Available CSS Variable Classes**
+**Available semantic token classes**
 
-These are the semantic tokens declared in the `@theme` block of
-`frontend/src/index.css` (Tailwind v4 CSS-first config — there is no
-`tailwind.config.js`). The full set:
+> ⚠️ **Verified 2026-08-26 against the built CSS.** Being declared in `@theme` is
+> *not* sufficient — a token also needs a value assigned in
+> `frontend/src/lib/theme/themes.ts`. The `bg-bg-*` and `border-border-*`
+> families are declared but **never assigned**, so they emit no CSS and render
+> nothing. They were removed from app code; do not reintroduce them.
+> The authoritative list is `frontend/src/components/ui/README.md`.
 
-**Backgrounds:**
-- `bg-bg-page` - Page background
-- `bg-bg-primary` - Primary container
-- `bg-bg-secondary` - Secondary/subtle background
-- `bg-bg-tertiary` - Third-level background
-- `bg-bg-input` - Form input surfaces
-- `bg-bg-hover` - Hover state
-- `bg-bg-active` - Active/pressed state
+**Surfaces (backgrounds):**
+- `surface-page` - Page background
+- `surface-base` - Cards, modals, primary containers
+- `surface-raised` - Hover states, active tabs, subtle contrast
+- `surface-overlay` - Dropdowns, popovers
+- `surface-sunken` - Input surfaces, wells, skeleton bars
 
-**Text:**
-- `text-text-heading` - Headings
-- `text-text-primary` - Body text
-- `text-text-secondary` - Secondary text
-- `text-text-muted` - Muted text
-- `text-text-disabled` - Disabled text
+**Content (text):**
+- `text-content-primary` - Headings and body text
+- `text-content-secondary` - Supporting text
+- `text-content-tertiary` - De-emphasized text
+- `text-content-disabled` - Disabled text
+- `text-content-inverse` - Text on a filled background
+- (The `text-text-*` family was **retired 2026-08-26** — see below.)
 
 **Borders:**
-- `border-border-primary` - Standard borders
-- `border-border-secondary` - Secondary borders
-- `border-border-default` - Default borders
-- `border-border-subtle` - Low-emphasis dividers
-- `border-border-strong` - High-emphasis borders
-- `border-border-input` - Form input borders
-- `border-border-focus` - Focus rings
+- `border-theme-default` - Standard borders
+- `border-theme-subtle` - Low-emphasis dividers
+- `border-theme-strong` - High-emphasis borders
+
+**Interactive & semantic states:**
+- `bg-interactive-primary`, `bg-interactive-primary-subtle`, `bg-interactive-secondary`
+- `text-interactive-primary`, `text-accent-primary`
+- `bg-semantic-{danger,warning,success,info}-subtle`
+- `border-semantic-{danger,warning,success,info}`, `text-semantic-danger`
+
+**Retired — do not use.** The `text-text-*` family was removed on 2026-08-26.
+It was worse than merely dead: `text-text-primary` resolved to
+`--color-content-secondary` (*not* `-primary`), so the name actively lied about
+the color, and `text-text-muted` / `-disabled` referenced variables no theme
+assigns — producing an invalid color that silently inherited. Replacements:
+`text-content-primary`→`text-content-primary`, `text-text-primary`/`-secondary`→
+`text-content-secondary`, `text-text-muted`→`text-content-tertiary`.
+
+Also retired (emit no CSS): `bg-bg-*`, `border-border-*`, `bg-primary`,
+`bg-{danger,warning,success}-light`, `text-{danger,warning,success,primary}-text`,
+`text-danger`, `bg-accent-primary`, `border-accent-primary`,
+`placeholder-placeholder`, `ring-focus-ring`.
+
+**Opacity modifiers don't work** on these (they are hand-written utility classes,
+not `@theme` colors): use `bg-interactive-primary-subtle`, not
+`bg-interactive-primary/10`.
 
 If you need a token that isn't listed here, add it to `@theme` in
 `src/index.css` rather than reaching for a hardcoded Tailwind color.
@@ -833,7 +854,7 @@ Before submitting a PR with frontend changes:
 
 **Code Quality:**
 - [ ] No hardcoded colors (`bg-white`, `text-gray-900`, etc.)
-- [ ] Layout containers use `bg-bg-*` and `text-text-*` tokens
+- [ ] Layout containers use `surface-*`, `text-content-*`, and `border-theme-*` tokens
 - [ ] Markdown uses MarkdownPreview component
 - [ ] Forms include proper labels and error handling
 
@@ -910,8 +931,8 @@ export function GameCard({ game }: GameCardProps) {
   return (
     <Card variant="default" padding="md">
       <CardBody>
-        <h3 className="text-text-heading font-bold">{game.name}</h3>
-        <p className="text-text-secondary text-sm">{game.description}</p>
+        <h3 className="text-content-primary font-bold">{game.name}</h3>
+        <p className="text-content-secondary text-sm">{game.description}</p>
         <Button variant="primary" onClick={handleJoin}>
           Join Game
         </Button>

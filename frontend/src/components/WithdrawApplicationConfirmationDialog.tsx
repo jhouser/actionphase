@@ -45,7 +45,7 @@ export function WithdrawApplicationConfirmationDialog({
           Are you sure you want to withdraw your {role} application for <strong>{gameTitle}</strong>?
         </p>
 
-        <div className="surface-raised border border-border-warning rounded-md p-4">
+        <div className="surface-raised border border-semantic-warning rounded-md p-4">
           <p className="text-sm text-content-secondary">
             <strong>Note:</strong> Withdrawing your application will:
           </p>

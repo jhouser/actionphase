@@ -245,7 +245,7 @@ export function TabNavigation({
           onChange={(e) => onTabChange(e.target.value)}
           className={`
             block w-full pl-2 pr-10 font-semibold surface-raised text-content-primary
-            border border-border-primary md:rounded-t-lg shadow-sm appearance-none cursor-pointer
+            border border-theme-default md:rounded-t-lg shadow-sm appearance-none cursor-pointer
             focus:outline-none focus:ring-2 focus:ring-interactive-primary focus:border-interactive-primary
             transition-all duration-200
             disabled:opacity-50 disabled:cursor-not-allowed
@@ -319,13 +319,13 @@ export function TabNavigation({
                 when navigation locks, and its items would otherwise still navigate,
                 unmounting the very editor the lock protects. */}
             {moreOpen && !disabled && (
-              <div className="absolute right-0 top-full z-40 min-w-[160px] surface-raised border border-border-primary rounded-b-lg rounded-tl-lg shadow-lg py-1">
+              <div className="absolute right-0 top-full z-40 min-w-[160px] surface-raised border border-theme-default rounded-b-lg rounded-tl-lg shadow-lg py-1">
                 {overflowTabs.map((tab) => {
                   const isActive = activeTab === tab.id;
                   const itemClass = `w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors
                     ${isActive
                       ? 'text-interactive-primary bg-semantic-info-subtle'
-                      : 'text-content-primary hover:bg-bg-secondary'
+                      : 'text-content-primary hover:surface-raised'
                     }`;
                   const handleClick = () => { onTabChange(tab.id); setMoreOpen(false); };
                   return getTabHref ? (

@@ -59,8 +59,8 @@ export function ChangeEmailForm() {
   return (
     <Card variant="default" padding="md" data-testid="change-email-form">
       <CardHeader>
-        <h3 className="text-lg font-semibold text-text-heading">Change Email</h3>
-        <p className="text-sm text-text-secondary mt-1" data-testid="current-email-display">
+        <h3 className="text-lg font-semibold text-content-primary">Change Email</h3>
+        <p className="text-sm text-content-secondary mt-1" data-testid="current-email-display">
           Current email: <span className="font-medium">{currentUser?.email}</span>
         </p>
       </CardHeader>

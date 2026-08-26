@@ -177,7 +177,7 @@ export function HandoutView({
             )}
           </div>
 
-          <div className="border-t border-border-primary pt-4">
+          <div className="border-t border-theme-default pt-4">
             <MarkdownPreview content={handout.content} fullWidth />
           </div>
         </div>
@@ -226,7 +226,7 @@ export function HandoutView({
         )}
 
         {/* Existing Comments */}
-        <div className={isGM ? "border-t border-border-primary pt-4" : ""}>
+        <div className={isGM ? "border-t border-theme-default pt-4" : ""}>
           {isGM && <h3 className="text-sm font-semibold text-content-secondary mb-3">Previous Updates</h3>}
           {commentsLoading ? (
             <div className="flex justify-center py-8">
@@ -241,7 +241,7 @@ export function HandoutView({
           ) : (
             <div className="space-y-4">
               {visibleComments.map(comment => (
-                <div key={comment.id} className="border border-border-primary rounded-lg p-4 bg-bg-secondary">
+                <div key={comment.id} className="border border-theme-default rounded-lg p-4 surface-raised">
                   {/* Edit Mode */}
                   {editingCommentId === comment.id ? (
                     <div className="space-y-3">

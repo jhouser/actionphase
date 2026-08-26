@@ -347,6 +347,131 @@ resolves (remaining hits are `skill-developer`'s hypothetical examples).
 
 ---
 
+### Follow-up: design-token standardization (2026-08-26, after Batch 3)
+
+Batch 3 finding #5 said two token families coexisted and "both work". **That was
+wrong**, and the correction is the most consequential result of the audit so far.
+
+**`bg-bg-*` and `border-border-*` emit no CSS whatsoever.** They are registered
+in the `@theme` block of `src/index.css` but were **never assigned values** in
+`src/lib/theme/themes.ts`. Tailwind generates no rule, so an element using one
+renders with *no background or border* — silently, in both light and dark mode.
+Verified by building the bundle and grepping the emitted CSS (`surface-base`
+appears 11×; `bg-bg-page`, `bg-primary`, `bg-danger-light` appear 0×).
+
+Independent corroboration: `ui/Toggle.test.tsx` already carried a regression test
+titled *"Off-state visibility (regression)"* whose comment reads "the off-state
+used unassigned tokens … that render invisible in light mode." Someone hit this
+bug once, fixed one component, and documented it only in that file's local note.
+
+**Shipped bugs this was causing:**
+- `GamesList` skeleton loaders — every placeholder bar invisible
+- `PollResults` — progress bar track, winning fill, and losing fill all invisible
+- `CommonRoom` — active-tab underline missing (no selected-tab indicator)
+- `EditHandoutModal` / `CreateHandoutModal` — required-field `*` invisible
+- `AdminsTab` / `BannedUsersTab` — hand-rolled badges, light-mode-only colors
+
+**Code changes (~185 replacements across ~55 files):**
+
+| Retired | Replacement | Basis |
+|---|---|---|
+| `bg-bg-primary` | `surface-base` | both white / gray-800 |
+| `bg-bg-secondary` | `surface-raised` | both gray-50 / gray-900 |
+| `bg-bg-tertiary`, `bg-bg-input` | `surface-sunken` | gray-100 / gray-900 |
+| `border-border-primary`, `-default` | `border-theme-default` | both gray-200 / gray-700 |
+| `border-border-secondary`, `-input` | `border-theme-strong` | gray-300–400 / gray-500–600 |
+| `border-border-warning` | `border-semantic-warning` | intent-preserving |
+| `bg-accent-primary`, `bg-primary` | `bg-interactive-primary` | intent-preserving |
+| `bg-accent-primary/10` | `bg-interactive-primary-subtle` | opacity modifiers don't work here |
+| `text-danger`, `text-danger-text` | `text-semantic-danger` | 57 existing uses |
+
+Mappings were derived from the literal RGB values in `themes.ts`, not guessed —
+a blind rename would have shifted colors. Note `text-text-primary` resolves to
+`--color-content-secondary`, **not** `-primary`, so it is *not* a drop-in rename;
+the `text-text-*` classes are hand-written utilities that do work and were left
+alone.
+
+Also replaced 3 hand-rolled badge `<span>`s with `<Badge>` in the admin tabs.
+
+**Guard added:** `frontend/src/__tests__/retired-tokens.test.ts` scans all of
+`src/` for 29 retired class names and fails with the offending file + token.
+Verified it actually fails by planting a canary, not just that it passes.
+
+**Docs standardized on the verified set** (all confirmed to emit CSS by building
+the bundle and grepping):
+- `frontend/src/components/ui/README.md` — now the **authoritative** token
+  reference; rewrote its "CSS Variables Reference" and added a retired-token
+  mapping table
+- `.claude/context/FRONTEND_STYLING.md` — replaced the token list I *expanded* in
+  Batch 1 (I had documented the dead tokens more thoroughly)
+- `CLAUDE.md`, `.claude/commands/implement-feature.md`,
+  `.claude/commands/review-changes.md`, and 5 frontend skill docs
+
+**Deleted** `frontend/src/styles/MIGRATION_PATTERNS.md` and
+`CSS_VARIABLES_USAGE.md` (both 2025-10-20). These were the *origin* of the
+error: mid-migration docs that taught `bg-bg-*`/`text-text-*` as the target
+state, then proposed building the UI library that superseded them. Neither had
+inbound references after the `ui/README.md` link was removed.
+
+**Verification:** `tsc -b` clean; **3,857 frontend tests pass** (241 files).
+Four test assertions that referenced retired class names were updated. One
+(`HandoutView`) needed a real selector fix, not a rename: `.bg-bg-secondary` had
+been acting as a de-facto "comment container" selector, and `surface-raised` also
+matches `Button variant="secondary"` — so the filter caught the top-level Edit
+button too. Re-anchored to the comment action row.
+
+**Not changed:** decorative mid-gray drag-handle dots in `CommentEditor` (legible
+in both themes, a visual judgment call), and `MarkdownPreview`'s `text-gray-300/400`
+(intentional, on a dark tooltip alongside `text-white`).
+
+---
+
+### Follow-up: retiring the `text-text-*` family (2026-08-26)
+
+The token standardization above left `text-text-*` in place because those classes
+*did* emit CSS. On closer inspection they were the most dangerous names in the
+system, and were removed.
+
+**`text-text-primary` resolved to `--color-content-secondary` — not `-primary`.**
+The class name misrepresented the color it produced. `text-text-muted` and
+`text-text-disabled` were worse still: they referenced variables that **no theme
+assigns**, so `color: rgb(var(--unset))` is invalid and the element silently
+inherited its parent's color. A "muted" error detail in `NewCommentsView` was
+rendering at full Alert color.
+
+**Root cause, traced to commit `cbb8533f` ("CSS refactor", 2025-11-12):** that
+commit deleted `--color-text-primary`, `-secondary`, `-muted`, and `-disabled`
+from `themes.ts`, then repointed `.text-text-primary` at `--color-content-secondary`
+to stop it rendering as nothing. It was damage control, not a design decision —
+and it left a class whose name and behavior disagreed.
+
+**The renames are provable no-ops.** The deleted `--color-text-primary` values
+(`75 85 99` / `209 213 219` / `30 30 30` / `230 230 230` / `55 65 81`) are
+byte-identical to the current `--color-content-secondary` in all five themes
+(light, dark, highContrast, highContrastDark, colorblind). Same for
+`--color-text-heading` vs `--color-content-primary`.
+
+| Retired | Replacement | Visual change |
+|---|---|---|
+| `text-text-heading` | `text-content-primary` | none (identical values) |
+| `text-text-primary` | `text-content-secondary` | none (identical values) |
+| `text-text-secondary` | `text-content-secondary` | none (was already this) |
+| `text-text-muted` | `text-content-tertiary` | **yes** — now actually muted |
+| `text-text-tertiary` | `text-content-tertiary` | **yes** — was never declared |
+
+**Changes:** 76 replacements across 23 files; the five `.text-text-*` utility
+classes deleted from `index.css` (with a comment explaining why); their orphaned
+`@theme` registrations removed; the now-unread `--color-text-heading` value
+dropped from all five themes. Guard extended to 35 retired names and
+canary-verified against the new family. Docs updated in `ui/README.md`,
+`context/FRONTEND_STYLING.md`, the frontend SKILL.md, and 4 skill resources
+(which also referenced a `text-text-danger` that never existed).
+
+**Net result:** one text-color family (`text-content-*`), no aliases, no name
+that disagrees with its value.
+
+---
+
 ## Batch 4 — Commands & agents
 
 | Status | Doc | Lines | Last Commit | Notes |

@@ -95,7 +95,7 @@ Systematically check each category:
   - ❌ No `<button>`, use `<Button>`
   - ❌ No `<input>`, use `<Input>`
   - ❌ No manual divs with styling, use `<Card>`, `<Modal>`, etc.
-- [ ] **Semantic CSS tokens** used for layout (`bg-surface-*`, `text-content-*`, `border-border-*`)
+- [ ] **Semantic tokens** used for layout (`surface-*`, `text-content-*`, `border-theme-*`) — never retired `bg-bg-*`/`border-border-*`
 - [ ] **Dark mode support** via CSS variables (no hardcoded colors)
 - [ ] **React Query** used for data fetching (not useEffect with fetch)
 - [ ] **AuthContext** used for auth state (not local state)

@@ -42,7 +42,7 @@ export const AudienceConversationHeader: React.FC<AudienceConversationHeaderProp
     : 'No participants';
 
   return (
-    <div className="border-b border-border-primary bg-bg-secondary sticky top-0 z-10">
+    <div className="border-b border-theme-default surface-raised sticky top-0 z-10">
       {/* Mobile Layout */}
       <div className="md:hidden p-4 space-y-3">
         {/* Back button + Read-Only badge */}

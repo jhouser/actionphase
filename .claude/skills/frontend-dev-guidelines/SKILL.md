@@ -171,23 +171,43 @@ User feedback goes through `useToast()` from `@/contexts/ToastContext`, or the
 <div className="bg-white dark:bg-gray-800">           // ❌
 ```
 
-**Two token families are declared and both work**, but they are not equally
-current. Prefer the `content-`/`surface-` family — it is what the UI library
-itself uses and dominates by roughly 20:1 in app code:
+Use the `surface-*` / `text-content-*` / `border-theme-*` families. A second,
+older set of names (`bg-bg-*`, `border-border-*`) is **retired**: those tokens are
+declared in `@theme` but were never assigned values, so Tailwind emits **no CSS
+rule at all** and elements using them render with no background or border. They
+were removed from app code on 2026-08-26 (~180 usages across ~50 files, including
+invisible skeleton loaders, poll result bars, and active-tab underlines).
 
-| Prefer | Over (legacy) |
+| Use | Not (retired — renders nothing) |
 |---|---|
-| `text-content-primary` (483 uses) | `text-text-primary` (25) |
-| `surface-base` (162) | `bg-bg-primary` (26) |
+| `surface-base` | `bg-bg-primary` |
+| `surface-raised` | `bg-bg-secondary` |
+| `surface-sunken` | `bg-bg-tertiary`, `bg-bg-input` |
+| `border-theme-default` | `border-border-primary`, `border-border-default` |
+| `border-theme-strong` | `border-border-secondary`, `border-border-input` |
+| `bg-interactive-primary` | `bg-primary`, `bg-accent-primary` |
+| `text-semantic-danger` | `text-danger`, `text-danger-text` |
+| `text-content-primary` | `text-text-heading` |
+| `text-content-secondary` | `text-text-primary`, `text-text-secondary` |
+| `text-content-tertiary` | `text-text-muted`, `text-text-tertiary` |
 
-Note that `.claude/context/FRONTEND_STYLING.md` and `CLAUDE.md` still show the
-legacy `text-text-*` / `bg-bg-*` names. They render correctly, so existing code
-is not broken — but match the file you're editing and prefer `content-`/`surface-`
-in new components.
+The `text-text-*` family was also retired (2026-08-26) and its classes deleted
+from `index.css`. It was the worst of the set: `text-text-primary` resolved to
+`--color-content-secondary` — *not* `-primary` — so the name misrepresented the
+color it produced, and `text-text-muted`/`-disabled` referenced variables no
+theme assigns, silently inheriting instead of rendering. The renames above are
+exact no-ops: the deleted `--color-text-*` values were byte-identical to their
+`--color-content-*` counterparts in all five themes.
+
+**Opacity modifiers do not work** on these classes: use
+`bg-interactive-primary-subtle`, never `bg-interactive-primary/10`.
+
+**Authoritative list:** `frontend/src/components/ui/README.md`. Verify any new
+token against the built CSS — declaration alone does not mean it renders.
 
 **[📖 resources/styling-guide.md](resources/styling-guide.md)** — accurate.
-The fuller reference is **`.claude/context/FRONTEND_STYLING.md`** (all 19 tokens
-and every exported UI component); prefer it when they disagree.
+The fuller reference is **`frontend/src/components/ui/README.md`** (verified
+token list + every exported UI component); prefer it when they disagree.
 
 ---
 

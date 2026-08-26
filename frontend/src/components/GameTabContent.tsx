@@ -143,7 +143,7 @@ export function GameTabContent({
 
         {hasSchedule && (
           <>
-            <div className="border-t border-border-primary my-6" />
+            <div className="border-t border-theme-default my-6" />
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-content-secondary mb-3">Common Room Schedule</p>
               <div className="grid grid-cols-2 gap-x-8 gap-y-3 max-w-sm">
@@ -163,7 +163,7 @@ export function GameTabContent({
 
         {/* Show public applicants list during recruitment */}
         {game.state === 'recruitment' && (
-          <div className="mt-6 pt-6 border-t border-border-primary">
+          <div className="mt-6 pt-6 border-t border-theme-default">
             <PublicApplicantsList gameId={gameId} />
           </div>
         )}
@@ -172,7 +172,7 @@ export function GameTabContent({
             can read the game (including public archive mode). Lives here rather
             than above the game because it is an occasional, secondary action. */}
         {game.state === 'completed' && (
-          <div className="mt-6 pt-6 border-t border-border-primary">
+          <div className="mt-6 pt-6 border-t border-theme-default">
             <GameExportPanel gameId={gameId} isCompleted />
           </div>
         )}

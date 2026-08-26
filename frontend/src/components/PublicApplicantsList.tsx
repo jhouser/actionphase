@@ -92,7 +92,7 @@ export function PublicApplicantsList({ gameId }: PublicApplicantsListProps) {
             {players.map((applicant) => (
               <div
                 key={applicant.id}
-                className="border border-border-primary rounded-lg p-3 bg-surface-raised"
+                className="border border-theme-default rounded-lg p-3 bg-surface-raised"
               >
                 <div className="flex items-center gap-3 mb-2">
                   {/* Avatar */}
@@ -132,7 +132,7 @@ export function PublicApplicantsList({ gameId }: PublicApplicantsListProps) {
             {audience.map((applicant) => (
               <div
                 key={applicant.id}
-                className="border border-border-primary rounded-lg p-3 bg-surface-raised"
+                className="border border-theme-default rounded-lg p-3 bg-surface-raised"
               >
                 <div className="flex items-center gap-3 mb-2">
                   {/* Avatar */}

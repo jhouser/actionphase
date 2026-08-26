@@ -75,7 +75,7 @@ export function ReassignCharacterModal({
       title={`Reassign ${character.name}`}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="p-4 rounded-lg bg-surface-raised border border-border-primary">
+        <div className="p-4 rounded-lg bg-surface-raised border border-theme-default">
           <h4 className="font-medium text-content-primary mb-2">Character Details</h4>
           <div className="text-sm text-content-secondary space-y-1">
             <p><span className="font-medium">Name:</span> {character.name}</p>
@@ -84,7 +84,7 @@ export function ReassignCharacterModal({
           </div>
         </div>
 
-        <div className="p-4 rounded-lg bg-semantic-info-subtle border border-border-primary">
+        <div className="p-4 rounded-lg bg-semantic-info-subtle border border-theme-default">
           <p className="text-sm text-content-primary">
             Reassigning this character will make it active again and transfer control to the new owner.
             The original owner information will be preserved for the audit trail.
@@ -104,7 +104,7 @@ export function ReassignCharacterModal({
                 }
               }}
               disabled={reassignCharacter.isPending}
-              className="rounded border-border-primary"
+              className="rounded border-theme-default"
             />
             <label htmlFor="assign-to-self" className="text-sm text-content-primary cursor-pointer">
               Assign to myself (make this character an NPC I control)

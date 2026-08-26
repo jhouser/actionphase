@@ -380,8 +380,8 @@ const InnerComponent: React.FC<{ id: number }> = ({ id }) => {
     return (
         <Card variant="default">
             <CardBody>
-                <h2 className="text-xl font-semibold text-text-heading">{data.title}</h2>
-                <p className="text-text-primary mt-2">{data.description}</p>
+                <h2 className="text-xl font-semibold text-content-primary">{data.title}</h2>
+                <p className="text-content-secondary mt-2">{data.description}</p>
             </CardBody>
         </Card>
     );
@@ -536,9 +536,9 @@ return (
 <div className="h-[500px]">
     {isLoading ? (
         <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-bg-secondary rounded w-1/4"></div>
-            <div className="h-48 bg-bg-secondary rounded"></div>
-            <div className="h-4 bg-bg-secondary rounded"></div>
+            <div className="h-8 surface-raised rounded w-1/4"></div>
+            <div className="h-48 surface-raised rounded"></div>
+            <div className="h-4 surface-raised rounded"></div>
         </div>
     ) : (
         <Content />
@@ -563,9 +563,9 @@ export const MyComponent: React.FC = () => {
             <CardBody>
                 {isLoading ? (
                     <div className="animate-pulse space-y-4">
-                        <div className="h-6 bg-bg-secondary rounded w-48"></div>
-                        <div className="h-40 bg-bg-secondary rounded"></div>
-                        <div className="h-4 bg-bg-secondary rounded"></div>
+                        <div className="h-6 surface-raised rounded w-48"></div>
+                        <div className="h-40 surface-raised rounded"></div>
+                        <div className="h-4 surface-raised rounded"></div>
                     </div>
                 ) : (
                     <>

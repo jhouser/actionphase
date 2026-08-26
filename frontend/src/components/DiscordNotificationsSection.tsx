@@ -193,11 +193,11 @@ export function DiscordNotificationsSection() {
     return (
       <Card variant="default" padding="md">
         <CardHeader>
-          <h3 className="text-lg font-semibold text-text-heading">Discord Notifications</h3>
+          <h3 className="text-lg font-semibold text-content-primary">Discord Notifications</h3>
         </CardHeader>
         <CardBody>
           <div className="space-y-4">
-            <p className="text-sm text-text-secondary">
+            <p className="text-sm text-content-secondary">
               Connect your Discord account to receive ActionPhase notifications as direct messages.
               You can control which notification types are delivered to Discord.
             </p>
@@ -220,18 +220,18 @@ export function DiscordNotificationsSection() {
     <div className="space-y-6">
       <Card variant="default" padding="md">
         <CardHeader>
-          <h3 className="text-lg font-semibold text-text-heading">Discord Account</h3>
+          <h3 className="text-lg font-semibold text-content-primary">Discord Account</h3>
         </CardHeader>
         <CardBody>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-text-primary">
+              <p className="text-sm font-medium text-content-secondary">
                 Connected as{' '}
                 <span className="font-semibold" data-testid="discord-username">
                   {discordStatus.discord_username}
                 </span>
               </p>
-              <p className="text-xs text-text-secondary mt-0.5">
+              <p className="text-xs text-content-secondary mt-0.5">
                 Discord DMs are enabled based on your preferences below.
               </p>
             </div>
@@ -248,8 +248,8 @@ export function DiscordNotificationsSection() {
 
       <Card variant="default" padding="md">
         <CardHeader>
-          <h3 className="text-lg font-semibold text-text-heading">Direct Events</h3>
-          <p className="text-sm text-text-secondary mt-1">
+          <h3 className="text-lg font-semibold text-content-primary">Direct Events</h3>
+          <p className="text-sm text-content-secondary mt-1">
             High-priority events that affect you directly. These default to on.
           </p>
         </CardHeader>
@@ -267,8 +267,8 @@ export function DiscordNotificationsSection() {
 
       <Card variant="default" padding="md">
         <CardHeader>
-          <h3 className="text-lg font-semibold text-text-heading">Game Activity</h3>
-          <p className="text-sm text-text-secondary mt-1">
+          <h3 className="text-lg font-semibold text-content-primary">Game Activity</h3>
+          <p className="text-sm text-content-secondary mt-1">
             Game-wide events. These default to off to avoid notification overload.
           </p>
         </CardHeader>

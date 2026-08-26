@@ -93,7 +93,7 @@ export function PeopleView({
   return (
     <div className="space-y-6">
       {/* Sub-tab navigation */}
-      <div className="border-b border-border-primary">
+      <div className="border-b border-theme-default">
         <nav className="flex gap-4">
           <button
             onClick={() => setActiveSubTab('characters')}

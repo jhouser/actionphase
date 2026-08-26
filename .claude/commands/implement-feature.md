@@ -55,7 +55,7 @@ Follow the test pyramid bottom-up. **Do not skip layers.**
 
 ### 5. Frontend Component
 - Implement UI using components from `@/components/ui` (no raw HTML elements)
-- Use semantic CSS tokens (`bg-bg-primary`, `text-text-primary`, etc.) for layout — no hardcoded colors
+- Use semantic tokens (`surface-base`, `text-content-primary`, `border-theme-default`) for layout — no hardcoded colors, and never `bg-bg-*`/`border-border-*` (retired, emit no CSS)
 - **Write component test** using React Testing Library — test what the user sees, not internals
 - Run: `just test-frontend` — must pass before proceeding
 

@@ -72,7 +72,7 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
 
           {context && (
             <>
-              <div className="bg-bg-secondary rounded-lg p-3" data-testid="unread-inbox-item-context">
+              <div className="surface-raised rounded-lg p-3" data-testid="unread-inbox-item-context">
                 {context.parentMessage && (
                   <ParentCommentPreview
                     content={context.parentMessage.content}
@@ -94,7 +94,7 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
                   />
                   <div className="flex flex-col flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-text-heading">
+                      <span className="font-medium text-content-primary">
                         {context.previewMessage.characterName || 'Unknown'}
                       </span>
                       {context.previewMessage.authorUsername && (

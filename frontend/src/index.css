@@ -20,13 +20,6 @@
   --color-bg-input*: initial;
   --color-bg-input-disabled*: initial;
 
-  /* Semantic Text Colors */
-  --color-text-heading*: initial;
-  --color-text-primary*: initial;
-  --color-text-secondary*: initial;
-  --color-text-muted*: initial;
-  --color-text-disabled*: initial;
-
   /* Semantic Content Colors */
   --color-content-primary*: initial;
   --color-content-secondary*: initial;
@@ -195,26 +188,11 @@
     color: rgb(var(--color-content-inverse));
   }
 
-  /* Text tokens - semantic text colors */
-  .text-text-heading {
-    color: rgb(var(--color-text-heading));
-  }
-
-  .text-text-primary {
-    color: rgb(var(--color-content-secondary));
-  }
-
-  .text-text-secondary {
-    color: rgb(var(--color-content-secondary));
-  }
-
-  .text-text-muted {
-    color: rgb(var(--color-text-muted));
-  }
-
-  .text-text-disabled {
-    color: rgb(var(--color-text-disabled));
-  }
+  /* NOTE: the .text-text-* family was removed on 2026-08-26.
+     Those class names were actively misleading: .text-text-primary resolved to
+     --color-content-secondary (not -primary), and .text-text-muted/-disabled
+     referenced variables that no theme assigns, so they produced an invalid
+     color and silently inherited. Use the .text-content-* family above. */
 
   /* Accent tokens - for links and interactive text (maps to primary colors) */
   .text-accent-primary {

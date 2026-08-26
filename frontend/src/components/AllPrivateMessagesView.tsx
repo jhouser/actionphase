@@ -215,7 +215,7 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
 
       {/* Participant Filter */}
       {filterOptions.length > 0 && (
-        <div className="border border-border-primary rounded-lg p-4 bg-bg-secondary">
+        <div className="border border-theme-default rounded-lg p-4 surface-raised">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-content-primary">Filter by Participants</h3>
             {selectedParticipants.size > 0 && (
@@ -240,7 +240,7 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
                     px-3 py-1.5 rounded-full text-sm font-medium transition-colors
                     ${isSelected
                       ? 'bg-interactive-primary text-white'
-                      : 'bg-bg-primary border border-border-primary text-content-primary hover:bg-bg-tertiary'
+                      : 'surface-base border border-theme-default text-content-primary hover:surface-sunken'
                     }
                   `}
                 >

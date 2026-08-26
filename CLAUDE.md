@@ -525,9 +525,12 @@ import { MarkdownPreview } from '@/components/MarkdownPreview';
 **When You Can't Use UI Components:**
 
 For layout-only elements (flexbox containers, grids, etc.), use semantic CSS tokens:
-- `bg-bg-primary`, `bg-bg-secondary` - Backgrounds
-- `text-text-heading`, `text-text-primary` - Text colors
-- `border-border-primary` - Borders
+- `surface-base`, `surface-raised`, `surface-sunken` - Backgrounds
+- `text-content-primary`, `text-content-secondary` - Text colors
+- `border-theme-default`, `border-theme-strong` - Borders
+
+⚠️ **`bg-bg-*` and `border-border-*` are retired — they emit no CSS and render
+nothing.** Full verified list: `frontend/src/components/ui/README.md`.
 
 **Pre-Flight Checklist for New Components:**
 
@@ -537,7 +540,7 @@ Before committing any new React component, verify:
 - [ ] Uses `<Card>` instead of manual `<div>` containers
 - [ ] Uses `<Badge>` for status indicators
 - [ ] Uses `<Alert>` for notifications
-- [ ] Layout containers use `bg-bg-*` and `text-text-*` tokens
+- [ ] Layout containers use `surface-*`, `text-content-*`, `border-theme-*` tokens
 - [ ] Component tested in both light AND dark mode
 - [ ] Markdown content uses MarkdownPreview component
 

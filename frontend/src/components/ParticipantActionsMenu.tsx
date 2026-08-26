@@ -176,7 +176,7 @@ export function ParticipantActionsMenu({
         </Button>
 
         {isOpen && (
-          <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-bg-primary border border-border-primary z-10 surface-raised">
+          <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg surface-base border border-theme-default z-10 surface-raised">
             <div className="py-1" role="menu">
               {canApprove && (
                 <button
@@ -184,7 +184,7 @@ export function ParticipantActionsMenu({
                     setShowApproveConfirm(true);
                     setIsOpen(false);
                   }}
-                  className="block w-full text-left px-4 py-2 text-sm text-content-primary hover:bg-bg-secondary"
+                  className="block w-full text-left px-4 py-2 text-sm text-content-primary hover:surface-raised"
                   role="menuitem"
                 >
                   Approve Application
@@ -197,7 +197,7 @@ export function ParticipantActionsMenu({
                     setShowRejectConfirm(true);
                     setIsOpen(false);
                   }}
-                  className="block w-full text-left px-4 py-2 text-sm text-semantic-danger hover:bg-bg-secondary"
+                  className="block w-full text-left px-4 py-2 text-sm text-semantic-danger hover:surface-raised"
                   role="menuitem"
                 >
                   Reject Application
@@ -210,7 +210,7 @@ export function ParticipantActionsMenu({
                     setShowPromoteConfirm(true);
                     setIsOpen(false);
                   }}
-                  className="block w-full text-left px-4 py-2 text-sm text-content-primary hover:bg-bg-secondary"
+                  className="block w-full text-left px-4 py-2 text-sm text-content-primary hover:surface-raised"
                   role="menuitem"
                 >
                   Promote to Co-GM
@@ -223,7 +223,7 @@ export function ParticipantActionsMenu({
                     setShowDemoteConfirm(true);
                     setIsOpen(false);
                   }}
-                  className="block w-full text-left px-4 py-2 text-sm text-content-primary hover:bg-bg-secondary"
+                  className="block w-full text-left px-4 py-2 text-sm text-content-primary hover:surface-raised"
                   role="menuitem"
                 >
                   Demote from Co-GM
@@ -236,7 +236,7 @@ export function ParticipantActionsMenu({
                     setShowTransitionToAudienceConfirm(true);
                     setIsOpen(false);
                   }}
-                  className="block w-full text-left px-4 py-2 text-sm text-content-primary hover:bg-bg-secondary"
+                  className="block w-full text-left px-4 py-2 text-sm text-content-primary hover:surface-raised"
                   role="menuitem"
                 >
                   <div>Move to Former Players</div>
@@ -250,7 +250,7 @@ export function ParticipantActionsMenu({
                     setShowRemoveConfirm(true);
                     setIsOpen(false);
                   }}
-                  className="block w-full text-left px-4 py-2 text-sm text-semantic-danger hover:bg-bg-secondary"
+                  className="block w-full text-left px-4 py-2 text-sm text-semantic-danger hover:surface-raised"
                   role="menuitem"
                 >
                   Remove Player
@@ -472,7 +472,7 @@ export function ParticipantActionsMenu({
           </p>
 
           {application?.message && (
-            <div className="bg-bg-secondary border border-border-primary rounded-lg p-3">
+            <div className="surface-raised border border-theme-default rounded-lg p-3">
               <p className="text-sm text-content-tertiary mb-1">Application message:</p>
               <p className="text-sm text-content-primary italic">"{application.message}"</p>
             </div>

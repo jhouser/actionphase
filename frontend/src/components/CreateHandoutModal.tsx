@@ -64,7 +64,7 @@ export function CreateHandoutModal({ onClose, onSubmit, isSubmitting }: CreateHa
 
             <div>
               <label className="block text-sm font-medium text-content-primary mb-1">
-                Content <span className="text-danger">*</span>
+                Content <span className="text-semantic-danger">*</span>
               </label>
               <CommentEditor
                 value={formData.content}

@@ -69,7 +69,7 @@ export function ParentCommentPreview({
     : null;
 
   return (
-    <div className="border-l-2 border-border-secondary pl-3 mb-3 opacity-70">
+    <div className="border-l-2 border-theme-strong pl-3 mb-3 opacity-70">
       <div className="flex items-start justify-between mb-2 gap-2">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm min-w-0">
           {characterName && (
@@ -82,9 +82,9 @@ export function ParentCommentPreview({
           )}
           {characterName ? (
             characterId ? (
-              <Link to={`/characters/${characterId}`} className="font-medium text-text-heading hover:underline">{characterName}</Link>
+              <Link to={`/characters/${characterId}`} className="font-medium text-content-primary hover:underline">{characterName}</Link>
             ) : (
-              <span className="font-medium text-text-heading">{characterName}</span>
+              <span className="font-medium text-content-primary">{characterName}</span>
             )
           ) : authorUsername ? (
             <span className="text-content-secondary">@{authorUsername}</span>

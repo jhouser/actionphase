@@ -313,8 +313,10 @@ import { Radio } from '@/components/ui';
 Accessible on/off switch (`role="switch"`). Use this instead of hand-rolled
 toggle markup — the off-state uses defined theme tokens (`bg-surface-sunken` +
 `border-theme-strong`) so it stays visible in light mode. (The legacy
-`bg-bg-secondary` / `bg-border-primary` utilities are unassigned in the current
-theme system and render invisible — that was the original toggle bug.)
+`bg-bg-secondary` / `border-border-primary` utilities are unassigned in the
+current theme system and render invisible — that was the original toggle bug.
+See "Retired tokens" below; the same class of bug was found and fixed across
+~50 more files on 2026-08-26.)
 
 **Import:**
 ```tsx
@@ -357,42 +359,83 @@ import { Toggle } from '@/components/ui';
 
 ---
 
-## CSS Variables Reference
+## Design Token Reference
 
-All components use semantic CSS variables that automatically switch with the theme:
+All components use semantic tokens that switch automatically with the theme.
+**Never write `dark:` variants or raw palette colors** (`bg-white`, `text-gray-600`).
 
-### Backgrounds
-- `bg-bg-page` - Page background
-- `bg-bg-primary` - Primary container background
-- `bg-bg-secondary` - Secondary/subtle background
-- `bg-bg-tertiary` - Tertiary background (more contrast)
-- `bg-bg-hover` - Hover state background
-- `bg-bg-active` - Active state background
-- `bg-bg-input` - Form input background
+> **Verified 2026-08-26** against the built CSS. Every token below emits a real
+> rule. Tokens *not* listed here may look plausible but produce **no CSS at all**
+> — see "Retired tokens" at the end of this section.
 
-### Text
-- `text-text-heading` - Headings and important text
-- `text-text-primary` - Body text
-- `text-text-secondary` - Secondary text
-- `text-text-muted` - Muted/subtle text
-- `text-text-disabled` - Disabled text
+### Surfaces (backgrounds)
+- `surface-page` - Page background
+- `surface-base` - Cards, modals, primary containers
+- `surface-raised` - Hover states, active tabs, subtle contrast
+- `surface-overlay` - Dropdowns, popovers
+- `surface-sunken` - Input backgrounds, wells, skeleton bars
+
+### Content (text)
+- `text-content-primary` - Headings and body text
+- `text-content-secondary` - Supporting text
+- `text-content-tertiary` - De-emphasized text
+- `text-content-disabled` - Disabled text
+- `text-content-inverse` - Text on a filled/colored background
+  (The `text-text-*` family was retired 2026-08-26 — see below.)
 
 ### Borders
-- `border-border-primary` - Standard borders
-- `border-border-secondary` - Secondary borders
-- `border-border-input` - Form input borders
+- `border-theme-default` - Standard borders
+- `border-theme-subtle` - Light dividers
+- `border-theme-strong` - Emphasized borders
 
-### Interactive Colors
-- `bg-primary` / `hover:bg-primary-hover` - Primary actions
-- `bg-danger` / `hover:bg-danger-hover` - Destructive actions
-- `bg-warning` / `hover:bg-warning-hover` - Warning states
-- `bg-success` / `hover:bg-success-hover` - Success states
+### Interactive
+- `bg-interactive-primary` - Primary buttons, active indicators
+- `bg-interactive-primary-subtle` - Selected-row / tinted primary background
+- `bg-interactive-secondary` - Secondary buttons, inactive bars
+- `text-interactive-primary` - Links, active tab labels
+- `text-accent-primary` / `hover:text-accent-primary`
 
-### State Colors (for alerts, badges, etc.)
-- `bg-primary-light` / `text-primary-text` / `border-primary`
-- `bg-danger-light` / `text-danger-text` / `border-danger`
-- `bg-warning-light` / `text-warning-text` / `border-warning`
-- `bg-success-light` / `text-success-text` / `border-success`
+### Semantic states (alerts, badges)
+- `bg-semantic-danger-subtle` / `border-semantic-danger` / `text-semantic-danger`
+- `bg-semantic-warning-subtle` / `border-semantic-warning`
+- `bg-semantic-success-subtle` / `border-semantic-success`
+- `bg-semantic-info-subtle` / `border-semantic-info`
+
+### ⚠️ Retired tokens — these render nothing
+
+These names are registered in `@theme` but were **never assigned values**, so
+Tailwind emits no rule for them. An element using one gets no background/border
+at all. They were removed from app code on 2026-08-26.
+
+| Retired (dead) | Use instead |
+|---|---|
+| `bg-bg-primary` | `surface-base` |
+| `bg-bg-secondary` | `surface-raised` |
+| `bg-bg-tertiary`, `bg-bg-input` | `surface-sunken` |
+| `bg-bg-page`, `bg-bg-hover`, `bg-bg-active` | `surface-page` / `surface-raised` |
+| `border-border-primary`, `border-border-default` | `border-theme-default` |
+| `border-border-secondary`, `border-border-input` | `border-theme-strong` |
+| `bg-primary`, `bg-primary-light`, `text-primary-text` | `bg-interactive-primary` / `-subtle` |
+| `bg-danger-light`, `text-danger-text`, `text-danger` | `bg-semantic-danger-subtle` / `text-semantic-danger` |
+| `bg-warning-light`, `text-warning-text` | `bg-semantic-warning-subtle` |
+| `bg-success-light`, `text-success-text` | `bg-semantic-success-subtle` |
+| `bg-accent-primary`, `border-accent-primary` | `bg-interactive-primary` / `border-interactive-primary` |
+| `placeholder-placeholder`, `ring-focus-ring` | no replacement needed |
+| `text-text-heading` | `text-content-primary` |
+| `text-text-primary`, `text-text-secondary` | `text-content-secondary` |
+| `text-text-muted` | `text-content-tertiary` |
+| `text-text-disabled` | `text-content-disabled` |
+
+The `text-text-*` family deserves special mention: it was not merely unassigned.
+`text-text-primary` resolved to `--color-content-secondary` — *not* `-primary` —
+so the class name actively misrepresented the color it produced, and
+`text-text-muted`/`-disabled` pointed at variables no theme assigns, yielding an
+invalid color that silently inherited from the parent. All five classes were
+deleted from `index.css`.
+
+**Note on opacity modifiers:** these are hand-written utility classes, not
+`@theme` colors, so `bg-interactive-primary/10` does **not** work. Use the
+`-subtle` variant instead.
 
 ### Focus States
 - `focus:ring-focus-ring` - Focus ring color
@@ -502,8 +545,8 @@ export function MyComponent({ variant = 'default', className, ...props }: MyComp
     <div
       className={clsx(
         'base-styles',
-        variant === 'default' && 'bg-bg-primary text-text-heading',
-        variant === 'custom' && 'bg-bg-secondary text-text-primary',
+        variant === 'default' && 'surface-base text-content-primary',
+        variant === 'custom' && 'surface-raised text-content-secondary',
         className
       )}
       {...props}
@@ -516,13 +559,14 @@ export function MyComponent({ variant = 'default', className, ...props }: MyComp
 
 ## Migration Guide
 
-See `src/styles/MIGRATION_PATTERNS.md` for detailed patterns on migrating existing components to use CSS variables.
-
 **Quick Migration:**
-1. Replace `bg-white dark:bg-gray-800` → `bg-bg-primary`
-2. Replace `text-gray-900 dark:text-white` → `text-text-heading`
-3. Replace `border-gray-200 dark:border-gray-700` → `border-border-primary`
+1. Replace `bg-white dark:bg-gray-800` → `surface-base`
+2. Replace `text-gray-900 dark:text-white` → `text-content-primary`
+3. Replace `border-gray-200 dark:border-gray-700` → `border-theme-default`
 4. Use components instead of custom markup where possible
+
+Verify any token you introduce against the reference above — several
+plausible-looking names are retired and emit no CSS.
 
 ---
 

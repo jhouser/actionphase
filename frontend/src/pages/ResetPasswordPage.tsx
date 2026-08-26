@@ -115,7 +115,7 @@ export function ResetPasswordPage() {
   // Loading state while validating token
   if (isValidating) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-bg-primary">
+      <div className="flex items-center justify-center min-h-screen surface-base">
         <Card variant="elevated" padding="md" className="max-w-md w-full">
           <CardBody>
             <div className="flex flex-col items-center justify-center py-8">
@@ -131,7 +131,7 @@ export function ResetPasswordPage() {
   // Invalid token state
   if (!isTokenValid) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-bg-primary">
+      <div className="flex items-center justify-center min-h-screen surface-base">
         <Card variant="elevated" padding="md" className="max-w-md w-full">
           <CardHeader>
             <h2 className="text-2xl font-bold text-content-primary">Invalid Link</h2>
@@ -157,7 +157,7 @@ export function ResetPasswordPage() {
   // Success state
   if (success) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-bg-primary">
+      <div className="flex items-center justify-center min-h-screen surface-base">
         <Card variant="elevated" padding="md" className="max-w-md w-full">
           <CardHeader>
             <h2 className="text-2xl font-bold text-content-primary">Password Reset Successful</h2>
@@ -182,7 +182,7 @@ export function ResetPasswordPage() {
 
   // Reset password form
   return (
-    <div className="flex items-center justify-center min-h-screen bg-bg-primary">
+    <div className="flex items-center justify-center min-h-screen surface-base">
       <Card variant="elevated" padding="md" className="max-w-md w-full">
         <CardHeader>
           <h2 className="text-2xl font-bold text-content-primary">Reset Your Password</h2>
