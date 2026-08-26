@@ -234,7 +234,9 @@ Everything runs in containers from here — see the **Containerized Workflow** a
 | `just up` | Start the containerized stack |
 | `just down` | Stop the stack |
 | `just status` | Health + migrations + git overview |
-| `just verify` | All code-quality checks (tidy + lint + dead-code + frontend lint + type-check + knip) |
+| `just verify` | Pre-push gate: all code-quality checks **plus** backend + frontend production builds. Runs in parallel. |
+| `just verify-quick` | Fast, non-mutating subset with no builds (~10s). What the Stop hook runs. |
+| `just build` | Build backend + frontend |
 | `just tidy` | `go mod tidy` (in container) |
 | `just sh backend` | Shell into the backend container |
 

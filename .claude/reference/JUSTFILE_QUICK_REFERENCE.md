@@ -110,7 +110,8 @@ just e2e-test file <path>      # A single spec — ONLY `file` mode takes a path
 ```bash
 just test-all   # Backend + frontend
 just ci-test    # Full CI suite (lint + test + race)
-just verify     # tidy + lint + dead-code + frontend lint + type-check + knip
+just verify       # pre-push gate: all checks + backend & frontend builds (parallel)
+just verify-quick # fast non-mutating checks, no builds (what the Stop hook runs)
 ```
 
 ## 🛠️ Code Quality
@@ -219,6 +220,12 @@ test-run pattern                                 # Run specific test by name
 tidy                                             # Go module maintenance
 type-check                                       # TypeScript type-check (in frontend container)
 up build=""                                      # Start the full dev stack (db + backend + frontend). Add 'build' to force a rebuild.
-verify                                           # Run all code-quality checks (tidy + lint + dead-code + frontend lint + type-check + knip)
+verify                                           # Pre-push gate: all code-quality checks + backend/frontend production builds (parallel)
+verify-quick                                     # Fast non-mutating checks, no builds (Stop hook)
+build                                            # Build backend + frontend
+build-backend                                    # Compile the Go binary
+build-frontend                                   # Production frontend build (tsc -b && vite build)
+tidy-check                                       # go mod tidy -diff (non-mutating)
+fmt-check                                        # gofmt -l (non-mutating)
 vet                                              # Run Go vet
 ```
