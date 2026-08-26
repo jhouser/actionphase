@@ -58,7 +58,8 @@ func canSeeCharacterPrivateStats(gameLevelAccess bool, authUser *core.Authentica
 //   - GMs and co-GMs always see it
 //   - Audience members always see it
 //   - The character's owner always sees their own count
-//   - Any authenticated user sees it when the game is completed
+//   - Any authenticated user sees it when the game is a public archive
+//     (completed or epilogue — see core.IsPublicArchive)
 //   - Other players in active/in-progress games do NOT see others' private counts
 func (h *Handler) GetCharacterStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

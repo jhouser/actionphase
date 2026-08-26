@@ -86,8 +86,26 @@ done
 constraint_states=$(echo "$constraint_block" | tr ',' '\n' | sed -n "s/.*'\([a-z_]*\)'.*/\1/p" | sort -u)
 
 fail=0
+
+# The baseline every other source is compared against. If extraction breaks —
+# a gofmt change to the leading tab the sed depends on, a reformatted closing
+# brace — this goes empty, and any other source whose extraction also broke
+# compares equal to it, so the script reports success with an empty list.
+if [ -z "$backend_states" ]; then
+    echo -e "${RED}✗ could not extract core.ValidGameStates from $CONSTANTS${NC}"
+    echo "  The extraction in this script is brittle by nature (it parses Go"
+    echo "  source with awk/sed); check that the var block and the GameState*"
+    echo "  const declarations still match the patterns above."
+    exit 1
+fi
+
 compare() {
     local label="$1" actual="$2"
+    if [ -z "$actual" ]; then
+        echo -e "${RED}✗ could not extract any states for $label${NC}"
+        fail=1
+        return
+    fi
     if [ "$actual" != "$backend_states" ]; then
         echo -e "${RED}✗ $label does not match core.ValidGameStates${NC}"
         echo "  core.ValidGameStates: $(echo "$backend_states" | tr '\n' ' ')"
