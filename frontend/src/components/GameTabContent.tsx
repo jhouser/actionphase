@@ -303,9 +303,9 @@ export function GameTabContent({
 
   // History Tab (In Progress & Completed)
   if (activeTab === 'history' && (game.state === 'in_progress' || game.state === 'epilogue' || game.state === 'completed')) {
-    // isGameCompleted is really "the archive is open" — it drives archive read
+    // The prop is "the archive is open" — it drives archive read
     // access in HistoryView, so epilogue qualifies.
-    return <HistoryView gameId={gameId} currentPhaseId={currentPhaseData?.phase?.id} isGM={isGM} isAudience={isAudience} isGameCompleted={isPublicArchive(game.state)} />;
+    return <HistoryView gameId={gameId} currentPhaseId={currentPhaseData?.phase?.id} isGM={isGM} isAudience={isAudience} isPublicArchive={isPublicArchive(game.state)} />;
   }
 
   // Private Messages Tab (In Progress & Completed)

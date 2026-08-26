@@ -98,6 +98,14 @@ export const FIXTURE_GAMES = {
   // Player-to-audience (permadeath) transition tests (370, worker-specific)
   PLAYER_TO_AUDIENCE: 'E2E Test: Player to Audience',
 
+  // Epilogue disclosure flow (348/349) — owned by epilogue-flow.spec.ts.
+  // TRANSITION starts in_progress and the spec drives it to epilogue and then
+  // completed (STATE-MODIFYING). STEADY is seeded in epilogue and never
+  // mutated, so the read-side tests do not depend on test ordering or survive
+  // retries against an already-advanced game.
+  E2E_EPILOGUE_TRANSITION: 'E2E Test: Epilogue Transition',
+  E2E_EPILOGUE_STEADY: 'E2E Test: Epilogue Steady',
+
   // Legacy alias (deprecated - use COMMON_ROOM_POSTS instead)
   COMMON_ROOM_TEST: 'E2E Common Room - Posts',    // Alias for Game #164
 } as const;

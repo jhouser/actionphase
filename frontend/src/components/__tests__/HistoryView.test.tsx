@@ -634,7 +634,7 @@ describe('HistoryView', () => {
           currentPhaseId={mockCurrentPhaseId}
           isGM={false}
           isAudience={false}
-          isGameCompleted={true}
+          isPublicArchive={true}
         />,
         { initialRoute: `/?phase=2&subTab=${subTab}` }
       );
@@ -753,7 +753,7 @@ describe('HistoryView', () => {
           currentPhaseId={mockCurrentPhaseId}
           isGM={false}
           isAudience={false}
-          isGameCompleted={false}
+          isPublicArchive={false}
         />,
         { initialRoute: `/?phase=2&subTab=submissions` }
       );

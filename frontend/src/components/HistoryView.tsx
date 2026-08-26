@@ -37,10 +37,16 @@ interface HistoryViewProps {
   currentPhaseId?: number;
   isGM?: boolean;
   isAudience?: boolean;
-  isGameCompleted?: boolean;
+  /**
+   * Whether the game is a public archive (completed OR epilogue) — i.e. its
+   * whole history is readable by any authenticated viewer. Deliberately not
+   * named for `completed`: epilogue opens the archive too, and the old name
+   * invited callers to pass a bare state equality that silently excluded it.
+   */
+  isPublicArchive?: boolean;
 }
 
-export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience = false, isGameCompleted = false }: HistoryViewProps) {
+export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience = false, isPublicArchive = false }: HistoryViewProps) {
   const gameContext = useOptionalGameContext();
   const portraitAvatars = gameContext?.game?.portrait_avatars ?? false;
   const allGameCharacters = gameContext?.allGameCharacters;
@@ -111,7 +117,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
   // through. Epilogue counts too: opening the archive is the entire point of
   // that state. Cancelled games are NOT public and keep the play-time rule,
   // which is why this keys on the archive rather than "not active".
-  const hasArchiveAccess = isAudience || isGameCompleted;
+  const hasArchiveAccess = isAudience || isPublicArchive;
 
   const { data: userActionResults, isLoading: isLoadingUserResults, error: userResultsError } = useQuery({
     queryKey: ['actionResults', 'user', gameId],
