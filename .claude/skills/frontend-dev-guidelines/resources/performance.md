@@ -403,4 +403,3 @@ const handleExportExcel = async () => {
 **See Also:**
 - [component-patterns.md](component-patterns.md) - Lazy loading
 - [data-fetching.md](data-fetching.md) - TanStack Query optimization
-- [complete-examples.md](complete-examples.md) - Performance patterns in context

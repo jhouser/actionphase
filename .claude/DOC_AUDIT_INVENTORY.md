@@ -4,7 +4,7 @@
 **Goal:** For each doc, assess accuracy against the actual state of the codebase and bring it back up to date.
 **Scope:** Internal/dev-facing docs only. 152 tracked `.md` files (excludes `frontend/dist/`, `node_modules/`).
 
-**Progress:** Batches 1 and 2 complete (26 docs). Next up: **Batch 3** — skills.
+**Progress:** Batches 1–3 complete (47 docs). Next up: **Batch 4** — commands & agents.
 One doc remains PENDING in Batch 2: `.claude/planning-doc.md`.
 
 ## How to use this file
@@ -222,40 +222,130 @@ creates a new session row without deleting the old; orphans are swept within
 
 | Status | Doc | Lines | Last Commit | Notes |
 |---|---|---|---|---|
-| PENDING | `.claude/skills/backend-dev-guidelines/SKILL.md` | 541 | 2026-08-19 | |
-| PENDING | `.claude/skills/game-domain/SKILL.md` | 527 | 2026-08-25 | |
-| PENDING | `.claude/skills/game-domain/resources/game-states.md` | 151 | 2026-08-25 | |
-| PENDING | `.claude/skills/game-domain/resources/messaging-system.md` | 92 | 2026-08-25 | |
-| PENDING | `.claude/skills/game-domain/resources/phase-system.md` | 91 | 2026-08-06 | Verify vs. `is_published` semantics. |
-| PENDING | `.claude/skills/testing-patterns/SKILL.md` | 202 | 2026-04-02 | |
-| PENDING | `.claude/skills/testing-patterns/resources/e2e-testing.md` | 583 | 2025-10-31 | |
-| PENDING | `.claude/skills/testing-patterns/resources/test-fixtures.md` | 550 | 2025-10-30 | |
-| PENDING | `.claude/skills/testing-patterns/resources/e2e-patterns-reference.md` | 474 | 2025-10-31 | |
-| PENDING | `.claude/skills/route-tester/SKILL.md` | 662 | 2025-10-30 | |
-| PENDING | `.claude/skills/frontend-dev-guidelines/SKILL.md` | 405 | 2025-10-30 | Whole tree is Oct 2025 — high risk. |
-| PENDING | `.claude/skills/frontend-dev-guidelines/resources/data-fetching.md` | 752 | 2025-10-30 | |
-| PENDING | `.claude/skills/frontend-dev-guidelines/resources/complete-examples.md` | 726 | 2025-10-30 | |
-| PENDING | `.claude/skills/frontend-dev-guidelines/resources/loading-and-error-states.md` | 604 | 2025-10-30 | |
-| PENDING | `.claude/skills/frontend-dev-guidelines/resources/routing-guide.md` | 554 | 2025-10-30 | |
-| PENDING | `.claude/skills/frontend-dev-guidelines/resources/component-patterns.md` | 495 | 2025-10-30 | |
-| PENDING | `.claude/skills/frontend-dev-guidelines/resources/file-organization.md` | 479 | 2025-10-30 | |
-| PENDING | `.claude/skills/frontend-dev-guidelines/resources/common-patterns.md` | 463 | 2025-10-30 | |
-| PENDING | `.claude/skills/frontend-dev-guidelines/resources/styling-guide.md` | 436 | 2025-10-30 | Overlaps `context/FRONTEND_STYLING.md`. |
-| PENDING | `.claude/skills/frontend-dev-guidelines/resources/typescript-standards.md` | 418 | 2025-10-30 | |
-| PENDING | `.claude/skills/frontend-dev-guidelines/resources/performance.md` | 406 | 2025-10-30 | |
+| UPDATED | `.claude/skills/backend-dev-guidelines/SKILL.md` | 541 | 2026-08-19 | Structurally sound (already carried the Batch-2 "Validate in Bind" fix). Fixed `just dev` + `just make_migration` (neither exists) → container lifecycle + `just migration create`; added the in-network `db:5432` DSN alongside the host one; `core/models.go` → split `core/*.go` (×2); ADR path `/docs/adrs/` → `/docs-site/developer/architecture/adrs/`; removed 2 links into gitignored `.claude/planning/`. |
+| REWRITTEN | `.claude/skills/frontend-dev-guidelines/SKILL.md` | 405→~300 | 2025-10-30 | **Described a different project.** See findings #1. |
+| DELETED | `.../resources/file-organization.md` | 479 | 2025-10-30 | Entirely `features/`-based; that directory does not exist. |
+| DELETED | `.../resources/routing-guide.md` | 554 | 2025-10-30 | Teaches React Router **v6** `<Routes>` JSX; app uses **v7** `createBrowserRouter`. |
+| DELETED | `.../resources/common-patterns.md` | 463 | 2025-10-30 | Built on react-hook-form, Zod, Zustand, DataGrid — **none installed**. Its `useAuth` example also invented a `user.roles` field. |
+| DELETED | `.../resources/complete-examples.md` | 726 | 2025-10-30 | `features/` + Suspense + MUI throughout. |
+| OK | `.../resources/styling-guide.md` | 436 | 2025-10-30 | Accurate. Defers to `context/FRONTEND_STYLING.md` as the fuller reference. |
+| OK | `.../resources/typescript-standards.md` | 418 | 2025-10-30 | Accurate. |
+| KEPT (flagged) | `.../resources/performance.md` | 406 | 2025-10-30 | Patterns sound; examples use `React.FC` / occasional Suspense. Flagged in SKILL.md accuracy table. |
+| KEPT (flagged) | `.../resources/component-patterns.md` | 495 | 2025-10-30 | `SuspenseLoader` (nonexistent) + default-export rule. Flagged. |
+| KEPT (flagged) | `.../resources/data-fetching.md` | 752 | 2025-10-30 | `useSuspenseQuery`-first. Flagged. |
+| KEPT (flagged) | `.../resources/loading-and-error-states.md` | 604 | 2025-10-30 | "No early returns" rule contradicts real code. Flagged. |
+| OK | `.claude/skills/game-domain/SKILL.md` | 527 | 2026-08-25 | **Verified accurate.** All 8 `GameState` constants match `core/constants.go` incl. the recent `epilogue`; `is_published` semantics correct. |
+| OK | `.claude/skills/game-domain/resources/game-states.md` | 151 | 2026-08-25 | Matches the DB CHECK constraint in migration `20260825193725`. |
+| OK | `.claude/skills/game-domain/resources/messaging-system.md` | 92 | 2026-08-25 | No defects found. |
+| OK | `.claude/skills/game-domain/resources/phase-system.md` | 91 | 2026-08-06 | `is_published` correctly documented as "GM published results", NOT visibility. |
+| UPDATED | `.claude/skills/testing-patterns/SKILL.md` | 202 | 2026-04-02 | Removed obsolete `go test -p=1` host invocation (packages clone their own DB and run parallel — `-p=1` is counterproductive) → `just test-run`; `just test-frontend` → `just test-fe run`; repointed the dead `frontend-testing.md` nav row. |
+| UPDATED | `.../resources/test-fixtures.md` | 550 | 2025-10-30 | `just db-restart` (nonexistent) → `just restart db`; added `just reset-test-db` for a dirty test template. |
+| PENDING | `.../resources/e2e-testing.md` | 583 | 2025-10-31 | Mechanical sweeps clean; deep content review deferred to Batch 6 (testing docs). |
+| PENDING | `.../resources/e2e-patterns-reference.md` | 474 | 2025-10-31 | As above. |
+| UPDATED | `.claude/skills/route-tester/SKILL.md` | 662 | 2025-10-30 | **Third copy of the 15-min/refresh-token fiction** — rewrote the auth overview (one 7-day session-backed token; `sub`/`session_id`/`exp`) and the 401 troubleshooting cause. Deleted a fabricated "justfile integrates api-test.sh" block (`just api-login`, `api-games`, `api-game` — none exist) and replaced it with the real 14 script subcommands. `just psql` → `just sh backend` + psql; `just dev` → `just up`; `core/models.go` → `core/*.go`. |
+| UPDATED | `.claude/skills/skill-rules.json` | 398 | — | **Two activation bugs.** `backend/cmd/**/*.go` → `backend/main.go` (no `cmd/` dir). `game-domain`'s three frontend globs (`components/{games,phases,characters}/**`) matched **zero** files — components are flat, not subdirectoried; replaced with name globs + `character-updates/` + `pages/Game*`, now matching **61** files. |
+| DELETED | `testing-patterns/resources/` ×8 stubs | 7 each | — | `anti-patterns`, `backend-testing`, `bug-fix-workflow`, `coverage-targets`, `frontend-testing`, `real-examples`, `test-commands`, `testing-pyramid`. Content-free filler ("*(Detailed documentation to be added)*"); 7 of 8 had zero inbound links. |
+| KEPT | `game-domain/resources/` ×7 stubs | 19 each | — | **Deliberately kept.** Unlike the above, these warn loudly ("⚠️ STUB — not yet written… do not infer rules from it") and redirect to specific source files. That is useful behavior, not noise. |
 
-### `skill-developer` skill (generic tooling, not codebase-specific — lowest priority)
+### `skill-developer` skill — audited for `skill-rules.json` drift only
 
 `SKILL.md` (426), `TROUBLESHOOTING.md` (514), `SKILL_RULES_REFERENCE.md` (315),
 `TRIGGER_TYPES.md` (305), `HOOK_MECHANISMS.md` (306), `ADVANCED.md` (197),
-`PATTERNS_LIBRARY.md` (152) — all 2025-10-30. Audit only for `skill-rules.json` drift.
+`PATTERNS_LIBRARY.md` (152) — all 2025-10-30. **No changes made.** Generic
+tooling docs; their `frontend/src/features/…`-style paths are hypothetical
+worked examples, not claims about this repo. They do reference three hook files
+that do not exist (`error-handling-reminder.ts`, `skill-verification-guard.ts`,
+`.claude/hooks/state/`) and `.claude/settings.json` (actual file is
+`settings.local.json`) — noted for Batch 4, which covers hooks.
 
-### Stub files — decide: write or delete
+### Batch 3 findings (completed 2026-08-26)
 
-Empty placeholders that add noise. The `game-domain` ones at least warn they're stubs; the `testing-patterns` ones do not.
+**21 docs + `skill-rules.json` reviewed: 1 rewritten, 5 updated, 8 verified OK,
+12 deleted (4 resources + 8 stubs).**
 
-- `testing-patterns/resources/`: `anti-patterns`, `backend-testing`, `bug-fix-workflow`, `coverage-targets`, `frontend-testing`, `real-examples`, `test-commands`, `testing-pyramid` (7 lines each)
-- `game-domain/resources/`: `api-reference`, `business-rules`, `character-workflows`, `data-models`, `database-queries`, `testing-guide`, `workflows` (19 lines each)
+1. **`frontend-dev-guidelines` was written for a different codebase.** This is the
+   most severe finding of the audit so far — worse than stale, it was *foreign*.
+   Its copy-paste component template imported **MUI** (`@mui/material`, `Box`,
+   `Paper`), which is **not a dependency**. It also prescribed, none of which exist
+   here: a `features/` directory tree, a `routes/` directory, a `SuspenseLoader`
+   component, and a `~types/` alias. Its cross-referenced patterns relied on
+   react-hook-form, Zod, Zustand, and DataGrid — **zero of the four are installed**.
+
+   Where it did name real tools, it inverted the conventions:
+
+   | Skill prescribed | Codebase reality |
+   |---|---|
+   | `useSuspenseQuery` as PRIMARY | `useQuery` in **54** files; `useSuspenseQuery` in **1** |
+   | default exports | **180** named exports vs **6** default |
+   | `React.FC<Props>` required | 29 files use it; both styles are live |
+   | `<Routes>`/`<Route>` JSX (v6) | React Router **7** `createBrowserRouter` |
+   | `import { api }` | `import { apiClient }` |
+   | "NEVER early-return on loading" | `useQuery` code branches on `isLoading` throughout |
+
+   A developer following this skill would have written code that does not compile.
+   SKILL.md rewritten from verified source; every symbol in the new template
+   (`Card`, `CardBody`, `Button`, `Spinner`, `Alert`, their variant values, and
+   `apiClient.games.getGame`) checked to exist. The four unsalvageable resources
+   were **deleted** rather than bannered, per the Batch-2 precedent: a banner does
+   not protect a reader landing on a grep hit mid-file. The four survivors carry a
+   per-file accuracy table in SKILL.md.
+
+2. **The auth fiction had a third copy.** `route-tester/SKILL.md` independently
+   asserted "Token lifetime: 15 minutes (access token) / Refresh tokens: 7 days"
+   — the same claim corrected in `ARCHITECTURE.md` (Batch 1) and
+   `BACKEND_ARCHITECTURE.md` (Batch 2). It appeared **twice**, once in the
+   overview and once mid-document in a 401 troubleshooting list — the exact
+   grep-hit failure mode that motivated deleting rather than bannering.
+   Now purged tree-wide (verified by grep). Removing the dead config in the
+   Batch-2 follow-up removed this error's source of truth.
+
+3. **`skill-rules.json` had two silent activation bugs.** These fail *closed* —
+   no error, the skill simply never loads. `game-domain` declared three frontend
+   globs (`components/{games,phases,characters}/**/*.tsx`) that matched **zero
+   files**, because game/phase/character components are flat files
+   (`CharacterSheet.tsx`, `PhaseCard.tsx`), not subdirectories. Replaced with
+   patterns matching **61** real files. `backend-dev-guidelines` pointed at
+   `backend/cmd/**/*.go`; the entrypoint is `backend/main.go`.
+   **New check for future batches: validate trigger globs actually match files.**
+
+4. **Fabricated tooling.** `route-tester` documented a block of `just api-login` /
+   `api-login-gm` / `api-games` / `api-game` recipes under the heading "justfile
+   integrates api-test.sh". No such recipes exist and never did. Replaced with the
+   real 14 `api-test.sh` subcommands, most of which the doc had never mentioned.
+
+5. **Two token families coexist, and the docs teach the losing one.** Both
+   `text-text-*`/`bg-bg-*` and `text-content-*`/`surface-*` are declared in
+   `@theme` and render correctly, so nothing is broken — but the UI component
+   library itself uses `content-`/`surface-`, which leads ~20:1 in app code
+   (`text-content-primary` 483 vs `text-text-primary` 25). **`CLAUDE.md` and
+   `context/FRONTEND_STYLING.md` both teach the legacy names.** The new frontend
+   skill documents the split and the preference. *Worth deciding whether to
+   migrate the stragglers or update those two docs.*
+
+6. **The `-p=1` regression reappeared**, as in Batch 1 — `testing-patterns` still
+   carried a raw host `go test -p=1` invocation. Per-package DB cloning exists
+   precisely to allow parallelism.
+
+7. **`game-domain` is the healthiest skill in the tree** and needed no changes —
+   all 8 `GameState` constants match, including `epilogue` (added 2026-08-25),
+   and its `is_published` documentation correctly warns it means "GM published
+   results", not phase visibility.
+
+**Mechanical sweeps now clean tree-wide:** every `just <recipe>` validates
+against `just --list`; every relative `.md` link resolves; every repo path
+resolves (remaining hits are `skill-developer`'s hypothetical examples).
+
+**Carried forward:**
+- `skill-rules.json` declares an `implement-feature` skill with **no directory** —
+  it is a `.claude/commands/` entry, not a skill. Resolve in **Batch 4**.
+- Three hook files referenced by `skill-developer` do not exist, and it names
+  `.claude/settings.json` when the real file is `settings.local.json` — **Batch 4**.
+- `e2e-testing.md` + `e2e-patterns-reference.md` deep review → **Batch 6**.
+- Decide on the `content-`/`surface-` vs `text-`/`bg-` token split (finding #5).
+- The 4 flagged-but-kept frontend resources should eventually be rewritten or
+  deleted; they are currently accurate only about generic React, not this app.
+
+---
 
 ## Batch 4 — Commands & agents
 

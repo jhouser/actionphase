@@ -494,9 +494,12 @@ PGPASSWORD=example psql -h localhost -U postgres -d actionphase \
 
 ```bash
 # Clear all test data and reload
-just db-restart  # Restarts database
-just migrate     # Apply migrations
-just load-e2e    # Reload fixtures
+just restart db      # Restart the database container
+just migrate         # Apply migrations
+just load-e2e        # Reload fixtures
+
+# If the *test* template DB is dirty (duplicate keys, failed migration):
+just reset-test-db
 ```
 
 ---
