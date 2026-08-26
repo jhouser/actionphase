@@ -14,11 +14,15 @@
 # a running app: the UI offers a transition the API rejects, or the API accepts
 # a state the UI cannot render, or Postgres rejects the write outright.
 #
-# This runs on the host (via `just lint`) rather than as a unit test because
-# neither the backend nor the frontend container can see the other's tree —
-# each is built from its own directory as its build context.
+# This runs as a script rather than a unit test because it spans two trees in
+# different languages. `just check-game-states` executes it inside the backend
+# container, where the repo root is bind-mounted read-only at /repo (the
+# service's own /app mount only covers backend/). Keeping it in the container
+# means contributors without a POSIX shell on the host — e.g. Windows — run the
+# same check as everyone else.
 #
-# Usage: ./scripts/check-game-states.sh
+# Usage: just check-game-states
+#    or: ./scripts/check-game-states.sh   (directly, on a host with bash)
 
 set -euo pipefail
 
