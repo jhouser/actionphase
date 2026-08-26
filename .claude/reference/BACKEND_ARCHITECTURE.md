@@ -414,18 +414,18 @@ finalToken := jwt.NewWithClaims(jwt.SigningMethodHS256,
     jwt.MapClaims{
         "sub":        strconv.Itoa(user.ID), // user ID, NOT username
         "session_id": session.ID,
-        "exp":        time.Now().Add(time.Hour * 24 * 7).Unix(),
+        "exp":        time.Now().Add(core.SessionLifetime).Unix(),
     })
 ```
 
 Because the session lives in the database, **revocation is by deleting the
 session** — that, not a short expiry, is the containment mechanism.
 
-> ⚠️ `JWTConfig.AccessTokenExpiry` (15m) and `JWTConfig.RefreshTokenExpiry` (7d)
-> exist in `core/config.go` with those defaults, but **nothing reads them** —
-> `jwt.go` hardcodes the 7-day lifetime. Treat them as dead config; do not
-> document or tune them as if they were live. This dead config is most likely
-> what earlier revisions of this doc were describing.
+> **History**: `JWTConfig` used to carry `AccessTokenExpiry` (15m) and
+> `RefreshTokenExpiry` (7d) that nothing ever read — dead config that this doc
+> and `ARCHITECTURE.md` both mistook for the live design. Removed August 2026.
+> Lifetime is now the single `core.SessionLifetime` constant, used by both the
+> token `exp` claim and the session row's `expires` column.
 
 ### Middleware-Based Authorization
 
@@ -570,8 +570,9 @@ Other groups you will encounter in `.env.example`:
 Note the `VITE_`-prefixed entries are consumed by the **frontend** build, not the
 Go backend, though both read the same `.env`.
 
-> ⚠️ `JWT_ACCESS_TOKEN_EXPIRY` / `JWT_REFRESH_TOKEN_EXPIRY` appear here and parse
-> into `JWTConfig`, but nothing reads them — see the JWT section above.
+> Token lifetime is **not** an environment variable — it is fixed by
+> `core.SessionLifetime`. `JWT_ACCESS_TOKEN_EXPIRY` / `JWT_REFRESH_TOKEN_EXPIRY`
+> were removed in August 2026; they never had any effect.
 
 ### Configuration Validation
 

@@ -26,7 +26,6 @@ Welcome to the ActionPhase documentation! This directory contains comprehensive 
 
 ### Development Guides
 - **[Logging Standards](../.claude/reference/LOGGING_STANDARDS.md)** - Comprehensive logging guidelines
-- **[AI-Friendly Improvements](../.claude/reference/AI_FRIENDLY_IMPROVEMENTS.md)** - Code quality roadmap
 
 ## 🚀 Quick Navigation
 

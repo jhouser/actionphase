@@ -705,10 +705,8 @@ func NewTestConfig() *Config {
 			MaxIdleTime:    30 * time.Minute,
 		},
 		JWT: JWTConfig{
-			Secret:             "test_jwt_secret_for_unit_tests_only",
-			AccessTokenExpiry:  15 * time.Minute,
-			RefreshTokenExpiry: 7 * 24 * time.Hour,
-			Algorithm:          "HS256",
+			Secret:    "test_jwt_secret_for_unit_tests_only",
+			Algorithm: "HS256",
 		},
 		Server: ServerConfig{
 			Port:         3000,

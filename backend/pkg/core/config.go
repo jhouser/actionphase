@@ -112,17 +112,28 @@ type DatabaseConfig struct {
 	HealthCheckPeriod time.Duration `env:"DATABASE_HEALTH_CHECK_PERIOD"`
 }
 
+// SessionLifetime is how long an issued JWT — and the session row backing it —
+// remains valid.
+//
+// There is no separate refresh token. A single bearer token is issued at login
+// and carries "sub" (user ID), "session_id", and "exp". Because every
+// authenticated request revalidates the session against the database
+// (see ValidateSessionMiddleware), a token is revoked the moment its session row
+// is deleted. Revocation, not a short expiry, is the containment mechanism —
+// which is why this lifetime can be generous.
+//
+// Both the token "exp" claim and the sessions.expires column MUST derive from
+// this constant. A token outliving its own session row would authenticate
+// against a row the cleanup worker has already swept.
+const SessionLifetime = 7 * 24 * time.Hour
+
 // JWTConfig contains JWT token configuration for authentication.
-// Supports both access tokens (short-lived) and refresh tokens (long-lived).
+//
+// Token lifetime is NOT configurable here — it is fixed by SessionLifetime
+// above, since the session row and the token must expire together.
 type JWTConfig struct {
 	// Secret is the signing key for JWT tokens (required)
 	Secret string `env:"JWT_SECRET"`
-
-	// AccessTokenExpiry controls access token lifetime (default: 15m)
-	AccessTokenExpiry time.Duration `env:"JWT_ACCESS_TOKEN_EXPIRY"`
-
-	// RefreshTokenExpiry controls refresh token lifetime (default: 7d)
-	RefreshTokenExpiry time.Duration `env:"JWT_REFRESH_TOKEN_EXPIRY"`
 
 	// Algorithm specifies the signing algorithm (default: HS256)
 	Algorithm string `env:"JWT_ALGORITHM"`
@@ -233,10 +244,8 @@ func LoadConfig() (*Config, error) {
 			HealthCheckPeriod: getEnvDuration("DATABASE_HEALTH_CHECK_PERIOD", 1*time.Minute),
 		},
 		JWT: JWTConfig{
-			Secret:             getEnvString("JWT_SECRET", ""),
-			AccessTokenExpiry:  getEnvDuration("JWT_ACCESS_TOKEN_EXPIRY", 15*time.Minute),
-			RefreshTokenExpiry: getEnvDuration("JWT_REFRESH_TOKEN_EXPIRY", 7*24*time.Hour),
-			Algorithm:          getEnvString("JWT_ALGORITHM", "HS256"),
+			Secret:    getEnvString("JWT_SECRET", ""),
+			Algorithm: getEnvString("JWT_ALGORITHM", "HS256"),
 		},
 		Server: ServerConfig{
 			Port:         getEnvInt("PORT", 3000),

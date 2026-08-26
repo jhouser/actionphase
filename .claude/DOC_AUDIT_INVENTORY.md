@@ -100,7 +100,7 @@ Nearly a year untouched while the backend was decomposed and the dev stack conta
 | OK | `.claude/reference/FRONTEND_ERROR_HANDLING.md` | 434 | 2025-10-16 | No command drift, no broken paths. Content-level review deferred to the frontend batch (Batch 3) where it overlaps the skill resources. |
 | UPDATED | `.claude/reference/API_TESTING_WITH_CURL.md` | 340 | 2025-10-27 | All endpoints and both `api-test.sh` subcommands verified against `root.go` / the script. Added a "Last Verified" header and documented the other 12 script subcommands (`health`, `status`, `games`, `posts`, `create-post`, `test-mentions`, ...) the doc never mentioned. Overlap with `route-tester` skill still to reconcile in Batch 3. |
 | OK | `.claude/reference/ERROR_HANDLING.md` | 263 | 2025-10-16 | Every `core.*` error helper referenced exists in `backend/pkg/core/`. |
-| BANNERED | `.claude/reference/TESTING_PARALLEL_EXECUTION.md` | 230 | 2025-10-16 | Confirmed a **historical changelog**, not current guidance — the named tests still exist, but isolation is now per-package DB cloning. Added a banner pointing to `.claude/context/TESTING.md`. Does not contradict current practice, so not deleted. |
+| DELETED | `.claude/reference/TESTING_PARALLEL_EXECUTION.md` | 230 | 2025-10-16 | Confirmed a **historical changelog**, not current guidance — the named tests still exist, but isolation is now per-package DB cloning. Added a banner pointing to `.claude/context/TESTING.md`. Does not contradict current practice, so not deleted. |
 | UPDATED | `.claude/reference/TESTING_GUIDE.md` | 200 | 2025-10-27 | Setup premise was pre-container: `brew install postgresql`, host `createdb`, `just db_up`, and a nonexistent `just test-db-setup` as the central one-time step (×5). Replaced with the real model — test recipes prepare the migrated template themselves and each package clones its own DB. Go test-code sections verified accurate and left as-is. |
 | UPDATED | `.claude/reference/JUSTFILE_QUICK_REFERENCE.md` | 193 | 2025-10-27 | **Regenerated wholesale.** Described the pre-container workflow: 5 nonexistent recipes (`just dev`, `just build`, `install-frontend`, `preview-frontend`, `test-frontend`) and a trailing "from `just --list`" snapshot listing 31 recipes when 57 exist. Rewrote around the container lifecycle, added `db`/`migration`/`test-fe`/`e2e-test` subcommand forms and the `e2e-test file` path gotcha. Every recipe named now validates against `just --list`. |
 | OK | `.claude/reference/GAME_APPLICATIONS_IMPLEMENTATION.md` | 157 | 2025-10-16 | No command drift or broken paths. Application endpoints verified live in `root.go` (`/apply`, `/application`, `/applications`, `PUT .../review`). |
@@ -112,10 +112,10 @@ Nearly a year untouched while the backend was decomposed and the dev stack conta
 
 | Status | Doc | Lines | Last Commit | Notes |
 |---|---|---|---|---|
-| BANNERED — **recommend DELETE** | `.claude/reference/VERIFICATION_REPORT.md` | 89 | 2025-11-07 | An unfinished Oct 2025 audit of these same reference docs, still marked "In Progress". **Zero inbound references**, and it is the *only* referrer to 3 other artifact docs. It marked ✅ several docs this audit found materially wrong, so leaving it discoverable is actively misleading. |
-| BANNERED | `.claude/reference/TESTING_IMPROVEMENTS_SUMMARY.md` | 309 | 2025-10-16 | Aug 2025 changelog. Only referrer is `VERIFICATION_REPORT.md`. Delete alongside it. |
-| BANNERED | `.claude/reference/AI_FRIENDLY_IMPROVEMENTS.md` | 168 | 2025-10-16 | Oct 2025 progress tracker (✅/🚧/⏳ never re-verified). Referred to by `VERIFICATION_REPORT.md` and `docs/README.md`. |
-| BANNERED | `.claude/reference/E2E_TESTING_LEARNINGS_CODIFIED.md` | 161 | 2025-10-18 | Both its "see also" links point at gitignored `.claude/planning/` files that no longer exist. Merge anything still valuable into `frontend/e2e/README.md` / `testing-patterns`, then delete. |
+| DELETED | `.claude/reference/VERIFICATION_REPORT.md` | 89 | 2025-11-07 | An unfinished Oct 2025 audit of these same reference docs, still marked "In Progress". **Zero inbound references**, and it is the *only* referrer to 3 other artifact docs. It marked ✅ several docs this audit found materially wrong, so leaving it discoverable is actively misleading. |
+| DELETED | `.claude/reference/TESTING_IMPROVEMENTS_SUMMARY.md` | 309 | 2025-10-16 | Aug 2025 changelog. Only referrer is `VERIFICATION_REPORT.md`. Delete alongside it. |
+| DELETED | `.claude/reference/AI_FRIENDLY_IMPROVEMENTS.md` | 168 | 2025-10-16 | Oct 2025 progress tracker (✅/🚧/⏳ never re-verified). Referred to by `VERIFICATION_REPORT.md` and `docs/README.md`. |
+| DELETED | `.claude/reference/E2E_TESTING_LEARNINGS_CODIFIED.md` | 161 | 2025-10-18 | Both its "see also" links point at gitignored `.claude/planning/` files that no longer exist. Merge anything still valuable into `frontend/e2e/README.md` / `testing-patterns`, then delete. |
 | PENDING | `.claude/planning-doc.md` | 81 | 2026-05-07 | Not yet reviewed — carried into the next session. |
 
 ### Batch 2 findings (completed 2026-08-26)
@@ -174,6 +174,45 @@ helpers exist), `LOGGING_STANDARDS.md`, `GAME_APPLICATIONS_*`, `PROJECT_SPEC.md`
 - Dead `JWTConfig` expiry fields — delete or wire up.
 - `.claude/planning/` links persist in 2 docs though the dir is gitignored.
 - `API_TESTING_WITH_CURL.md` vs the `route-tester` skill overlap — reconcile in Batch 3.
+
+---
+
+### Follow-up actions taken (2026-08-26, after Batch 2)
+
+**All 5 historical artifacts deleted**, not just bannered. Rationale: a banner
+only protects a reader who starts at the top of the file — someone landing on a
+grep match mid-document never sees it. Each was independently confirmed
+inaccurate first:
+
+- `E2E_TESTING_LEARNINGS_CODIFIED.md` — every line-number citation stale
+  (claims CLAUDE.md "lines 24-32"; the E2E section is now ~line 250).
+- `TESTING_PARALLEL_EXECUTION.md` — bare host `go test -parallel N` commands that
+  don't work in the containerized stack, and "each test creates its own database
+  connection" when the isolation unit is now the *package*.
+- `AI_FRIENDLY_IMPROVEMENTS.md` — ✅/🚧/⏳ status list frozen at Oct 2025.
+- `VERIFICATION_REPORT.md` / `TESTING_IMPROVEMENTS_SUMMARY.md` — as described above.
+
+Dangling link removed from `docs/README.md`. Zero references remain to any of the five.
+
+**Dead JWT expiry config removed (code change).** `JWTConfig.AccessTokenExpiry`
+and `RefreshTokenExpiry` deleted from `core/config.go`, its defaults, and
+`test_utils.go`; `JWT_ACCESS_TOKEN_EXPIRY` / `JWT_REFRESH_TOKEN_EXPIRY` dropped
+from `.env.example`. `JWT_SECRET` and `JWT_ALGORITHM` retained (both live).
+
+Introduced **`core.SessionLifetime`** (7 days) and pointed the three previously
+duplicated literals at it — `jwt.go` ×2 (temp + final token `exp`) and
+`sessions.go` ×1 (session row `expires`). These were separate hardcoded values
+that had to agree; a token outliving its own session row would authenticate
+against a row the cleanup worker had already swept.
+
+Verified: `go build` clean, `go vet` clean, `just test-mocks` and the full
+`just test` suite pass. Docs updated to describe the constant rather than the
+removed config.
+
+**Deliberately not changed:** the 7-day lifetime itself (kept long — hobby site,
+infrequent re-login is the goal) and the refresh session leak (`V1Refresh`
+creates a new session row without deleting the old; orphans are swept within
+7 days by the existing cleanup worker).
 
 ---
 

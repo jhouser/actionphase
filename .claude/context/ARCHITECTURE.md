@@ -187,7 +187,7 @@ Issued by `JWTHandler.CreateToken` (`backend/pkg/auth/jwt.go`). Claims are:
 |---|---|
 | `sub` | User ID, stringified via `strconv.Itoa` |
 | `session_id` | FK to the `sessions` row |
-| `exp` | Issued time + 7 days |
+| `exp` | Issued time + `core.SessionLifetime` (7 days) |
 
 Token creation is two-phase: a temporary token (`sub` + `exp`) is signed to
 create the session row, then the final token is re-signed with `session_id`
@@ -198,9 +198,11 @@ session — that, not a short expiry, is the containment mechanism.
 
 **See**: `/docs-site/developer/architecture/adrs/003-authentication-strategy.md`
 
-> **Note**: earlier revisions of this doc described 15-minute access tokens plus
-> separate 7-day refresh tokens, and a `sub` holding the *username*. Neither
-> matches the code: `sub` is the user ID, and there is one token type.
+> **History**: earlier revisions described 15-minute access tokens plus separate
+> 7-day refresh tokens and a `sub` holding the *username* — none of which matched
+> the code. That fiction traced to unused `JWTConfig.AccessTokenExpiry` /
+> `RefreshTokenExpiry` fields, removed in August 2026. Lifetime now lives in one
+> place: `core.SessionLifetime`, shared by the token `exp` and the session row.
 
 ### 6. Error Handling Pattern
 
