@@ -69,8 +69,6 @@ GET    /api/v1/polls/{}
 PUT    /api/v1/polls/{}
 GET    /api/v1/polls/{}/results
 GET    /api/v1/uploads/*
-GET    /api/v1/users/{}/profile
-GET    /api/v1/users/username/{}/profile
 POST   /api/v1/auth/change-username
 POST   /api/v1/auth/complete-email-change
 POST   /api/v1/auth/request-email-change
@@ -98,11 +96,9 @@ POST   /api/v1/games/{}/results/{}/publish
 POST   /api/v1/games/{}/results/staged
 POST   /api/v1/phases/{}/draft-post
 POST   /api/v1/polls/{}/vote
-POST   /api/v1/users/me/avatar
 PATCH  /api/v1/games/{}/handouts/{}/comments/{}
 PATCH  /api/v1/games/{}/posts/{}
 PATCH  /api/v1/games/{}/posts/{}/comments/{}
-PATCH  /api/v1/users/me/profile
 DELETE /api/v1/auth/account
 DELETE /api/v1/auth/discord/disconnect
 DELETE /api/v1/games/{}/banner
@@ -117,4 +113,3 @@ DELETE /api/v1/games/{}/results/{}/pending
 DELETE /api/v1/notifications/{}
 DELETE /api/v1/phases/{}/draft-post
 DELETE /api/v1/polls/{}
-DELETE /api/v1/users/me/avatar

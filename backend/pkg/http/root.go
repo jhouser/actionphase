@@ -682,6 +682,7 @@ func (h *Handler) Start() {
 	apiV1Router.Mount("/dashboard", dashboardRouter)
 
 	// Users API - User profiles and avatars
+	var usersAPI huma.API
 	usersRouter := chi.NewRouter()
 	usersRouter.Route("/", func(r chi.Router) {
 		userHandler := users.Handler{
@@ -698,16 +699,10 @@ func (h *Handler) Start() {
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 
-			// Profile viewing (public - any authenticated user can view any profile)
-			r.Get("/{id}/profile", userHandler.GetUserProfile)
-			r.Get("/username/{username}/profile", userHandler.GetUserProfileByUsername)
-
-			// Profile editing (own profile only)
-			r.Patch("/me/profile", userHandler.UpdateUserProfile)
-
-			// Avatar management (own profile only)
-			r.Post("/me/avatar", userHandler.UploadUserAvatar)
-			r.Delete("/me/avatar", userHandler.DeleteUserAvatar)
+			// Profile viewing, profile editing and avatar management
+			// (huma / type-first)
+			usersAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			users.RegisterHumaUsers(usersAPI, &userHandler)
 		})
 	})
 	apiV1Router.Mount("/users", usersRouter)
@@ -766,6 +761,7 @@ func (h *Handler) Start() {
 				// Registered on the /{gameID} subrouter, so the documented URL
 				// needs that segment added back.
 				"/deadlines":      deadlinesAPI,
+				"/users":          usersAPI,
 				"/games/{gameID}": gameScopedAPI,
 			})
 		},
