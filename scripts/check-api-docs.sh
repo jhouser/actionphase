@@ -172,13 +172,36 @@ def huma_routes():
     found = []
     text = ''.join(src)
 
-    # Line number -> enclosing "<name>Router.Route(" block, by brace depth.
+    # Line number -> (enclosing "<name>Router.Route(" block, nested prefix).
+    #
+    # The nested part matters: gameScopedAPI is created inside
+    # gamesRouter.Route("/") > r.Route("/{gameID}"), so a package registering
+    # on it is served under /api/v1/games/{gameID}/..., not /api/v1/games/....
+    # Tracking only the named router drops that segment and every game-scoped
+    # package's routes get recorded at a URL nothing serves -- which silently
+    # exempts them from the drift check this script exists to perform.
     owner, d, stack = {}, 0, []
     for i, ln in enumerate(src):
         mo = re.search(r'(\w+Router)\.Route\("', ln)
         if mo:
-            stack.append((d, mo.group(1)))
-        owner[i] = stack[-1][1] if stack else None
+            stack.append((d, mo.group(1), ''))
+        else:
+            mi = re.search(r'\br\.Route\("([^"]*)"', ln)
+            if mi:
+                stack.append((d, None, mi.group(1)))
+        if stack:
+            router = next((n for _, n, _ in reversed(stack) if n), None)
+            # Only the prefixes nested *inside* that named router count; the
+            # router's own mount point comes from full_prefix.
+            seen_router, nested = False, []
+            for _, n, pfx in stack:
+                if n:
+                    seen_router, nested = True, []
+                elif seen_router:
+                    nested.append(pfx)
+            owner[i] = (router, ''.join(nested))
+        else:
+            owner[i] = (None, '')
         d += ln.count('{') - ln.count('}')
         while stack and stack[-1][0] >= d:
             stack.pop()
@@ -187,14 +210,15 @@ def huma_routes():
         m = re.search(r'(\w+)\.RegisterHuma(\w+)\(', ln)
         if not m:
             continue
-        pkg, router = m.group(1), owner.get(i)
+        pkg = m.group(1)
+        router, nested = owner.get(i, (None, ''))
         if not router:
             print(f"{RED}✗ {pkg}.RegisterHuma{m.group(2)} is not inside a "
                   f"<name>Router.Route block; cannot resolve its mount{NC}")
             sys.exit(1)
         # full_prefix walks the router's Mount() chain, so the result is
         # absolute (/api/v1/characters), matching the chi scan's paths.
-        prefix = full_prefix(router)
+        prefix = full_prefix(router) + nested
         f = os.path.join(PKG_DIR, pkg, 'huma_api.go')
         if not os.path.isfile(f):
             print(f"{RED}✗ {pkg}.RegisterHuma{m.group(2)} is registered but "

@@ -345,13 +345,10 @@ func (h *Handler) Start() {
 					HandoutService:      db.NewHandoutService(h.App.Pool),
 					NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 				}
-				r.Post("/handouts", handoutHandler.CreateHandout)
-				r.Get("/handouts", handoutHandler.ListHandouts)
-				r.Get("/handouts/{handoutId}", handoutHandler.GetHandout)
-				r.Put("/handouts/{handoutId}", handoutHandler.UpdateHandout)
-				r.Delete("/handouts/{handoutId}", handoutHandler.DeleteHandout)
-				r.Post("/handouts/{handoutId}/publish", handoutHandler.PublishHandout)
-				r.Post("/handouts/{handoutId}/unpublish", handoutHandler.UnpublishHandout)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				// Registers the comment operations too.
+				handouts.RegisterHumaGameHandouts(gameScopedAPI, handoutHandler)
 
 				// Game archive exports (completed games only). Read access is
 				// CanUserViewGame, so any authenticated user may export a
@@ -365,12 +362,6 @@ func (h *Handler) Start() {
 				// huma / type-first — paths are relative to this /{gameID}
 				// subrouter (see huma-migration.md gotcha 4).
 				exports.RegisterHumaGameExports(gameScopedAPI, exportHandler)
-
-				// Handout comments
-				r.Post("/handouts/{handoutId}/comments", handoutHandler.CreateHandoutComment)
-				r.Get("/handouts/{handoutId}/comments", handoutHandler.ListHandoutComments)
-				r.Patch("/handouts/{handoutId}/comments/{commentId}", handoutHandler.UpdateHandoutComment)
-				r.Delete("/handouts/{handoutId}/comments/{commentId}", handoutHandler.DeleteHandoutComment)
 
 				// Deadlines
 				deadlineHandler := &deadlines.Handler{
@@ -544,6 +535,7 @@ func (h *Handler) Start() {
 	// because it spans every game the user is in, which is exactly what the
 	// global Utility Drawer needs when no game is in scope. Per-game handout
 	// routes remain under /games/{gameID}/handouts.
+	var handoutsAPI huma.API
 	handoutsRouter := chi.NewRouter()
 	handoutsRouter.Route("/", func(r chi.Router) {
 		handoutHandler := &handouts.Handler{
@@ -563,7 +555,9 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			r.Get("/", handoutHandler.ListHandoutsAcrossGames)
+			// huma / type-first -- paths are relative to this /handouts mount.
+			handoutsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			handouts.RegisterHumaHandouts(handoutsAPI, handoutHandler)
 		})
 	})
 	apiV1Router.Mount("/handouts", handoutsRouter)
@@ -759,6 +753,7 @@ func (h *Handler) Start() {
 				"/users":          usersAPI,
 				"/notifications":  notificationsAPI,
 				"/polls":          pollsAPI,
+				"/handouts":       handoutsAPI,
 				"/games/{gameID}": gameScopedAPI,
 			})
 		},
