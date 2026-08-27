@@ -4,8 +4,9 @@ import (
 	"actionphase/pkg/core"
 	"actionphase/pkg/email"
 	"fmt"
-	"github.com/go-chi/render"
 	"net/http"
+
+	"github.com/go-chi/render"
 )
 
 func (h *Handler) V1Register(w http.ResponseWriter, r *http.Request) {

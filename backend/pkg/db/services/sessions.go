@@ -5,9 +5,10 @@ import (
 	db "actionphase/pkg/db/models"
 	"actionphase/pkg/observability"
 	"context"
+	"time"
+
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"time"
 )
 
 type SessionService struct {

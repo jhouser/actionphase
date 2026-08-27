@@ -13,10 +13,13 @@ RUN apk add --no-cache git curl gcc musl-dev netcat-openbsd postgresql-client ma
 #   dlv   — Delve remote debugger
 #   migrate — DB migrations CLI (postgres driver; version matches go.mod)
 #   sqlc  — SQL -> Go codegen
+#   goimports — gofmt plus automatic import add/remove; `just fmt` uses it so
+#               deleting a handler does not leave the file unbuildable
 RUN go install github.com/air-verse/air@v1.61.7 \
  && go install github.com/go-delve/delve/cmd/dlv@v1.27.0 \
  && go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.0 \
  && go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 \
+ && go install golang.org/x/tools/cmd/goimports@v0.38.0 \
  && go install golang.org/x/tools/cmd/deadcode@latest
 
 WORKDIR /app

@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/jwtauth/v5"
@@ -53,6 +54,11 @@ func (h *Handler) sessionValidateMW() func(http.Handler) http.Handler {
 }
 
 func (h *Handler) Start() {
+	// Huma's default error body is RFC 7807, which the frontend cannot parse.
+	// Install the legacy shape before any huma API is built. See
+	// .claude/planning/rfc7807-error-format.md.
+	InstallLegacyErrorFormat()
+
 	r := chi.NewRouter()
 
 	// Add observability middleware stack first
@@ -689,7 +695,10 @@ func (h *Handler) Start() {
 	})
 	apiV1Router.Mount("/users", usersRouter)
 
-	// Admin API - All routes require authentication AND admin privileges
+	// Admin API - All routes require authentication AND admin privileges.
+	// adminAPI is captured so the docs handler can serve huma's generated spec
+	// for these routes (see below).
+	var adminAPI huma.API
 	adminRouter := chi.NewRouter()
 	adminRouter.Route("/", func(r chi.Router) {
 		adminHandler := admin.Handler{
@@ -711,43 +720,30 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(httpmiddleware.RequireAdmin(h.App))
 
-			// Admin management
-			r.Get("/admins", adminHandler.ListAdmins)
-
-			// User admin status management
-			r.Put("/users/{id}/admin", adminHandler.GrantAdminStatus)
-			r.Delete("/users/{id}/admin", adminHandler.RevokeAdminStatus)
-
-			// User banning
-			r.Post("/users/{id}/ban", adminHandler.BanUser)
-			r.Delete("/users/{id}/ban", adminHandler.UnbanUser)
-			r.Get("/users/banned", adminHandler.ListBannedUsers)
-
-			// User list, pending approval, sessions (fixed paths before parameterized)
-			r.Get("/users", adminHandler.ListUsers)
-			r.Get("/users/pending", adminHandler.ListPendingApprovalUsers)
-			r.Post("/users/{id}/approve", adminHandler.ApproveUser)
-			r.Post("/users/{id}/reject", adminHandler.RejectUser)
-			r.Get("/users/{id}/sessions", adminHandler.GetUserSessions)
-
-			// IP bans
-			r.Get("/ip-bans", adminHandler.ListIPBans)
-			r.Post("/ip-bans", adminHandler.CreateIPBan)
-			r.Delete("/ip-bans/{id}", adminHandler.DeleteIPBan)
-
-			// Device fingerprint bans
-			r.Get("/fingerprint-bans", adminHandler.ListFingerprintBans)
-			r.Post("/fingerprint-bans", adminHandler.CreateFingerprintBan)
-			r.Delete("/fingerprint-bans/{id}", adminHandler.DeleteFingerprintBan)
-
-			// Content moderation
-			r.Delete("/messages/{messageId}", adminHandler.DeleteMessage)
+			// Admin routes are type-first (huma): paths, params, schemas and
+			// status codes are derived from the Go types in
+			// pkg/admin/huma_api.go, so the OpenAPI spec cannot drift from
+			// the handlers. Huma mounts onto this same chi router, so the
+			// middleware above applies unchanged.
+			//
+			// Registered on adminRouter (not r) because huma paths are
+			// absolute and this group is mounted at /api/v1/admin.
+			adminAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			admin.RegisterHumaAdmin(adminAPI, &adminHandler)
 		})
 	})
 	apiV1Router.Mount("/admin", adminRouter)
 
 	// API Documentation routes (public) - register on apiV1Router BEFORE mounting
-	docsHandler := &docs.Handler{}
+	// The served spec merges huma's generated paths over the hand-written
+	// openapi.yaml, so migrated packages are documented from their Go types
+	// and the rest fall back to the manual file. Each package converted in
+	// .claude/planning/huma-migration.md improves the docs automatically.
+	docsHandler := &docs.Handler{
+		GeneratedSpec: func() ([]byte, error) {
+			return generatedSpecFor(map[string]huma.API{"/admin": adminAPI})
+		},
+	}
 	docsHandler.RegisterRoutes(apiV1Router)
 
 	// Debug routes (development only) - exposed via /api/v1/debug/*

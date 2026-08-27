@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/golang-jwt/jwt/v5"
 	"net/http"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // Removed global tokenAuth - now using instance method with config secret

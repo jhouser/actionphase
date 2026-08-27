@@ -4,10 +4,11 @@ import (
 	"actionphase/pkg/core"
 	"strconv"
 
+	"net/http"
+
 	"github.com/go-chi/jwtauth/v5"
 	"github.com/go-chi/render"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-	"net/http"
 )
 
 func (h *Handler) V1Refresh(w http.ResponseWriter, r *http.Request) {

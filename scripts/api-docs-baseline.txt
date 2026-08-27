@@ -14,14 +14,6 @@
 #   GET /api/v1/ping           — documented at a URL that 404s
 #   GET /api/v1/games/public   — documented with no handler behind it
 
-GET    /api/v1/admin/admins
-GET    /api/v1/admin/fingerprint-bans
-GET    /api/v1/admin/ip-bans
-GET    /api/v1/admin/users
-PUT    /api/v1/admin/users/{}/admin
-GET    /api/v1/admin/users/{}/sessions
-GET    /api/v1/admin/users/banned
-GET    /api/v1/admin/users/pending
 GET    /api/v1/auth/discord/callback
 GET    /api/v1/auth/discord/connect
 GET    /api/v1/auth/discord/status
@@ -83,11 +75,6 @@ GET    /api/v1/polls/{}/results
 GET    /api/v1/uploads/*
 GET    /api/v1/users/{}/profile
 GET    /api/v1/users/username/{}/profile
-POST   /api/v1/admin/fingerprint-bans
-POST   /api/v1/admin/ip-bans
-POST   /api/v1/admin/users/{}/approve
-POST   /api/v1/admin/users/{}/ban
-POST   /api/v1/admin/users/{}/reject
 POST   /api/v1/auth/change-username
 POST   /api/v1/auth/complete-email-change
 POST   /api/v1/auth/request-email-change
@@ -123,11 +110,6 @@ PATCH  /api/v1/games/{}/handouts/{}/comments/{}
 PATCH  /api/v1/games/{}/posts/{}
 PATCH  /api/v1/games/{}/posts/{}/comments/{}
 PATCH  /api/v1/users/me/profile
-DELETE /api/v1/admin/fingerprint-bans/{}
-DELETE /api/v1/admin/ip-bans/{}
-DELETE /api/v1/admin/messages/{}
-DELETE /api/v1/admin/users/{}/admin
-DELETE /api/v1/admin/users/{}/ban
 DELETE /api/v1/auth/account
 DELETE /api/v1/auth/discord/disconnect
 DELETE /api/v1/deadlines/{}

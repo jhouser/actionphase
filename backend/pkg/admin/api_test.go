@@ -15,6 +15,8 @@ import (
 	messagesvc "actionphase/pkg/db/services/messages"
 	httpmiddleware "actionphase/pkg/http/middleware"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
 	"github.com/stretchr/testify/assert"
@@ -23,6 +25,50 @@ import (
 
 func jsonBody(b []byte) *bytes.Reader {
 	return bytes.NewReader(b)
+}
+
+// newTestHumaAPI mirrors pkg/http.newHumaAPI: docs and $schema injection off,
+// legacy error format installed, so tests see exactly what production serves.
+func newTestHumaAPI(r chi.Router) huma.API {
+	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
+		detail := msg
+		if len(errs) > 0 && errs[0] != nil {
+			detail = errs[0].Error()
+		}
+		// Mirrors pkg/http.InstallLegacyErrorFormat: huma's hardcoded 422 for
+		// binding failures becomes 400, matching core.ErrInvalidRequest.
+		if status == http.StatusUnprocessableEntity {
+			status = http.StatusBadRequest
+		}
+		return &testLegacyError{StatusText: legacyStatusTextForTest(status), ErrorMsg: detail, status: status}
+	}
+	cfg := huma.DefaultConfig("ActionPhase API", "1.0.0")
+	cfg.DocsPath = ""
+	cfg.SchemasPath = ""
+	cfg.CreateHooks = nil
+	return humachi.New(r, cfg)
+}
+
+type testLegacyError struct {
+	StatusText string `json:"status"`
+	ErrorMsg   string `json:"error,omitempty"`
+	status     int
+}
+
+func (e *testLegacyError) Error() string  { return e.ErrorMsg }
+func (e *testLegacyError) GetStatus() int { return e.status }
+
+func legacyStatusTextForTest(s int) string {
+	switch s {
+	case http.StatusUnauthorized:
+		return "Unauthorized."
+	case http.StatusForbidden:
+		return "Forbidden."
+	case http.StatusNotFound:
+		return "Resource not found."
+	default:
+		return "Invalid request."
+	}
 }
 
 // setupAdminTestRouter creates a test router with admin routes (with RequireAdmin middleware)
@@ -45,27 +91,11 @@ func setupAdminTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 			FingerprintBanService: &dbsvc.FingerprintBanService{DB: testDB.Pool, Logger: app.ObsLogger},
 			MessageService:        &messagesvc.MessageService{DB: testDB.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
 		}
-		r.Get("/admins", handler.ListAdmins)
-		r.Put("/users/{id}/admin", handler.GrantAdminStatus)
-		r.Delete("/users/{id}/admin", handler.RevokeAdminStatus)
-		r.Post("/users/{id}/ban", handler.BanUser)
-		r.Delete("/users/{id}/ban", handler.UnbanUser)
-		r.Get("/users/banned", handler.ListBannedUsers)
-		r.Delete("/messages/{messageId}", handler.DeleteMessage)
-
-		r.Get("/users", handler.ListUsers)
-		r.Get("/users/pending", handler.ListPendingApprovalUsers)
-		r.Post("/users/{id}/approve", handler.ApproveUser)
-		r.Post("/users/{id}/reject", handler.RejectUser)
-		r.Get("/users/{id}/sessions", handler.GetUserSessions)
-
-		r.Get("/ip-bans", handler.ListIPBans)
-		r.Post("/ip-bans", handler.CreateIPBan)
-		r.Delete("/ip-bans/{id}", handler.DeleteIPBan)
-
-		r.Get("/fingerprint-bans", handler.ListFingerprintBans)
-		r.Post("/fingerprint-bans", handler.CreateFingerprintBan)
-		r.Delete("/fingerprint-bans/{id}", handler.DeleteFingerprintBan)
+		// Routes are registered through huma (see huma_api.go). These tests
+		// assert on HTTP behaviour via router.ServeHTTP, so they are unchanged
+		// from when chi handlers served them — that is what makes them a
+		// migration harness rather than implementation tests.
+		RegisterHumaAdmin(newTestHumaAPI(r), handler)
 	})
 
 	return r

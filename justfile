@@ -594,7 +594,7 @@ tidy:
 
 # Format Go code
 fmt:
-  {{BE}} go fmt ./...
+  {{BE}} goimports -w .
 
 # Run Go vet
 vet:
