@@ -61,25 +61,15 @@ Business Rules:
   - Public games are visible to all users
   - Private games are only visible to participants
 
-Usage Example:
+Routes:
 
-	// Setting up game routes
-	r.Route("/api/games", func(r chi.Router) {
-		r.Use(jwtauth.Verifier(tokenAuth))
-		r.Use(jwtauth.Authenticator) // All game operations require auth
+Game routes are registered in backend/pkg/http/root.go, mounted at /api/v1/games.
+That file is the only authoritative list — this comment deliberately does not
+reproduce it. An inlined copy here drifted for months (it showed a /api/games
+mount and POST /join and /leave endpoints that never existed), and a wrong route
+table next to the code is worse than none.
 
-		r.Post("/", gameHandler.CreateGame)
-		r.Get("/", gameHandler.GetAllGames)
-		r.Get("/user/{userID}", gameHandler.GetGamesByUser)
-
-		r.Route("/{gameID}", func(r chi.Router) {
-			r.Get("/", gameHandler.GetGame)
-			r.Put("/", gameHandler.UpdateGame)      // GM only
-			r.Delete("/", gameHandler.DeleteGame)   // GM only
-			r.Post("/join", gameHandler.JoinGame)
-			r.Post("/leave", gameHandler.LeaveGame)
-			r.Put("/state", gameHandler.UpdateGameState) // GM only
-		})
-	})
+For the documented HTTP contract see backend/pkg/docs/openapi.yaml;
+`just check-api-docs` verifies the two agree.
 */
 package games

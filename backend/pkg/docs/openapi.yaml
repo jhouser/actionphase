@@ -1360,12 +1360,23 @@ components:
 
 paths:
   # Health Check
+  #
+  # Registered on the root router, NOT under /api/v1 (see root.go). The
+  # per-operation `servers` override below is what makes the documented URL
+  # match reality — without it this resolves to /api/v1/ping, which 404s.
   /ping:
     get:
+      servers:
+        - url: http://localhost:3000
+          description: Local development server (root, not /api/v1)
+        - url: https://api.action-phase.com
+          description: Production server (root, not /api/v1)
       tags:
         - Health
       summary: Health check endpoint
-      description: Simple health check to verify API is running
+      description: |
+        Simple health check to verify the API is running. Served at the root
+        (`/ping`), not under the `/api/v1` base used by every other operation.
       security: []
       responses:
         '200':
@@ -1375,6 +1386,8 @@ paths:
               schema:
                 type: string
                 example: "ponger"
+        '503':
+          description: API is unavailable
 
   # Authentication Endpoints
   /auth/register:
@@ -1739,22 +1752,11 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   # Game Management Endpoints
-  /games/public:
-    get:
-      tags:
-        - Games
-      summary: Get all public games
-      description: Retrieve a list of all public games
-      responses:
-        '200':
-          description: List of public games
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Game'
-
+  #
+  # NOTE: there is no /games/public endpoint. It was documented here for some
+  # time with no handler behind it; requests returned 401 (auth middleware runs
+  # before routing) rather than 404, which disguised the cause. Use
+  # /games/recruiting below, or /games for the full authenticated listing.
   /games/recruiting:
     get:
       tags:

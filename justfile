@@ -625,7 +625,7 @@ _vet-unix:
 
 
 # Run backend linters (fmt + vet) plus cross-tree consistency checks
-lint: fmt vet check-game-states
+lint: fmt vet check-game-states check-api-docs
   @echo "Go linting complete"
 
 # Verify the game state list agrees across constants, transitions, the
@@ -634,6 +634,14 @@ lint: fmt vet check-game-states
 # host bash — contributors on Windows get the same check as everyone else.
 check-game-states:
   @{{BE}} bash /repo/scripts/check-game-states.sh
+
+# Catches undocumented routes, documented paths with no handler, and paths
+# unreachable at the spec's /api/v1 base. Pre-existing gaps live in
+# scripts/api-docs-baseline.txt, so this fails only on NEW drift. Runs in the
+# backend container against /repo, same as check-game-states.
+# Verify the OpenAPI spec agrees with the routes registered in root.go
+check-api-docs:
+  @{{BE}} bash /repo/scripts/check-api-docs.sh
 
 # Find unreachable/dead code in backend (excludes test helpers and mocks)
 dead-code:
@@ -706,7 +714,7 @@ _verify-unix:
   just tidy
   just fmt
   fail=0
-  for t in "vet" "check-game-states" "dead-code" "build-backend" \
+  for t in "vet" "check-game-states" "check-api-docs" "dead-code" "build-backend" \
            "lint-frontend" "knip" "build-frontend"; do
     ( out=$(just $t 2>&1); code=$?; \
       if [ $code -ne 0 ]; then printf '\n=== FAILED: just %s ===\n%s\n' "$t" "$out" >&2; fi; \
@@ -721,7 +729,7 @@ _verify-windows:
   Write-Host "Verifying code quality (checks + builds)..."
   just tidy
   just fmt
-  $tasks = @("vet","check-game-states","dead-code","build-backend","lint-frontend","knip","build-frontend")
+  $tasks = @("vet","check-game-states","check-api-docs","dead-code","build-backend","lint-frontend","knip","build-frontend")
   $jobs = $tasks | ForEach-Object { Start-Job -ScriptBlock { param($t,$d) Set-Location $d; $o = just $t 2>&1; if ($LASTEXITCODE -ne 0) { Write-Output "=== FAILED: just $t ==="; Write-Output $o; exit 1 } } -ArgumentList $_, $PWD }
   $jobs | Wait-Job | Out-Null
   $failed = $jobs | Where-Object { $_.State -eq 'Failed' -or (Receive-Job $_ | Out-String) -match 'FAILED' }
@@ -741,7 +749,7 @@ _verify-quick-unix:
     exit 0
   fi
   fail=0
-  for t in "tidy-check" "fmt-check" "vet" "check-game-states" "type-check" "lint-frontend"; do
+  for t in "tidy-check" "fmt-check" "vet" "check-game-states" "check-api-docs" "type-check" "lint-frontend"; do
     ( out=$(just $t 2>&1); code=$?; \
       if [ $code -ne 0 ]; then printf '\n=== FAILED: just %s ===\n%s\n' "$t" "$out" >&2; fi; \
       exit $code ) &
@@ -753,7 +761,7 @@ _verify-quick-windows:
   #!pwsh.exe
   $running = docker compose -f docker-compose.dev.yml ps --status running --services 2>$null
   if (-not ($running -match 'backend')) { exit 0 }
-  $tasks = @("tidy-check","fmt-check","vet","check-game-states","type-check","lint-frontend")
+  $tasks = @("tidy-check","fmt-check","vet","check-game-states","check-api-docs","type-check","lint-frontend")
   $jobs = $tasks | ForEach-Object { Start-Job -ScriptBlock { param($t,$d) Set-Location $d; $o = just $t 2>&1; if ($LASTEXITCODE -ne 0) { Write-Output "=== FAILED: just $t ==="; Write-Output $o; exit 1 } } -ArgumentList $_, $PWD }
   $jobs | Wait-Job | Out-Null
   $out = $jobs | ForEach-Object { Receive-Job $_ }

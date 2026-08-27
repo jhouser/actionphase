@@ -1,0 +1,146 @@
+# API docs baseline — routes known to be missing from the OpenAPI spec.
+#
+# Generated 2026-08-27 from a 65%-undocumented API surface. `just check-api-docs`
+# ignores anything listed here, so the check is green today and fails only on
+# NEW drift. This file is a debt ledger, not a permission slip.
+#
+# Format: METHOD  PATH   (path params normalised to {})
+#
+# To retire an entry: document the route in backend/pkg/docs/openapi.yaml, then
+# delete its line. The check reports entries that are no longer drifting, so a
+# stale line surfaces on the next run rather than lingering.
+#
+# Deliberately NOT baselined (they are bugs, not backlog):
+#   GET /api/v1/ping           — documented at a URL that 404s
+#   GET /api/v1/games/public   — documented with no handler behind it
+
+GET    /api/v1/admin/admins
+GET    /api/v1/admin/fingerprint-bans
+GET    /api/v1/admin/ip-bans
+GET    /api/v1/admin/users
+PUT    /api/v1/admin/users/{}/admin
+GET    /api/v1/admin/users/{}/sessions
+GET    /api/v1/admin/users/banned
+GET    /api/v1/admin/users/pending
+GET    /api/v1/auth/discord/callback
+GET    /api/v1/auth/discord/connect
+GET    /api/v1/auth/discord/status
+GET    /api/v1/auth/preferences
+PUT    /api/v1/auth/preferences
+GET    /api/v1/auth/users/search
+GET    /api/v1/characters/{}/comments
+GET    /api/v1/characters/{}/stats
+GET    /api/v1/characters/controllable
+GET    /api/v1/deadlines/upcoming
+GET    /api/v1/exports/{}/download
+GET    /api/v1/games
+GET    /api/v1/games/{}/action-submissions/all
+GET    /api/v1/games/{}/actions
+GET    /api/v1/games/{}/applicants
+GET    /api/v1/games/{}/application/mine
+GET    /api/v1/games/{}/audience
+GET    /api/v1/games/{}/characters/audience-npcs
+GET    /api/v1/games/{}/characters/controllable
+GET    /api/v1/games/{}/characters/inactive
+GET    /api/v1/games/{}/characters/stats
+GET    /api/v1/games/{}/comments/recent
+GET    /api/v1/games/{}/deadlines
+GET    /api/v1/games/{}/exports/latest
+PUT    /api/v1/games/{}/handouts/{}
+GET    /api/v1/games/{}/handouts/{}/comments
+GET    /api/v1/games/{}/loot-tables
+PUT    /api/v1/games/{}/loot-tables/{}
+GET    /api/v1/games/{}/loot-tables/{}/contents
+GET    /api/v1/games/{}/manual-read-comment-ids
+GET    /api/v1/games/{}/messages/{}
+GET    /api/v1/games/{}/messages/{}/thread-context
+GET    /api/v1/games/{}/phases
+GET    /api/v1/games/{}/phases/{}/polls
+GET    /api/v1/games/{}/phases/{}/results/unpublished-count
+GET    /api/v1/games/{}/polls
+GET    /api/v1/games/{}/posts-unread-info
+GET    /api/v1/games/{}/posts/{}/comments-with-threads
+GET    /api/v1/games/{}/private-messages/all
+GET    /api/v1/games/{}/private-messages/conversations/{}
+GET    /api/v1/games/{}/private-messages/participants
+GET    /api/v1/games/{}/read-markers
+GET    /api/v1/games/{}/results
+PUT    /api/v1/games/{}/results/{}
+GET    /api/v1/games/{}/results/{}/character-updates
+PUT    /api/v1/games/{}/results/{}/character-updates/{}
+GET    /api/v1/games/{}/results/{}/character-updates/count
+PUT    /api/v1/games/{}/results/{}/delay
+PUT    /api/v1/games/{}/settings/auto-accept-audience
+GET    /api/v1/games/{}/stats
+GET    /api/v1/games/{}/unread-comment-ids
+GET    /api/v1/handouts
+PUT    /api/v1/notifications/{}/mark-unread
+GET    /api/v1/phases/{}/draft-post
+PUT    /api/v1/phases/{}/draft-post
+GET    /api/v1/polls/{}
+PUT    /api/v1/polls/{}
+GET    /api/v1/polls/{}/results
+GET    /api/v1/uploads/*
+GET    /api/v1/users/{}/profile
+GET    /api/v1/users/username/{}/profile
+POST   /api/v1/admin/fingerprint-bans
+POST   /api/v1/admin/ip-bans
+POST   /api/v1/admin/users/{}/approve
+POST   /api/v1/admin/users/{}/ban
+POST   /api/v1/admin/users/{}/reject
+POST   /api/v1/auth/change-username
+POST   /api/v1/auth/complete-email-change
+POST   /api/v1/auth/request-email-change
+POST   /api/v1/auth/resend-verification
+POST   /api/v1/auth/revoke-all-sessions
+POST   /api/v1/auth/verify-email
+POST   /api/v1/games/{}/banner
+POST   /api/v1/games/{}/deadlines
+POST   /api/v1/games/{}/exports
+POST   /api/v1/games/{}/handouts/{}/comments
+POST   /api/v1/games/{}/handouts/{}/unpublish
+POST   /api/v1/games/{}/loot-tables
+POST   /api/v1/games/{}/loot-tables/{}/contents
+POST   /api/v1/games/{}/loot-tables/{}/random/{}
+POST   /api/v1/games/{}/participants/{}/demote-from-co-gm
+POST   /api/v1/games/{}/participants/{}/promote-to-co-gm
+POST   /api/v1/games/{}/participants/{}/to-audience
+POST   /api/v1/games/{}/participants/direct-add
+POST   /api/v1/games/{}/phases/{}/mark-all-comments-read
+POST   /api/v1/games/{}/phases/{}/results/publish
+POST   /api/v1/games/{}/polls
+POST   /api/v1/games/{}/posts/{}/comments/{}/toggle-read
+POST   /api/v1/games/{}/posts/{}/mark-read
+POST   /api/v1/games/{}/results/{}/character-updates
+POST   /api/v1/games/{}/results/{}/parts
+POST   /api/v1/games/{}/results/{}/publish
+POST   /api/v1/games/{}/results/staged
+POST   /api/v1/phases/{}/draft-post
+POST   /api/v1/polls/{}/vote
+POST   /api/v1/users/me/avatar
+PATCH  /api/v1/deadlines/{}
+PATCH  /api/v1/games/{}/handouts/{}/comments/{}
+PATCH  /api/v1/games/{}/posts/{}
+PATCH  /api/v1/games/{}/posts/{}/comments/{}
+PATCH  /api/v1/users/me/profile
+DELETE /api/v1/admin/fingerprint-bans/{}
+DELETE /api/v1/admin/ip-bans/{}
+DELETE /api/v1/admin/messages/{}
+DELETE /api/v1/admin/users/{}/admin
+DELETE /api/v1/admin/users/{}/ban
+DELETE /api/v1/auth/account
+DELETE /api/v1/auth/discord/disconnect
+DELETE /api/v1/deadlines/{}
+DELETE /api/v1/games/{}/banner
+DELETE /api/v1/games/{}/handouts/{}
+DELETE /api/v1/games/{}/handouts/{}/comments/{}
+DELETE /api/v1/games/{}/loot-tables/{}
+DELETE /api/v1/games/{}/participants/{}
+DELETE /api/v1/games/{}/posts/{}/comments/{}
+DELETE /api/v1/games/{}/results/{}
+DELETE /api/v1/games/{}/results/{}/character-updates/{}
+DELETE /api/v1/games/{}/results/{}/pending
+DELETE /api/v1/notifications/{}
+DELETE /api/v1/phases/{}/draft-post
+DELETE /api/v1/polls/{}
+DELETE /api/v1/users/me/avatar

@@ -122,6 +122,30 @@ just <recipe> --help                 # signature is right
 
 Same for SQL columns, API paths, and file paths in examples.
 
+### API routes — run the checker
+
+If the diff touches `backend/pkg/http/root.go` or any `RegisterRoutes` helper,
+run:
+
+```bash
+just check-api-docs
+```
+
+It compares every route registered in the router against the paths in
+`backend/pkg/docs/openapi.yaml` and reports three failure modes: routes missing
+from the spec, documented paths with no handler, and paths unreachable at the
+spec's `/api/v1` base. **Fix what it reports for the routes this branch
+touched** — add the path entry, or delete the phantom.
+
+Do not add this branch's routes to `scripts/api-docs-baseline.txt`. That file is
+a ledger of pre-existing debt, not an escape hatch; adding to it converts a
+fixable defect into permanent backlog. If a route genuinely cannot be documented
+now, say so in the output and explain why.
+
+The spec is a doc that looks like code, so Pass 1's greps never match it — a
+removed handler leaves its YAML block behind with nothing to flag it. This
+checker is the only thing that catches that.
+
 ## Output
 
 Report as a table — file, what's wrong, evidence:
