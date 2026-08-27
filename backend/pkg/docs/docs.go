@@ -2,6 +2,7 @@ package docs
 
 import (
 	"embed"
+	"io/fs"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -29,6 +30,23 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	// NOTE: Chi router strips file extensions, so route "/docs/openapi" matches requests to "/docs/openapi.yaml"
 	// This is why we register without the .yaml extension
 	r.Get("/docs/openapi", h.serveOpenAPISpec)
+
+	// Serve the Swagger UI assets (CSS/JS) from the embedded filesystem.
+	// These are self-hosted rather than loaded from a CDN so that the page
+	// satisfies the production CSP, which only allows script/style from 'self'.
+	r.Handle("/docs/static/*", h.swaggerAssetServer())
+}
+
+// swaggerAssetServer returns a file server for the embedded Swagger UI assets
+func (h *Handler) swaggerAssetServer() http.Handler {
+	assetFS, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "documentation assets unavailable", http.StatusInternalServerError)
+		})
+	}
+
+	return http.StripPrefix("/api/v1/docs/static/", http.FileServer(http.FS(assetFS)))
 }
 
 // serveOpenAPISpec serves the OpenAPI specification as YAML
@@ -58,7 +76,7 @@ func (h *Handler) serveSwaggerUI(w http.ResponseWriter, r *http.Request) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ActionPhase API Documentation</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css" />
+    <link rel="stylesheet" type="text/css" href="/api/v1/docs/static/swagger-ui.css" />
     <style>
         html {
             box-sizing: border-box;
@@ -76,8 +94,8 @@ func (h *Handler) serveSwaggerUI(w http.ResponseWriter, r *http.Request) {
 </head>
 <body>
     <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
-    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-standalone-preset.js"></script>
+    <script src="/api/v1/docs/static/swagger-ui-bundle.js"></script>
+    <script src="/api/v1/docs/static/swagger-ui-standalone-preset.js"></script>
     <script>
         window.onload = function() {
             SwaggerUIBundle({
