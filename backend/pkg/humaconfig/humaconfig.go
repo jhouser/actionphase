@@ -12,7 +12,10 @@
 package humaconfig
 
 import (
+	"fmt"
 	"net/http"
+	"reflect"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
@@ -99,4 +102,64 @@ func New(r chi.Router, title, version string) huma.API {
 	cfg.SchemasPath = ""
 	cfg.CreateHooks = nil
 	return humachi.New(r, cfg)
+}
+
+// Trimming request strings
+//
+// core.ValidateStruct trims every string field in place *before* validating, so
+// for chi handlers a title of "   " failed `min=1`. Huma's minLength counts raw
+// characters, so the same input passes and a blank-titled row reaches the
+// database. Body structs restore the old behaviour by implementing Resolve:
+//
+//	func (b *createBody) Resolve(huma.Context) []error {
+//	    return humaconfig.TrimStrings(b)
+//	}
+//
+// TrimStrings trims all exported string fields of v in place, reporting the
+// JSON names of those which a non-zero minLength requires but which are empty
+// after trimming.
+//
+// Call it from a body struct's Resolve. It is exported separately from
+// TrimmedBody because Go embeds methods, not field access: a promoted Resolve
+// cannot see the outer struct's fields, so each body type calls this on itself.
+func TrimStrings(v any) []error {
+	val := reflect.ValueOf(v)
+	if val.Kind() != reflect.Ptr || val.IsNil() {
+		return nil
+	}
+	val = val.Elem()
+	if val.Kind() != reflect.Struct {
+		return nil
+	}
+
+	var errs []error
+	t := val.Type()
+	for i := 0; i < val.NumField(); i++ {
+		f := val.Field(i)
+		if f.Kind() != reflect.String || !f.CanSet() {
+			continue
+		}
+		trimmed := strings.TrimSpace(f.String())
+		f.SetString(trimmed)
+
+		sf := t.Field(i)
+		if trimmed != "" {
+			continue
+		}
+		// Only fields declaring a minimum length are required to be non-empty.
+		if min := sf.Tag.Get("minLength"); min != "" && min != "0" {
+			name := sf.Tag.Get("json")
+			if idx := strings.Index(name, ","); idx >= 0 {
+				name = name[:idx]
+			}
+			if name == "" {
+				name = sf.Name
+			}
+			errs = append(errs, &huma.ErrorDetail{
+				Message:  fmt.Sprintf("%s must not be blank", name),
+				Location: "body." + name,
+			})
+		}
+	}
+	return errs
 }

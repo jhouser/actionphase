@@ -151,7 +151,11 @@ func (h *Handler) Start() {
 
 	// Games API - All routes require authentication
 	gamesRouter := chi.NewRouter()
-	var gameExportsAPI huma.API
+	// gameScopedAPI is the single huma API for the /{gameID} subrouter. Several
+	// packages hang operations off that mount, and they must share one API:
+	// generatedSpecFor keys by mount prefix, so a second API on the same prefix
+	// would be dropped from the served spec.
+	var gameScopedAPI huma.API
 	gamesRouter.Route("/", func(r chi.Router) {
 		gameHandler := games.Handler{
 			App:                     h.App,
@@ -190,6 +194,10 @@ func (h *Handler) Start() {
 			r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/", gameHandler.CreateGame)
 			r.Route("/{gameID}", func(r chi.Router) {
 				r.Use(gameHandler.GameMiddleware())
+
+				// Shared by every converted package registering on this
+				// subrouter; see the declaration for why it must be one API.
+				gameScopedAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
 
 				r.Get("/", gameHandler.GetGame)
 				r.Get("/details", gameHandler.GetGameWithDetails)
@@ -352,10 +360,9 @@ func (h *Handler) Start() {
 					GameService:   &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					ExportService: exports.NewService(h.App.Pool, h.App.Config.Storage.ArchivePath, h.App.ObsLogger),
 				}
-				// huma / type-first — registered on the {gameID} subrouter, so
-				// paths are relative to it (see huma-migration.md gotcha 4).
-				gameExportsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
-				exports.RegisterHumaGameExports(gameExportsAPI, exportHandler)
+				// huma / type-first — paths are relative to this /{gameID}
+				// subrouter (see huma-migration.md gotcha 4).
+				exports.RegisterHumaGameExports(gameScopedAPI, exportHandler)
 
 				// Handout comments
 				r.Post("/handouts/{handoutId}/comments", handoutHandler.CreateHandoutComment)
@@ -370,8 +377,9 @@ func (h *Handler) Start() {
 					GameService:     &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					DeadlineService: &db.DeadlineService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 				}
-				r.Post("/deadlines", deadlineHandler.CreateDeadline)
-				r.Get("/deadlines", deadlineHandler.GetGameDeadlines)
+				// huma / type-first — shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				deadlines.RegisterHumaGameDeadlines(gameScopedAPI, deadlineHandler)
 
 				// Polls
 				pollHandler := &polls.Handler{
@@ -503,6 +511,7 @@ func (h *Handler) Start() {
 	apiV1Router.Mount("/phases", phasesRouter)
 
 	// Deadlines API (for deadline-specific operations)
+	var deadlinesAPI huma.API
 	deadlinesRouter := chi.NewRouter()
 	deadlinesRouter.Route("/", func(r chi.Router) {
 		deadlineHandler := deadlines.Handler{
@@ -522,10 +531,9 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			// Deadline management
-			r.Get("/upcoming", deadlineHandler.GetUpcomingDeadlines) // Get upcoming deadlines across all user's games
-			r.Patch("/{deadlineId}", deadlineHandler.UpdateDeadline)
-			r.Delete("/{deadlineId}", deadlineHandler.DeleteDeadline)
+			// Deadline management (huma / type-first)
+			deadlinesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			deadlines.RegisterHumaDeadlines(deadlinesAPI, &deadlineHandler)
 		})
 	})
 	apiV1Router.Mount("/deadlines", deadlinesRouter)
@@ -757,7 +765,8 @@ func (h *Handler) Start() {
 				"/exports":    exportDownloadsAPI,
 				// Registered on the /{gameID} subrouter, so the documented URL
 				// needs that segment added back.
-				"/games/{gameID}": gameExportsAPI,
+				"/deadlines":      deadlinesAPI,
+				"/games/{gameID}": gameScopedAPI,
 			})
 		},
 	}
