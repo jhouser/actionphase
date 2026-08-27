@@ -137,6 +137,30 @@ for ln in src:
 # is mount + huma path.
 PKG_DIR = sys.argv[4] if len(sys.argv) > 4 else ''
 
+def register_func_body(src_text, fname):
+    """The body of one RegisterHumaX function, or None if it is not defined.
+
+    A package may expose several registration functions mounted at different
+    prefixes -- pkg/polls registers /polls operations and game-scoped ones from
+    the same file. Scanning the whole file per call site would attribute every
+    operation to every mount, inventing routes like /games/{}/{}/vote.
+    """
+    mo = re.search(r'^func ' + re.escape(fname) + r'\b', src_text, re.M)
+    if not mo:
+        return None
+    d, started, out = 0, False, []
+    for ch in src_text[mo.start():]:
+        out.append(ch)
+        if ch == '{':
+            d += 1
+            started = True
+        elif ch == '}':
+            d -= 1
+            if started and d == 0:
+                break
+    return ''.join(out)
+
+
 def huma_routes():
     """Routes registered through huma.Register in a converted package.
 
@@ -176,7 +200,11 @@ def huma_routes():
             print(f"{RED}✗ {pkg}.RegisterHuma{m.group(2)} is registered but "
                   f"{f} does not exist{NC}")
             sys.exit(1)
-        body = open(f).read()
+        body = register_func_body(open(f).read(), 'RegisterHuma' + m.group(2))
+        if body is None:
+            print(f"{RED}✗ {pkg}.RegisterHuma{m.group(2)} is registered but "
+                  f"no such function is defined in {f}{NC}")
+            sys.exit(1)
         # huma.Operation literals: Method: http.MethodGet / "GET", Path: "/x"
         for op in re.finditer(
                 r'Method:\s*(?:http\.Method(\w+)|"(\w+)")[^}]*?Path:\s*"([^"]*)"',

@@ -390,9 +390,9 @@ func (h *Handler) Start() {
 					CharacterService:    &db.CharacterService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 				}
-				r.Post("/polls", pollHandler.CreatePoll)
-				r.Get("/polls", pollHandler.ListGamePolls)
-				r.Get("/phases/{phaseId}/polls", pollHandler.ListPollsByPhase)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				polls.RegisterHumaGamePolls(gameScopedAPI, pollHandler)
 
 				// Logs
 				r.Get("/logs", gameHandler.GetGameLogs)
@@ -596,9 +596,10 @@ func (h *Handler) Start() {
 	apiV1Router.Mount("/exports", exportsRouter)
 
 	// Polls API (for poll-specific operations)
+	var pollsAPI huma.API
 	pollsRouter := chi.NewRouter()
 	pollsRouter.Route("/", func(r chi.Router) {
-		pollHandler := polls.Handler{
+		pollHandler := &polls.Handler{
 			App:                 h.App,
 			UserService:         &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 			GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
@@ -618,11 +619,8 @@ func (h *Handler) Start() {
 			r.Use(core.AdminModeMiddleware)
 
 			// Poll management
-			r.Get("/{pollId}", pollHandler.GetPoll)
-			r.Get("/{pollId}/results", pollHandler.GetPollResults)
-			r.Post("/{pollId}/vote", pollHandler.SubmitVote)
-			r.Put("/{pollId}", pollHandler.UpdatePoll)
-			r.Delete("/{pollId}", pollHandler.DeletePoll)
+			pollsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			polls.RegisterHumaPolls(pollsAPI, pollHandler)
 		})
 	})
 	apiV1Router.Mount("/polls", pollsRouter)
@@ -758,6 +756,7 @@ func (h *Handler) Start() {
 				"/deadlines":      deadlinesAPI,
 				"/users":          usersAPI,
 				"/notifications":  notificationsAPI,
+				"/polls":          pollsAPI,
 				"/games/{gameID}": gameScopedAPI,
 			})
 		},

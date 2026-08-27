@@ -7,6 +7,7 @@ import (
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -31,7 +32,7 @@ func setupPollTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 	router := chi.NewRouter()
 
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Route("/polls/{pollId}/results", func(r chi.Router) {
+		r.Route("/polls", func(r chi.Router) {
 			r.Use(jwtauth.Verifier(tokenAuth))
 			r.Use(jwtauth.Authenticator(tokenAuth))
 			r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -44,7 +45,9 @@ func setupPollTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				CharacterService:    &dbservices.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger},
 				NotificationService: dbservices.NewNotificationService(testDB.Pool, app.ObsLogger),
 			}
-			r.Get("/", handler.GetPollResults)
+			// huma registers by full relative path, so the API mounts at
+			// /polls rather than at the individual operation's path.
+			RegisterHumaPolls(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 		})
 	})
 
@@ -419,7 +422,7 @@ func setupPollVoteTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux 
 	router := chi.NewRouter()
 
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Route("/polls/{pollId}/vote", func(r chi.Router) {
+		r.Route("/polls", func(r chi.Router) {
 			r.Use(jwtauth.Verifier(tokenAuth))
 			r.Use(jwtauth.Authenticator(tokenAuth))
 			r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -432,7 +435,9 @@ func setupPollVoteTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux 
 				CharacterService:    &dbservices.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger},
 				NotificationService: dbservices.NewNotificationService(testDB.Pool, app.ObsLogger),
 			}
-			r.Post("/", handler.SubmitVote)
+			// huma registers by full relative path, so the API mounts at
+			// /polls rather than at the individual operation's path.
+			RegisterHumaPolls(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 		})
 	})
 
@@ -447,7 +452,7 @@ func setupGetPollTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 	router := chi.NewRouter()
 
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Route("/polls/{pollId}", func(r chi.Router) {
+		r.Route("/polls", func(r chi.Router) {
 			r.Use(jwtauth.Verifier(tokenAuth))
 			r.Use(jwtauth.Authenticator(tokenAuth))
 			r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -460,7 +465,9 @@ func setupGetPollTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				CharacterService:    &dbservices.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger},
 				NotificationService: dbservices.NewNotificationService(testDB.Pool, app.ObsLogger),
 			}
-			r.Get("/", handler.GetPoll)
+			// huma registers by full relative path, so the API mounts at
+			// /polls rather than at the individual operation's path.
+			RegisterHumaPolls(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 		})
 	})
 
@@ -747,7 +754,7 @@ func setupListPollsByPhaseTestRouter(app *core.App, testDB *core.TestDatabase) *
 	router := chi.NewRouter()
 
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Route("/games/{gameID}/phases/{phaseId}/polls", func(r chi.Router) {
+		r.Route("/games/{gameID}", func(r chi.Router) {
 			r.Use(jwtauth.Verifier(tokenAuth))
 			r.Use(jwtauth.Authenticator(tokenAuth))
 			r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -761,7 +768,7 @@ func setupListPollsByPhaseTestRouter(app *core.App, testDB *core.TestDatabase) *
 				CharacterService:    &dbservices.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger},
 				NotificationService: dbservices.NewNotificationService(testDB.Pool, app.ObsLogger),
 			}
-			r.Get("/", handler.ListPollsByPhase)
+			RegisterHumaGamePolls(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 		})
 	})
 
@@ -1056,20 +1063,18 @@ func TestCreatePoll_ValidationErrors(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+gmToken)
 
-			// Note: This test focuses on request binding validation
-			// Actual route testing would require full router setup
-			// For now, testing the Bind() method directly
+			// This exercises the validation rules directly rather than
+			// through the router; the handler tests above cover the wiring.
+			_ = req
 			var testReq CreatePollRequest
 			json.Unmarshal(payload, &testReq)
-			err := testReq.Bind(req)
+			msg := resolveErrText(testReq.Resolve(nil))
 
 			if tc.expectedStatus == 400 {
-				core.AssertNotEqual(t, nil, err, tc.description)
-				if err != nil {
-					core.AssertTrue(t, strings.Contains(err.Error(), tc.expectedError), "Error should contain: "+tc.expectedError)
-				}
+				core.AssertNotEqual(t, "", msg, tc.description)
+				core.AssertTrue(t, strings.Contains(msg, tc.expectedError), "Error should contain: "+tc.expectedError)
 			} else {
-				core.AssertEqual(t, nil, err, tc.description)
+				core.AssertEqual(t, "", msg, tc.description)
 			}
 		})
 	}
@@ -1121,15 +1126,14 @@ func TestUpdatePoll_ValidationErrors(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest("PATCH", "/api/v1/polls/1", nil)
-			err := tc.payload.Bind(req)
+			_ = req
+			msg := resolveErrText(tc.payload.Resolve(nil))
 
 			if tc.expectedStatus == 400 {
-				core.AssertNotEqual(t, nil, err, tc.description)
-				if err != nil {
-					core.AssertTrue(t, strings.Contains(err.Error(), tc.expectedError), "Error should contain: "+tc.expectedError)
-				}
+				core.AssertNotEqual(t, "", msg, tc.description)
+				core.AssertTrue(t, strings.Contains(msg, tc.expectedError), "Error should contain: "+tc.expectedError)
 			} else {
-				core.AssertEqual(t, nil, err, tc.description)
+				core.AssertEqual(t, "", msg, tc.description)
 			}
 		})
 	}
@@ -1187,15 +1191,14 @@ func TestSubmitVote_ValidationErrors(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest("POST", "/api/v1/polls/1/vote", nil)
-			err := tc.payload.Bind(req)
+			_ = req
+			msg := resolveErrText(tc.payload.Resolve(nil))
 
 			if tc.expectedStatus == 400 {
-				core.AssertNotEqual(t, nil, err, tc.description)
-				if err != nil {
-					core.AssertTrue(t, strings.Contains(err.Error(), tc.expectedError), "Error should contain: "+tc.expectedError)
-				}
+				core.AssertNotEqual(t, "", msg, tc.description)
+				core.AssertTrue(t, strings.Contains(msg, tc.expectedError), "Error should contain: "+tc.expectedError)
 			} else {
-				core.AssertEqual(t, nil, err, tc.description)
+				core.AssertEqual(t, "", msg, tc.description)
 			}
 		})
 	}
@@ -1404,4 +1407,14 @@ func TestPollVisibilityByRole(t *testing.T) {
 			core.AssertTrue(t, hasVoters(w.Body.Bytes()), tc.name+" should see individual votes on completed game regardless of poll deadline")
 		}
 	})
+}
+
+// resolveErrText flattens the errors a huma Resolve returns into one string, so
+// the validation tables can keep asserting on message substrings.
+func resolveErrText(errs []error) string {
+	parts := make([]string, 0, len(errs))
+	for _, err := range errs {
+		parts = append(parts, err.Error())
+	}
+	return strings.Join(parts, "; ")
 }

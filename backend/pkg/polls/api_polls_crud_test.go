@@ -17,6 +17,7 @@ import (
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -58,14 +59,18 @@ func setupPollCRUDTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux 
 				NotificationService: dbservices.NewNotificationService(testDB.Pool, app.ObsLogger),
 			}
 
-			// Game-scoped poll routes
-			r.With(gameHandler.GameMiddleware()).Post("/games/{gameID}/polls", handler.CreatePoll)
-			r.With(gameHandler.GameMiddleware()).Get("/games/{gameID}/polls", handler.ListGamePolls)
+			// Game-scoped poll routes. These read the game from context, so
+			// they sit behind GameMiddleware under a {gameID} route exactly as
+			// they do in pkg/http/root.go.
+			r.Route("/games/{gameID}", func(r chi.Router) {
+				r.Use(gameHandler.GameMiddleware())
+				RegisterHumaGamePolls(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
+			})
 
 			// Poll-specific routes
-			r.Get("/polls/{pollId}", handler.GetPoll)
-			r.Put("/polls/{pollId}", handler.UpdatePoll)
-			r.Delete("/polls/{pollId}", handler.DeletePoll)
+			r.Route("/polls", func(r chi.Router) {
+				RegisterHumaPolls(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
+			})
 		})
 	})
 
@@ -315,9 +320,10 @@ func TestPollCRUD_DeletePoll(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		// The handler calls render.Status(r, 204) but doesn't write a body,
-		// so the actual response code is 200 (default empty response)
-		assert.Equal(t, http.StatusOK, rec.Code)
+		// 204 No Content. The chi handler used to answer 200 here: it called
+		// render.Status(r, 204) without a following write, so the status never
+		// reached the response. The huma port states the status explicitly.
+		assert.Equal(t, http.StatusNoContent, rec.Code)
 
 		// Verify poll is gone
 		getReq := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/polls/%d", pollID), nil)
