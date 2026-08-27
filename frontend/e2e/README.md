@@ -580,5 +580,4 @@ run in the E2E container. `just dev-help` covers the host-only workflow.
 - **Playwright Docs**: https://playwright.dev/
 - **Test Data Reference**: `.claude/context/TEST_DATA.md`
 - **Page Objects**: `frontend/e2e/pages/README.md`
-- **Coverage status**: `frontend/e2e/STATUS.md`
 - **Testing Philosophy**: `.claude/context/TESTING.md`

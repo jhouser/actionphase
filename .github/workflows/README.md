@@ -40,7 +40,7 @@ locally before merging. Accepts a `test_suite` input (`all`, `smoke`,
 > The non-`all` choices filter by Playwright tag, and **almost no specs carry
 > tags** — only `smoke/health-check.spec.ts` and `auth/registration.spec.ts` use
 > the `tagTest()` helper. `game`, `character`, and `message` currently select
-> zero tests. See `frontend/e2e/STATUS.md`.
+> zero tests.
 
 ### Nightly Workflow (`nightly.yml`)
 

@@ -483,7 +483,6 @@ await settingsPage.saveChanges();
 For more information:
 - **E2E Quick Start**: `/docs-site/developer/testing/E2E_QUICK_START.md`
 - **E2E Guide**: `/frontend/e2e/README.md`
-- **Coverage status**: `/frontend/e2e/STATUS.md`
 - **Playwright Docs**: https://playwright.dev/docs/pom
 
 ---

@@ -19,8 +19,6 @@ are not part of the published documentation site.
 - **[Route53 + SSL Setup](deployment/ROUTE53_SSL_SETUP.md)** — DNS configuration
 
 ### Operations
-- **[Deployment Improvements](operations/DEPLOYMENT_IMPROVEMENTS.md)** —
-  monitoring schedule, log retention, quick commands
 - **[Logging Quick Reference](operations/LOGGING_QUICK_REFERENCE.md)** — day-to-day
   log commands
 - **[Logging Strategy](operations/LOGGING_STRATEGY.md)** — decision record for the

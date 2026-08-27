@@ -255,7 +255,6 @@ cp .claude/planning/FEATURE_TEMPLATE.md .claude/planning/feature-[name].md
 - [ ] **Error Scenarios**: Invalid input, permissions, network errors
 - [ ] **Multi-User** (if needed): GM-Player interactions
 - [ ] **Test Duration**: < 3 minutes
-- [ ] **Update Coverage**: Add to `frontend/e2e/STATUS.md`
 
 ---
 

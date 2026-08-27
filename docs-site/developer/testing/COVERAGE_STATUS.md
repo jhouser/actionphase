@@ -205,39 +205,19 @@ SKIP_DB_TESTS=false go test ./pkg/db/services/messages -cover
 
 ## Frontend Coverage
 
-### Current Status: ~60% Estimated Coverage ✅
+### Current Status
 
-**Overall Assessment**: VERY GOOD - Production-ready with comprehensive component coverage
+Measured 2026-08-26 via `just test-fe run`:
 
-**Test Distribution**:
-- Total test files: 38
-- Total tests: 3,857 passing, 14 skipped
-- Pass rate: 100%
+| Metric | Value |
+|---|---|
+| Test files | 246 |
+| Tests | 3,857 passing, 14 skipped |
+| Pass rate | 100% |
 
-### Recent Improvements (October 2025)
-
-**Major Testing Campaign Results**:
-- ✅ Added 695 new tests (+213% growth)
-- ✅ Achieved 60% coverage target
-- ✅ All critical user paths now covered
-- ✅ Established comprehensive testing patterns
-
-**Components Tested in Campaign**:
-1. ✅ **Layout.tsx** - 28 tests (navigation, user display)
-2. ✅ **Modal.tsx** - 25 tests (modal behavior, accessibility)
-3. ✅ **ProtectedRoute.tsx** - 10 tests (auth routing)
-4. ✅ **ErrorDisplay.tsx** - 30 tests (error handling)
-5. ✅ **NewConversationModal.tsx** - 33 tests (conversation creation)
-6. ✅ **EditGameModal.tsx** - 37 tests (game editing)
-7. ✅ **ThreadedComment.tsx** - 54 tests (comment system)
-8. ✅ **GameResultsManager.tsx** - 45 tests (results management)
-9. ✅ **LoginForm.tsx** - 13 tests (5 deferred due to vi.mock complexity)
-10. ✅ **RegisterForm.tsx** - Comprehensive coverage
-11. ✅ **GamesList.tsx** - 12 tests (includes GM bug regression)
-12. ✅ **ConversationList.tsx** - 8 tests (includes deduplication regression)
-13. ✅ **CharactersList.tsx** - Character list display
-14. ✅ **PhaseManagement.tsx** - Phase control tests
-15. ✅ **And 23 more components...**
+Statement coverage is not currently instrumented for the frontend; the counts
+above are the tracked signal. Regenerate with `just test-fe run` and
+`find frontend/src -name '*.test.ts*' | wc -l`.
 
 ### Well-Covered Areas ✅
 
@@ -549,46 +529,6 @@ frontend/src/
     server.ts
     handlers.ts
 ```
-
----
-
-## Historical Context
-
-### October 2025 Testing Campaign
-
-**Phase 1 (October 17)** - Initial Testing Campaign:
-- ✅ Added 695 frontend tests (+213% growth)
-- ✅ Achieved 60% frontend coverage target
-- ✅ 100% component coverage (all 38 components have tests)
-- ✅ Established comprehensive testing patterns
-- ⚠️ Coverage report outdated (phases service 22.7% was incorrect)
-
-**Phase 2 (October 23)** - Infrastructure & Accuracy:
-- ✅ Fixed critical data integrity bug (deleted comment editing)
-- ✅ Implemented automatic test isolation (27 table cleanup)
-- ✅ Corrected coverage metrics (phases actually 81.9%)
-- ✅ Documented service decomposition architecture
-- ✅ Added 322 backend tests (+222% growth from Phase 1)
-- ✅ Achieved 100% backend test pass rate
-
-**Key Milestones**:
-1. **Backend**: Accurate coverage measurement, service decomposition documented
-2. **Frontend**: MSW v2 setup and pattern establishment
-3. **Regression**: Tests added for all known bugs + new data integrity bug
-4. **Infrastructure**: Automatic cleanup system, test reliability restored
-
-### Major Refactoring (October 2025)
-
-**AuthContext Consolidation**:
-- Migrated from per-component user fetching to centralized AuthProvider
-- Eliminated JWT decoding from client-side code
-- Reduced API calls by 60-70%
-- Updated 15+ components to use `useAuth()` hook
-
-**Testing Impact**:
-- Required updates to many component tests
-- Improved testability with centralized auth
-- Better loading state management with `isCheckingAuth`
 
 ---
 

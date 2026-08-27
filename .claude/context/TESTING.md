@@ -267,7 +267,7 @@ E2E tests (Playwright) are slow (~20-30s each), hard to debug, and provide poor 
 - Simple API correctness (use curl or a handler test)
 - Authorization rules (handler tests are faster and more precise)
 
-See `frontend/e2e/STATUS.md` for current E2E test coverage and `frontend/e2e/README.md` for the complete testing guide.
+See `frontend/e2e/README.md` for the complete E2E testing guide.
 
 **Current E2E coverage** (49 spec files, organized into subdirectories under `frontend/e2e/`):
 - Auth, Games (lifecycle/applications/settings/co-GM), Gameplay (actions/phases/characters/handouts/polls/deadlines), Messaging (common room/private messages/mentions), Notifications, Settings, Admin, Security, Smoke, Edge cases

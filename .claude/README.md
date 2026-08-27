@@ -101,7 +101,6 @@ Read ADRs for understanding architectural decisions:
 **Location**: `/docs-site/developer/testing/`
 
 - COVERAGE_STATUS.md - Current test coverage status
-- TEST_COVERAGE_REFERENCE.md - Coverage metrics and recommendations
 - TEST_DATA.md - Test fixtures and data setup
 - E2E_QUICK_START.md - E2E testing quick reference
 - E2E_FIXTURES.md - E2E test fixture documentation
@@ -161,7 +160,7 @@ Active documentation files (not in docs-site yet):
 - Use `data-testid` selectors
 - Wait for specific conditions, not arbitrary timeouts
 
-**See**: `.claude/context/TESTING.md` E2E section, `frontend/e2e/STATUS.md` for current coverage, and `frontend/e2e/README.md` for the complete guide
+**See**: `.claude/context/TESTING.md` E2E section and `frontend/e2e/README.md` for the complete guide
 
 ## Quick Start for AI
 

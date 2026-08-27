@@ -282,5 +282,4 @@ Nginx (actionphase-nginx)
 
 - [Route53 DNS Setup Guide](./ROUTE53_SSL_SETUP.md)
 - [Production Env Checklist](./PRODUCTION_ENV_CHECKLIST.md)
-- [Deployment Operations](../operations/DEPLOYMENT_IMPROVEMENTS.md)
 - [Let's Encrypt Documentation](https://letsencrypt.org/docs/)

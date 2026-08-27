@@ -67,9 +67,8 @@ When an E2E test fails, you MUST:
 3. Check **`/backend/pkg/db/test_fixtures/`** for actual SQL files
 
 **Before E2E Testing**:
-1. Review **`frontend/e2e/STATUS.md`** for current E2E coverage
-2. Check **`frontend/e2e/README.md`** for complete guide and patterns
-3. Check **`/docs-site/developer/testing/E2E_QUICK_START.md`** for quick reference commands
+1. Check **`frontend/e2e/README.md`** for complete guide and patterns
+2. Check **`/docs-site/developer/testing/E2E_QUICK_START.md`** for quick reference commands
 
 ### Context File Quick Reference
 
@@ -386,7 +385,6 @@ Location: `.claude/reference/`
 - **`/docs-site/developer/testing/COVERAGE_STATUS.md`** - Test coverage status and recommendations
 - **`/docs-site/developer/testing/TEST_DATA.md`** - Detailed test fixture documentation
 - **`/docs-site/developer/testing/E2E_QUICK_START.md`** - Quick reference for E2E testing (developer reference)
-- **`frontend/e2e/STATUS.md`** - Current E2E test coverage and plan
 - **`frontend/e2e/README.md`** - Complete E2E testing guide
 
 ---
