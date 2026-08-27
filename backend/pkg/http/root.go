@@ -333,7 +333,9 @@ func (h *Handler) Start() {
 					ConversationService: db.NewConversationService(h.App.Pool, h.App.ObsLogger),
 					PhaseService:        &dbphases.PhaseService{DB: h.App.Pool},
 				}
-				conversationHandler.RegisterRoutes(r)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				conversations.RegisterHumaConversations(gameScopedAPI, conversationHandler)
 
 				// Handouts
 				handoutHandler := &handouts.Handler{
