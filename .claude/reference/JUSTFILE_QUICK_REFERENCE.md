@@ -132,7 +132,7 @@ just docs-dev       # Docs dev server (http://localhost:5174)
 just docs-build     # Build the docs site
 just docs-preview   # Preview the build (http://localhost:5175)
 just docs-embed     # Build + embed docs into the backend
-just api-docs-validate  # Validate API documentation completeness
+just check-api-docs # Verify the OpenAPI spec matches registered routes
 ```
 
 ## 🚢 Production
@@ -165,7 +165,7 @@ curl -s -H "Authorization: Bearer $(cat /tmp/api-token.txt)" \
 ## Full Listing (from `just --list`)
 
 ```
-api-docs-validate                                # Validate API documentation completeness (in backend container)
+check-api-docs                                   # Verify the OpenAPI spec agrees with the routes registered in root.go
 check-game-states                                # host bash — contributors on Windows get the same check as everyone else.
 ci-test                                          # Run CI test suite
 claude                                           # Launch Claude Code editor

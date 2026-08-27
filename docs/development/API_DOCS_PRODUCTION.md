@@ -271,7 +271,7 @@ docker-compose restart backend
 Before deploying API documentation updates:
 
 - [ ] Edit `backend/pkg/docs/openapi.yaml`
-- [ ] Run `just api-docs-validate` to check coverage
+- [ ] Run `just check-api-docs` to verify the spec matches registered routes
 - [ ] Replace all `TODO:` placeholders
 - [ ] Test locally: `http://localhost:3000/api/v1/docs/`
 - [ ] Rebuild backend: `go build -o actionphase main.go`

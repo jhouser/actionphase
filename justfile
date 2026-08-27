@@ -1244,6 +1244,3 @@ docs-embed: docs-build
   @echo "✅ Documentation embedded at backend/pkg/docs/dist"
   @echo "🔧 Restart the backend to include updated docs: just restart backend"
 
-# Validate API documentation completeness (in backend container)
-api-docs-validate:
-  {{BE}} go run scripts/validate-api-docs.go
