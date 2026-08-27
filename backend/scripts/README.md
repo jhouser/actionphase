@@ -71,6 +71,50 @@ Duration:                45s
 - Updates metadata only, doesn't re-upload files
 - Can be interrupted and resumed safely
 
+### Development & Testing
+
+#### API Test Utility (`api-test.sh`)
+
+Authenticated API testing from the host. Logs in, caches the JWT at
+`/tmp/api-token.txt`, and reuses it for subsequent calls.
+
+```bash
+./backend/scripts/api-test.sh login-player   # or login-gm
+./backend/scripts/api-test.sh games
+curl -s -H "Authorization: Bearer $(cat /tmp/api-token.txt)" \
+  http://localhost:3000/api/v1/games | jq
+```
+
+**Subcommands:** `health`, `status`, `login`, `login-gm`, `login-player`,
+`test-token`, `games`, `game`, `characters`, `posts`,
+`create-post`, `comments`, `create-comment`, `test-mentions`.
+
+#### Dev Container Entrypoint (`dev-entrypoint.sh`)
+
+Entrypoint for the backend dev container. Waits for Postgres to be resolvable
+and accepting connections, then `exec`s Air so it becomes PID 1's child and
+receives signals cleanly. Not run directly — `docker-compose.dev.yml` invokes it.
+
+#### Endpoint Smoke Tests
+
+- **`test_character_rename.sh`** — exercises `PUT /api/v1/characters/{id}/rename`
+- **`test_game_settings_api.sh`** — game create/update with `is_anonymous` and
+  `auto_accept_audience`
+
+Both are standalone bash scripts hitting a running backend; they are not part of
+`just test`.
+
+#### Character Data Diagnostics (`fix_character_data_ids.sql`)
+
+⚠️ **Diagnostic only — do not run automatically.** Finds character data rows with
+missing `id` fields (corruption from an old draft-merge bug) across currency,
+items, abilities, and skills. Read it before running anything it suggests.
+
+```bash
+docker compose -f docker-compose.dev.yml exec -T db \
+  psql -U postgres -d actionphase -f /dev/stdin < backend/scripts/fix_character_data_ids.sql
+```
+
 ### API Documentation
 
 #### 1. Route Validator (`validate-api-docs.go`)

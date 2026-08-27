@@ -441,8 +441,10 @@ import { Card, CardBody, Input, Button } from '@/components/ui';
 **Available UI Components:**
 
 **Layout Components:**
-- `<Card variant="default|elevated|bordered">` - Container with sections
+- `<Card variant="default|elevated|bordered|danger|warning|success">` - Container with sections
 - `<CardHeader>`, `<CardBody>`, `<CardFooter>` - Card sections
+- `<Modal>` - Dialog overlay
+- `<Drawer>` - Slide-in panel
 
 **Form Components:**
 - `<Input label="..." />` - Text input with label and validation
@@ -450,14 +452,17 @@ import { Card, CardBody, Input, Button } from '@/components/ui';
 - `<Select label="...">` - Dropdown select
 - `<Checkbox label="..." />` - Checkbox with label
 - `<Radio label="..." />` - Radio button
+- `<Toggle label="..." />` - On/off switch
 - `<DateTimeInput label="..." />` - Date/time picker
 - `<Label required optional>` - Standalone form label
 
 **Interactive Components:**
-- `<Button variant="primary|secondary|danger|ghost">` - Action buttons
-- `<Badge variant="primary|success|warning|danger">` - Status indicators
+- `<Button variant="primary|secondary|outline|danger|warning|success|ghost">` - Action buttons
+- `<Badge variant="primary|secondary|success|warning|danger|neutral">` - Status indicators (default `neutral`)
 - `<Alert variant="info|success|warning|danger">` - Notification boxes
-- `<Spinner size="sm|md|lg|xl">` - Loading indicator
+- `<Spinner size="sm|md|lg|xl" variant="primary|secondary|inverse">` - Loading indicator
+- `<HelpTooltip>` - Inline help
+- `<MetadataItem>`, `<MetadataGroup>`, `<MetadataSeparator>` - Metadata display
 
 **Common Patterns:**
 

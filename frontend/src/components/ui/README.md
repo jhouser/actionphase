@@ -26,7 +26,7 @@ import { Button } from '@/components/ui';
 ```
 
 **Props:**
-- `variant`: `'primary' | 'secondary' | 'danger' | 'ghost'` (default: `'primary'`)
+- `variant`: `'primary' | 'secondary' | 'outline' | 'danger' | 'warning' | 'success' | 'ghost'` (default: `'primary'`)
 - `size`: `'sm' | 'md' | 'lg'` (default: `'md'`)
 - `loading`: `boolean` - Shows spinner when true
 - `icon`: `ReactNode` - Icon to display before text
@@ -116,7 +116,7 @@ import { Card, CardHeader, CardBody, CardFooter } from '@/components/ui';
 ```
 
 **Card Props:**
-- `variant`: `'default' | 'elevated' | 'bordered'` (default: `'default'`)
+- `variant`: `'default' | 'elevated' | 'bordered' | 'danger' | 'warning' | 'success'` (default: `'default'`)
 - `padding`: `'none' | 'sm' | 'md' | 'lg'` (default: `'md'`)
 - All standard div HTML attributes
 
@@ -214,7 +214,7 @@ import { Spinner } from '@/components/ui';
 
 **Props:**
 - `size`: `'sm' | 'md' | 'lg' | 'xl'` (default: `'md'`)
-- `variant`: `'primary' | 'secondary' | 'white'` (default: `'primary'`)
+- `variant`: `'primary' | 'secondary' | 'inverse'` (default: `'primary'`)
 - `label`: `string` - Optional label text
 - All standard div HTML attributes (except children)
 
@@ -355,6 +355,143 @@ import { Toggle } from '@/components/ui';
 
 // Bare switch (bring your own layout) — always pass an aria-label
 <Toggle checked={on} onChange={setOn} aria-label="Toggle setting" />
+```
+
+---
+
+### Textarea
+
+Multi-line text input with label, validation, and optional character count.
+
+**Props:**
+- `textareaSize`: `'sm' | 'md' | 'lg'` (default: `'md'`) — **note the name; it is not `size`**
+- `variant`: `'default' | 'error'` (default: `'default'`)
+- `label`, `error`, `helperText`: `string`
+- `optional`: `boolean` — renders an "optional" hint on the label
+- `showCharacterCount`: `boolean`
+- All standard textarea HTML attributes
+
+```tsx
+<Textarea
+  label="Description"
+  textareaSize="lg"
+  showCharacterCount
+  maxLength={500}
+/>
+```
+
+---
+
+### Select
+
+Dropdown select with label and validation.
+
+**Props:**
+- `selectSize`: `'sm' | 'md' | 'lg'` (default: `'md'`) — **not `size`**, which is a
+  native HTML attribute on `<select>` with different meaning
+- `variant`: `'default' | 'error'` (default: `'default'`)
+- `label`, `error`, `helperText`: `string`
+- `optional`: `boolean`
+
+```tsx
+<Select label="Genre" selectSize="md">
+  <option value="fantasy">Fantasy</option>
+  <option value="scifi">Sci-Fi</option>
+</Select>
+```
+
+---
+
+### DateTimeInput
+
+Date/time picker.
+
+**Props:**
+- `inputSize`: `'sm' | 'md' | 'lg'` (default: `'md'`)
+- `variant`: `'default' | 'error'`
+- `label`, `error`, `helperText`, `id`, `name`: `string`
+- `optional`: `boolean`
+- `value`: `string`
+- `onChange`: `(e: { target: { value: string } }) => void` — a synthetic shape,
+  not a native `ChangeEvent`
+
+```tsx
+<DateTimeInput label="Deadline" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+```
+
+---
+
+### Modal
+
+Dialog overlay.
+
+**Props:**
+- `isOpen`: `boolean` (required)
+- `onClose`: `() => void` (required)
+- `title`: `string`
+- `children`: `ReactNode` (required)
+- `footer`: `ReactNode`
+- `size`: `'sm' | 'md' | 'lg' | 'xl'`
+- `showCloseButton`: `boolean`
+
+```tsx
+<Modal isOpen={open} onClose={close} title="Confirm" footer={<Button onClick={close}>OK</Button>}>
+  Are you sure?
+</Modal>
+```
+
+---
+
+### Drawer
+
+Slide-in panel. Note the prop is `open`, **not** `isOpen` as on `Modal`.
+
+**Props:**
+- `open`: `boolean` (required)
+- `onClose`: `() => void` (required)
+- `title`: `string`
+- `children`: `ReactNode` (required)
+- `side`: `'bottom' | 'right' | 'responsive'`
+- `zIndexClass`: `string`
+
+```tsx
+<Drawer open={open} onClose={close} side="responsive" title="Filters">
+  …
+</Drawer>
+```
+
+---
+
+### HelpTooltip
+
+Inline help affordance.
+
+**Props:**
+- `text`: `string` (required)
+- `align`: `'left' | 'right'`
+
+```tsx
+<HelpTooltip text="Only the GM can see this." align="right" />
+```
+
+---
+
+### MetadataItem / MetadataGroup / MetadataSeparator
+
+Icon + label + value rows for metadata display.
+
+**`MetadataItem` props:**
+- `icon`: `ReactNode` (required)
+- `label`: `string` (required)
+- `value`: `string | ReactNode`
+- `className`: `string`
+
+```tsx
+<MetadataGroup>
+  <MetadataItem icon={<ClockIcon />} label="Deadline" value="2 days" />
+  <MetadataSeparator />
+  <MetadataItem icon={<UsersIcon />} label="Players" value="5" />
+</MetadataGroup>
 ```
 
 ---
@@ -606,22 +743,17 @@ When contributing components:
 
 ---
 
-## Future Components (Planned)
+## Component Status
 
-**Tier 2:**
-- Label
-- Checkbox
-- Radio
-- Badge
-- Alert
-- Spinner
+Everything listed under "Available Components" above is implemented and
+exported from `@/components/ui`.
 
-**Tier 3:**
+**Not yet built:**
 - Tabs
-- Dropdown/Select
-- DatePicker
-- Tooltip
-- Modal (refactor existing)
-- Toast/Notification
+- Toast/Notification component — note that toast *state* already exists via
+  `src/contexts/ToastContext.tsx`; what is missing is a `ui/` presentational
+  component.
 
-See `.claude/planning/DARK_MODE_REFACTOR_PLAN.md` for complete roadmap.
+> An earlier version of this section listed Label, Checkbox, Radio, Badge,
+> Alert, Spinner, Select, DateTimeInput, Modal, and Tooltip as "planned". All of
+> those shipped — several are documented above in this same file.

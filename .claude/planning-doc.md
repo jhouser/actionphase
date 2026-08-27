@@ -3,6 +3,9 @@
 High-value work prioritized for remaining Claude subscription time.
 No active features/bugs; goal is lasting quality improvement.
 
+> **Status re-verified 2026-08-27.** Items 1–5 are complete. Only item 6
+> remains open. Statuses below are updated in place.
+
 ---
 
 ## Tier 1: High Impact, Low Risk
@@ -19,7 +22,8 @@ No active features/bugs; goal is lasting quality improvement.
 No work needed here.
 
 ### 2. Resolve deprecated `User()` method callers → `GetUserByID()`
-**Status**: In progress (Day 1)
+**Status**: ✅ DONE — the deprecated `User()` method is gone from `users.go`
+and there are zero non-test callers remaining.
 
 `UserService.User()` is deprecated in favor of `GetUserByID()`.
 Active callers (non-test):
@@ -34,7 +38,7 @@ Active callers (non-test):
 Plan: Update all callers, then remove the deprecated `User()` method from `users.go`.
 
 ### 3. Remove deprecated `useAuthLegacy` barrel export
-**Status**: In progress (Day 1)
+**Status**: ✅ DONE — no longer exported from `frontend/src/hooks/index.ts`.
 
 `frontend/src/hooks/index.ts` exports `useAuth as useAuthLegacy`.
 No consumer imports `useAuthLegacy` — the two test files that use `useAuth`
@@ -47,7 +51,8 @@ Plan: Remove the export line from `hooks/index.ts`.
 ## Tier 2: Meaningful but Heavier
 
 ### 4. Resolve 4 service migration TODOs in phases package
-**Status**: TODO
+**Status**: ✅ DONE — the migration TODOs are no longer present in
+`phases/api_results.go` or `phases/api_actions.go`.
 
 TODOs in `phases/api_results.go` and `phases/api_actions.go` indicate
 methods should be migrated to the `actions` package but weren't completed.
@@ -55,7 +60,9 @@ methods should be migrated to the `actions` package but weren't completed.
 - `GetUserActions` → actions package
 
 ### 5. Decompose `messages/api.go` (1,524 lines)
-**Status**: TODO
+**Status**: ✅ DONE — `api.go` no longer exists. The package is now split into
+`api_posts.go`, `api_read_tracking.go`, `api_recent.go`, `api_draft_posts.go`,
+`api_types.go`, and `render_error.go`.
 
 The handler was not decomposed when the service was. Natural splits:
 - `api_posts.go` — post CRUD
@@ -66,11 +73,21 @@ The handler was not decomposed when the service was. Natural splits:
 
 Pattern already exists in `db/services/messages/`.
 
-### 6. Replace `fmt.Errorf` with typed errors in `messages/api.go`
-**Status**: TODO
+### 6. Replace `fmt.Errorf` with typed errors in the messages package
+**Status**: 🔄 OPEN — the only item still outstanding.
 
-30+ ad-hoc error strings instead of `core.ErrXxx()` constants.
-Lower priority than structural decomposition.
+**26 instances** remain (re-counted 2026-08-27), now spread across the
+decomposed files rather than a single `api.go`:
+
+| File | `fmt.Errorf` |
+|---|---|
+| `api_posts.go` | 13 |
+| `api_read_tracking.go` | 6 |
+| `api_recent.go` | 5 |
+| `api_draft_posts.go` | 1 |
+| `api_types.go` | 1 |
+
+Replace with `core.ErrXxx()` constants.
 
 ---
 

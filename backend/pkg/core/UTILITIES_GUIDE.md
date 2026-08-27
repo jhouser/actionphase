@@ -1,12 +1,19 @@
 # Core Utilities Guide
 
+**Verified:** 2026-08-26 against `backend/pkg/core/handler_utils.go`,
+`api_errors.go`, `db_utils.go`, and `middleware.go`.
+
+
 This document explains the new utility functions in the `core` package that reduce code duplication across API handlers.
 
 ## Database Error Handling
 
-### HandleDBError
+### HandleDBErrorWithID
 
 Converts database errors to appropriate API error responses.
+
+> There is **no** plain `core.HandleDBError`. `HandleDBErrorWithID` is the only
+> exported variant (`db_utils.go:21`).
 
 **Before:**
 ```go
@@ -28,16 +35,16 @@ if err != nil {
 game, err := gameService.GetGame(ctx, gameID)
 if err != nil {
     h.App.ObsLogger.LogError(ctx, err, "Failed to get game", "game_id", gameID)
-    render.Render(w, r, core.HandleDBError(err, "game"))
+    render.Render(w, r, core.HandleDBErrorWithID(err, "game", gameID))
     return
 }
 ```
 
 **Reduction**: 8 lines → 5 lines (37% reduction)
 
-### HandleDBErrorWithID
+#### Including the ID
 
-Same as HandleDBError but includes the ID in the error message.
+The `id` argument is interpolated into the error message.
 
 **Usage:**
 ```go
@@ -101,9 +108,17 @@ if errResp != nil {
 
 **Reduction**: 29 lines → 7 lines (76% reduction)
 
-### GetUsernameFromJWT
+### GetUserIDFromJWT
 
-Extracts just the username from JWT token.
+Resolves the authenticated user's **ID** from the JWT.
+
+> There is no `GetUsernameFromJWT`. The real helper is
+> `GetUserIDFromJWT(ctx, userService) (int32, render.Renderer)` — it takes a
+> `UserServiceInterface` and returns an `int32` user ID, not a username.
+>
+> If the request has already passed `ValidateSessionMiddleware`, prefer
+> `core.GetAuthenticatedUser(ctx)`, which reads the user off the context with no
+> service call.
 
 **Before**:
 ```go
@@ -122,7 +137,7 @@ if !ok {
 
 **After**:
 ```go
-username, errResp := core.GetUsernameFromJWT(ctx)
+userID, errResp := core.GetUserIDFromJWT(ctx, h.App.UserService)
 if errResp != nil {
     render.Render(w, r, errResp)
     return
@@ -154,17 +169,24 @@ if errResp := core.ValidateRequired(data.Title, "title"); errResp != nil {
 }
 ```
 
-### ValidateStringLength
+### ValidateStruct
 
-Checks string length requirements.
+> **`core.ValidateStringLength` does not exist.** Length limits are enforced
+> declaratively through struct tags, evaluated by `core.ValidateStruct` inside
+> `Bind` — not by an imperative per-field helper.
 
-**Usage**:
 ```go
-if errResp := core.ValidateStringLength(title, "title", 3, 255); errResp != nil {
-    render.Render(w, r, errResp)
-    return
+type CreateGameRequest struct {
+    Title string `json:"title" validate:"required,min=3,max=255"`
+}
+
+func (req *CreateGameRequest) Bind(r *http.Request) error {
+    return core.ValidateStruct(req)
 }
 ```
+
+Validating in `Bind` matters: a rejection there renders a **400**, whereas a
+service-layer reject surfaces as a **500**.
 
 ## Complete Example: CreateGame Handler
 
@@ -177,11 +199,16 @@ Key sections with duplication:
 
 ### After Refactoring (Estimated ~100 lines)
 
+> The original version of this example also called
+> `h.App.Observability.Metrics.IncrementCounter(...)`. **That API no longer
+> exists** — the custom metrics registry and the `/metrics` endpoint were removed
+> when the project moved to OpenTelemetry (see ADR-006). Tracing via
+> `ObsLogger.LogOperation` is the current equivalent.
+
 ```go
 func (h *Handler) CreateGame(w http.ResponseWriter, r *http.Request) {
     ctx := r.Context()
     defer h.App.ObsLogger.LogOperation(ctx, "api_create_game")()
-    h.App.Observability.Metrics.IncrementCounter("games_create_requests")
 
     // Bind request
     data := &CreateGameRequest{}
@@ -218,7 +245,7 @@ func (h *Handler) CreateGame(w http.ResponseWriter, r *http.Request) {
     // Handle database errors (REFACTORED)
     if err != nil {
         h.App.ObsLogger.LogError(ctx, err, "Failed to create game")
-        render.Render(w, r, core.HandleDBError(err, "game"))
+        render.Render(w, r, core.HandleDBErrorWithID(err, "game", gameID))
         return
     }
 

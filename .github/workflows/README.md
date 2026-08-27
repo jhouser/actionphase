@@ -4,43 +4,48 @@ This directory contains GitHub Actions workflows for automated pre-merge checks.
 
 ## Workflows
 
-### CI Workflow (ci.yml)
+Three workflows live here: `ci.yml`, `e2e.yml`, and `nightly.yml`.
 
-Runs on all pushes and pull requests to `master` and `go_rewrite` branches.
+### CI Workflow (`ci.yml`)
+
+Runs on pushes and pull requests to `master`, `develop`, and `go_rewrite`.
 
 **Jobs:**
 
-1. **backend-lint** - Backend code quality checks
-   - Go format check (`gofmt`)
-   - Go vet analysis
-   - Runs on: `ubuntu-latest`
-   - Go version: 1.25.0
+1. **backend-lint** — `gofmt` check and `go vet`. Go 1.25.0.
+2. **backend-test** — PostgreSQL **17** service container; creates the test
+   database, runs migrations, then mock tests, integration tests, and the race
+   detector. Go 1.25.0.
+3. **frontend-lint** — ESLint. Node **24**.
+4. **frontend-test** — Vitest unit tests. Node 24.
+5. **build-check** — runs after the others; builds backend (`go build`) and
+   frontend (`npm run build`).
+6. **upload-sourcemaps** — uploads frontend source maps to Grafana Faro.
+   Gated on `github.ref == 'refs/heads/master' && github.event_name == 'push'`,
+   so it does not run on pull requests.
 
-2. **backend-test** - Backend testing with PostgreSQL
-   - Sets up PostgreSQL 16 service container
-   - Creates test database and runs migrations
-   - Runs mock tests (fast, parallel)
-   - Runs integration tests (with database, sequential)
-   - Runs race detector tests
-   - Runs on: `ubuntu-latest` with PostgreSQL service
-   - Go version: 1.25.0
+> **On the type check:** `frontend-lint` runs `npx tsc -b --force`, **not**
+> `tsc --noEmit`. `frontend/tsconfig.json` is a solution-style file
+> (`"files": []` plus project references), so a bare `--noEmit` type-checks
+> **zero files** and exits 0 even with type errors present. `-b` walks the
+> referenced projects, matching `just type-check` and `npm run build`.
+> Fixed 2026-08-27 — CI had been passing vacuously.
 
-3. **frontend-lint** - Frontend code quality checks
-   - ESLint linting
-   - TypeScript type checking (`tsc --noEmit`)
-   - Runs on: `ubuntu-latest`
-   - Node version: 20
+### E2E Workflow (`e2e.yml`)
 
-4. **frontend-test** - Frontend unit testing
-   - Vitest unit tests
-   - Runs on: `ubuntu-latest`
-   - Node version: 20
+**Manual trigger only** (`workflow_dispatch`) — E2E tests are expected to run
+locally before merging. Accepts a `test_suite` input (`all`, `smoke`,
+`critical`, `auth`, `game`, `character`, `message`).
 
-5. **build-check** - Final build verification
-   - Runs after all other jobs pass
-   - Builds backend (`go build`)
-   - Builds frontend (`npm run build`)
-   - Ensures production builds succeed
+> The non-`all` choices filter by Playwright tag, and **almost no specs carry
+> tags** — only `smoke/health-check.spec.ts` and `auth/registration.spec.ts` use
+> the `tagTest()` helper. `game`, `character`, and `message` currently select
+> zero tests. See `frontend/e2e/STATUS.md`.
+
+### Nightly Workflow (`nightly.yml`)
+
+Scheduled at **04:00 UTC daily**, plus `workflow_dispatch`. Runs the
+`race-detector` job.
 
 ## Caching
 
@@ -50,48 +55,50 @@ The workflow uses caching to speed up builds:
 
 ## What's NOT Included
 
-As requested, the following are handled locally and NOT in CI:
+Handled locally, not in CI:
 - Docker image builds
 - Deployments
 - Coverage reports
-- Artifact uploads
 
-**Note**: E2E tests run separately on main branch push (see `e2e.yml`)
+**Note**: E2E tests are **manual-only** (`workflow_dispatch`) — they do *not*
+run automatically on push to `master`. `e2e.yml` does upload the Playwright
+report as an artifact when it runs.
 
 ## Local Testing
 
-To verify changes will pass CI before pushing:
+Reproduce CI locally against the containerized stack:
 
 ```bash
-# Backend
-just lint          # Format + vet
-just test-mocks    # Fast unit tests
-just test          # Full test suite with database
+just verify            # lint + type-check + builds (the full pre-push gate)
+just verify-quick      # non-mutating checks only (~8-11s)
 
-# Frontend
-just lint-frontend # ESLint
-cd frontend && npx tsc --noEmit  # Type check
-just test-frontend # Unit tests
-
-# Build check
-just build-all all # Backend + frontend builds
+just fmt-check         # gofmt
+just vet               # go vet
+just test              # backend tests
+just test-fe run       # frontend tests
+just lint-frontend     # ESLint
+just type-check        # tsc -b  (note: NOT --noEmit)
 ```
 
 ## Workflow Triggers
 
-- **Push**: Runs on pushes to `master` and `go_rewrite` branches
-- **Pull Request**: Runs on PRs targeting `master` and `go_rewrite` branches
+| Workflow | Trigger |
+|---|---|
+| `ci.yml` | push + PR to `master`, `develop`, `go_rewrite` |
+| `e2e.yml` | manual only (`workflow_dispatch`) |
+| `nightly.yml` | cron `0 4 * * *` (04:00 UTC) + manual |
 
 ## Job Dependencies
 
 ```
 backend-lint ──┐
 backend-test ──┤
-frontend-lint ─┼──> build-check
-frontend-test ─┘
+frontend-lint ─┼──> build-check ──> upload-sourcemaps
+frontend-test ─┘                    (master push only)
 ```
 
-All lint and test jobs run in parallel. Build check only runs if all previous jobs succeed.
+All lint and test jobs run in parallel. `build-check` runs only if they all
+succeed; `upload-sourcemaps` runs only on a push to `master`.
 
 ## Troubleshooting
 
@@ -105,10 +112,11 @@ Run `just vet` locally to see vet issues.
 Run `just lint-frontend` locally to see linting errors.
 
 ### Workflow fails on TypeScript check
-Run `cd frontend && npx tsc --noEmit` locally to see type errors.
+Run `just type-check` locally (it uses `tsc -b`). Do **not** use
+`tsc --noEmit` against the root tsconfig — it checks zero files and always passes.
 
 ### Workflow fails on tests
-Run `just test` (backend) or `just test-frontend` (frontend) locally.
+Run `just test` (backend) or `just test-fe run` (frontend) locally.
 
 ### Workflow fails on migration
 Ensure all migration files in `backend/pkg/db/migrations/` are valid and run in order.

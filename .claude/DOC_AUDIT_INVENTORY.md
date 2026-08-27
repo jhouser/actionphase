@@ -4,8 +4,7 @@
 **Goal:** For each doc, assess accuracy against the actual state of the codebase and bring it back up to date.
 **Scope:** Internal/dev-facing docs only. 152 tracked `.md` files (excludes `frontend/dist/`, `node_modules/`).
 
-**Progress:** Batches 1–7 complete (102 docs; 3 deleted in Batch 7). Next up: **Batch 8** — component-level READMEs & misc.
-One doc remains PENDING in Batch 2: `.claude/planning-doc.md`.
+**Progress:** ✅ **All 8 batches complete** (114 docs audited; 4 deleted). **Zero PENDING remaining.**
 
 ## How to use this file
 
@@ -116,7 +115,7 @@ Nearly a year untouched while the backend was decomposed and the dev stack conta
 | DELETED | `.claude/reference/TESTING_IMPROVEMENTS_SUMMARY.md` | 309 | 2025-10-16 | Aug 2025 changelog. Only referrer is `VERIFICATION_REPORT.md`. Delete alongside it. |
 | DELETED | `.claude/reference/AI_FRIENDLY_IMPROVEMENTS.md` | 168 | 2025-10-16 | Oct 2025 progress tracker (✅/🚧/⏳ never re-verified). Referred to by `VERIFICATION_REPORT.md` and `docs/README.md`. |
 | DELETED | `.claude/reference/E2E_TESTING_LEARNINGS_CODIFIED.md` | 161 | 2025-10-18 | Both its "see also" links point at gitignored `.claude/planning/` files that no longer exist. Merge anything still valuable into `frontend/e2e/README.md` / `testing-patterns`, then delete. |
-| PENDING | `.claude/planning-doc.md` | 81 | 2026-05-07 | Not yet reviewed — carried into the next session. |
+| UPDATED | `.claude/planning-doc.md` | 81 | 2026-05-07 | Re-verified 2026-08-27: **items 1–5 are complete** (deprecated `User()` removed with 0 callers left; `useAuthLegacy` gone; phases migration TODOs resolved; `messages/api.go` decomposed into 6 files). Only item 6 remains — 26 `fmt.Errorf` instances, re-counted and re-mapped onto the decomposed files. Statuses updated in place rather than deleted; this is an active work plan. |
 
 ### Batch 2 findings (completed 2026-08-26)
 
@@ -240,8 +239,8 @@ creates a new session row without deleting the old; orphans are swept within
 | OK | `.claude/skills/game-domain/resources/phase-system.md` | 91 | 2026-08-06 | `is_published` correctly documented as "GM published results", NOT visibility. |
 | UPDATED | `.claude/skills/testing-patterns/SKILL.md` | 202 | 2026-04-02 | Removed obsolete `go test -p=1` host invocation (packages clone their own DB and run parallel — `-p=1` is counterproductive) → `just test-run`; `just test-frontend` → `just test-fe run`; repointed the dead `frontend-testing.md` nav row. |
 | UPDATED | `.../resources/test-fixtures.md` | 550 | 2025-10-30 | `just db-restart` (nonexistent) → `just restart db`; added `just reset-test-db` for a dirty test template. |
-| PENDING | `.../resources/e2e-testing.md` | 583 | 2025-10-31 | Mechanical sweeps clean; deep content review deferred to Batch 6 (testing docs). |
-| PENDING | `.../resources/e2e-patterns-reference.md` | 474 | 2025-10-31 | As above. |
+| UPDATED | `.../resources/e2e-testing.md` | 583 | 2025-10-31 | **Completed in Batch 6** — see that section. |
+| UPDATED | `.../resources/e2e-patterns-reference.md` | 474 | 2025-10-31 | **Completed in Batch 6** — see that section. |
 | UPDATED | `.claude/skills/route-tester/SKILL.md` | 662 | 2025-10-30 | **Third copy of the 15-min/refresh-token fiction** — rewrote the auth overview (one 7-day session-backed token; `sub`/`session_id`/`exp`) and the 401 troubleshooting cause. Deleted a fabricated "justfile integrates api-test.sh" block (`just api-login`, `api-games`, `api-game` — none exist) and replaced it with the real 14 script subcommands. `just psql` → `just sh backend` + psql; `just dev` → `just up`; `core/models.go` → `core/*.go`. |
 | UPDATED | `.claude/skills/skill-rules.json` | 398 | — | **Two activation bugs.** `backend/cmd/**/*.go` → `backend/main.go` (no `cmd/` dir). `game-domain`'s three frontend globs (`components/{games,phases,characters}/**`) matched **zero** files — components are flat, not subdirectoried; replaced with name globs + `character-updates/` + `pages/Game*`, now matching **61** files. **Superseded by Batch 4 finding #3:** `fileTriggers` is read by no hook, so these were real config bugs but fixing them changed no runtime behavior. |
 | DELETED | `testing-patterns/resources/` ×8 stubs | 7 each | — | `anti-patterns`, `backend-testing`, `bug-fix-workflow`, `coverage-targets`, `frontend-testing`, `real-examples`, `test-commands`, `testing-pyramid`. Content-free filler ("*(Detailed documentation to be added)*"); 7 of 8 had zero inbound links. |
@@ -698,22 +697,34 @@ reachable only via `CLAUDE.md` and the root `README.md`.
 7. **`docs/` overlaps `docs-site/` and loses.** The onboarding duplicate had 11 invalid recipes while the `docs-site` copy (fixed in Batch 5) was correct. Consolidation, not parallel maintenance, is the fix.
 8. **Correction to my own work:** I reported `terraform/` as nonexistent early on — a zsh `nomatch` failure on a glob, not a real absence. It exists and is where the cron and logrotate config live.
 
-## Batch 8 — Component-level READMEs & misc
+## Batch 8 — Component-level READMEs & misc — ✅ COMPLETE
 
-| Status | Doc | Lines | Last Commit | Notes |
-|---|---|---|---|---|
-| PENDING | `frontend/src/components/ui/README.md` | 583 | 2026-07-27 | UI library API ref — CLAUDE.md leans on this heavily. |
-| PENDING | `frontend/src/styles/MIGRATION_PATTERNS.md` | 475 | 2025-10-21 | Migration likely complete → DELETE? |
-| PENDING | `frontend/src/styles/CSS_VARIABLES_USAGE.md` | 298 | 2025-10-21 | |
-| PENDING | `backend/scripts/README.md` | 290 | 2025-11-24 | |
-| PENDING | `backend/pkg/core/UTILITIES_GUIDE.md` | 260 | 2025-10-19 | |
-| PENDING | `backend/pkg/core/MIGRATION_EDGE_CASES.md` | 236 | 2025-10-19 | |
-| PENDING | `README.md` (root) | 207 | 2026-04-22 | Public-facing entry point. |
-| PENDING | `docs-site/README.md` | 212 | 2025-11-15 | |
-| PENDING | `frontend/README.md` | 66 | 2025-08-06 | Oldest doc in repo — probably stock Vite boilerplate. |
-| PENDING | `.github/workflows/README.md` | 114 | 2026-04-22 | Verify vs. actual workflow YAML. |
-| PENDING | `docs-site/STATUS.md` | 53 | 2026-04-22 | |
-| PENDING | `docs-site/index.md` | 27 | 2026-04-22 | |
+| Status | Doc | Lines | Notes |
+|---|---|---|---|
+| UPDATED | `frontend/src/components/ui/README.md` | 583 | **7 of 22 exported components were entirely undocumented** — `Textarea`, `Select`, `Modal`, `Drawer`, `DateTimeInput`, `HelpTooltip`, `MetadataItem`/`Group`/`Separator` — several of which CLAUDE.md instructs developers to use. Added sections for all, including two real footguns: `Textarea`/`Select` take **`textareaSize`/`selectSize`**, not `size`; and `Drawer` uses **`open`** while `Modal` uses `isOpen`. Fixed 3 wrong variant unions: Button 4→7 (`outline`, `warning`, `success` missing), Card 3→6, and Spinner's `'white'` → **`'inverse'`** (a prop value that does not exist). Replaced the "Future Components (Planned)" list — every Tier 2 entry and most of Tier 3 had already shipped and were documented *in the same file*. Design-token section verified accurate, including the retired-token table. |
+| UPDATED | `CLAUDE.md` | — | Repeated the same wrong Button variant list, and an incomplete Badge list omitting its **default** (`neutral`). Added the 7 missing components. |
+| UPDATED | `backend/pkg/core/UTILITIES_GUIDE.md` | 260 | **4 documented functions do not exist.** `core.HandleDBError` (only `HandleDBErrorWithID` is exported), `core.GetUsernameFromJWT` (real one is `GetUserIDFromJWT(ctx, userService) (int32, render.Renderer)` — different name, args, *and* return type), `core.ValidateStringLength` (validation is tag-based via `ValidateStruct` in `Bind`), and `Observability.Metrics.IncrementCounter` (the metrics registry was removed with the OTel migration, per ADR-006). |
+| DELETED | `backend/pkg/core/MIGRATION_EDGE_CASES.md` | 236 | Point-in-time retrospective ("Week 1, Days 2-3", "Files Migrated Successfully"). Cites `characters/api.go:592-597`; that file is now **34 lines** after decomposition. Referenced the same fictional `GetUsernameFromJWT`. **0 inbound links.** |
+| UPDATED | `backend/scripts/README.md` | 290 | Documented only the S3 script and the API-docs tooling; **6 files undocumented** — `api-test.sh` (14 subcommands, all verified), `dev-entrypoint.sh`, two endpoint smoke-test scripts, and the `fix_character_data_ids.sql` diagnostic. Added a section for each. API-docs tooling left untouched per your note. |
+| UPDATED | `README.md` (root) | 207 | Public entry point with **8 invalid recipes** (`just dev`, `start frontend`, `start all`, `build-all all`, `db setup`, `test-frontend` ×4, `e2e-test headed`, `e2e-test ui`). Claimed React **18** (actual 19) and listed host Go/Node/PostgreSQL prerequisites for a containerized stack. Fixed 4 broken links (`docs/architecture/`, `docs/adrs/`, `docs/CONTRIBUTING.md`). **Claimed "MIT License" with no LICENSE file in the repo and no `license` field in any package.json** — replaced with a factual statement rather than inventing one. |
+| REWRITTEN | `frontend/README.md` | 66 | Not Vite boilerplate, but the oldest doc in the repo (2025-08-06) and materially wrong: `just db_up` / `just run` (neither exists), host `npm install`, and "JWT authentication with **automatic token refresh**" implying a refresh-token pair. Reality is a single JWT in an HTTP-only cookie that `/auth/refresh` re-issues. Rewritten against verified versions (React 19, Router 7, Query 5, Tailwind 4, Vite 7). |
+| UPDATED | `.github/workflows/README.md` | 114 | Documented **1 of 3** workflows — `e2e.yml` and `nightly.yml` absent entirely — and 5 of 6 CI jobs (missing `upload-sourcemaps`). Wrong versions: PostgreSQL 16→**17**, Node 20→**24**. Claimed "E2E tests run separately on main branch push"; they are **manual-only** (`workflow_dispatch`). Claimed artifact uploads are not in CI; `e2e.yml` uploads the Playwright report. Documented the CI type-check gap (finding #2). |
+| UPDATED | `docs-site/README.md` | 212 | Documented a `/user/` tree with `getting-started`/`game-guide`/`gm-guide` subdirectories — the actual directory is a flat `/guide/`. Wrong dev-server port (5173 → **5174**). `just docs-install` does not exist. The `npm run docs:*` scripts live in `docs-site/package.json`, **not** the root `package.json`, which has no scripts at all — so the documented root-level invocations all fail. |
+| OK | `docs-site/STATUS.md` | 53 | Every one of the 19 listed guide files exists; no unlisted feature docs. No changes. |
+| OK | `docs-site/index.md` | 27 | VitePress home page; links are site routes and resolve. No changes. |
+| N/A | `frontend/src/styles/MIGRATION_PATTERNS.md` | 475 | **Already deleted** in `82108137` ("Tons of styling fixes"). No dangling references. |
+| N/A | `frontend/src/styles/CSS_VARIABLES_USAGE.md` | 298 | Same — already deleted, no dangling references. |
+
+### Batch 8 findings (completed 2026-08-27)
+
+1. **The UI library README — the doc CLAUDE.md leans on hardest — omitted a third of the library.** 7 of 22 exported components had zero coverage, including `Modal`, `Drawer`, `Textarea`, and `Select`. Three variant unions were wrong, and `Spinner variant="white"` was a value that has never existed.
+2. **Live bug: the CI TypeScript check verified nothing — ✅ FIXED 2026-08-27.** `.github/workflows/ci.yml` ran `npx tsc --noEmit` against `frontend/tsconfig.json`, a solution-style file (`"files": []` + project references). It type-checked **zero files** and passed vacuously. Same defect as `just type-check` (fixed earlier); the justfile was fixed, CI was not. Changed to `npx tsc -b --force`. Canary-verified: with a deliberate type error present, `--noEmit` exits **0** while `tsc -b` exits **2**.
+3. **~~The root README claimed an MIT license that does not exist.~~ Retracted — my error.** The file is `MIT-LICENSE`, which my `ls LICENSE*` glob missed. It is tracked, and the GitHub API confirms detection (`spdx_id: MIT`), since `MIT-LICENSE` is on GitHub's recognized-filenames list. The README link was restored to `[MIT License](MIT-LICENSE)`.
+4. **Four fictional functions in `UTILITIES_GUIDE.md`**, presented as real API with `core.` prefixes and dedicated sections. `GetUsernameFromJWT` differed from the real helper in name, arguments, and return type.
+5. **Version drift in CI docs**: PostgreSQL 16→17, Node 20→24. Both would mislead anyone debugging a CI-only failure.
+6. **"Planned" sections describing shipped work**, again — the UI README listed 10 components as future work, all of which exist, most documented in the same file.
+7. **Two docs in this batch were already deleted**, and the inventory was stale on them. Worth a pre-pass in future batches: confirm the file exists before auditing it.
+8. **Correction to my own work:** I invented an `api-test.sh create-game` subcommand while writing its docs. Caught by verifying each of the 14 subcommands against the script's `case` block before finalizing.
 
 ## Out of scope
 

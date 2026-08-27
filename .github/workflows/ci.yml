@@ -221,8 +221,13 @@ jobs:
       - name: Run ESLint
         run: cd frontend && npm run lint
 
+      # NOTE: use `tsc -b`, not `tsc --noEmit`. frontend/tsconfig.json is a
+      # solution-style file ("files": [] + project references), so a bare
+      # `tsc --noEmit` type-checks ZERO files and exits 0 even with type errors
+      # present. `-b` walks the referenced projects (tsconfig.app.json /
+      # tsconfig.node.json), matching `just type-check` and `npm run build`.
       - name: TypeScript type check
-        run: cd frontend && npx tsc --noEmit
+        run: cd frontend && npx tsc -b --force
 
   frontend-test:
     name: Frontend Tests
