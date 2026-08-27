@@ -24,7 +24,6 @@ GET    /api/v1/characters/{}/comments
 GET    /api/v1/characters/{}/stats
 GET    /api/v1/characters/controllable
 GET    /api/v1/deadlines/upcoming
-GET    /api/v1/exports/{}/download
 GET    /api/v1/games
 GET    /api/v1/games/{}/action-submissions/all
 GET    /api/v1/games/{}/actions
@@ -37,7 +36,6 @@ GET    /api/v1/games/{}/characters/inactive
 GET    /api/v1/games/{}/characters/stats
 GET    /api/v1/games/{}/comments/recent
 GET    /api/v1/games/{}/deadlines
-GET    /api/v1/games/{}/exports/latest
 PUT    /api/v1/games/{}/handouts/{}
 GET    /api/v1/games/{}/handouts/{}/comments
 GET    /api/v1/games/{}/loot-tables
@@ -83,7 +81,6 @@ POST   /api/v1/auth/revoke-all-sessions
 POST   /api/v1/auth/verify-email
 POST   /api/v1/games/{}/banner
 POST   /api/v1/games/{}/deadlines
-POST   /api/v1/games/{}/exports
 POST   /api/v1/games/{}/handouts/{}/comments
 POST   /api/v1/games/{}/handouts/{}/unpublish
 POST   /api/v1/games/{}/loot-tables

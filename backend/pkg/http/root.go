@@ -151,6 +151,7 @@ func (h *Handler) Start() {
 
 	// Games API - All routes require authentication
 	gamesRouter := chi.NewRouter()
+	var gameExportsAPI huma.API
 	gamesRouter.Route("/", func(r chi.Router) {
 		gameHandler := games.Handler{
 			App:                     h.App,
@@ -351,8 +352,10 @@ func (h *Handler) Start() {
 					GameService:   &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					ExportService: exports.NewService(h.App.Pool, h.App.Config.Storage.ArchivePath, h.App.ObsLogger),
 				}
-				r.Post("/exports", exportHandler.RequestExport)
-				r.Get("/exports/latest", exportHandler.GetLatestExport)
+				// huma / type-first — registered on the {gameID} subrouter, so
+				// paths are relative to it (see huma-migration.md gotcha 4).
+				gameExportsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+				exports.RegisterHumaGameExports(gameExportsAPI, exportHandler)
 
 				// Handout comments
 				r.Post("/handouts/{handoutId}/comments", handoutHandler.CreateHandoutComment)
@@ -559,6 +562,7 @@ func (h *Handler) Start() {
 	// id is the addressable resource; the handler resolves the game from the
 	// export row and re-checks CanUserViewGame, so a leaked export id grants
 	// nothing the caller could not already read.
+	var exportDownloadsAPI huma.API
 	exportsRouter := chi.NewRouter()
 	exportsRouter.Route("/", func(r chi.Router) {
 		exportHandler := &exports.Handler{
@@ -577,7 +581,8 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			r.Get("/{exportID}/download", exportHandler.DownloadExport)
+			exportDownloadsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			exports.RegisterHumaExportDownloads(exportDownloadsAPI, exportHandler)
 		})
 	})
 	apiV1Router.Mount("/exports", exportsRouter)
@@ -749,6 +754,10 @@ func (h *Handler) Start() {
 				"/admin":      adminAPI,
 				"/dashboard":  dashboardAPI,
 				"/characters": avatarsAPI,
+				"/exports":    exportDownloadsAPI,
+				// Registered on the /{gameID} subrouter, so the documented URL
+				// needs that segment added back.
+				"/games/{gameID}": gameExportsAPI,
 			})
 		},
 	}

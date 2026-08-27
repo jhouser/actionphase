@@ -16,6 +16,7 @@ import (
 
 	"actionphase/pkg/core"
 	db "actionphase/pkg/db/services"
+	"actionphase/pkg/humaconfig"
 )
 
 func setupDownloadRouter(t *testing.T, app *core.App, testDB *core.TestDatabase, svc *Service) *chi.Mux {
@@ -24,7 +25,9 @@ func setupDownloadRouter(t *testing.T, app *core.App, testDB *core.TestDatabase,
 	userService := &db.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
 	r := chi.NewRouter()
-	r.Route("/api/v1/exports/{exportID}/download", func(r chi.Router) {
+	// Mirrors production: the download route is registered on the /exports
+	// router, so the huma path is /{exportID}/download relative to it.
+	r.Route("/api/v1/exports", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(jwtauth.Authenticator(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -35,7 +38,7 @@ func setupDownloadRouter(t *testing.T, app *core.App, testDB *core.TestDatabase,
 			GameService:   &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 			ExportService: svc,
 		}
-		r.Get("/", h.DownloadExport)
+		RegisterHumaExportDownloads(humaconfig.New(r, "ActionPhase API", "1.0.0"), h)
 	})
 	return r
 }
