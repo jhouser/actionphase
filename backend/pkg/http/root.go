@@ -301,29 +301,13 @@ func (h *Handler) Start() {
 					MessageService: &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
 				}
 				// Create post requires email verification
-				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/posts", messageHandler.CreatePost)
-				r.Get("/posts", messageHandler.GetGamePosts)
-				r.Patch("/posts/{postId}", messageHandler.UpdatePost) // Edit post
-				// Create comment requires email verification
-				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/posts/{postId}/comments", messageHandler.CreateComment)
-				r.Get("/posts/{postId}/comments", messageHandler.GetPostComments)
-				r.Get("/posts/{postId}/comments-with-threads", messageHandler.GetPostCommentsWithThreads) // NEW: Paginated with nested replies
-				r.Patch("/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)             // Edit comment
-				r.Delete("/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)            // Delete comment
-				r.Get("/messages/{messageId}", messageHandler.GetMessage)                                 // For deep linking to nested comments
-				r.Get("/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)     // Target + full ancestor chain in one request
-				r.Get("/comments/recent", messageHandler.ListRecentCommentsWithParents)                   // New Comments view
-
-				// Read tracking for common room
-				r.Post("/posts/{postId}/mark-read", messageHandler.MarkPostRead)
-				r.Get("/read-markers", messageHandler.GetGameReadMarkers)
-				r.Get("/posts-unread-info", messageHandler.GetPostsUnreadInfo)
-				r.Get("/unread-comment-ids", messageHandler.GetUnreadCommentIDs)
-
-				// Manual read tracking (per-comment)
-				r.Post("/posts/{postId}/comments/{commentId}/toggle-read", messageHandler.ToggleCommentRead)
-				r.Get("/manual-read-comment-ids", messageHandler.GetManualReadCommentIDs)
-				r.Post("/phases/{phaseId}/mark-all-comments-read", messageHandler.MarkAllCommentsRead)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter. The
+				// email-verification requirement on create-post and
+				// create-comment now runs inside those handlers
+				// (core.RequireVerifiedEmailCtx), since huma handlers take a
+				// context rather than a *http.Request.
+				messages.RegisterHumaGameMessages(gameScopedAPI, &messageHandler)
 
 				// Private messages (conversations)
 				conversationHandler := &conversations.Handler{
@@ -445,7 +429,9 @@ func (h *Handler) Start() {
 				UserService:    &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 				MessageService: &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
 			}
-			r.Get("/{id}/comments", messageHandler.GetCharacterComments)
+			// huma / type-first -- shares charactersAPI with the characters
+			// and avatars packages on this same /characters mount.
+			messages.RegisterHumaCharacterMessages(charactersAPI, &messageHandler)
 
 			// Avatar management (huma / type-first)
 			avatars.RegisterHumaAvatars(charactersAPI, &avatarHandler)
@@ -454,6 +440,9 @@ func (h *Handler) Start() {
 	apiV1Router.Mount("/characters", charactersRouter)
 
 	// Phases API (for phase-specific operations)
+	// phasesAPI is captured for the generated spec; only the draft-post routes
+	// are huma so far (see .claude/planning/huma-migration.md).
+	var phasesAPI huma.API
 	phasesRouter := chi.NewRouter()
 	phasesRouter.Route("/", func(r chi.Router) {
 		phaseHandler := phases.Handler{
@@ -486,10 +475,12 @@ func (h *Handler) Start() {
 				UserService:    &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 				MessageService: &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
 			}
-			r.Get("/{id}/draft-post", messageHandler.GetDraftPost)
-			r.Post("/{id}/draft-post", messageHandler.CreateDraftPost)
-			r.Put("/{id}/draft-post", messageHandler.UpdateDraftPost)
-			r.Delete("/{id}/draft-post", messageHandler.DeleteDraftPost)
+			// huma / type-first -- paths are relative to this /phases mount.
+			// The rest of this router is still chi; pkg/phases converts next,
+			// and must register onto this same API rather than creating a
+			// second one (see huma-migration.md gotcha 3).
+			phasesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			messages.RegisterHumaPhaseDraftPosts(phasesAPI, &messageHandler)
 		})
 	})
 	apiV1Router.Mount("/phases", phasesRouter)
@@ -745,6 +736,7 @@ func (h *Handler) Start() {
 				"/notifications":  notificationsAPI,
 				"/polls":          pollsAPI,
 				"/handouts":       handoutsAPI,
+				"/phases":         phasesAPI,
 				"/games/{gameID}": gameScopedAPI,
 			})
 		},

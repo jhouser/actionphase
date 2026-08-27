@@ -7,6 +7,7 @@ import (
 	dbmessages "actionphase/pkg/db/services/messages"
 	messagesvc "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -492,23 +493,7 @@ func setupMessageTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				MessageService: &messagesvc.MessageService{DB: testDB.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
 			}
 
-			// Post routes
-			r.Post("/posts", messageHandler.CreatePost)
-			r.Get("/posts", messageHandler.GetGamePosts)
-			r.Post("/posts/{postId}/mark-read", messageHandler.MarkPostRead)
-			r.Get("/posts-unread-info", messageHandler.GetPostsUnreadInfo)
-			r.Get("/unread-comment-ids", messageHandler.GetUnreadCommentIDs)
-
-			// Comment routes
-			r.Post("/posts/{postId}/comments", messageHandler.CreateComment)
-			r.Get("/posts/{postId}/comments", messageHandler.GetPostComments)
-			r.Get("/comments/recent", messageHandler.ListRecentCommentsWithParents)
-			r.Patch("/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)
-			r.Delete("/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)
-
-			// Other routes
-			r.Get("/messages/{messageId}", messageHandler.GetMessage)
-			r.Get("/read-markers", messageHandler.GetGameReadMarkers)
+			RegisterHumaGameMessages(humaconfig.New(r, "ActionPhase API", "1.0.0"), messageHandler)
 		})
 	})
 

@@ -8,6 +8,7 @@ import (
 	"actionphase/pkg/db/services/messages"
 	dbmessages "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -64,18 +65,7 @@ func setupMessageAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mu
 				r.Use(core.RequireAuthenticationMiddleware(userService))
 				r.Use(gameHandler.GameMiddleware())
 
-				// Post routes
-				r.With(core.RequireEmailVerificationMiddleware(app.Pool)).Post("/posts", messageHandler.CreatePost)
-				r.Patch("/posts/{postId}", messageHandler.UpdatePost)
-				r.With(core.RequireEmailVerificationMiddleware(app.Pool)).Post("/posts/{postId}/comments", messageHandler.CreateComment)
-				r.Patch("/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)
-				r.Delete("/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)
-				r.Get("/posts/{postId}/comments-with-threads", messageHandler.GetPostCommentsWithThreads)
-				r.Get("/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)
-				r.Post("/posts/{postId}/comments/{commentId}/toggle-read", messageHandler.ToggleCommentRead)
-				r.Get("/manual-read-comment-ids", messageHandler.GetManualReadCommentIDs)
-				r.Post("/phases/{phaseId}/mark-all-comments-read", messageHandler.MarkAllCommentsRead)
-				r.Get("/comments/recent", messageHandler.ListRecentCommentsWithParents)
+				RegisterHumaGameMessages(humaconfig.New(r, "ActionPhase API", "1.0.0"), &messageHandler)
 			})
 		})
 
@@ -90,7 +80,7 @@ func setupMessageAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mu
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
 
-				r.Get("/{id}/comments", messageHandler2.GetCharacterComments)
+				RegisterHumaCharacterMessages(humaconfig.New(r, "ActionPhase API", "1.0.0"), &messageHandler2)
 			})
 		})
 	})

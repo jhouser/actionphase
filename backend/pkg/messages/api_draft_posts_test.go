@@ -18,6 +18,7 @@ import (
 	models "actionphase/pkg/db/models"
 	db "actionphase/pkg/db/services"
 	messagesvc "actionphase/pkg/db/services/messages"
+	"actionphase/pkg/humaconfig"
 )
 
 func setupDraftPostRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
@@ -25,7 +26,9 @@ func setupDraftPostRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 	userService := &db.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
 	r := chi.NewRouter()
-	r.Route("/api/v1/phases/{id}/draft-post", func(r chi.Router) {
+	// Mounted at /phases: the huma operations carry the {id}/draft-post
+	// segments themselves, matching production.
+	r.Route("/api/v1/phases", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(jwtauth.Authenticator(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -35,10 +38,7 @@ func setupDraftPostRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 			UserService:    &db.UserService{DB: testDB.Pool, Logger: app.ObsLogger},
 			MessageService: &messagesvc.MessageService{DB: testDB.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
 		}
-		r.Get("/", h.GetDraftPost)
-		r.Post("/", h.CreateDraftPost)
-		r.Put("/", h.UpdateDraftPost)
-		r.Delete("/", h.DeleteDraftPost)
+		RegisterHumaPhaseDraftPosts(humaconfig.New(r, "ActionPhase API", "1.0.0"), h)
 	})
 	return r
 }
@@ -85,7 +85,7 @@ func TestDraftPostAPI_CreateAndGet(t *testing.T) {
 			"character_id": char.ID,
 			"content":      "The fog which surrounded you dissipates...",
 		})
-		req := httptest.NewRequest(http.MethodPost, phaseURL+"/", bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, phaseURL, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+gmToken)
 		rec := httptest.NewRecorder()
@@ -100,7 +100,7 @@ func TestDraftPostAPI_CreateAndGet(t *testing.T) {
 	})
 
 	t.Run("GM can get the draft post", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, phaseURL+"/", nil)
+		req := httptest.NewRequest(http.MethodGet, phaseURL, nil)
 		req.Header.Set("Authorization", "Bearer "+gmToken)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -114,7 +114,7 @@ func TestDraftPostAPI_CreateAndGet(t *testing.T) {
 	})
 
 	t.Run("player gets 403 on GET", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, phaseURL+"/", nil)
+		req := httptest.NewRequest(http.MethodGet, phaseURL, nil)
 		req.Header.Set("Authorization", "Bearer "+playerToken)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -127,7 +127,7 @@ func TestDraftPostAPI_CreateAndGet(t *testing.T) {
 			"character_id": char.ID,
 			"content":      "Sneaky post",
 		})
-		req := httptest.NewRequest(http.MethodPost, phaseURL+"/", bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, phaseURL, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+outsiderToken)
 		rec := httptest.NewRecorder()
@@ -141,7 +141,7 @@ func TestDraftPostAPI_CreateAndGet(t *testing.T) {
 			"character_id": char.ID,
 			"content":      "Second draft",
 		})
-		req := httptest.NewRequest(http.MethodPost, phaseURL+"/", bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, phaseURL, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+gmToken)
 		rec := httptest.NewRecorder()
@@ -151,7 +151,7 @@ func TestDraftPostAPI_CreateAndGet(t *testing.T) {
 	})
 
 	t.Run("unauthenticated gets 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, phaseURL+"/", nil)
+		req := httptest.NewRequest(http.MethodGet, phaseURL, nil)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
@@ -203,7 +203,7 @@ func TestDraftPostAPI_UpdateAndDelete(t *testing.T) {
 		body, _ := json.Marshal(map[string]string{
 			"content": "Updated draft content",
 		})
-		req := httptest.NewRequest(http.MethodPut, phaseURL+"/", bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPut, phaseURL, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+gmToken)
 		rec := httptest.NewRecorder()
@@ -218,7 +218,7 @@ func TestDraftPostAPI_UpdateAndDelete(t *testing.T) {
 	})
 
 	t.Run("GM can delete draft post", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, phaseURL+"/", nil)
+		req := httptest.NewRequest(http.MethodDelete, phaseURL, nil)
 		req.Header.Set("Authorization", "Bearer "+gmToken)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -226,7 +226,7 @@ func TestDraftPostAPI_UpdateAndDelete(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Verify it's gone — 200 with null body (no draft)
-		getReq := httptest.NewRequest(http.MethodGet, phaseURL+"/", nil)
+		getReq := httptest.NewRequest(http.MethodGet, phaseURL, nil)
 		getReq.Header.Set("Authorization", "Bearer "+gmToken)
 		getRec := httptest.NewRecorder()
 		router.ServeHTTP(getRec, getReq)

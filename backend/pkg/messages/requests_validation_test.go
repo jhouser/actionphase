@@ -13,13 +13,14 @@ import (
 	db "actionphase/pkg/db/services"
 )
 
-// TestMessageRequestValidation covers the `validate` struct tags in
-// api_types.go, which are executed by core.ValidateStruct from each Bind.
+// TestMessageRequestValidation covers the request rules in requests.go: the
+// schema tags huma enforces before the handler runs, plus the trimming each
+// body does in Resolve.
 //
-// Whitespace-only content is the case the tags do not catch on their own: the
-// stock `required` only rejects the zero value, so " " satisfies both
-// `required` and `min=1`. ValidateStruct trims first, matching what the update
-// handler already did by hand and what the frontend composers send.
+// Whitespace-only content is the case the schema cannot catch: huma's minLength
+// counts raw characters, so " " satisfies minLength:"1". Resolve trims first,
+// matching what the update handler already did by hand and what the frontend
+// composers send.
 func TestMessageRequestValidation(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
@@ -70,8 +71,11 @@ func TestMessageRequestValidation(t *testing.T) {
 		w := send(t, http.MethodPost, postsPath, `{"content": "orphan post"}`)
 
 		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Missing character_id should be rejected")
-		if !bytes.Contains(w.Body.Bytes(), []byte("character_id is required")) {
-			t.Errorf("expected 'character_id is required' in body, got %q", w.Body.String())
+		// The message names the offending field; the exact wording is huma's
+		// ("expected required property character_id to be present") and is not
+		// worth pinning, but the field name is the part clients read.
+		if !bytes.Contains(w.Body.Bytes(), []byte("character_id")) {
+			t.Errorf("expected 'character_id' named in body, got %q", w.Body.String())
 		}
 		// The Go field name must not leak to clients.
 		if bytes.Contains(w.Body.Bytes(), []byte("CharacterID")) {
