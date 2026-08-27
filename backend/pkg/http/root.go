@@ -399,6 +399,9 @@ func (h *Handler) Start() {
 	apiV1Router.Mount("/games", gamesRouter)
 
 	// Characters API (for character-specific operations)
+	// avatarsAPI is captured for the generated spec; the rest of this router is
+	// still chi (see .claude/planning/huma-migration.md).
+	var avatarsAPI huma.API
 	charactersRouter := chi.NewRouter()
 	charactersRouter.Route("/", func(r chi.Router) {
 		characterHandler := characters.Handler{
@@ -448,9 +451,9 @@ func (h *Handler) Start() {
 			}
 			r.Get("/{id}/comments", messageHandler.GetCharacterComments)
 
-			// Avatar management
-			r.Post("/{id}/avatar", avatarHandler.UploadCharacterAvatar)
-			r.Delete("/{id}/avatar", avatarHandler.DeleteCharacterAvatar)
+			// Avatar management (huma / type-first)
+			avatarsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			avatars.RegisterHumaAvatars(avatarsAPI, &avatarHandler)
 		})
 	})
 	apiV1Router.Mount("/characters", charactersRouter)
@@ -743,8 +746,9 @@ func (h *Handler) Start() {
 	docsHandler := &docs.Handler{
 		GeneratedSpec: func() ([]byte, error) {
 			return generatedSpecFor(map[string]huma.API{
-				"/admin":     adminAPI,
-				"/dashboard": dashboardAPI,
+				"/admin":      adminAPI,
+				"/dashboard":  dashboardAPI,
+				"/characters": avatarsAPI,
 			})
 		},
 	}

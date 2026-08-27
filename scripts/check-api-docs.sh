@@ -61,6 +61,8 @@ done
 python3 - "$ROUTER" "$SPEC" "$BASELINE" "$ROOT/backend/pkg" <<'PYEOF'
 import os, re, sys
 
+RED, GREEN, YELLOW, NC = '\033[0;31m', '\033[0;32m', '\033[0;33m', '\033[0m'
+
 router_path, spec_path, baseline_path = sys.argv[1:4]
 
 # ---------------------------------------------------------------- real routes
@@ -136,32 +138,55 @@ for ln in src:
 PKG_DIR = sys.argv[4] if len(sys.argv) > 4 else ''
 
 def huma_routes():
+    """Routes registered through huma.Register in a converted package.
+
+    root.go holds the mount, but the router variable is not derivable from the
+    package name: pkg/avatars registers onto charactersRouter, because avatars
+    hang off /characters. So resolve the mount by finding which <x>Router.Route
+    block the RegisterHumaX call physically sits inside.
+    """
     found = []
-    # Map each RegisterHumaX call in root.go to the mount prefix in scope.
     text = ''.join(src)
-    for m in re.finditer(r'(\w+)\.RegisterHuma(\w+)\(', text):
-        pkg = m.group(1)
-        # full_prefix walks the router's Mount() chain, so the result is
-        # absolute (/api/v1/admin), matching the paths the chi scan produces.
-        prefix = full_prefix(pkg + 'Router')
-        if not prefix:
+
+    # Line number -> enclosing "<name>Router.Route(" block, by brace depth.
+    owner, d, stack = {}, 0, []
+    for i, ln in enumerate(src):
+        mo = re.search(r'(\w+Router)\.Route\("', ln)
+        if mo:
+            stack.append((d, mo.group(1)))
+        owner[i] = stack[-1][1] if stack else None
+        d += ln.count('{') - ln.count('}')
+        while stack and stack[-1][0] >= d:
+            stack.pop()
+
+    for i, ln in enumerate(src):
+        m = re.search(r'(\w+)\.RegisterHuma(\w+)\(', ln)
+        if not m:
             continue
+        pkg, router = m.group(1), owner.get(i)
+        if not router:
+            print(f"{RED}✗ {pkg}.RegisterHuma{m.group(2)} is not inside a "
+                  f"<name>Router.Route block; cannot resolve its mount{NC}")
+            sys.exit(1)
+        # full_prefix walks the router's Mount() chain, so the result is
+        # absolute (/api/v1/characters), matching the chi scan's paths.
+        prefix = full_prefix(router)
         f = os.path.join(PKG_DIR, pkg, 'huma_api.go')
         if not os.path.isfile(f):
-            continue
+            print(f"{RED}✗ {pkg}.RegisterHuma{m.group(2)} is registered but "
+                  f"{f} does not exist{NC}")
+            sys.exit(1)
         body = open(f).read()
         # huma.Operation literals: Method: http.MethodGet / "GET", Path: "/x"
         for op in re.finditer(
                 r'Method:\s*(?:http\.Method(\w+)|"(\w+)")[^}]*?Path:\s*"([^"]*)"',
                 body, re.S):
-            method = (op.group(1) or op.group(2)).upper()
-            found.append((method, prefix, op.group(3)))
+            found.append(((op.group(1) or op.group(2)).upper(), prefix, op.group(3)))
         # The op(id, method, path, ...) helper form used by pkg/admin.
         for op in re.finditer(
                 r'op\(\s*"[^"]*",\s*(?:http\.Method(\w+)|"(\w+)")\s*,\s*"([^"]*)"',
                 body):
-            method = (op.group(1) or op.group(2)).upper()
-            found.append((method, prefix, op.group(3)))
+            found.append(((op.group(1) or op.group(2)).upper(), prefix, op.group(3)))
     return found
 
 # Huma routes are documented by construction: the served spec merges huma's
@@ -260,7 +285,6 @@ new_undoc, known_undoc = split_known(undocumented)
 new_phantom, known_phantom = split_known(phantom)
 new_unreach, known_unreach = split_known(unreachable)
 
-RED, GREEN, YELLOW, NC = '\033[0;31m', '\033[0;32m', '\033[0;33m', '\033[0m'
 fail = 0
 
 def report(title, items, hint):
