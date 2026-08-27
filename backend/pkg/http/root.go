@@ -627,10 +627,11 @@ func (h *Handler) Start() {
 	})
 	apiV1Router.Mount("/polls", pollsRouter)
 
-	// Notifications API
+	// Notifications API (huma / type-first -- see .claude/planning/huma-migration.md)
+	var notificationsAPI huma.API
 	notificationsRouter := chi.NewRouter()
 	notificationsRouter.Route("/", func(r chi.Router) {
-		notificationHandler := notifications.Handler{
+		notificationHandler := &notifications.Handler{
 			App:                 h.App,
 			NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 		}
@@ -644,14 +645,8 @@ func (h *Handler) Start() {
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 
-			// Notification management
-			r.Get("/", notificationHandler.GetNotifications)
-			r.Get("/unread-count", notificationHandler.GetUnreadCount)
-			r.Put("/mark-all-read", notificationHandler.MarkAllAsRead)
-			r.Get("/{id}", notificationHandler.GetNotification)
-			r.Put("/{id}/mark-read", notificationHandler.MarkNotificationAsRead)
-			r.Put("/{id}/mark-unread", notificationHandler.MarkNotificationAsUnread)
-			r.Delete("/{id}", notificationHandler.DeleteNotification)
+			notificationsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			notifications.RegisterHumaNotifications(notificationsAPI, notificationHandler)
 		})
 	})
 	apiV1Router.Mount("/notifications", notificationsRouter)
@@ -762,6 +757,7 @@ func (h *Handler) Start() {
 				// needs that segment added back.
 				"/deadlines":      deadlinesAPI,
 				"/users":          usersAPI,
+				"/notifications":  notificationsAPI,
 				"/games/{gameID}": gameScopedAPI,
 			})
 		},

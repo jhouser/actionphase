@@ -62,7 +62,6 @@ PUT    /api/v1/games/{}/settings/auto-accept-audience
 GET    /api/v1/games/{}/stats
 GET    /api/v1/games/{}/unread-comment-ids
 GET    /api/v1/handouts
-PUT    /api/v1/notifications/{}/mark-unread
 GET    /api/v1/phases/{}/draft-post
 PUT    /api/v1/phases/{}/draft-post
 GET    /api/v1/polls/{}
@@ -110,6 +109,5 @@ DELETE /api/v1/games/{}/posts/{}/comments/{}
 DELETE /api/v1/games/{}/results/{}
 DELETE /api/v1/games/{}/results/{}/character-updates/{}
 DELETE /api/v1/games/{}/results/{}/pending
-DELETE /api/v1/notifications/{}
 DELETE /api/v1/phases/{}/draft-post
 DELETE /api/v1/polls/{}
