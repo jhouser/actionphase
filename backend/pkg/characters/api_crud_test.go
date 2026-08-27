@@ -7,6 +7,7 @@ import (
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -52,10 +53,11 @@ func setupCharacterTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux
 				GameService:         &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 				NotificationService: db.NewNotificationService(testDB.Pool, app.ObsLogger),
 			}
-			r.Post("/characters", handler.CreateCharacter)
-			r.Get("/characters", handler.GetGameCharacters)
+			RegisterHumaGameCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 		})
-		r.Route("/characters/{id}", func(r chi.Router) {
+		// Mounted at /characters, not /characters/{id}: huma registers the id
+		// as part of each operation's path, matching production.
+		r.Route("/characters", func(r chi.Router) {
 			r.Use(jwtauth.Verifier(tokenAuth))
 			r.Use(jwtauth.Authenticator(tokenAuth))
 			r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -67,7 +69,7 @@ func setupCharacterTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux
 				GameService:         &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 				NotificationService: db.NewNotificationService(testDB.Pool, app.ObsLogger),
 			}
-			r.Get("/", handler.GetCharacter)
+			RegisterHumaCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 		})
 	})
 
@@ -635,7 +637,7 @@ func TestGetCharacter_AnonymousMode(t *testing.T) {
 	coGMToken, _ := createTestAuthToken(app, coGMUser)
 	audienceToken, _ := createTestAuthToken(app, audienceUser)
 
-	charURL := "/api/v1/characters/" + strconv.Itoa(int(char.ID)) + "/"
+	charURL := "/api/v1/characters/" + strconv.Itoa(int(char.ID))
 
 	t.Run("player cannot see character_type in anonymous game", func(t *testing.T) {
 		req := httptest.NewRequest("GET", charURL, nil)
@@ -845,7 +847,7 @@ func TestGetCharacter_AudienceAssignedPendingNPC_InProgress(t *testing.T) {
 
 	audienceToken, _ := createTestAuthToken(app, audienceUser)
 	otherPlayerToken, _ := createTestAuthToken(app, otherPlayer)
-	charURL := "/api/v1/characters/" + strconv.Itoa(int(pendingNPC.ID)) + "/"
+	charURL := "/api/v1/characters/" + strconv.Itoa(int(pendingNPC.ID))
 
 	t.Run("assigned audience user can fetch their pending NPC", func(t *testing.T) {
 		req := httptest.NewRequest("GET", charURL, nil)

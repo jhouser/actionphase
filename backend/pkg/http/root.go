@@ -248,12 +248,12 @@ func (h *Handler) Start() {
 					GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 				}
-				// Create character requires email verification
-				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/characters", characterHandler.CreateCharacter)
-				r.Get("/characters", characterHandler.GetGameCharacters)
-				r.Get("/characters/stats", characterHandler.GetGameCharacterStats)
-				r.Get("/characters/controllable", characterHandler.GetUserControllableCharacters)
-				r.Get("/characters/inactive", characterHandler.ListInactiveCharacters) // GM views inactive characters
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter. The
+				// email-verification requirement on create now runs inside the
+				// handler (core.RequireVerifiedEmailCtx), since huma handlers
+				// take a context rather than a *http.Request.
+				characters.RegisterHumaGameCharacters(gameScopedAPI, &characterHandler)
 
 				// Phase management within games
 				phaseHandler := phases.Handler{
@@ -402,10 +402,10 @@ func (h *Handler) Start() {
 	})
 	apiV1Router.Mount("/games", gamesRouter)
 
-	// Characters API (for character-specific operations)
-	// avatarsAPI is captured for the generated spec; the rest of this router is
-	// still chi (see .claude/planning/huma-migration.md).
-	var avatarsAPI huma.API
+	// Characters API (for character-specific operations).
+	// charactersAPI is the single huma API for this mount: the characters and
+	// avatars packages both register onto it.
+	var charactersAPI huma.API
 	charactersRouter := chi.NewRouter()
 	charactersRouter.Route("/", func(r chi.Router) {
 		characterHandler := characters.Handler{
@@ -430,22 +430,14 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			// Cross-game character list for the current user. Static segment, so
-			// chi matches it ahead of the /{id} route below.
-			r.Get("/controllable", characterHandler.GetUserControllableCharactersAcrossGames)
+			// One huma API for this whole /characters mount: characters and
+			// avatars both register onto it, because generatedSpecFor keys by
+			// mount prefix and a second API here would be dropped.
+			charactersAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
 
-			// Character management
-			r.Get("/{id}", characterHandler.GetCharacter)
-			r.Post("/{id}/approve", characterHandler.ApproveCharacter)
-			r.Post("/{id}/assign", characterHandler.AssignNPC)
-			r.Put("/{id}/reassign", characterHandler.ReassignCharacter) // GM reassigns inactive character
-			r.Put("/{id}/rename", characterHandler.RenameCharacter)     // GM or owner renames character
-			r.Delete("/{id}", characterHandler.DeleteCharacter)         // GM deletes character with no activity
-			r.Post("/{id}/data", characterHandler.SetCharacterData)
-			r.Get("/{id}/data", characterHandler.GetCharacterData)
-
-			// Character activity stats
-			r.Get("/{id}/stats", characterHandler.GetCharacterStats)
+			// huma / type-first -- registers the cross-game /controllable list
+			// and every per-character operation.
+			characters.RegisterHumaCharacters(charactersAPI, &characterHandler)
 
 			// Character page - public activity feed
 			messageHandler := messages.Handler{
@@ -456,8 +448,7 @@ func (h *Handler) Start() {
 			r.Get("/{id}/comments", messageHandler.GetCharacterComments)
 
 			// Avatar management (huma / type-first)
-			avatarsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
-			avatars.RegisterHumaAvatars(avatarsAPI, &avatarHandler)
+			avatars.RegisterHumaAvatars(charactersAPI, &avatarHandler)
 		})
 	})
 	apiV1Router.Mount("/characters", charactersRouter)
@@ -745,7 +736,7 @@ func (h *Handler) Start() {
 			return generatedSpecFor(map[string]huma.API{
 				"/admin":      adminAPI,
 				"/dashboard":  dashboardAPI,
-				"/characters": avatarsAPI,
+				"/characters": charactersAPI,
 				"/exports":    exportDownloadsAPI,
 				// Registered on the /{gameID} subrouter, so the documented URL
 				// needs that segment added back.
