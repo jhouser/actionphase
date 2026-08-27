@@ -2,17 +2,17 @@ package admin
 
 // Huma (type-first) implementation of the admin API.
 //
-// SPIKE — evaluated 2026-08-27 alongside the existing (w, r) handlers in this
-// package. Both are registered on separate routers in root.go; the Chi ones
-// remain authoritative. Nothing here is wired into production traffic.
+// This is the reference implementation for the migration: admin was converted
+// first, its chi handlers deleted, and api_test.go repointed here with its
+// assertions unchanged. See .claude/planning/huma-migration.md.
 //
 // The point of a type-first handler is that the OpenAPI spec is *derived* from
 // the Go signature rather than written beside it. Path/query params, request
 // bodies, status codes, and response schemas all come from the types below, so
 // the two cannot drift: changing a field changes the spec on the next build.
 //
-// Compare to api.go — the manual chi.URLParam + strconv.ParseInt + renderError
-// preamble is gone, absorbed by huma's binding.
+// The manual chi.URLParam + strconv.ParseInt + renderError preamble the chi
+// handlers needed is gone, absorbed by huma's binding.
 
 import (
 	"context"

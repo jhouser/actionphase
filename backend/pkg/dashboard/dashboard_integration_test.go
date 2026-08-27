@@ -3,6 +3,7 @@ package dashboard
 import (
 	"actionphase/pkg/core"
 	services "actionphase/pkg/db/services"
+	"actionphase/pkg/humaconfig"
 	"actionphase/pkg/observability"
 	"encoding/json"
 	"fmt"
@@ -64,7 +65,7 @@ func TestDashboardAPI_GetUserDashboard_Integration(t *testing.T) {
 		UserService:      &services.UserService{DB: testDB.Pool, Logger: app.ObsLogger},
 		DashboardService: &services.DashboardService{DB: testDB.Pool, Logger: app.ObsLogger},
 	}
-	r.Get("/", handler.GetUserDashboard)
+	RegisterHumaDashboard(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 
 	t.Run("empty_dashboard_for_new_user", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -180,7 +181,7 @@ func TestDashboardAPI_GetUserDashboard_WithUrgentGame(t *testing.T) {
 		UserService:      &services.UserService{DB: testDB.Pool, Logger: app.ObsLogger},
 		DashboardService: &services.DashboardService{DB: testDB.Pool, Logger: app.ObsLogger},
 	}
-	r.Get("/", handler.GetUserDashboard)
+	RegisterHumaDashboard(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 
 	// Create game with urgent deadline
 	gm := factory.NewUser().WithUsername("gm").Create()
@@ -236,11 +237,11 @@ func makeDashboardRouter(app *core.App, testDB *core.TestDatabase) (*chi.Mux, *j
 	r.Use(jwtauth.Verifier(tokenAuth))
 	r.Use(jwtauth.Authenticator(tokenAuth))
 	r.Use(core.RequireAuthenticationMiddleware(userService))
-	r.Get("/", (&Handler{
+	RegisterHumaDashboard(humaconfig.New(r, "ActionPhase API", "1.0.0"), &Handler{
 		App:              app,
 		UserService:      &services.UserService{DB: testDB.Pool, Logger: app.ObsLogger},
 		DashboardService: &services.DashboardService{DB: testDB.Pool, Logger: app.ObsLogger},
-	}).GetUserDashboard)
+	})
 	return r, tokenAuth
 }
 

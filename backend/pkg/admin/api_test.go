@@ -14,9 +14,9 @@ import (
 	dbsvc "actionphase/pkg/db/services"
 	messagesvc "actionphase/pkg/db/services/messages"
 	httpmiddleware "actionphase/pkg/http/middleware"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
 	"github.com/stretchr/testify/assert"
@@ -27,48 +27,10 @@ func jsonBody(b []byte) *bytes.Reader {
 	return bytes.NewReader(b)
 }
 
-// newTestHumaAPI mirrors pkg/http.newHumaAPI: docs and $schema injection off,
-// legacy error format installed, so tests see exactly what production serves.
+// newTestHumaAPI uses the same setup as production (pkg/http.newHumaAPI), so
+// tests see exactly the config and error shape that ships.
 func newTestHumaAPI(r chi.Router) huma.API {
-	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
-		detail := msg
-		if len(errs) > 0 && errs[0] != nil {
-			detail = errs[0].Error()
-		}
-		// Mirrors pkg/http.InstallLegacyErrorFormat: huma's hardcoded 422 for
-		// binding failures becomes 400, matching core.ErrInvalidRequest.
-		if status == http.StatusUnprocessableEntity {
-			status = http.StatusBadRequest
-		}
-		return &testLegacyError{StatusText: legacyStatusTextForTest(status), ErrorMsg: detail, status: status}
-	}
-	cfg := huma.DefaultConfig("ActionPhase API", "1.0.0")
-	cfg.DocsPath = ""
-	cfg.SchemasPath = ""
-	cfg.CreateHooks = nil
-	return humachi.New(r, cfg)
-}
-
-type testLegacyError struct {
-	StatusText string `json:"status"`
-	ErrorMsg   string `json:"error,omitempty"`
-	status     int
-}
-
-func (e *testLegacyError) Error() string  { return e.ErrorMsg }
-func (e *testLegacyError) GetStatus() int { return e.status }
-
-func legacyStatusTextForTest(s int) string {
-	switch s {
-	case http.StatusUnauthorized:
-		return "Unauthorized."
-	case http.StatusForbidden:
-		return "Forbidden."
-	case http.StatusNotFound:
-		return "Resource not found."
-	default:
-		return "Invalid request."
-	}
+	return humaconfig.New(r, "ActionPhase API", "1.0.0")
 }
 
 // setupAdminTestRouter creates a test router with admin routes (with RequireAdmin middleware)

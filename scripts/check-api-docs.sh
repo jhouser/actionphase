@@ -58,8 +58,8 @@ done
 # Not created if absent — /repo is mounted read-only in the container. A
 # missing baseline simply means "no known gaps".
 
-python3 - "$ROUTER" "$SPEC" "$BASELINE" <<'PYEOF'
-import re, sys
+python3 - "$ROUTER" "$SPEC" "$BASELINE" "$ROOT/backend/pkg" <<'PYEOF'
+import os, re, sys
 
 router_path, spec_path, baseline_path = sys.argv[1:4]
 
@@ -124,6 +124,58 @@ for ln in src:
     while stack and stack[-1][0] >= depth:
         stack.pop()
 
+# ------------------------------------------------- huma (type-first) routes
+# Converted packages register their operations with huma.Register in
+# <pkg>/huma_api.go rather than with r.Get(...) in root.go, so the chi scan
+# above cannot see them and would report every one as a PHANTOM.
+#
+# root.go still holds the mount point: a RegisterHumaX(api, h) call sits inside
+# the block that Mounts that package's router. Huma paths are registered
+# relative to that mount (see gotcha 4 in the migration plan), so the full path
+# is mount + huma path.
+PKG_DIR = sys.argv[4] if len(sys.argv) > 4 else ''
+
+def huma_routes():
+    found = []
+    # Map each RegisterHumaX call in root.go to the mount prefix in scope.
+    text = ''.join(src)
+    for m in re.finditer(r'(\w+)\.RegisterHuma(\w+)\(', text):
+        pkg = m.group(1)
+        # full_prefix walks the router's Mount() chain, so the result is
+        # absolute (/api/v1/admin), matching the paths the chi scan produces.
+        prefix = full_prefix(pkg + 'Router')
+        if not prefix:
+            continue
+        f = os.path.join(PKG_DIR, pkg, 'huma_api.go')
+        if not os.path.isfile(f):
+            continue
+        body = open(f).read()
+        # huma.Operation literals: Method: http.MethodGet / "GET", Path: "/x"
+        for op in re.finditer(
+                r'Method:\s*(?:http\.Method(\w+)|"(\w+)")[^}]*?Path:\s*"([^"]*)"',
+                body, re.S):
+            method = (op.group(1) or op.group(2)).upper()
+            found.append((method, prefix, op.group(3)))
+        # The op(id, method, path, ...) helper form used by pkg/admin.
+        for op in re.finditer(
+                r'op\(\s*"[^"]*",\s*(?:http\.Method(\w+)|"(\w+)")\s*,\s*"([^"]*)"',
+                body):
+            method = (op.group(1) or op.group(2)).upper()
+            found.append((method, prefix, op.group(3)))
+    return found
+
+# Huma routes are documented by construction: the served spec merges huma's
+# generated paths over openapi.yaml (see pkg/docs/docs.go, mergeGenerated), so
+# they can never be undocumented. They are still recorded as real routes, so
+# that a spec entry duplicating one is not mistaken for a phantom.
+generated = set()
+for method, prefix, p in huma_routes():
+    path = re.sub(r'/+', '/', prefix + p)
+    if len(path) > 1:
+        path = path.rstrip('/')
+    routes.append((method, path))
+    generated.add((method, path))
+
 # ------------------------------------------------------------ documented spec
 # An operation may override the global server base with its own `servers:`
 # block (OpenAPI 3). /ping uses this because it is registered at the root
@@ -163,6 +215,7 @@ def norm(mp):
     return (method, re.sub(r'\{[^}]*\}', '{}', p))
 
 real_n  = {norm(r) for r in routes}
+gen_n   = {norm(g) for g in generated}
 root_n  = {norm(r) for r in root_routes}
 doc_n   = {norm(d) for d in documented}
 # Operations documented at the root via a `servers:` override.
@@ -171,7 +224,7 @@ doc_rt  = {norm(d) for d in doc_root}
 def fmt(mp):
     return f"{mp[0]:<6} {mp[1]}"
 
-undocumented = sorted(real_n - doc_n, key=lambda x: (x[1], x[0]))
+undocumented = sorted(real_n - doc_n - gen_n, key=lambda x: (x[1], x[0]))
 # A documented path with no route anywhere. A root-mounted endpoint is reported
 # as UNREACHABLE below rather than as a phantom; one correctly documented with a
 # `servers:` override is not a defect at all.

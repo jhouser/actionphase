@@ -1,6 +1,6 @@
 package http
 
-// Shared huma setup for the type-first handler migration.
+// Huma wiring for the type-first handler migration.
 //
 // Handlers are moving from func(w http.ResponseWriter, r *http.Request) to
 // func(ctx, *Input) (*Output, error) so that the OpenAPI spec is derived from
@@ -9,104 +9,25 @@ package http
 // Chi is NOT going away: huma mounts onto the existing chi router via the
 // humachi adapter, so routing, mounting, and every r.Use middleware continue to
 // work unchanged. Only the handler signature and response encoding differ.
+//
+// The API config and legacy error shim live in pkg/humaconfig, a leaf package,
+// so handler tests can use the same setup without importing pkg/http (which
+// imports every handler package and would be an import cycle).
 
 import (
-	"net/http"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 )
 
-// legacyError reproduces the error body the API has always sent:
-//
-//	{"status": "Forbidden.", "error": "admin privileges required"}
-//
-// Huma's default is RFC 7807 (application/problem+json), which the frontend
-// cannot parse: frontend/src/lib/errors.ts reads `.error`, falls through to
-// `.status`, and would render the bare number 422 as the user's error message.
-// Adopting RFC 7807 properly is tracked in
-// .claude/planning/rfc7807-error-format.md; until then this shim keeps the
-// migration invisible to clients.
-type legacyError struct {
-	StatusText string `json:"status"`
-	ErrorMsg   string `json:"error,omitempty"`
-
-	status int
-}
-
-func (e *legacyError) Error() string  { return e.ErrorMsg }
-func (e *legacyError) GetStatus() int { return e.status }
-
-// legacyStatusText mirrors the StatusText values core's error constructors use,
-// so a converted endpoint is byte-identical to the chi one it replaced.
-func legacyStatusText(status int) string {
-	switch status {
-	case http.StatusBadRequest:
-		return "Invalid request."
-	case http.StatusUnauthorized:
-		return "Unauthorized."
-	case http.StatusForbidden:
-		return "Forbidden."
-	case http.StatusNotFound:
-		return "Resource not found."
-	case http.StatusConflict:
-		return "Conflict."
-	case http.StatusUnprocessableEntity:
-		return "Invalid request."
-	default:
-		return "Internal server error."
-	}
-}
-
-// InstallLegacyErrorFormat points huma's error constructor at the legacy shape.
-// It mutates a package-level variable in huma, so it must run once, before any
-// huma API is served. Idempotent.
-func InstallLegacyErrorFormat() {
-	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
-		// Validation failures arrive as errs; their message is more specific
-		// than the generic msg ("validation failed"), so prefer them.
-		detail := msg
-		if len(errs) > 0 && errs[0] != nil {
-			detail = errs[0].Error()
-		}
-
-		// Huma hardcodes 422 for request binding/validation failures (a bad
-		// path param, a missing required field). The chi handlers these
-		// replace parsed by hand and returned 400 via core.ErrInvalidRequest,
-		// and existing tests assert 400. Remap so the migration does not
-		// change status codes.
-		//
-		// This is safe for clients: frontend/src/types/errors.ts maps both 400
-		// and 422 to ErrorType.VALIDATION_ERROR, and errors.ts handles them in
-		// the same switch branch — so the two are already interchangeable
-		// downstream. Revisit if the API ever wants to distinguish
-		// "malformed" from "semantically invalid".
-		if status == http.StatusUnprocessableEntity {
-			status = http.StatusBadRequest
-		}
-
-		return &legacyError{
-			StatusText: legacyStatusText(status),
-			ErrorMsg:   detail,
-			status:     status,
-		}
-	}
-}
+// InstallLegacyErrorFormat keeps huma's errors in the shape clients expect.
+func InstallLegacyErrorFormat() { humaconfig.InstallLegacyErrorFormat() }
 
 // newHumaAPI builds a huma API bound to an existing chi router.
-//
-// DocsPath and SchemaLinkTransformer are disabled deliberately:
-//   - docs are served by pkg/docs (Swagger UI at /api/v1/docs/)
-//   - the $schema link huma injects into response bodies would change the
-//     response shape that 236 frontend call sites depend on
 func newHumaAPI(r chi.Router, title, version string) huma.API {
-	cfg := huma.DefaultConfig(title, version)
-	cfg.DocsPath = ""
-	cfg.SchemasPath = ""
-	cfg.CreateHooks = nil
-	return humachi.New(r, cfg)
+	return humaconfig.New(r, title, version)
 }
 
 // generatedSpecFor renders the OpenAPI documents of the migrated packages as a
@@ -136,7 +57,15 @@ func generatedSpecFor(apis map[string]huma.API) ([]byte, error) {
 		}
 		if p, ok := doc["paths"].(map[string]any); ok {
 			for path, item := range p {
-				paths[prefix+path] = item
+				// A package's index operation registers as "/" relative to its
+				// mount, which would document "/dashboard/" — a second,
+				// trailing-slash entry sitting beside the hand-written
+				// "/dashboard" rather than superseding it.
+				full := prefix + path
+				if path == "/" {
+					full = prefix
+				}
+				paths[full] = item
 			}
 		}
 		if comp, ok := doc["components"].(map[string]any); ok {

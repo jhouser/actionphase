@@ -640,7 +640,8 @@ func (h *Handler) Start() {
 	})
 	apiV1Router.Mount("/notifications", notificationsRouter)
 
-	// Dashboard API
+	// Dashboard API (huma / type-first — see .claude/planning/huma-migration.md)
+	var dashboardAPI huma.API
 	dashboardRouter := chi.NewRouter()
 	dashboardRouter.Route("/", func(r chi.Router) {
 		dashboardHandler := dashboard.Handler{
@@ -658,8 +659,8 @@ func (h *Handler) Start() {
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 
-			// Get user's dashboard
-			r.Get("/", dashboardHandler.GetUserDashboard)
+			dashboardAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			dashboard.RegisterHumaDashboard(dashboardAPI, &dashboardHandler)
 		})
 	})
 	apiV1Router.Mount("/dashboard", dashboardRouter)
@@ -741,7 +742,10 @@ func (h *Handler) Start() {
 	// .claude/planning/huma-migration.md improves the docs automatically.
 	docsHandler := &docs.Handler{
 		GeneratedSpec: func() ([]byte, error) {
-			return generatedSpecFor(map[string]huma.API{"/admin": adminAPI})
+			return generatedSpecFor(map[string]huma.API{
+				"/admin":     adminAPI,
+				"/dashboard": dashboardAPI,
+			})
 		},
 	}
 	docsHandler.RegisterRoutes(apiV1Router)

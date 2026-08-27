@@ -3575,39 +3575,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  # Dashboard Endpoint
-  /dashboard:
-    get:
-      tags:
-        - Dashboard
-      summary: Get user dashboard
-      description: |
-        Get comprehensive dashboard data for the authenticated user.
-
-        Returns:
-        - Active games (games user is playing)
-        - Recruiting games (games open for applications)
-        - Recent notifications (last 5)
-        - Unread notification count
-        - Pending actions count (action submissions needed)
-        - Upcoming deadlines (next 3 approaching deadlines)
-
-        This is an optimized endpoint that aggregates data from multiple
-        services into a single response for efficient dashboard rendering.
-      responses:
-        '200':
-          description: User dashboard data
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DashboardData'
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   # Handout Endpoints
   /games/{gameId}/handouts:
     get:
