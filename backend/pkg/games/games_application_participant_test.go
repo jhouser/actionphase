@@ -67,8 +67,12 @@ func TestGameAPI_ApplicationManagement(t *testing.T) {
 	})
 	core.AssertNoError(t, err, "Application creation should succeed")
 
+	// GET is /application/mine but DELETE is /application. The asymmetry is
+	// real -- both production routing and the frontend client use exactly these
+	// two paths. The test router previously mounted GET at /application, which
+	// no client has ever called.
 	t.Run("get_my_application_success", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application", nil)
+		req := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application/mine", nil)
 		req.Header.Set("Authorization", "Bearer "+playerToken)
 		w := httptest.NewRecorder()
 
@@ -88,7 +92,7 @@ func TestGameAPI_ApplicationManagement(t *testing.T) {
 
 	t.Run("get_my_application_no_application", func(t *testing.T) {
 		// GM has no application - should return 200 with null body
-		req := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application", nil)
+		req := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application/mine", nil)
 		req.Header.Set("Authorization", "Bearer "+gmToken)
 		w := httptest.NewRecorder()
 
@@ -99,7 +103,7 @@ func TestGameAPI_ApplicationManagement(t *testing.T) {
 	})
 
 	t.Run("get_my_application_unauthorized", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application", nil)
+		req := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application/mine", nil)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
@@ -117,7 +121,7 @@ func TestGameAPI_ApplicationManagement(t *testing.T) {
 		core.AssertEqual(t, 204, w.Code, "Should return 204 No Content")
 
 		// Verify application is deleted
-		getReq := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application", nil)
+		getReq := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application/mine", nil)
 		getReq.Header.Set("Authorization", "Bearer "+playerToken)
 		getW := httptest.NewRecorder()
 		router.ServeHTTP(getW, getReq)
@@ -246,7 +250,7 @@ func TestGameAPI_AudienceMemberCanRejoinAfterLeaving(t *testing.T) {
 		// Root-cause assertion: after approval the audience application row is gone (the user
 		// is now a participant, not an applicant), so GET /application returns null rather than
 		// a lingering 'approved' record that would otherwise go stale and confuse the UI.
-		getReq := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application", nil)
+		getReq := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application/mine", nil)
 		getReq.Header.Set("Authorization", "Bearer "+audienceToken)
 		getW := httptest.NewRecorder()
 		router.ServeHTTP(getW, getReq)
@@ -288,7 +292,7 @@ func TestGameAPI_AudienceMemberCanRejoinAfterLeaving(t *testing.T) {
 	t.Run("no application record lingers after leaving", func(t *testing.T) {
 		// Since approval already deleted the application, leaving leaves nothing behind —
 		// no stale 'approved' row implying a relationship the user no longer has.
-		getReq := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application", nil)
+		getReq := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application/mine", nil)
 		getReq.Header.Set("Authorization", "Bearer "+audienceToken)
 		getW := httptest.NewRecorder()
 		router.ServeHTTP(getW, getReq)
@@ -397,7 +401,7 @@ func TestGameAPI_RejectedAudienceApplicationShowsRejected(t *testing.T) {
 	router.ServeHTTP(rejectW, rejectReq)
 	core.AssertEqual(t, 200, rejectW.Code, "Audience application rejection should succeed")
 
-	getReq := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application", nil)
+	getReq := httptest.NewRequest("GET", "/api/v1/games/"+strconv.Itoa(int(game.ID))+"/application/mine", nil)
 	getReq.Header.Set("Authorization", "Bearer "+audienceToken)
 	getW := httptest.NewRecorder()
 	router.ServeHTTP(getW, getReq)

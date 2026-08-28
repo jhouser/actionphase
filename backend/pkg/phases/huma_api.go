@@ -29,6 +29,13 @@ import (
 // preserving the status and message the chi handlers produced.
 func humaErr(errResp any) error {
 	if resp, ok := errResp.(*core.ErrResponse); ok {
+		// The app code travels in the errs slice, which is the only channel
+		// huma.NewError offers; the shim unwraps it back onto the response.
+		// Without this, core.ErrWithCode's "code" field is silently dropped.
+		if resp.AppCode != 0 {
+			return huma.NewError(resp.HTTPStatusCode, resp.ErrorText,
+				&humaconfig.CodedError{Code: resp.AppCode, Msg: resp.ErrorText})
+		}
 		return huma.NewError(resp.HTTPStatusCode, resp.ErrorText)
 	}
 	return huma.Error500InternalServerError("unexpected error")

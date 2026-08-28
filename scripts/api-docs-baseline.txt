@@ -15,29 +15,4 @@
 #   GET /api/v1/games/public   — documented with no handler behind it
 
 GET    /api/v1/auth/discord/callback
-GET    /api/v1/games
-GET    /api/v1/games/{}/action-submissions/all
-GET    /api/v1/games/{}/applicants
-GET    /api/v1/games/{}/application/mine
-GET    /api/v1/games/{}/audience
-GET    /api/v1/games/{}/characters/audience-npcs
-GET    /api/v1/games/{}/loot-tables
-PUT    /api/v1/games/{}/loot-tables/{}
-GET    /api/v1/games/{}/loot-tables/{}/contents
-GET    /api/v1/games/{}/private-messages/all
-GET    /api/v1/games/{}/private-messages/conversations/{}
-GET    /api/v1/games/{}/private-messages/participants
-PUT    /api/v1/games/{}/settings/auto-accept-audience
-GET    /api/v1/games/{}/stats
 GET    /api/v1/uploads/*
-POST   /api/v1/games/{}/banner
-POST   /api/v1/games/{}/loot-tables
-POST   /api/v1/games/{}/loot-tables/{}/contents
-POST   /api/v1/games/{}/loot-tables/{}/random/{}
-POST   /api/v1/games/{}/participants/{}/demote-from-co-gm
-POST   /api/v1/games/{}/participants/{}/promote-to-co-gm
-POST   /api/v1/games/{}/participants/{}/to-audience
-POST   /api/v1/games/{}/participants/direct-add
-DELETE /api/v1/games/{}/banner
-DELETE /api/v1/games/{}/loot-tables/{}
-DELETE /api/v1/games/{}/participants/{}

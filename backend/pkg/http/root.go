@@ -174,6 +174,7 @@ func (h *Handler) Start() {
 	// generatedSpecFor keys by mount prefix, so a second API on the same prefix
 	// would be dropped from the served spec.
 	var gameScopedAPI huma.API
+	var gamesAPI, gamesPublicListAPI, gamesPublicGameAPI huma.API
 	gamesRouter.Route("/", func(r chi.Router) {
 		gameHandler := games.Handler{
 			App:                     h.App,
@@ -191,10 +192,23 @@ func (h *Handler) Start() {
 		// Public routes (authentication optional - will enrich if present)
 		tokenAuth := h.getTokenAuth()
 		r.Group(func(r chi.Router) {
-			// Use verifier to extract token if present, but don't require authentication
+			// Verifier without Authenticator: a token is read if present, and
+			// its absence is not an error. The listing is simply unenriched for
+			// an anonymous caller.
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Get("/", gameHandler.GetFilteredGames)                                                              // Main game listing endpoint with filters
-			r.With(gameHandler.GameMiddleware()).Get("/{gameID}/applicants", gameHandler.GetPublicGameApplicants) // Public list of applicants (username + role only)
+
+			// Two APIs, not one, because the applicants route additionally needs
+			// GameMiddleware to load the game and the listing must not have it.
+			// A huma API binds to one router, so a differing middleware stack
+			// needs its own (gotcha 19).
+			gamesPublicListAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			games.RegisterHumaGamesPublicList(gamesPublicListAPI, &gameHandler)
+
+			r.Group(func(r chi.Router) {
+				r.Use(gameHandler.GameMiddleware())
+				gamesPublicGameAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+				games.RegisterHumaGamesPublicApplicants(gamesPublicGameAPI, &gameHandler)
+			})
 		})
 
 		// All routes below require authentication
@@ -205,11 +219,17 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			// Game listing and viewing
-			r.Get("/recruiting", gameHandler.GetRecruitingGames)
+			// huma / type-first -- the collection routes (/recruiting and
+			// POST /), which need no game context. The game-scoped operations
+			// register on gameScopedAPI inside the /{gameID} subrouter below,
+			// where GameMiddleware has loaded the game.
+			//
+			// Email verification for create-game now runs inside the handler
+			// (core.RequireVerifiedEmailCtx), since huma handlers take a
+			// context rather than a *http.Request (gotcha 15).
+			gamesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			games.RegisterHumaGamesCollection(gamesAPI, &gameHandler)
 
-			// Create game requires email verification
-			r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/", gameHandler.CreateGame)
 			r.Route("/{gameID}", func(r chi.Router) {
 				r.Use(gameHandler.GameMiddleware())
 
@@ -217,46 +237,14 @@ func (h *Handler) Start() {
 				// subrouter; see the declaration for why it must be one API.
 				gameScopedAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
 
-				r.Get("/", gameHandler.GetGame)
-				r.Get("/details", gameHandler.GetGameWithDetails)
-				r.Get("/participants", gameHandler.GetGameParticipants)
-
-				// Game management
-				r.Put("/", gameHandler.UpdateGame)
-				r.Delete("/", gameHandler.DeleteGame)
-				r.Put("/state", gameHandler.UpdateGameState)
-				r.Post("/banner", gameHandler.UploadGameBanner)
-				r.Delete("/banner", gameHandler.DeleteGameBanner)
-
-				// Participant management
-				r.Delete("/leave", gameHandler.LeaveGame)
-				r.Delete("/participants/{userId}", gameHandler.RemovePlayer)           // GM removes player
-				r.Post("/participants/direct-add", gameHandler.AddParticipantDirectly) // GM adds player or audience member directly
-
-				// Co-GM management
-				r.Post("/participants/{userId}/promote-to-co-gm", gameHandler.PromoteToCoGM)         // GM promotes audience to co-GM
-				r.Post("/participants/{userId}/demote-from-co-gm", gameHandler.DemoteFromCoGM)       // GM demotes co-GM to audience
-				r.Post("/participants/{userId}/to-audience", gameHandler.TransitionPlayerToAudience) // GM moves player to audience (permadeath)
-
-				// Game application management
-				// Apply to game requires email verification
-				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/apply", gameHandler.ApplyToGame)
-				r.Get("/applications", gameHandler.GetGameApplications)
-				r.Get("/application/mine", gameHandler.GetMyGameApplication)
-				r.Put("/applications/{applicationId}/review", gameHandler.ReviewGameApplication)
-				r.Delete("/application", gameHandler.WithdrawGameApplication)
-
-				// Audience participation
-				r.Get("/audience", gameHandler.ListAudienceMembers)
-				r.Get("/characters/audience-npcs", gameHandler.ListAudienceNPCs)
-				r.Put("/settings/auto-accept-audience", gameHandler.UpdateAutoAcceptAudience)
-				r.Get("/private-messages/all", gameHandler.ListAllPrivateConversations)
-				r.Get("/private-messages/participants", gameHandler.GetConversationParticipants)
-				r.Get("/private-messages/conversations/{conversationId}", gameHandler.GetAudienceConversationMessages)
-				r.Get("/action-submissions/all", gameHandler.ListAllActionSubmissions)
-
-				// Post-game statistics (completed games only; handler enforces)
-				r.Get("/stats", gameHandler.GetGameStats)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				// Covers the game, participant, application, audience, log,
+				// stats, banner and loot-table operations. The email
+				// verification apply-to-game required now runs inside that
+				// handler (core.RequireVerifiedEmailCtx), since huma handlers
+				// take a context rather than a *http.Request.
+				games.RegisterHumaGameScoped(gameScopedAPI, &gameHandler)
 
 				// Character management within games
 				characterHandler := characters.Handler{
@@ -363,17 +351,6 @@ func (h *Handler) Start() {
 				// huma / type-first -- shares gameScopedAPI with the other
 				// packages registering on this same /{gameID} subrouter.
 				polls.RegisterHumaGamePolls(gameScopedAPI, pollHandler)
-
-				// Logs
-				r.Get("/logs", gameHandler.GetGameLogs)
-
-				r.Get("/loot-tables", gameHandler.GetGameLootTables)
-				r.Post("/loot-tables", gameHandler.AddGameLootTable)
-				r.Put("/loot-tables/{tableId}", gameHandler.UpdateGameLootTable)
-				r.Delete("/loot-tables/{tableId}", gameHandler.DeleteGameLootTable)
-				r.Get("/loot-tables/{tableId}/contents", gameHandler.GetGameLootTableContents)
-				r.Post("/loot-tables/{tableId}/contents", gameHandler.UpdateGameLootTableContent)
-				r.Post("/loot-tables/{tableId}/random/{characterId}", gameHandler.SetRandomLootForCharacter) // Assign random loot to character from table
 			})
 		})
 	})
@@ -723,6 +700,12 @@ func (h *Handler) Start() {
 				"/handouts":       {handoutsAPI},
 				"/phases":         {phasesAPI},
 				"/games/{gameID}": {gameScopedAPI},
+				// Three APIs, one mount: the /games routes split across chi
+				// groups with different middleware (the public listing runs
+				// Verifier only, the public applicants list adds GameMiddleware,
+				// and the collection routes are fully authenticated). Their
+				// paths are disjoint.
+				"/games": {gamesAPI, gamesPublicListAPI, gamesPublicGameAPI},
 				// Four APIs, one mount: /auth's routes split across chi groups
 				// with different middleware (rate-limited, public, Verifier-only
 				// probe, fully protected). Their paths are disjoint.

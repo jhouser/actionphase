@@ -652,66 +652,19 @@ func setupGameTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
+				r.Use(core.AdminModeMiddleware)
 
-				// Game listing and viewing
-				r.Get("/", gameHandler.GetFilteredGames) // Main game listing endpoint with filters
-				r.Get("/recruiting", gameHandler.GetRecruitingGames)
-
-				// Game management
-				r.Post("/", gameHandler.CreateGame)
+				// huma / type-first, mirroring production's grouping. The
+				// listing is registered here rather than on a Verifier-only
+				// group because this router authenticates every route; the
+				// production split is exercised by the public applicants test.
+				RegisterHumaGamesPublicList(humaconfig.New(r, "ActionPhase API", "1.0.0"), &gameHandler)
+				RegisterHumaGamesCollection(humaconfig.New(r, "ActionPhase API", "1.0.0"), &gameHandler)
 
 				//Routes with game ID parameter
 				r.Route("/{gameID}", func(r chi.Router) {
 					r.Use(gameHandler.GameMiddleware())
-
-					// Game listing and viewing
-					r.Get("/", gameHandler.GetGame)
-					r.Get("/details", gameHandler.GetGameWithDetails)
-					r.Get("/participants", gameHandler.GetGameParticipants)
-
-					// Game management
-					r.Put("/", gameHandler.UpdateGame)
-					r.Delete("/", gameHandler.DeleteGame)
-					r.Put("/state", gameHandler.UpdateGameState)
-
-					// Participant management
-					// NOTE: join endpoint removed - use application system instead
-					r.Delete("/leave", gameHandler.LeaveGame)
-					r.Post("/participants/direct-add", gameHandler.AddParticipantDirectly)
-					r.Delete("/participants/{userId}", gameHandler.RemovePlayer)
-					r.Post("/participants/{userId}/promote-to-co-gm", gameHandler.PromoteToCoGM)
-					r.Post("/participants/{userId}/demote-from-co-gm", gameHandler.DemoteFromCoGM)
-					r.Post("/participants/{userId}/to-audience", gameHandler.TransitionPlayerToAudience)
-
-					// Game application management
-					r.Post("/apply", gameHandler.ApplyToGame)
-					r.Get("/applications", gameHandler.GetGameApplications)
-					r.Put("/applications/{applicationId}/review", gameHandler.ReviewGameApplication)
-					r.Get("/application", gameHandler.GetMyGameApplication)
-					r.Delete("/application", gameHandler.WithdrawGameApplication)
-
-					// Audience management
-					r.Get("/audience", gameHandler.ListAudienceMembers)
-					r.Put("/settings/auto-accept-audience", gameHandler.UpdateAutoAcceptAudience)
-					r.Get("/characters/audience-npcs", gameHandler.ListAudienceNPCs)
-					r.Get("/private-messages/all", gameHandler.ListAllPrivateConversations)
-					r.Get("/private-messages/participants", gameHandler.GetConversationParticipants)
-					r.Get("/private-messages/conversations/{conversationId}", gameHandler.GetAudienceConversationMessages)
-					r.Get("/action-submissions/all", gameHandler.ListAllActionSubmissions)
-
-					// Logs
-					r.Get("/logs", gameHandler.GetGameLogs)
-
-					// Post-game statistics
-					r.Get("/stats", gameHandler.GetGameStats)
-
-					r.Get("/loot-tables", gameHandler.GetGameLootTables)
-					r.Post("/loot-tables", gameHandler.AddGameLootTable)
-					r.Put("/loot-tables/{tableId}", gameHandler.UpdateGameLootTable)
-					r.Delete("/loot-tables/{tableId}", gameHandler.DeleteGameLootTable)
-					r.Get("/loot-tables/{tableId}/contents", gameHandler.GetGameLootTableContents)
-					r.Post("/loot-tables/{tableId}/contents", gameHandler.UpdateGameLootTableContent)
-					r.Post("/loot-tables/{tableId}/random/{characterId}", gameHandler.SetRandomLootForCharacter)
+					RegisterHumaGameScoped(humaconfig.New(r, "ActionPhase API", "1.0.0"), &gameHandler)
 				})
 			})
 		})

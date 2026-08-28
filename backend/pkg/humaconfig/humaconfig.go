@@ -31,13 +31,31 @@ import (
 // cannot parse. See .claude/planning/rfc7807-error-format.md.
 type LegacyError struct {
 	StatusText string `json:"status"`
-	ErrorMsg   string `json:"error,omitempty"`
+	// AppCode is the application-specific error code core.ErrResponse carries
+	// as "code". Only some errors have one (core.ErrWithCode), so it is
+	// omitempty -- but when present it must survive the conversion, since it is
+	// the machine-readable half of the response and a caller may switch on it.
+	AppCode  int64  `json:"code,omitempty"`
+	ErrorMsg string `json:"error,omitempty"`
 
 	status int
 }
 
 func (e *LegacyError) Error() string  { return e.ErrorMsg }
 func (e *LegacyError) GetStatus() int { return e.status }
+
+// CodedError carries an application error code alongside the message, so
+// NewError can put it on the LegacyError it builds.
+//
+// huma.NewError's signature only passes a status and a message, so a code has
+// nowhere else to travel; wrapping it in the errs slice is the one channel
+// available.
+type CodedError struct {
+	Code int64
+	Msg  string
+}
+
+func (e *CodedError) Error() string { return e.Msg }
 
 // LegacyStatusText mirrors the StatusText values core's error constructors use,
 // so a converted endpoint is byte-identical to the chi one it replaced.
@@ -68,8 +86,12 @@ func InstallLegacyErrorFormat() {
 		// Validation failures arrive as errs; their message is more specific
 		// than the generic msg ("validation failed"), so prefer them.
 		detail := msg
+		var appCode int64
 		if len(errs) > 0 && errs[0] != nil {
 			detail = errs[0].Error()
+			if coded, ok := errs[0].(*CodedError); ok {
+				appCode = coded.Code
+			}
 		}
 
 		// Huma hardcodes 422 for request binding/validation failures (a bad
@@ -84,6 +106,7 @@ func InstallLegacyErrorFormat() {
 
 		return &LegacyError{
 			StatusText: LegacyStatusText(status),
+			AppCode:    appCode,
 			ErrorMsg:   detail,
 			status:     status,
 		}
