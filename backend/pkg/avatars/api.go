@@ -1,7 +1,6 @@
 package avatars
 
 import (
-	"net/http"
 	"strings"
 
 	"actionphase/pkg/core"
@@ -15,10 +14,6 @@ type Handler struct {
 // AvatarUploadResponse is the success body for an avatar upload.
 type AvatarUploadResponse struct {
 	AvatarURL string `json:"avatar_url" doc:"Public URL of the stored avatar"`
-}
-
-func (r *AvatarUploadResponse) Render(w http.ResponseWriter, req *http.Request) error {
-	return nil
 }
 
 // detectContentType guesses a content type from a filename extension. It is a
