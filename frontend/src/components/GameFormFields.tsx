@@ -110,7 +110,7 @@ const DAY_OPTIONS = (
 function SectionHeading({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-3 pt-1">
-      <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary whitespace-nowrap">
+      <span className="text-xs font-semibold uppercase tracking-wider text-content-secondary whitespace-nowrap">
         {children}
       </span>
       <div className="flex-1 h-px bg-border-primary" />

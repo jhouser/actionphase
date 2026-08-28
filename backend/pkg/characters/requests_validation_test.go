@@ -16,13 +16,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCharacterRequestValidation covers the `validate` struct tags in
-// requests.go, which are executed by core.ValidateStruct from each Bind.
+// TestCharacterRequestValidation covers the request rules in requests.go: the
+// schema tags huma enforces before the handler runs, plus the trimming each
+// body does in Resolve.
 //
-// The tags predate any code that ran them, so these tests pin down both halves:
-// that malformed payloads are rejected at Bind with a 400 rather than falling
-// through to a service and surfacing as a 500, and that the payloads the
-// frontend actually sends still pass.
+// These pin down both halves: that malformed payloads are rejected with a 400
+// rather than falling through to a service and surfacing as a 500, and that the
+// payloads the frontend actually sends still pass.
+//
+// The assertions name the offending field rather than quoting the message,
+// because the two layers phrase it differently -- huma's schema says "expected
+// required property name to be present", Resolve says "name is required" -- and
+// pinning the phrasing would break on a huma upgrade with no behaviour change.
 func TestCharacterRequestValidation(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
@@ -72,7 +77,7 @@ func TestCharacterRequestValidation(t *testing.T) {
 		rec := send(t, http.MethodPut, renamePath, `{}`)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "name is required")
+		assert.Contains(t, rec.Body.String(), "name")
 	})
 
 	t.Run("rejects rename with whitespace-only name", func(t *testing.T) {
@@ -83,7 +88,7 @@ func TestCharacterRequestValidation(t *testing.T) {
 		rec := send(t, http.MethodPut, renamePath, `{"name": "   "}`)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "name is required")
+		assert.Contains(t, rec.Body.String(), "name")
 	})
 
 	t.Run("rejects rename with over-length name", func(t *testing.T) {
@@ -94,7 +99,7 @@ func TestCharacterRequestValidation(t *testing.T) {
 		rec := send(t, http.MethodPut, renamePath, fmt.Sprintf(`{"name": %q}`, longName))
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "name must be at most 255 characters")
+		assert.Contains(t, rec.Body.String(), "255")
 	})
 
 	t.Run("accepts rename and trims surrounding whitespace", func(t *testing.T) {
@@ -111,7 +116,7 @@ func TestCharacterRequestValidation(t *testing.T) {
 			`{"field_name": "strength", "field_value": "10", "field_type": "number", "is_public": true}`)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "module_type is required")
+		assert.Contains(t, rec.Body.String(), "module_type")
 	})
 
 	t.Run("accepts character data with an empty field_value", func(t *testing.T) {
@@ -127,20 +132,20 @@ func TestCharacterRequestValidation(t *testing.T) {
 		rec := send(t, http.MethodPost, approvePath, `{}`)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "status is required")
+		assert.Contains(t, rec.Body.String(), "status")
 	})
 
 	t.Run("rejects assign with missing assigned_user_id", func(t *testing.T) {
 		rec := send(t, http.MethodPost, assignPath, `{}`)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "assigned_user_id is required")
+		assert.Contains(t, rec.Body.String(), "assigned_user_id")
 	})
 
 	t.Run("rejects reassign with missing new_owner_user_id", func(t *testing.T) {
 		rec := send(t, http.MethodPut, reassignPath, `{}`)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "new_owner_user_id is required")
+		assert.Contains(t, rec.Body.String(), "new_owner_user_id")
 	})
 }

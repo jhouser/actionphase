@@ -687,39 +687,49 @@ func TestGameValidation(t *testing.T) {
 ## Test Organization
 
 ### Directory Structure
+
+> Corrected 2026-08-26 — `backend/pkg/testutil/`, `backend/tests/`,
+> `frontend/src/__tests__/integration/`, and `frontend/src/__tests__/e2e/` were
+> listed here but do not exist. Actual layout:
+
 ```
 backend/
 ├── pkg/
 │   ├── games/
 │   │   ├── api.go
-│   │   ├── api_test.go          # Unit tests
-│   │   ├── service.go
-│   │   ├── service_test.go      # Unit tests
-│   │   └── integration_test.go  # Integration tests
-│   └── testutil/
-│       ├── database.go          # DB test utilities
-│       ├── fixtures.go          # Test data fixtures
-│       └── builders.go          # Test data builders
-├── tests/
-│   ├── api/                     # API tests
-│   ├── integration/             # Integration tests
-│   └── performance/             # Performance tests
-└── justfile                     # Test commands
+│   │   └── api_test.go              # Co-located tests
+│   ├── db/
+│   │   ├── services/                # Service implementations + *_test.go
+│   │   └── test_fixtures/           # SQL fixtures (apply_all.sh)
+│   └── core/
+│       ├── test_utils.go            # NewTestDatabase, per-package DB cloning
+│       ├── test_factories.go        # Test data factories
+│       ├── test_builders_test.go    # Builder helpers
+│       ├── mocks.go                  # Interface mocks (files, not a package)
+│       └── repository_mocks.go
+└── main.go
 
 frontend/
 ├── src/
 │   ├── components/
 │   │   ├── GameForm.tsx
-│   │   └── GameForm.test.tsx
+│   │   └── GameForm.test.tsx        # Co-located component tests
 │   ├── hooks/
-│   │   ├── useGameManagement.ts
-│   │   └── useGameManagement.test.ts
-│   └── __tests__/
-│       ├── integration/         # Integration tests
-│       └── e2e/                 # End-to-end tests
+│   │   ├── useGameListing.ts
+│   │   └── useGameListing.test.ts   # Co-located hook tests
+│   └── __tests__/                   # Cross-cutting suites only
+│       ├── App.test.tsx
+│       └── retired-tokens.test.ts   # Guard: no retired design tokens
+├── e2e/                             # Playwright specs, grouped by domain
+│   ├── auth/  characters/  admin/  common-room/  edge-cases/
+│   └── config/
 ├── vitest.config.ts
 └── playwright.config.ts
 ```
+
+Backend tests are **co-located** with the code they test; there is no separate
+`tests/` tree. Each test package clones its own database from a migrated
+template (`core.NewTestDatabase`), so packages run in parallel safely.
 
 ### Test Commands
 ```bash
@@ -728,11 +738,10 @@ just test-mocks           # Fast unit tests only
 just test-integration     # Database integration tests
 just test                 # All tests
 just test-coverage        # Coverage report
-just test-bench           # Benchmark tests
 just test-race            # Race condition detection
 
 # Frontend tests
-just test-frontend        # Unit and integration tests
+just test-fe run          # Unit and integration tests
 just test-fe watch        # Watch mode
 just e2e                  # End-to-end tests (desktop + mobile)
 just e2e-desktop          # Desktop only
@@ -740,6 +749,10 @@ just e2e-mobile           # Mobile only
 
 # Combined
 just ci-test             # Full CI test suite (lint + test + race)
+
+# Pre-push / end-of-session checks
+just verify-quick        # Fast non-mutating checks, no builds
+just verify              # All checks + backend & frontend production builds
 ```
 
 ## Continuous Integration
@@ -779,7 +792,7 @@ jobs:
         run: just test-integration
 
       - name: Run benchmarks
-        run: just test-bench
+        run: just test-race
 
       - name: Generate coverage
         run: just test-coverage
@@ -796,10 +809,10 @@ jobs:
         run: npm install
 
       - name: Run unit tests
-        run: just test-frontend
+        run: just test-fe run
 
       - name: Run E2E tests
-        run: just test-e2e
+        run: just e2e
 ```
 
 ## Quality Gates

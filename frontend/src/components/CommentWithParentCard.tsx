@@ -228,7 +228,7 @@ export function CommentWithParentCard({
         />
 
         {/* Comment header + body */}
-        <div className="bg-bg-secondary rounded-lg p-3">
+        <div className="surface-raised rounded-lg p-3">
           <div className="flex items-start gap-3 mb-2">
             <CharacterAvatar
               avatarUrl={comment.character_avatar_url}
@@ -238,7 +238,7 @@ export function CommentWithParentCard({
             />
             <div className="flex flex-col flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <Link to={`/characters/${comment.character_id}`} className="font-medium text-text-heading hover:underline">
+                <Link to={`/characters/${comment.character_id}`} className="font-medium text-content-primary hover:underline">
                   {comment.character_name || 'Unknown'}
                 </Link>
                 {!screenshotModeEnabled && (
@@ -416,7 +416,7 @@ export function CommentWithParentCard({
 
         {/* Reply posted confirmation */}
         {replyPostedId && (
-          <div className="mt-3 p-3 bg-bg-secondary rounded-lg border border-semantic-success flex items-center justify-between gap-3">
+          <div className="mt-3 p-3 surface-raised rounded-lg border border-semantic-success flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm text-semantic-success">
               <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -435,7 +435,7 @@ export function CommentWithParentCard({
 
         {/* Reply form */}
         {isReplying && (
-          <div className="mt-3 p-3 bg-bg-secondary rounded-lg border border-border-primary">
+          <div className="mt-3 p-3 surface-raised rounded-lg border border-theme-default">
             <form onSubmit={handleSubmitReply}>
               {userCharacters.length > 1 && (
                 <Select

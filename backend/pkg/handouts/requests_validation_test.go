@@ -13,8 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestHandoutRequestValidation covers the `validate` struct tags in
-// requests.go, which are executed by core.ValidateStruct from each Bind.
+// TestHandoutRequestValidation covers the request rules in requests.go: the
+// schema tags huma enforces before the handler runs, plus the trimming each
+// body does in Resolve.
+//
+// The assertions check which field was rejected rather than the exact wording,
+// because the two layers phrase it differently -- huma's schema says "expected
+// length >= 1", Resolve says "content is required" -- and pinning the phrasing
+// would break on a huma upgrade without any behaviour changing.
 //
 // Content is the field worth pinning down: the create modal marks it required
 // in its label but enforces nothing, because the editor is not a native input
@@ -51,13 +57,15 @@ func TestHandoutRequestValidation(t *testing.T) {
 			`{"title": "Empty", "content": "", "status": "draft"}`)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "content is required")
+		assert.Contains(t, rec.Body.String(), "content")
 	})
 
 	t.Run("rejects a handout with whitespace-only content", func(t *testing.T) {
 		rec := send(t, http.MethodPost, handoutsPath,
 			`{"title": "Blank", "content": "   \n  ", "status": "draft"}`)
 
+		// Only Resolve can catch this one: minLength counts raw characters, so
+		// "   \n  " satisfies the schema.
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 		assert.Contains(t, rec.Body.String(), "content is required")
 	})
@@ -67,7 +75,7 @@ func TestHandoutRequestValidation(t *testing.T) {
 			`{"content": "Body text", "status": "draft"}`)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "title is required")
+		assert.Contains(t, rec.Body.String(), "title")
 	})
 
 	t.Run("rejects a status outside the allowed set", func(t *testing.T) {
@@ -77,7 +85,7 @@ func TestHandoutRequestValidation(t *testing.T) {
 			`{"title": "Bad status", "content": "Body text", "status": "archived"}`)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "status must be one of: draft, published")
+		assert.Contains(t, rec.Body.String(), "draft, published")
 	})
 
 	t.Run("accepts both allowed statuses", func(t *testing.T) {

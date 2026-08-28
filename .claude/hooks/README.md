@@ -8,15 +8,14 @@ This directory contains hooks that enhance Claude Code's capabilities for the Ac
 **Trigger:** UserPromptSubmit
 **Purpose:** Auto-suggests relevant skills based on your prompts
 
-When you type a prompt, this hook analyzes it and suggests relevant skills like:
-- `backend-dev-guidelines` - For Go backend work with Chi router
-- `frontend-dev-guidelines` - For React/TypeScript frontend work
-- `game-phase-management` - For phase service patterns
-- `character-management` - For character workflows
-- `messaging-system` - For chat/messaging features
-- `test-fixtures` - For E2E test data management
-- `database-operations` - For migrations and sqlc queries
-- `authentication` - For JWT auth patterns
+When you type a prompt, this hook analyzes it and suggests relevant skills.
+The six skills that exist (one directory each under `.claude/skills/`):
+- `backend-dev-guidelines` - Go/Chi/PostgreSQL Clean Architecture patterns
+- `frontend-dev-guidelines` - React/TypeScript patterns
+- `game-domain` - Game lifecycle, phases, characters, messaging
+- `testing-patterns` - V&V criteria and test patterns
+- `route-tester` - Authenticated API route testing
+- `skill-developer` - Meta-skill for authoring skills and trigger rules
 
 The hook works from any directory within the project by automatically finding the project root.
 
@@ -31,16 +30,33 @@ When you edit files, this hook:
 
 ### 3. ActionPhase Build Check (`actionphase-build-check`)
 **Trigger:** Stop
-**Purpose:** Checks for compilation errors before ending the session
+**Purpose:** Surfaces code-quality problems before ending the session
 
-When a Claude Code session ends, this hook:
-- **Frontend checks:**
-  - Runs TypeScript compilation check (`tsc --noEmit`)
-  - Runs npm build to catch any build errors
-- **Backend checks:**
-  - Runs Go build to catch compilation errors
-  - Runs `go vet` for additional static analysis
-- Only checks parts that were actually edited in the session
+The hook is a thin wrapper: it runs **`just verify-quick`** and reports the
+output. All check logic lives in the justfile so it cannot drift from what you
+run by hand.
+
+`just verify-quick` runs these in **parallel** (~8-11s), and none of them
+mutate the tree:
+
+| Check | Catches |
+|---|---|
+| `tidy-check` | `go.mod` / `go.sum` out of sync (`go mod tidy -diff`) |
+| `fmt-check`  | Unformatted Go (`gofmt -l`) |
+| `vet`        | Go static-analysis problems |
+| `check-game-states` | Game-state list disagreeing across the trees |
+| `type-check` | TypeScript errors (`tsc -b`) |
+| `lint-frontend` | ESLint errors |
+
+It deliberately does **not** compile. For the full pre-push gate — every check
+above plus `tidy`/`fmt` and both production builds — run **`just verify`**.
+
+**When the dev stack is down**, every check would fail on infrastructure rather
+than code, so the hook exits 0 silently. Start the stack with `just up` to get
+checks back.
+
+> The hook runs everything through the containers, so it keeps working if you
+> delete host `node_modules`.
 
 ## Directory Structure
 
@@ -51,7 +67,7 @@ When a Claude Code session ends, this hook:
 ├── skill-activation-prompt.sh          # Shell wrapper for skill activation
 ├── skill-activation-prompt.ts          # TypeScript skill activation logic
 ├── post-tool-use-tracker.sh           # File tracking hook (customized for ActionPhase)
-├── actionphase-build-check.sh         # Build verification (Go + TypeScript)
+├── actionphase-build-check.sh         # Stop hook — wraps `just verify-quick`
 ├── tsc-check.sh                       # Original TypeScript check (not used)
 └── stop-build-check-enhanced.sh       # Original build check (not used)
 ```
@@ -65,10 +81,16 @@ Skills are configured in `.claude/skills/skill-rules.json` with:
 
 ## Cache Management
 
-The hooks create a cache directory at `.claude/tsc-cache/{session_id}/` containing:
+The tracker creates a cache directory at `.claude/tsc-cache/{session_id}/` containing:
 - `edited-files.log` - Timestamped log of edited files
 - `affected-repos.txt` - List of affected components (frontend/backend)
 - `commands.txt` - Build commands for affected components
+
+**Note:** since the Stop hook moved to `just verify-quick` (which checks the
+whole tree), nothing active reads this cache any more — only the two unused
+scripts below do. It is kept because `edited-files.log` is a useful record of
+what a session touched, and because scoping `verify-quick` to just the affected
+tree is the obvious next optimization.
 
 ## Testing Hooks
 
@@ -84,7 +106,7 @@ export CLAUDE_PROJECT_DIR=/path/to/actionphase
 echo '{"tool_name": "Edit", "tool_input": {"file_path": "/path/to/file.tsx"}, "session_id": "test"}' | \
   ./.claude/hooks/post-tool-use-tracker.sh
 
-# Test build check
+# Test build check (equivalent to just running `just verify-quick`)
 echo '{"session_id": "test"}' | \
   ./.claude/hooks/actionphase-build-check.sh
 ```
@@ -96,8 +118,11 @@ echo '{"session_id": "test"}' | \
 - Verify scripts have execute permissions: `chmod +x .claude/hooks/*.sh`
 
 ### Build check errors
-- Frontend: Ensure you're in the project root and dependencies are installed
-- Backend: Ensure Go modules are up to date (`go mod tidy`)
+- Ensure the dev stack is running (`just ps`); if it is down the hook exits 0
+  silently and checks nothing
+- Reproduce by hand with `just verify-quick`
+- Formatting/module failures are fixed by their mutating counterparts:
+  `just fmt` and `just tidy`
 
 ### Skill suggestions not appearing
 - Check that `.claude/skills/skill-rules.json` exists

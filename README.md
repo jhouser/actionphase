@@ -24,7 +24,7 @@ A modern turn-based gaming platform built with Go and React.
 - Clean Architecture patterns
 
 **Frontend:**
-- React 18+ with TypeScript
+- React 19 with TypeScript
 - Vite for build tooling
 - TanStack Query (React Query)
 - Tailwind CSS
@@ -34,47 +34,50 @@ A modern turn-based gaming platform built with Go and React.
 
 ### Prerequisites
 
-- Go 1.25+
-- Node.js 20+
-- PostgreSQL 17
-- Docker & Docker Compose (for database)
+Local development is **fully containerized** — you do not need Go, Node, or
+PostgreSQL on the host:
+
+- Docker & Docker Compose
 - [just](https://github.com/casey/just) command runner
+- git
+
+(For reference, the containers run Go 1.25, Node 24, and PostgreSQL 17.)
 
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/RallinaTricolor/actionphase.git
 cd actionphase
 
-# Complete setup (database, .env, dependencies)
+# First-time setup: create .env, build images, start the stack
 just dev-setup
 
-# Run migrations
-just migrate
-
-# Load test data (optional)
-just load-demo
+# Load demo data (optional)
+just test-data reload
 ```
+
+Migrations run automatically when the backend boots.
 
 ### Development
 
 ```bash
-# Start backend (with database)
-just dev
+just up                  # Start db + backend + frontend
+just down                # Stop (data preserved)
+just ps                  # Container status
+just dev-logs backend    # Tail a service's logs
 
-# In another terminal, start frontend
-cd frontend && npm run dev
+# Tests
+just test                # Backend tests
+just test-fe run         # Frontend tests
+just e2e                 # E2E (desktop + mobile)
 
-# Run tests
-just test          # Backend tests
-just test-frontend # Frontend tests
-just e2e           # E2E tests
-
-# Run linting
-just lint          # Backend linting
-just lint-frontend # Frontend linting
+# Linting
+just lint                # Backend
+just lint-frontend       # Frontend
 ```
+
+Code hot-reloads: edit a `.go` file (Air rebuilds in ~1-2s) or a frontend file
+(Vite HMR) on the host and the container picks it up.
 
 Visit:
 - **Frontend**: http://localhost:5173
@@ -91,11 +94,14 @@ After loading test data (`just load-demo`):
 
 ## Documentation
 
-- **[Developer Onboarding](docs/getting-started/DEVELOPER_ONBOARDING.md)** - 30-minute setup guide
-- **[Architecture Overview](docs/architecture/SYSTEM_ARCHITECTURE.md)** - System design
-- **[API Documentation](http://localhost:3000/api/v1/docs)** - OpenAPI/Swagger docs (when server running)
+- **[Developer Onboarding](docs-site/developer/getting-started/onboarding.md)** - 30-minute setup guide
+- **[Architecture Overview](docs-site/developer/architecture/overview.md)** - System design
+- **[ADRs](docs-site/developer/architecture/adrs/)** - Architecture Decision Records
 - **[Testing Guide](.claude/context/TESTING.md)** - Testing patterns and requirements
-- **[ADRs](docs/adrs/)** - Architecture Decision Records
+- **[Operations & Deployment](docs/README.md)** - Deployment, logging, env checklist
+- **[API Documentation](http://localhost:3000/api/v1/docs)** - OpenAPI/Swagger docs (when server running)
+
+Run `just docs-dev` to preview the documentation site locally.
 
 ## Project Structure
 
@@ -125,31 +131,33 @@ actionphase/
 See the [justfile](justfile) for all available commands:
 
 ```bash
-just help              # Show all commands
+just --list            # Show all commands
+just dev-help          # Development cheatsheet
+
+# Stack lifecycle
+just up                # Start the stack
+just down              # Stop the stack
+just ps                # Container status
 
 # Database
-just db setup          # Setup database
-just migrate           # Run migrations
-just load-demo         # Load demo data
-
-# Development
-just dev               # Start backend
-just start frontend    # Start frontend
-just start all         # Start both
+just migrate           # Run migrations (also automatic on backend boot)
+just test-data reload  # Reset + load demo/E2E fixtures
+just migration create <name>   # New migration
 
 # Testing
 just test              # Backend tests
-just test-frontend     # Frontend tests
+just test-mocks        # Fast unit tests (no DB)
+just test-fe run       # Frontend tests
 just e2e               # E2E tests
 just test-coverage     # Backend coverage report
 
-# Linting
+# Linting & verification
 just lint              # Backend lint
 just lint-frontend     # Frontend lint
+just verify            # Full pre-push gate (lint + type-check + builds)
 
 # Build
-just build             # Build backend
-just build-all all     # Build backend + frontend
+just build             # Backend + frontend production builds
 ```
 
 ## Contributing
@@ -157,7 +165,7 @@ just build-all all     # Build backend + frontend
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Write tests for your changes
-4. Ensure all tests pass (`just test && just test-frontend`)
+4. Ensure all tests pass (`just test && just test-fe run`)
 5. Ensure linting passes (`just lint && just lint-frontend`)
 6. Commit your changes (follow [Conventional Commits](https://www.conventionalcommits.org/))
 7. Push to the branch (`git push origin feature/amazing-feature`)
@@ -170,7 +178,6 @@ just build-all all     # Build backend + frontend
 - **Linting**: All code must pass linting checks
 - **Documentation**: Update docs for API or architectural changes
 
-See [Contributing Guide](docs/CONTRIBUTING.md) for detailed guidelines.
 
 ## Testing
 
@@ -182,19 +189,21 @@ just test-integration  # Database integration tests
 just test-coverage     # With coverage report
 
 # Frontend
-just test-frontend           # Run once
+just test-fe run            # Run once
 just test-fe watch          # Watch mode
 just test-fe coverage       # With coverage
 
-# E2E
-just e2e                    # Headless
-just e2e-test headed        # With browser visible
-just e2e-test ui            # Interactive UI
+# E2E (runs in the playwright container)
+just e2e                    # Desktop + mobile
+just e2e-desktop            # chromium only
+just e2e-mobile             # Pixel 5 only
+just e2e-test file <spec>   # A single spec
+just e2e-test report        # HTML report
 ```
 
 ## License
 
-[MIT License](LICENSE)
+[MIT License](MIT-LICENSE)
 
 ## Acknowledgments
 

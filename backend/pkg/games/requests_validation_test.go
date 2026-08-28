@@ -2,28 +2,27 @@ package games
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/go-chi/render"
 )
 
-// bindUpdate runs a JSON body through the same render.Bind path the update
-// handler uses, mirroring bindCreate in character_sheet_config_test.go.
-func bindUpdate(t *testing.T, body string) (*UpdateGameRequest, error) {
+// bindUpdate runs a JSON body through huma's real binding path, mirroring
+// bindCreate in character_sheet_config_test.go.
+func bindUpdate(t *testing.T, body string) (*updateGameBody, error) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/games/1", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	data := &UpdateGameRequest{}
-	return data, render.Bind(req, data)
+	return bindThroughHuma[updateGameBody](t, http.MethodPut, body)
 }
 
-// TestGameRequestTagValidation covers the `validate` tags on the game request
-// types. They sat inert for a while: Bind only parsed the character sheet and
-// checked the schedule fields, so a blank title reached the service and
-// surfaced to the GM as a 500 "unexpected error" rather than a 400.
+// TestGameRequestTagValidation covers the length and presence constraints on
+// the game request bodies. These sat inert for a while before the chi version
+// wired them up: Bind only parsed the character sheet and checked the schedule
+// fields, so a blank title reached the service and surfaced to the GM as a 500
+// "unexpected error" rather than a 400.
+//
+// The constraints now live as huma tags rather than `validate` tags, so the
+// wording differs -- huma says "expected length >= 3" where core.ValidateStruct
+// said "title must be at least 3 characters". Every input rejected before is
+// still rejected, and with the same 400; only the message text moved.
 func TestGameRequestTagValidation(t *testing.T) {
 	const goodDescription = "A description long enough to validate."
 
@@ -32,8 +31,8 @@ func TestGameRequestTagValidation(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected a missing title to be rejected")
 		}
-		if !strings.Contains(err.Error(), "title is required") {
-			t.Errorf("expected 'title is required', got %q", err.Error())
+		if !strings.Contains(err.Error(), "expected required property title to be present") {
+			t.Errorf("expected a missing-property message, got %q", err.Error())
 		}
 	})
 
@@ -42,8 +41,10 @@ func TestGameRequestTagValidation(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected a whitespace-only title to be rejected")
 		}
-		if !strings.Contains(err.Error(), "title is required") {
-			t.Errorf("expected 'title is required', got %q", err.Error())
+		// Trimmed to empty by the Resolve hook, then reported as blank rather
+		// than passing a whitespace title through to the database.
+		if !strings.Contains(err.Error(), "title must not be blank") {
+			t.Errorf("expected a blank-title message, got %q", err.Error())
 		}
 	})
 
@@ -52,7 +53,7 @@ func TestGameRequestTagValidation(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected a two-character title to be rejected")
 		}
-		if !strings.Contains(err.Error(), "title must be at least 3 characters") {
+		if !strings.Contains(err.Error(), "expected length >= 3") {
 			t.Errorf("expected a min-length message, got %q", err.Error())
 		}
 	})
@@ -62,7 +63,7 @@ func TestGameRequestTagValidation(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected a five-character description to be rejected")
 		}
-		if !strings.Contains(err.Error(), "description must be at least 10 characters") {
+		if !strings.Contains(err.Error(), "expected length >= 10") {
 			t.Errorf("expected a min-length message, got %q", err.Error())
 		}
 	})
@@ -88,8 +89,8 @@ func TestGameRequestTagValidation(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected a whitespace-only title to be rejected")
 		}
-		if !strings.Contains(err.Error(), "title is required") {
-			t.Errorf("expected 'title is required', got %q", err.Error())
+		if !strings.Contains(err.Error(), "title must not be blank") {
+			t.Errorf("expected a blank-title message, got %q", err.Error())
 		}
 	})
 
@@ -99,15 +100,29 @@ func TestGameRequestTagValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("tag validation runs before the schedule check", func(t *testing.T) {
-		// A body that is bad in two ways should name the blank title, not the
-		// partial schedule: the field the GM actually needs to fix first.
+	t.Run("field validation runs before the schedule check", func(t *testing.T) {
+		// A body that is bad in two ways should name the bad title, not the
+		// partial schedule: the field the GM actually needs to fix first. Huma
+		// runs schema validation before Resolve, which preserves that ordering.
 		_, err := bindCreate(t, `{"title":"","description":"`+goodDescription+`","common_room_open_day":1}`)
 		if err == nil {
 			t.Fatal("expected the body to be rejected")
 		}
-		if !strings.Contains(err.Error(), "title is required") {
+		if !strings.Contains(err.Error(), "expected length >= 3") {
 			t.Errorf("expected the title error to win, got %q", err.Error())
+		}
+		if strings.Contains(err.Error(), "schedule fields") {
+			t.Errorf("the schedule error should not have been reached: %q", err.Error())
+		}
+	})
+
+	t.Run("an incomplete schedule is still rejected on its own", func(t *testing.T) {
+		_, err := bindCreate(t, `{"title":"A Test Game","description":"`+goodDescription+`","common_room_open_day":1}`)
+		if err == nil {
+			t.Fatal("expected a partial schedule to be rejected")
+		}
+		if !strings.Contains(err.Error(), "must be set together or all omitted") {
+			t.Errorf("expected the schedule error, got %q", err.Error())
 		}
 	})
 }

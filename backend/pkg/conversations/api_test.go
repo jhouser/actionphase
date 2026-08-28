@@ -8,6 +8,7 @@ import (
 	dbmessages "actionphase/pkg/db/services/messages"
 	phasesvc "actionphase/pkg/db/services/phases"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -64,7 +65,7 @@ func setupConversationAPITestRouter(app *core.App, testDB *core.TestDatabase) *c
 				r.Use(gameHandler.GameMiddleware())
 
 				// Conversation routes
-				conversationHandler.RegisterRoutes(r)
+				RegisterHumaConversations(humaconfig.New(r, "ActionPhase API", "1.0.0"), &conversationHandler)
 			})
 		})
 	})
@@ -192,7 +193,31 @@ func TestConversationAPI_CreateConversation(t *testing.T) {
 		router.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "title is required")
+		// The message comes from the schema (minLength) rather than a
+		// hand-written check, so assert on the field, not the phrasing.
+		assert.Contains(t, rec.Body.String(), "title")
+	})
+
+	t.Run("rejects a whitespace-only title", func(t *testing.T) {
+		// Regression guard: the old check was `Title == ""`, which a
+		// whitespace-only title passes, so a blank-titled conversation was
+		// created (201). The trimming resolver on CreateConversationRequest
+		// rejects it.
+		reqBody := CreateConversationRequest{
+			Title:        "   ",
+			CharacterIDs: []int32{playerChar1.ID, playerChar2.ID},
+		}
+		reqJSON, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/games/%d/conversations", game.ID), bytes.NewBuffer(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+player1Token)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "must not be blank")
 	})
 
 	t.Run("rejects unauthenticated requests", func(t *testing.T) {
@@ -986,7 +1011,7 @@ func TestConversationAPI_GetUserConversations(t *testing.T) {
 	core.AssertNoError(t, err, "Should create conversation")
 
 	t.Run("player sees their own conversations", func(t *testing.T) {
-		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/conversations/", game.ID), nil)
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/conversations", game.ID), nil)
 		req.Header.Set("Authorization", "Bearer "+player1Token)
 
 		rec := httptest.NewRecorder()
@@ -1000,7 +1025,7 @@ func TestConversationAPI_GetUserConversations(t *testing.T) {
 	})
 
 	t.Run("player without conversations sees empty list", func(t *testing.T) {
-		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/conversations/", game.ID), nil)
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/conversations", game.ID), nil)
 		req.Header.Set("Authorization", "Bearer "+player3Token)
 
 		rec := httptest.NewRecorder()
@@ -1187,7 +1212,7 @@ func TestConversationAPI_MarkAsRead(t *testing.T) {
 func TestConversationAPI_AddParticipant(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "phases", "games", "users")
+	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupConversationAPITestRouter(app, testDB)
@@ -1291,7 +1316,7 @@ func TestConversationAPI_AddParticipant(t *testing.T) {
 func TestConversationAPI_UpdateMessage(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "phases", "games", "users")
+	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupConversationAPITestRouter(app, testDB)
@@ -1479,7 +1504,7 @@ func TestConversationAPI_UpdateMessage(t *testing.T) {
 func TestConversationAPI_InterludePhaseMessaging(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "phases", "games", "users")
+	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupConversationAPITestRouter(app, testDB)
@@ -1613,7 +1638,7 @@ func TestConversationAPI_InterludePhaseMessaging(t *testing.T) {
 func TestConversationAPI_GetUserConversations_UnreadOnly(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversation_read_receipts", "conversation_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "conversation_reads", "private_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupConversationAPITestRouter(app, testDB)
@@ -1662,7 +1687,7 @@ func TestConversationAPI_GetUserConversations_UnreadOnly(t *testing.T) {
 	})
 	core.AssertNoError(t, err, "Should send message")
 
-	unreadURL := fmt.Sprintf("/api/v1/games/%d/conversations/?unread_only=true", game.ID)
+	unreadURL := fmt.Sprintf("/api/v1/games/%d/conversations?unread_only=true", game.ID)
 
 	t.Run("returns only conversations with unread messages", func(t *testing.T) {
 		req := httptest.NewRequest("GET", unreadURL, nil)

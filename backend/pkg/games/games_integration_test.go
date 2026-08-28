@@ -6,6 +6,7 @@ import (
 	db "actionphase/pkg/db/services"
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -360,6 +361,7 @@ func TestGameAPI_ParticipantManagement(t *testing.T) {
 	_ = secondUser.HashPassword()
 	createdSecondUser, err := userService.CreateUser(secondUser)
 	core.AssertNoError(t, err, "Second user creation should succeed")
+	testDB.MarkUserVerified(t, createdSecondUser.ID)
 
 	secondUserToken, _ := core.CreateTestJWTTokenForUser(app, createdSecondUser)
 
@@ -448,6 +450,7 @@ func TestGameAPI_Authorization(t *testing.T) {
 	_ = nonOwner.HashPassword()
 	createdNonOwner, err := userService.CreateUser(nonOwner)
 	core.AssertNoError(t, err, "Non-owner user creation should succeed")
+	testDB.MarkUserVerified(t, createdNonOwner.ID)
 
 	ownerToken, _ := core.CreateTestJWTTokenForUser(app, fixtures.TestUser)
 	nonOwnerToken, _ := core.CreateTestJWTTokenForUser(app, createdNonOwner)
@@ -651,66 +654,19 @@ func setupGameTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
+				r.Use(core.AdminModeMiddleware)
 
-				// Game listing and viewing
-				r.Get("/", gameHandler.GetFilteredGames) // Main game listing endpoint with filters
-				r.Get("/recruiting", gameHandler.GetRecruitingGames)
-
-				// Game management
-				r.Post("/", gameHandler.CreateGame)
+				// huma / type-first, mirroring production's grouping. The
+				// listing is registered here rather than on a Verifier-only
+				// group because this router authenticates every route; the
+				// production split is exercised by the public applicants test.
+				RegisterHumaGamesPublicList(humaconfig.New(r, "ActionPhase API", "1.0.0"), &gameHandler)
+				RegisterHumaGamesCollection(humaconfig.New(r, "ActionPhase API", "1.0.0"), &gameHandler)
 
 				//Routes with game ID parameter
 				r.Route("/{gameID}", func(r chi.Router) {
 					r.Use(gameHandler.GameMiddleware())
-
-					// Game listing and viewing
-					r.Get("/", gameHandler.GetGame)
-					r.Get("/details", gameHandler.GetGameWithDetails)
-					r.Get("/participants", gameHandler.GetGameParticipants)
-
-					// Game management
-					r.Put("/", gameHandler.UpdateGame)
-					r.Delete("/", gameHandler.DeleteGame)
-					r.Put("/state", gameHandler.UpdateGameState)
-
-					// Participant management
-					// NOTE: join endpoint removed - use application system instead
-					r.Delete("/leave", gameHandler.LeaveGame)
-					r.Post("/participants/direct-add", gameHandler.AddParticipantDirectly)
-					r.Delete("/participants/{userId}", gameHandler.RemovePlayer)
-					r.Post("/participants/{userId}/promote-to-co-gm", gameHandler.PromoteToCoGM)
-					r.Post("/participants/{userId}/demote-from-co-gm", gameHandler.DemoteFromCoGM)
-					r.Post("/participants/{userId}/to-audience", gameHandler.TransitionPlayerToAudience)
-
-					// Game application management
-					r.Post("/apply", gameHandler.ApplyToGame)
-					r.Get("/applications", gameHandler.GetGameApplications)
-					r.Put("/applications/{applicationId}/review", gameHandler.ReviewGameApplication)
-					r.Get("/application", gameHandler.GetMyGameApplication)
-					r.Delete("/application", gameHandler.WithdrawGameApplication)
-
-					// Audience management
-					r.Get("/audience", gameHandler.ListAudienceMembers)
-					r.Put("/settings/auto-accept-audience", gameHandler.UpdateAutoAcceptAudience)
-					r.Get("/characters/audience-npcs", gameHandler.ListAudienceNPCs)
-					r.Get("/private-messages/all", gameHandler.ListAllPrivateConversations)
-					r.Get("/private-messages/participants", gameHandler.GetConversationParticipants)
-					r.Get("/private-messages/conversations/{conversationId}", gameHandler.GetAudienceConversationMessages)
-					r.Get("/action-submissions/all", gameHandler.ListAllActionSubmissions)
-
-					// Logs
-					r.Get("/logs", gameHandler.GetGameLogs)
-
-					// Post-game statistics
-					r.Get("/stats", gameHandler.GetGameStats)
-
-					r.Get("/loot-tables", gameHandler.GetGameLootTables)
-					r.Post("/loot-tables", gameHandler.AddGameLootTable)
-					r.Put("/loot-tables/{tableId}", gameHandler.UpdateGameLootTable)
-					r.Delete("/loot-tables/{tableId}", gameHandler.DeleteGameLootTable)
-					r.Get("/loot-tables/{tableId}/contents", gameHandler.GetGameLootTableContents)
-					r.Post("/loot-tables/{tableId}/contents", gameHandler.UpdateGameLootTableContent)
-					r.Post("/loot-tables/{tableId}/random/{characterId}", gameHandler.SetRandomLootForCharacter)
+					RegisterHumaGameScoped(humaconfig.New(r, "ActionPhase API", "1.0.0"), &gameHandler)
 				})
 			})
 		})
@@ -737,13 +693,15 @@ func setupAuthTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				FingerprintBanService:  &db.FingerprintBanService{DB: testDB.Pool, Logger: app.ObsLogger},
 				DiscordService:         &db.DiscordAccountService{DB: testDB.Pool, Logger: app.ObsLogger},
 			}
-			r.Post("/register", authHandler.V1Register)
-			r.Post("/login", authHandler.V1Login)
+			// Auth is huma-registered; mirror production's grouping.
+			r.Group(func(r chi.Router) {
+				auth.RegisterHumaAuthRateLimited(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
+			})
 			r.Group(func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
-				r.Get("/refresh", authHandler.V1Refresh)
+				auth.RegisterHumaAuthProtected(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
 			})
 		})
 	})
@@ -854,6 +812,7 @@ func TestGameAPI_GameApplications(t *testing.T) {
 		Email:    "player1@example.com",
 	})
 	core.AssertNoError(t, err, "Player user creation should succeed")
+	testDB.MarkUserVerified(t, playerUser.ID)
 
 	playerToken, err := core.CreateTestJWTTokenForUser(app, playerUser)
 	core.AssertNoError(t, err, "Player token creation should succeed")
@@ -1018,6 +977,7 @@ func TestGameAPI_GameApplications(t *testing.T) {
 			Email:    "player2@example.com",
 		})
 		core.AssertNoError(t, err, "Player 2 creation should succeed")
+		testDB.MarkUserVerified(t, player2.ID)
 
 		player2Token, err := core.CreateTestJWTTokenForUser(app, player2)
 		core.AssertNoError(t, err, "Player 2 token creation should succeed")
@@ -1060,6 +1020,7 @@ func TestGameAPI_GameApplications(t *testing.T) {
 			Email:    "player3@example.com",
 		})
 		core.AssertNoError(t, err, "Player 3 creation should succeed")
+		testDB.MarkUserVerified(t, player3.ID)
 
 		player3Token, err := core.CreateTestJWTTokenForUser(app, player3)
 		core.AssertNoError(t, err, "Player 3 token creation should succeed")
@@ -1141,6 +1102,7 @@ func TestGameAPI_AudienceManagement(t *testing.T) {
 		Email:    "audience1@example.com",
 	})
 	core.AssertNoError(t, err, "Audience user creation should succeed")
+	testDB.MarkUserVerified(t, audienceUser.ID)
 
 	audienceToken, err := core.CreateTestJWTTokenForUser(app, audienceUser)
 	core.AssertNoError(t, err, "Audience token creation should succeed")
@@ -1213,6 +1175,7 @@ func TestGameAPI_AudienceManagement(t *testing.T) {
 			Email:    "audience2@example.com",
 		})
 		core.AssertNoError(t, err, "User creation should succeed")
+		testDB.MarkUserVerified(t, user2.ID)
 
 		token2, err := core.CreateTestJWTTokenForUser(app, user2)
 		core.AssertNoError(t, err, "Token creation should succeed")
@@ -1367,6 +1330,7 @@ func TestGameAPI_AudienceManagement(t *testing.T) {
 			Email:    "charaudience@example.com",
 		})
 		core.AssertNoError(t, err, "User creation should succeed")
+		testDB.MarkUserVerified(t, charCreationAudienceUser.ID)
 
 		charCreationAudienceToken, err := core.CreateTestJWTTokenForUser(app, charCreationAudienceUser)
 		core.AssertNoError(t, err, "Token creation should succeed")
@@ -1420,6 +1384,7 @@ func TestGetGameParticipants_IncludesAvatarUrl(t *testing.T) {
 		Email:    "testgm@example.com",
 	})
 	core.AssertNoError(t, err, "GM user creation should succeed")
+	testDB.MarkUserVerified(t, gmUser.ID)
 
 	// Create user WITH avatar
 	userWithAvatar, err := userService.CreateUser(&core.User{
@@ -1428,6 +1393,7 @@ func TestGetGameParticipants_IncludesAvatarUrl(t *testing.T) {
 		Email:    "withavatar@example.com",
 	})
 	core.AssertNoError(t, err, "User with avatar creation should succeed")
+	testDB.MarkUserVerified(t, userWithAvatar.ID)
 
 	// Update user to have an avatar URL
 	_, err = testDB.Pool.Exec(context.Background(),
@@ -1442,6 +1408,7 @@ func TestGetGameParticipants_IncludesAvatarUrl(t *testing.T) {
 		Email:    "noavatar@example.com",
 	})
 	core.AssertNoError(t, err, "User without avatar creation should succeed")
+	testDB.MarkUserVerified(t, userWithoutAvatar.ID)
 
 	// Create a game
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}

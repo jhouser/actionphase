@@ -594,7 +594,7 @@ tidy:
 
 # Format Go code
 fmt:
-  {{BE}} go fmt ./...
+  {{BE}} goimports -w .
 
 # Run Go vet
 vet:
@@ -625,7 +625,7 @@ _vet-unix:
 
 
 # Run backend linters (fmt + vet) plus cross-tree consistency checks
-lint: fmt vet check-game-states
+lint: fmt vet check-game-states check-api-docs
   @echo "Go linting complete"
 
 # Verify the game state list agrees across constants, transitions, the
@@ -634,6 +634,23 @@ lint: fmt vet check-game-states
 # host bash — contributors on Windows get the same check as everyone else.
 check-game-states:
   @{{BE}} bash /repo/scripts/check-game-states.sh
+
+# Regenerate the committed OpenAPI spec from the Go types.
+#
+# The document is produced by huma from the registered operations, plus the
+# metadata in pkg/docs/spec_metadata.go. Run this after any API change and
+# commit the result; check-api-docs fails when it is stale.
+gen-openapi:
+  {{BE}} go run ./cmd/genopenapi -o pkg/docs/openapi.gen.yaml
+  @echo "✅ pkg/docs/openapi.gen.yaml regenerated — commit it with your change"
+
+# Verify the committed OpenAPI spec matches what the code generates.
+#
+# Since every package is huma-native the spec is derived from Go types, so this
+# is a diff rather than a judgment call: regenerate to a temp file and compare.
+# A failure means someone changed the API without running `just gen-openapi`.
+check-api-docs:
+  @{{BE}} bash /repo/scripts/check-api-docs.sh
 
 # Find unreachable/dead code in backend (excludes test helpers and mocks)
 dead-code:
@@ -651,24 +668,116 @@ _dead-code-unix:
     "pkg/core/test_\|pkg/core/mocks\|pkg/core/repository_mocks\|pkg/db/services/test_suite\|pkg/http/test_helpers\|pkg/core/test_best_practices" || true)
   if [ -n "$output" ]; then echo "$output"; exit 1; fi
 
-# TypeScript type-check (in frontend container)
+# TypeScript type-check (in frontend container).
+# NOTE: use `tsc -b`, not `tsc --noEmit`. The root tsconfig.json is a
+# solution-style file (`"files": []` + project references), so a bare
+# `tsc --noEmit` type-checks ZERO files and passes vacuously. `-b` walks the
+# referenced projects (tsconfig.app.json / tsconfig.node.json), which is also
+# what `npm run build` does.
 type-check:
-  {{FE}} npx tsc --noEmit
+  {{FE}} npx tsc -b --force
 
 # Dead-export detection (in frontend container)
 knip:
   {{FE}} npx knip
 
-# Run all code-quality checks (tidy + lint + dead-code + frontend lint + type-check + knip)
+# Non-mutating counterparts of tidy/fmt, for checks that must not rewrite the
+# tree while other checks are reading it (see `verify` / `verify-quick`).
+
+# Check go.mod/go.sum are tidy without rewriting them
+tidy-check:
+  {{BE}} go mod tidy -diff
+
+# Check Go formatting without rewriting files
+fmt-check:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  out=$({{BE}} gofmt -l .)
+  if [ -n "$out" ]; then
+    echo "Go files need formatting (run 'just fmt'):" >&2
+    echo "$out" >&2
+    exit 1
+  fi
+
+# Compile the backend binary (catches build errors `go vet` alone can miss).
+build-backend:
+  {{BE}} go build -o /tmp/actionphase-server .
+
+# Production frontend build (tsc -b && vite build); catches Vite-only failures
+build-frontend:
+  {{FE}} npm run build
+
+# Build both trees.
+build: build-backend build-frontend
+
+# Pre-push gate: every code-quality check PLUS both production builds (parallel)
 verify:
-  @echo "Verifying code quality..."
-  @just tidy
-  @just lint
-  @just dead-code
-  @just lint-frontend
-  @just type-check
-  @just knip
-  @echo "✅ Code quality verified"
+  @just _verify-{{os_family()}}
+
+_verify-unix:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  echo "Verifying code quality (checks + builds)..."
+  # tidy/fmt mutate the tree, so they run first and alone — never alongside
+  # readers like vet/deadcode/tsc.
+  just tidy
+  just fmt
+  fail=0
+  for t in "vet" "check-game-states" "check-api-docs" "dead-code" "build-backend" \
+           "lint-frontend" "knip" "build-frontend"; do
+    ( out=$(just $t 2>&1); code=$?; \
+      if [ $code -ne 0 ]; then printf '\n=== FAILED: just %s ===\n%s\n' "$t" "$out" >&2; fi; \
+      exit $code ) &
+  done
+  for job in $(jobs -p); do wait "$job" || fail=1; done
+  if [ "$fail" -ne 0 ]; then echo "❌ Verification failed" >&2; exit 1; fi
+  echo "✅ Code quality verified (checks + builds)"
+
+_verify-windows:
+  #!pwsh.exe
+  Write-Host "Verifying code quality (checks + builds)..."
+  just tidy
+  just fmt
+  $tasks = @("vet","check-game-states","check-api-docs","dead-code","build-backend","lint-frontend","knip","build-frontend")
+  $jobs = $tasks | ForEach-Object { Start-Job -ScriptBlock { param($t,$d) Set-Location $d; $o = just $t 2>&1; if ($LASTEXITCODE -ne 0) { Write-Output "=== FAILED: just $t ==="; Write-Output $o; exit 1 } } -ArgumentList $_, $PWD }
+  $jobs | Wait-Job | Out-Null
+  $failed = $jobs | Where-Object { $_.State -eq 'Failed' -or (Receive-Job $_ | Out-String) -match 'FAILED' }
+  $jobs | ForEach-Object { Receive-Job $_ } | Write-Host
+  $jobs | Remove-Job
+  if ($failed) { Write-Error "❌ Verification failed"; exit 1 }
+  Write-Host "✅ Code quality verified (checks + builds)"
+
+# Fast non-mutating checks, no builds (Stop hook); exits 0 if stack is down
+verify-quick:
+  @just _verify-quick-{{os_family()}}
+
+_verify-quick-unix:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  if ! docker compose -f docker-compose.dev.yml ps --status running --services 2>/dev/null | grep -q backend; then
+    exit 0
+  fi
+  fail=0
+  for t in "tidy-check" "fmt-check" "vet" "check-game-states" "check-api-docs" "type-check" "lint-frontend"; do
+    ( out=$(just $t 2>&1); code=$?; \
+      if [ $code -ne 0 ]; then printf '\n=== FAILED: just %s ===\n%s\n' "$t" "$out" >&2; fi; \
+      exit $code ) &
+  done
+  for job in $(jobs -p); do wait "$job" || fail=1; done
+  exit "$fail"
+
+_verify-quick-windows:
+  #!pwsh.exe
+  $running = docker compose -f docker-compose.dev.yml ps --status running --services 2>$null
+  if (-not ($running -match 'backend')) { exit 0 }
+  $tasks = @("tidy-check","fmt-check","vet","check-game-states","check-api-docs","type-check","lint-frontend")
+  $jobs = $tasks | ForEach-Object { Start-Job -ScriptBlock { param($t,$d) Set-Location $d; $o = just $t 2>&1; if ($LASTEXITCODE -ne 0) { Write-Output "=== FAILED: just $t ==="; Write-Output $o; exit 1 } } -ArgumentList $_, $PWD }
+  $jobs | Wait-Job | Out-Null
+  $out = $jobs | ForEach-Object { Receive-Job $_ }
+  $bad = $out | Out-String
+  $jobs | Remove-Job
+  if ($bad -match 'FAILED') { Write-Host $bad; exit 1 }
+  exit 0
 
 # ═══════════════════════════════════════════════════════════════════════════
 # DEVELOPMENT WORKFLOW
@@ -1144,6 +1253,3 @@ docs-embed: docs-build
   @echo "✅ Documentation embedded at backend/pkg/docs/dist"
   @echo "🔧 Restart the backend to include updated docs: just restart backend"
 
-# Validate API documentation completeness (in backend container)
-api-docs-validate:
-  {{BE}} go run scripts/validate-api-docs.go

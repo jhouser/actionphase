@@ -515,8 +515,8 @@ export const UserProfile: React.FC<UserProfileProps> = ({ userId }) => {
     return (
         <Card variant="default" padding="md">
             <CardBody>
-                <h2 className="text-xl font-semibold text-text-heading">{user.name}</h2>
-                <p className="text-text-primary">{user.email}</p>
+                <h2 className="text-xl font-semibold text-content-primary">{user.name}</h2>
+                <p className="text-content-secondary">{user.email}</p>
             </CardBody>
         </Card>
     );
@@ -749,4 +749,3 @@ useSuspenseQuery({
 **See Also:**
 - [component-patterns.md](component-patterns.md) - Suspense integration
 - [loading-and-error-states.md](loading-and-error-states.md) - SuspenseLoader usage
-- [complete-examples.md](complete-examples.md) - Full working examples

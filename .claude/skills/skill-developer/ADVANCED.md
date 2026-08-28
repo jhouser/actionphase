@@ -170,11 +170,11 @@ Ideas and concepts for future improvements to the skill system.
 **Example Test:**
 ```typescript
 describe('database-verification', () => {
-  it('triggers on Prisma imports', () => {
+  it('triggers on sqlc imports', () => {
     const result = testSkill({
       prompt: "add user tracking",
       file: "services/user.ts",
-      content: "import { PrismaService } from './prisma'"
+      content: "import { Queries } from './sqlc'"
     });
 
     expect(result.triggered).toBe(true);

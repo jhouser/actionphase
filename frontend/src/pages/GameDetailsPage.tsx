@@ -348,18 +348,18 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
           <div className="surface-base shadow-md py-4 px-3 md:p-6 mb-6 md:rounded-lg animate-pulse">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <div className="h-7 bg-bg-secondary rounded w-2/3 mb-3"></div>
+                <div className="h-7 surface-raised rounded w-2/3 mb-3"></div>
                 <div className="flex gap-2">
-                  <div className="h-5 bg-bg-secondary rounded-full w-20"></div>
-                  <div className="h-5 bg-bg-secondary rounded-full w-16"></div>
-                  <div className="h-5 bg-bg-secondary rounded-full w-24"></div>
+                  <div className="h-5 surface-raised rounded-full w-20"></div>
+                  <div className="h-5 surface-raised rounded-full w-16"></div>
+                  <div className="h-5 surface-raised rounded-full w-24"></div>
                 </div>
               </div>
-              <div className="h-8 bg-bg-secondary rounded w-24 ml-4"></div>
+              <div className="h-8 surface-raised rounded w-24 ml-4"></div>
             </div>
             <div className="mt-4 space-y-2">
-              <div className="h-4 bg-bg-secondary rounded w-full"></div>
-              <div className="h-4 bg-bg-secondary rounded w-5/6"></div>
+              <div className="h-4 surface-raised rounded w-full"></div>
+              <div className="h-4 surface-raised rounded w-5/6"></div>
             </div>
           </div>
 
@@ -367,14 +367,14 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
           <div className="surface-base shadow-sm md:rounded-lg mb-6 animate-pulse">
             <div className="flex gap-1 p-2 border-b border-theme-default overflow-x-auto">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-8 bg-bg-secondary rounded w-20 flex-shrink-0"></div>
+                <div key={i} className="h-8 surface-raised rounded w-20 flex-shrink-0"></div>
               ))}
             </div>
             <div className="p-4 md:p-6 space-y-4">
-              <div className="h-4 bg-bg-secondary rounded w-full"></div>
-              <div className="h-4 bg-bg-secondary rounded w-4/5"></div>
-              <div className="h-4 bg-bg-secondary rounded w-3/5"></div>
-              <div className="h-32 bg-bg-secondary rounded w-full mt-4"></div>
+              <div className="h-4 surface-raised rounded w-full"></div>
+              <div className="h-4 surface-raised rounded w-4/5"></div>
+              <div className="h-4 surface-raised rounded w-3/5"></div>
+              <div className="h-32 surface-raised rounded w-full mt-4"></div>
             </div>
           </div>
         </div>

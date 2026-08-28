@@ -62,7 +62,7 @@ func setupActionsTestState(t *testing.T, testDB *core.TestDatabase, app *core.Ap
 func TestPhaseAPI_SubmitAction(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -112,7 +112,7 @@ func TestPhaseAPI_SubmitAction(t *testing.T) {
 func TestPhaseAPI_SubmitAction_NoActivePhase(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_submissions", "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "action_submissions", "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -149,7 +149,7 @@ func TestPhaseAPI_SubmitAction_NoActivePhase(t *testing.T) {
 func TestPhaseAPI_GetUserActions(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -209,7 +209,7 @@ func TestPhaseAPI_GetUserActions(t *testing.T) {
 func TestPhaseAPI_GetGameActions(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -258,7 +258,7 @@ func TestPhaseAPI_GetGameActions(t *testing.T) {
 func TestPhaseAPI_GetCurrentPhase(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -318,7 +318,7 @@ func TestPhaseAPI_GetCurrentPhase(t *testing.T) {
 func TestPhaseAPI_InterludeBlocksActionSubmission(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)

@@ -25,7 +25,7 @@ export interface ToggleProps
  *
  * Fixes the recurring "invisible off-state in light mode" bug by rendering the
  * off track with a defined surface token plus a visible border, instead of the
- * legacy `bg-bg-secondary` / `bg-border-primary` utilities which are unassigned
+ * legacy `surface-raised` / `bg-border-primary` utilities which are unassigned
  * in the current theme system.
  *
  * When `label`/`description`/`icon` are provided, the component renders a full

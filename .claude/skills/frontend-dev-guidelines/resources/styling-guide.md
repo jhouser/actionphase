@@ -58,9 +58,9 @@ Use Tailwind utilities for layout, spacing, and positioning:
 
 ```tsx
 // ✅ CORRECT - CSS variables adapt to theme
-<div className="bg-bg-primary text-text-primary border-border-primary">
-  <h2 className="text-text-heading">Welcome</h2>
-  <p className="text-text-secondary">Select a game to continue</p>
+<div className="surface-base text-content-secondary border-theme-default">
+  <h2 className="text-content-primary">Welcome</h2>
+  <p className="text-content-secondary">Select a game to continue</p>
 </div>
 
 // ❌ WRONG - Never use hardcoded colors
@@ -80,13 +80,13 @@ Use Tailwind utilities for layout, spacing, and positioning:
 
 | Variable | Usage | Light Mode | Dark Mode |
 |----------|-------|------------|-----------|
-| `bg-bg-primary` | Main backgrounds | White | Dark gray |
-| `bg-bg-secondary` | Secondary backgrounds | Light gray | Darker gray |
-| `bg-bg-elevated` | Elevated surfaces | White + shadow | Dark gray + border |
-| `text-text-heading` | Headings | Dark gray | White |
-| `text-text-primary` | Body text | Gray | Light gray |
-| `text-text-secondary` | Muted text | Light gray | Darker gray |
-| `border-border-primary` | Borders | Light gray | Dark gray |
+| `surface-base` | Main backgrounds | White | Dark gray |
+| `surface-raised` | Secondary backgrounds | Light gray | Darker gray |
+| `surface-overlay` | Elevated surfaces (dropdowns, popovers) | White | Dark gray |
+| `text-content-primary` | Headings | Dark gray | White |
+| `text-content-secondary` | Body text | Gray | Light gray |
+| `text-content-secondary` | Muted text | Light gray | Darker gray |
+| `border-theme-default` | Borders | Light gray | Dark gray |
 
 ### Examples
 
@@ -94,21 +94,21 @@ Use Tailwind utilities for layout, spacing, and positioning:
 // Card with proper theming
 <Card variant="default" padding="md">
   <CardBody>
-    <h3 className="text-text-heading text-lg font-semibold mb-2">
+    <h3 className="text-content-primary text-lg font-semibold mb-2">
       Game Stats
     </h3>
-    <p className="text-text-primary">
+    <p className="text-content-secondary">
       You have {gameCount} active games
     </p>
-    <p className="text-text-secondary text-sm">
+    <p className="text-content-secondary text-sm">
       Last updated 5 minutes ago
     </p>
   </CardBody>
 </Card>
 
 // Custom container with theming
-<div className="bg-bg-secondary rounded-lg p-6">
-  <div className="bg-bg-primary rounded border border-border-primary p-4">
+<div className="surface-raised rounded-lg p-6">
+  <div className="surface-base rounded border border-theme-default p-4">
     <Badge variant="success">Active</Badge>
   </div>
 </div>
@@ -189,7 +189,7 @@ Use Tailwind utilities for layout, spacing, and positioning:
 
 ```tsx
 // Header layout
-<header className="flex items-center justify-between p-4 border-b border-border-primary">
+<header className="flex items-center justify-between p-4 border-b border-theme-default">
   <div className="flex items-center gap-4">
     <Logo />
     <Navigation />
@@ -199,7 +199,7 @@ Use Tailwind utilities for layout, spacing, and positioning:
 
 // Sidebar layout
 <div className="flex h-screen">
-  <aside className="w-64 bg-bg-secondary p-4">
+  <aside className="w-64 surface-raised p-4">
     <Navigation />
   </aside>
   <main className="flex-1 p-6 overflow-auto">
@@ -218,7 +218,7 @@ Use Tailwind utilities for layout, spacing, and positioning:
 
 // Content section
 <section className="mb-8">
-  <h2 className="text-2xl font-bold text-text-heading mb-4">
+  <h2 className="text-2xl font-bold text-content-primary mb-4">
     Section Title
   </h2>
   <div className="space-y-4">
@@ -277,8 +277,8 @@ Use Tailwind utilities for layout, spacing, and positioning:
 
 // Skeleton loading
 <div className="animate-pulse">
-  <div className="h-4 bg-bg-secondary rounded w-3/4 mb-2"></div>
-  <div className="h-4 bg-bg-secondary rounded w-1/2"></div>
+  <div className="h-4 surface-raised rounded w-3/4 mb-2"></div>
+  <div className="h-4 surface-raised rounded w-1/2"></div>
 </div>
 ```
 
@@ -287,10 +287,10 @@ Use Tailwind utilities for layout, spacing, and positioning:
 ```tsx
 <div className="text-center py-12">
   <div className="text-6xl mb-4">📭</div>
-  <h3 className="text-text-heading text-lg font-semibold mb-2">
+  <h3 className="text-content-primary text-lg font-semibold mb-2">
     No messages yet
   </h3>
-  <p className="text-text-secondary">
+  <p className="text-content-secondary">
     Start a conversation to see messages here
   </p>
   <Button variant="primary" className="mt-4">
@@ -304,11 +304,11 @@ Use Tailwind utilities for layout, spacing, and positioning:
 ```tsx
 <ul className="divide-y divide-border-primary">
   {items.map(item => (
-    <li key={item.id} className="py-4 hover:bg-bg-secondary transition-colors">
+    <li key={item.id} className="py-4 hover:surface-raised transition-colors">
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="text-text-heading font-medium">{item.title}</h4>
-          <p className="text-text-secondary text-sm">{item.description}</p>
+          <h4 className="text-content-primary font-medium">{item.title}</h4>
+          <p className="text-content-secondary text-sm">{item.description}</p>
         </div>
         <Badge variant={item.status}>{item.status}</Badge>
       </div>
@@ -321,14 +321,14 @@ Use Tailwind utilities for layout, spacing, and positioning:
 
 ```tsx
 // Headings
-<h1 className="text-3xl font-bold text-text-heading">Page Title</h1>
-<h2 className="text-2xl font-semibold text-text-heading">Section</h2>
-<h3 className="text-xl font-medium text-text-heading">Subsection</h3>
+<h1 className="text-3xl font-bold text-content-primary">Page Title</h1>
+<h2 className="text-2xl font-semibold text-content-primary">Section</h2>
+<h3 className="text-xl font-medium text-content-primary">Subsection</h3>
 
 // Body text
-<p className="text-text-primary">Regular paragraph text</p>
-<p className="text-text-secondary text-sm">Secondary or muted text</p>
-<p className="text-text-danger">Error message text</p>
+<p className="text-content-secondary">Regular paragraph text</p>
+<p className="text-content-secondary text-sm">Secondary or muted text</p>
+<p className="text-semantic-danger">Error message text</p>
 
 // Links (using React Router)
 <Link to="/path" className="text-primary hover:underline">

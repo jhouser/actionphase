@@ -21,7 +21,9 @@ Learn about the system design:
 
 ## Testing
 
-- **[Testing Guide](/developer/testing/overview)** - Test pyramid, patterns, and tools
+- **[Test Coverage Status](/developer/testing/COVERAGE_STATUS)** - Current coverage and gaps
+- **[E2E Quick Start](/developer/testing/E2E_QUICK_START)** - Running Playwright tests
+- **[ADR-007: Testing Strategy](/developer/architecture/adrs/007-testing-strategy)** - Test pyramid, patterns, and tools
 
 ## Tech Stack
 
@@ -46,5 +48,5 @@ Learn about the system design:
 
 1. Read the **[Developer Onboarding](/developer/getting-started/onboarding)** guide
 2. Check out the **[Architecture docs](/developer/architecture/overview)**
-3. Review the **[Testing Guide](/developer/testing/overview)**
+3. Review **[ADR-007: Testing Strategy](/developer/architecture/adrs/007-testing-strategy)**
 4. Start with a good first issue!

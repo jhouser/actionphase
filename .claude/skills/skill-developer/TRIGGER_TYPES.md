@@ -124,7 +124,7 @@ Domain/area-specific activation based on file location in the project.
 "fileTriggers": {
   "pathPatterns": [
     "frontend/src/**/*.tsx",
-    "form/src/**/*.ts"
+    "backend/pkg/**/*.go"
   ],
   "pathExclusions": [
     "**/*.test.ts",
@@ -139,8 +139,8 @@ Domain/area-specific activation based on file location in the project.
 - `*` = Any characters within a directory name
 - Examples:
   - `frontend/src/**/*.tsx` = All .tsx files in frontend/src and subdirs
-  - `**/schema.prisma` = schema.prisma anywhere in project
-  - `form/src/**/*.ts` = All .ts files in form/src subdirs
+  - `**/*.sql` = schema.sqlc anywhere in project
+  - `backend/pkg/**/*.go` = All .ts files in backend/pkg subdirs
 
 ### Example
 
@@ -154,7 +154,7 @@ Domain/area-specific activation based on file location in the project.
 - Use exclusions for test files: `**/*.test.ts`
 - Consider subdirectory structure
 - Test patterns with actual file paths
-- Use narrower patterns when possible: `form/src/services/**` not `form/**`
+- Use narrower patterns when possible: `backend/pkg/db/services/**` not `backend/**`
 
 ### Common Path Patterns
 
@@ -165,18 +165,18 @@ frontend/src/**/*.ts         # All TypeScript files
 frontend/src/components/**   # Only components directory
 
 # Backend Services
-form/src/**/*.ts            # Form service
+backend/pkg/**/*.go            # Form service
 email/src/**/*.ts           # Email service
 users/src/**/*.ts           # Users service
 
 # Database
-**/schema.prisma            # Prisma schema (anywhere)
+**/*.sql            # SQL query files (anywhere)
 **/migrations/**/*.sql      # Migration files
 database/src/**/*.ts        # Database scripts
 
 # Workflows
-form/src/workflow/**/*.ts              # Workflow engine
-form/src/workflow-definitions/**/*.json # Workflow definitions
+backend/pkg/db/services/phases/**/*.go              # Workflow engine
+backend/pkg/db/queries/**/*.sql # Workflow definitions
 
 # Test Exclusions
 **/*.test.ts                # TypeScript tests
@@ -194,16 +194,16 @@ Regex pattern matching against the file's actual content (what's inside the file
 
 ### Use For
 
-Technology-specific activation based on what the code imports or uses (Prisma, controllers, specific libraries).
+Technology-specific activation based on what the code imports or uses (sqlc, controllers, specific libraries).
 
 ### Configuration
 
 ```json
 "fileTriggers": {
   "contentPatterns": [
-    "import.*[Pp]risma",
-    "PrismaService",
-    "\\.findMany\\(",
+    "import.*pkg/db/models",
+    "Queries",
+    "\.GetDraftCharacterUpdates\(",
     "\\.create\\("
   ]
 }
@@ -211,9 +211,9 @@ Technology-specific activation based on what the code imports or uses (Prisma, c
 
 ### Examples
 
-**Prisma Detection:**
-- File contains: `import { PrismaService } from '@project/database'`
-- Matches: `import.*[Pp]risma`
+**sqlc Detection:**
+- File contains: `models "actionphase/pkg/db/models"`
+- Matches: `import.*pkg/db/models`
 - Activates: `database-verification`
 
 **Controller Detection:**
@@ -223,8 +223,8 @@ Technology-specific activation based on what the code imports or uses (Prisma, c
 
 ### Best Practices
 
-- Match imports: `import.*[Pp]risma` (case-insensitive with [Pp])
-- Escape special regex chars: `\\.findMany\\(` not `.findMany(`
+- Match imports: `import.*pkg/db/models`
+- Escape special regex chars: `\.GetDraftCharacterUpdates\(` not `.GetDraftCharacterUpdates(`
 - Patterns use case-insensitive flag
 - Test against real file content
 - Make patterns specific enough to avoid false matches
@@ -232,11 +232,11 @@ Technology-specific activation based on what the code imports or uses (Prisma, c
 ### Common Content Patterns
 
 ```regex
-# Prisma/Database
-import.*[Pp]risma                # Prisma imports
-PrismaService                    # PrismaService usage
-prisma\.                         # prisma.something
-\.findMany\(                     # Prisma query methods
+# sqlc / Database
+import.*pkg/db/models                # sqlc imports
+Queries\.                  # generated Queries method calls
+sqlc\.                         # sqlc.something
+\.findMany\(                     # generated query methods
 \.create\(
 \.update\(
 \.delete\(
@@ -286,16 +286,11 @@ echo '{"session_id":"test","prompt":"your test prompt"}' | \
   npx tsx .claude/hooks/skill-activation-prompt.ts
 ```
 
-**Test file path/content triggers:**
-```bash
-cat <<'EOF' | npx tsx .claude/hooks/skill-verification-guard.ts
-{
-  "session_id": "test",
-  "tool_name": "Edit",
-  "tool_input": {"file_path": "/path/to/test/file.ts"}
-}
-EOF
-```
+**Note on file triggers:** `fileTriggers` (`pathPatterns` / `contentPatterns`)
+is **not read by any hook in this project** — the only registered skill hook is
+`UserPromptSubmit`, which matches `promptTriggers` against the prompt text.
+File-trigger config is inert; it is retained for documentation value and in case
+a `PreToolUse` hook is added later. Do not rely on it to activate a skill.
 
 ---
 

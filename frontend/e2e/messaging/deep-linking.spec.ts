@@ -106,14 +106,14 @@ test.describe('@mobile Deep Linking in Common Room', () => {
     await page.waitForLoadState('networkidle');
 
     const newCommentsButton = page.locator('button').filter({ hasText: /^New Comments$/ });
-    await expect(newCommentsButton).toHaveClass(/border-accent-primary/);
+    await expect(newCommentsButton).toHaveClass(/border-interactive-primary/);
 
     // Deep link — should switch to Posts tab
     await page.goto(`/games/${gameId}?tab=common-room&comment=${shallowCommentId}`);
     await page.waitForLoadState('networkidle');
 
     const postsButton = page.locator('button').filter({ hasText: /^Posts$/ });
-    await expect(postsButton).toHaveClass(/border-accent-primary/);
+    await expect(postsButton).toHaveClass(/border-interactive-primary/);
 
     const comment = page.locator(`#comment-${shallowCommentId}`)
       .or(page.locator(`#comment-${shallowCommentId}-mobile`))

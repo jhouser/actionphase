@@ -254,7 +254,12 @@ func (td *TestDatabase) CleanupTables(t TestingInterface, tables ...string) {
 		if exists {
 			existingTables = append(existingTables, table)
 		} else {
-			t.Logf("Note: Table %s does not exist, skipping cleanup", table)
+			// A name that matches no table is a typo, not a no-op. Skipping it
+			// silently leaves that table's rows and id sequence untouched while
+			// the rest of the list is reset, which later surfaces as a
+			// duplicate-key failure in an unrelated test. Fail at the typo.
+			t.Fatalf("CleanupTables: no table named %q exists; "+
+				"check the name against the schema (e.g. phases -> game_phases)", table)
 		}
 	}
 
@@ -336,11 +341,34 @@ func (td *TestDatabase) CreateTestUser(t TestingInterface, username, email strin
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 
+	// Mark the email verified. CreateUser leaves email_verified false, but every
+	// write endpoint gates on RequireVerifiedEmail(Ctx), so an unverified fixture
+	// user models someone who cannot act — no test wants that. Leaving it false
+	// made the suite pass only where REQUIRE_EMAIL_VERIFICATION=false happened to
+	// be in the environment (the dev container) and 403 in CI, which does not set it.
+	if err := queries.MarkUserEmailVerified(ctx, dbUser.ID); err != nil {
+		t.Fatalf("Failed to mark test user email verified: %v", err)
+	}
+
 	return &User{
 		ID:        int(dbUser.ID),
 		Username:  dbUser.Username,
 		Email:     dbUser.Email,
 		CreatedAt: &dbUser.CreatedAt.Time,
+	}
+}
+
+// MarkUserVerified marks an already-created user's email as verified.
+//
+// Use it for users built through the production UserService.CreateUser, which
+// deliberately leaves email_verified false (real registration verifies out of
+// band). Every write endpoint gates on RequireVerifiedEmail(Ctx), so a test user
+// who is supposed to act must be verified first. TestDatabase.CreateTestUser
+// does this for you; this is the escape hatch for the service path.
+func (td *TestDatabase) MarkUserVerified(t TestingInterface, userID int) {
+	t.Helper()
+	if err := models.New(td.Pool).MarkUserEmailVerified(context.Background(), int32(userID)); err != nil {
+		t.Fatalf("Failed to mark user %d email verified: %v", userID, err)
 	}
 }
 
@@ -686,6 +714,12 @@ func (td *TestDatabase) CreateTestUserWithCredentials(t TestingInterface, userna
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 
+	// Verified for the same reason as CreateTestUser: an unverified user is
+	// forbidden from every write endpoint.
+	if err := queries.MarkUserEmailVerified(ctx, dbUser.ID); err != nil {
+		t.Fatalf("Failed to mark test user email verified: %v", err)
+	}
+
 	return &User{
 		ID:        int(dbUser.ID),
 		Username:  dbUser.Username,
@@ -705,10 +739,8 @@ func NewTestConfig() *Config {
 			MaxIdleTime:    30 * time.Minute,
 		},
 		JWT: JWTConfig{
-			Secret:             "test_jwt_secret_for_unit_tests_only",
-			AccessTokenExpiry:  15 * time.Minute,
-			RefreshTokenExpiry: 7 * 24 * time.Hour,
-			Algorithm:          "HS256",
+			Secret:    "test_jwt_secret_for_unit_tests_only",
+			Algorithm: "HS256",
 		},
 		Server: ServerConfig{
 			Port:         3000,

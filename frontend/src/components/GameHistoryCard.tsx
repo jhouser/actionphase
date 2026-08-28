@@ -158,7 +158,7 @@ export function GameHistoryCard({ game }: GameHistoryCardProps) {
         )}
 
         {/* Date Range */}
-        <div className="mt-4 pt-4 border-t border-border-primary text-xs text-content-secondary">
+        <div className="mt-4 pt-4 border-t border-theme-default text-xs text-content-secondary">
           {endLabel ? `${startLabel} → ${endLabel}` : startLabel}
         </div>
       </CardBody>

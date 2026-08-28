@@ -14,6 +14,12 @@ ActionPhase requires secure user authentication that supports:
 
 The solution must balance security, user experience, and implementation complexity.
 
+> ⚠️ **Accuracy notice (verified 2026-08-26):** several specifics in this
+> section were never implemented as written — the token lifetime, the claim
+> contents, and the separate refresh token all differ in the shipped code. See
+> [Implementation Divergence](#implementation-divergence-verified-2026-08-26) at
+> the end before relying on any detail here.
+
 ## Decision
 We implemented a **JWT + Refresh Token Strategy** with server-side session management:
 
@@ -153,48 +159,70 @@ We implemented a **JWT + Refresh Token Strategy** with server-side session manag
 ## Implementation Details
 
 ### JWT Token Structure
+
+> ❌ **The structure originally documented here was never implemented.** It
+> claimed `sub` held a username with `iat`/`jti` present, and that the user ID
+> was deliberately excluded. The shipped token does the opposite.
+
+**As designed (not built):**
+```json
+{ "sub": "username", "exp": 1625097600, "iat": 1625096700, "jti": "token-uuid" }
+```
+
+**As actually issued** (`pkg/auth/jwt.go:78-83`):
 ```json
 {
-  "sub": "username",  // Username (not user-123)
-  "exp": 1625097600,
-  "iat": 1625096700,
-  "jti": "token-uuid"
+  "sub": "42",          // the user ID, as a string
+  "session_id": 1337,   // FK into the sessions table
+  "exp": 1625097600
 }
 ```
 
-**Security Note**: User ID is intentionally **NOT included** in JWT payload to prevent
-client-side manipulation. The user ID is fetched server-side after token validation
-via the `/api/v1/auth/me` endpoint.
-
-This approach provides defense-in-depth:
-- JWT cannot be tampered to change user identity
-- User data is always authoritative from server
-- Eliminates client-side JWT decoding security risks
+The "user ID intentionally excluded" rationale below does **not** describe this
+system. Tamper-resistance comes from the HMAC signature (HS256), not from
+omitting the ID; and `session_id` means every request is checked against a
+server-side session row, so a forged or revoked token fails regardless of claims.
 
 ### Database Session Schema
+
+> ❌ **The schema originally documented here does not exist.** It had a
+> `refresh_token` column, `device_id`, and `expires_at`. The real table has no
+> refresh token at all — it stores the JWT itself in `data`.
+
+**Actual schema** (`backend/pkg/db/schema.sql`):
 ```sql
 CREATE TABLE sessions (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    refresh_token VARCHAR(255) UNIQUE NOT NULL,
-    device_id VARCHAR(255),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    data TEXT NOT NULL,          -- the JWT itself
+    expires TIMESTAMP WITH TIME ZONE,
+    ip_address VARCHAR(45),
     user_agent TEXT,
-    ip_address INET,
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    last_used_at TIMESTAMPTZ DEFAULT NOW()
+    fingerprint VARCHAR(255),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE INDEX idx_sessions_user_id ON sessions(user_id);
-CREATE INDEX idx_sessions_refresh_token ON sessions(refresh_token);
-CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
 ```
 
+Note `expires` / `last_seen_at` (not `expires_at` / `last_used_at`), and
+`fingerprint` in place of `device_id`.
+
 ### Authentication Flow
-1. **Login**: Validate credentials → Create session → Return JWT + refresh token
-2. **API Access**: Include JWT in Authorization header → Validate → Process request
-3. **Token Refresh**: Submit refresh token → Validate session → Return new JWT
-4. **Logout**: Invalidate refresh token → Delete session → Clear client tokens
+
+**As actually implemented** (there is only one token):
+
+1. **Login**: Validate credentials → create `sessions` row → return the JWT in
+   the body **and** as an HTTP-only `jwt` cookie
+2. **API Access**: `Authorization: Bearer <jwt>` → signature + session check →
+   process request
+3. **Token Rotation**: `GET /api/v1/auth/refresh` with a **currently valid**
+   token → mint a new token and a **new session row**. There is no separate
+   refresh credential, so this cannot recover an already-expired session.
+4. **Logout**: `V1Logout` **only clears the `jwt` cookie**
+   (`pkg/auth/login.go:153`). It does **not** delete the session row, so a token
+   already captured by a client remains valid server-side until `exp` (up to
+   7 days). Session rows are deleted elsewhere — e.g. password change revokes
+   all *other* sessions (`pkg/auth/account_service.go:475`).
 
 ### Frontend Integration
 ```typescript
@@ -236,6 +264,61 @@ func AuthRateLimit() func(http.Handler) http.Handler {
     return middleware.RateLimit(5, time.Minute) // 5 requests per minute
 }
 ```
+
+## Implementation Divergence (verified 2026-08-26)
+
+The design above describes a two-token scheme. **The shipped system uses a
+single token.** Each row below was checked against source.
+
+| ADR claims | Reality | Source |
+|---|---|---|
+| Access token lives **15 minutes** | **7 days** (`core.SessionLifetime`) | `pkg/core/config.go:128`, `pkg/auth/jwt.go:61` |
+| `sub` is the **username**, "user ID intentionally excluded" | `sub` **is the user ID** (`strconv.Itoa(user.ID)`) | `pkg/auth/jwt.go:60,80` |
+| Claims include `iat` and `jti` | Neither is set. Claims are `sub`, `session_id`, `exp` | `pkg/auth/jwt.go:78-83` |
+| Separate long-lived **refresh token** in the DB | **No separate refresh token exists.** `sessions.data` stores the JWT itself | `pkg/db/schema.sql` (`sessions`) |
+| HTTP-only cookie for refresh tokens is a "future" item | **Already shipped** — `SetJWTCookie` sets an HTTP-only `jwt` cookie | `pkg/auth/jwt.go:17` |
+
+### How authentication actually works
+
+1. `CreateToken` mints a JWT, creates a `sessions` row, then re-mints the token
+   with `session_id` embedded and stores it in `sessions.data`.
+2. The token is returned in the body **and** set as an HTTP-only `jwt` cookie.
+   The frontend sends it as `Authorization: Bearer <token>`
+   (`src/lib/api/client.ts:41`); `withCredentials: true` carries the cookie.
+3. `GET /api/v1/auth/refresh` requires a **currently valid** token, reads `sub`,
+   and issues a brand-new token plus a **new session row**. It is a token
+   *rotation* endpoint, not a refresh-credential exchange.
+
+**This is a deliberate design, not an oversight.** `pkg/core/config.go:115-127`
+documents the reasoning: `ValidateSessionMiddleware` (mounted in
+`pkg/http/root.go:52`) revalidates the `session_id` against the database on
+**every authenticated request**, so a token dies the moment its session row is
+deleted. Revocation, not a short expiry, is the containment mechanism — which is
+why a 7-day lifetime is acceptable here and why the two-token scheme above was
+unnecessary.
+
+That comment also records an invariant worth preserving: the token `exp` claim
+and `sessions.expires` **must** both derive from `SessionLifetime`, or a token
+could outlive the row it authenticates against.
+
+The practical caveat is that revocation is only as good as the code paths that
+use it — and logout currently does not (see the flow above).
+
+### Security notes for deployment
+
+- `SetJWTCookie` has **`Secure: true` commented out unconditionally**
+  (`pkg/auth/jwt.go:23`), so the cookie is transmissible over plain HTTP. This
+  is not environment-gated. Set it before any production HTTPS deployment.
+- `SameSite` is `Lax`.
+- Each `/auth/refresh` call creates an *additional* session row, and logout does
+  not remove rows, so the ADR's "Implement session cleanup for expired tokens"
+  item is load-bearing, not optional.
+- Logout is client-side only. If server-side invalidation on logout is wanted,
+  `V1Logout` needs to delete the session identified by the token's `session_id`.
+
+> **This section documents divergence, not a decision.** If the single-token
+> design is intentional (it has real merits — server-side revocation, no refresh
+> plumbing), it deserves its own ADR superseding this one.
 
 ## Future Considerations
 

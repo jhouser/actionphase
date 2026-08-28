@@ -54,15 +54,21 @@ We need games in the following states:
 ### Required Test Scenarios
 
 #### Minimal Coverage
-- ✓ Game #1: Running, Active Common Room Phase
-- ✓ Game #2: Running, Active Action Phase (with submitted actions)
-- ✓ Game #3: Running, Active Results Phase (with published results)
-- ✓ Game #4: Running, Previous Common Room + Active Action Phase
-- ✓ Game #5: Running, Previous Action + Previous Results + Active Common Room
-- ✓ Game #6: Running, Multiple previous phases of mixed types
-- ✓ Game #7: Recruiting (no phases yet)
-- ✓ Game #8: Paused (with some phase history)
-- ✓ Game #9: Completed (full phase history)
+
+> These are **scenario slots**, not database IDs. Actual game IDs are
+> sequence-assigned and change on every fixture reload — resolve games by title.
+
+| Scenario | State | Phase content |
+|---|---|---|
+| A | Running | Active Common Room phase |
+| B | Running | Active Action phase (with submitted actions) |
+| C | Running | Active Results phase (with published results) |
+| D | Running | Previous Common Room + Active Action |
+| E | Running | Previous Action + Previous Results + Active Common Room |
+| F | Running | Multiple previous phases of mixed types |
+| G | Recruiting | No phases yet |
+| H | Paused | Some phase history |
+| I | Completed | Full phase history |
 
 #### Additional Coverage
 - Game with deadline approaching (within 1 hour)
@@ -957,98 +963,49 @@ END $$;
 COMMIT;
 ```
 
-### apply_all.sh - Apply All Fixtures
+### Fixture Layout
 
-```bash
-#!/bin/bash
-# Apply all test fixtures to the database
+Fixtures live under `backend/pkg/db/test_fixtures/`, organised by purpose:
 
-set -e
+| Directory | Contents | Loader |
+|---|---|---|
+| `common/` | `00_reset.sql`, `01_users.sql`, worker users | `apply_common.sh` |
+| `demo/` | Recruiting/running games, characters, actions, results | `apply_demo.sh` |
+| `e2e/` | Per-scenario E2E fixtures (66 files) | `apply_e2e_worker.sh` |
+| `perf/` | Performance/pagination data | — |
 
-# Load environment variables
-if [ -f .env ]; then
-  export $(cat .env | grep -v '^#' | xargs)
-fi
+`apply_all.sh` runs reset → users → all of `demo/` → all of `e2e/`, globbing
+each directory in filename order. Adding a `.sql` file to one of these
+directories is enough; no loader edit is required.
 
-# Database connection details
-DB_USER="${DB_USER:-postgres}"
-DB_PASSWORD="${DB_PASSWORD:-example}"
-DB_HOST="${DB_HOST:-localhost}"
-DB_PORT="${DB_PORT:-5432}"
-DB_NAME="${DB_NAME:-actionphase}"
-
-FIXTURES_DIR="backend/pkg/db/test_fixtures"
-
-echo "🧹 Resetting test data..."
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$FIXTURES_DIR/00_reset.sql"
-
-echo "👥 Creating test users..."
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$FIXTURES_DIR/01_users.sql"
-
-echo "🎲 Creating recruiting games..."
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$FIXTURES_DIR/02_games_recruiting.sql"
-
-echo "🎮 Creating running games with phases..."
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$FIXTURES_DIR/03_games_running.sql"
-
-echo "🧙 Creating characters and NPCs..."
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$FIXTURES_DIR/04_characters.sql"
-
-echo "⚔️  Creating action submissions..."
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$FIXTURES_DIR/05_actions.sql"
-
-echo "📜 Creating action results..."
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$FIXTURES_DIR/06_results.sql"
-
-echo "✅ Test data fixtures applied successfully!"
-echo ""
-echo "Test Accounts:"
-echo "  GM: test_gm@example.com / testpassword123"
-echo "  Player 1-5: test_player1@example.com through test_player5@example.com / testpassword123"
-echo "  Audience: test_audience@example.com / testpassword123"
-```
+> Paths are **not** flat. `00_reset.sql` is at `common/00_reset.sql`, not
+> `test_fixtures/00_reset.sql`.
 
 ## Usage Instructions
 
-### Initial Setup
-
-1. **Create the fixtures directory:**
-   ```bash
-   mkdir -p backend/pkg/db/test_fixtures
-   ```
-
-2. **Copy all SQL files** from the sections above into the `test_fixtures/` directory
-
-3. **Make the apply script executable:**
-   ```bash
-   chmod +x backend/pkg/db/test_fixtures/apply_all.sh
-   ```
+All fixture commands run inside the backend container, which reaches Postgres at
+host `db`. The `just` recipes handle this for you.
 
 ### Applying Test Data
 
-**From the project root directory:**
-
 ```bash
-# Apply all test fixtures
-./backend/pkg/db/test_fixtures/apply_all.sh
+just test-data reload   # reset + reload everything (most common)
+just test-fixtures      # apply fixtures without the reset
+just load-common        # users only, no games
+just load-demo          # demo games
+just load-e2e           # E2E fixtures (what the e2e recipes call)
+just load-all           # demo + e2e
 ```
 
-**Or using just:**
+### Individual Fixture Application
 
-Add this to your `justfile`:
-```makefile
-# Apply test data fixtures
-test-fixtures:
-    ./backend/pkg/db/test_fixtures/apply_all.sh
+To apply one file by hand:
 
-# Reset test data only
-reset-test-data:
-    PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d ${DB_NAME} -f backend/pkg/db/test_fixtures/00_reset.sql
-```
-
-Then run:
 ```bash
-just test-fixtures
+docker compose -f docker-compose.dev.yml exec -T backend \
+  env DB_HOST=db PGPASSWORD=example \
+  psql -h db -U postgres -d actionphase \
+  -f pkg/db/test_fixtures/common/01_users.sql
 ```
 
 ### Resetting to Clean State
@@ -1056,61 +1013,86 @@ just test-fixtures
 To reset the database to a clean state with just test data:
 
 ```bash
-just reset-test-data
-just test-fixtures
+just test-data reload
 ```
 
-### Individual Fixture Application
-
-To apply specific fixtures:
-
-```bash
-# Reset only
-PGPASSWORD=example psql -h localhost -p 5432 -U postgres -d actionphase -f backend/pkg/db/test_fixtures/00_reset.sql
-
-# Add just users
-PGPASSWORD=example psql -h localhost -p 5432 -U postgres -d actionphase -f backend/pkg/db/test_fixtures/01_users.sql
-```
+`test-data reload` runs the reset **and** re-applies every fixture, so it
+replaces the old two-step sequence. Use `just test-data reset` to wipe without
+reloading.
 
 ## Test Data Summary
 
 After applying all fixtures, you will have:
 
-### Users (7 total)
-- 1 Game Master
-- 5 Players
-- 1 Audience Member
-- **All passwords:** `testpassword123`
+### Users (10 total)
 
-### Games (10 total)
+| Username | Email | Role |
+|---|---|---|
+| TestGM | test_gm@example.com | Game Master |
+| TestPlayer1–5 | test_player1..5@example.com | Players |
+| TestAudience | test_audience@example.com | Audience |
+| TestAudience1–2 | test_audience1..2@example.com | Audience |
+| testuser | test@example.com | Generic |
 
-| # | Name | Status | Phase Status |
-|---|------|--------|--------------|
-| 1 | Shadows Over Innsmouth | Running | Active Common Room |
-| 2 | The Heist at Goldstone Bank | Running | Active Action (with submissions) |
-| 3 | Starfall Station | Running | Active Results (with published results) |
-| 4 | Court of Shadows | Running | Previous Common Room + Active Action |
-| 5 | The Dragon of Mount Krag | Running | 6 previous phases + Active Common Room |
-| 6 | Chronicles of Westmarch | Running | 11 previous phases + Active Results |
-| 7 | The Mystery of Blackwood Manor | Recruiting | No phases |
-| 8 | On Hold: The Frozen North | Paused | 4 previous phases |
-| 9 | COMPLETED: Tales of the Arcane | Completed | 9 completed phases |
-| 10 | Secret Campaign | Recruiting | No phases (private) |
+**All passwords:** `testpassword123`
+
+### Demo Games (8 total)
+
+> **Game IDs are assigned by the sequence, not hardcoded.** After a reload they
+> land in the 50700+ range, and they shift every time fixtures are reloaded.
+> Look games up by **title**, never by a remembered ID:
+>
+> ```sql
+> SELECT id FROM games WHERE title = 'The Heist at Goldstone Bank';
+> ```
+>
+> In E2E tests use `getFixtureGameId(page, KEY)` from
+> `frontend/e2e/fixtures/game-helpers.ts`.
+
+| Title | State | Phase Content |
+|---|---|---|
+| The Mystery of Blackwood Manor | recruitment | No phases |
+| Secret Campaign | recruitment | No phases (private) |
+| Shadows Over Innsmouth | in_progress | Active Common Room |
+| The Heist at Goldstone Bank | in_progress | Active Action (with submissions) |
+| Starfall Station | in_progress | Active Results (with published results) |
+| The Dragon of Mount Krag | in_progress | Multiple previous phases + Active Common Room |
+| Chronicles of Westmarch | in_progress | Many previous phases (pagination testing) |
+| COMPLETED: Tales of the Arcane | completed | Completed phases |
+
+`just test-data reload` also loads the **E2E** fixtures, bringing the total to
+**68 games** and **164 characters**. Titles prefixed `E2E ` belong to that set —
+see `E2E_FIXTURES.md`.
 
 ### Characters & NPCs
-- **30+ characters total**
+- **164 characters total** after a full `just test-data reload`
 - Each player has exactly one player character per game
 - Multiple GM NPCs per game (controlled by GM only)
 - Character data examples included
 
 ### Action Submissions
-- **Game #2**: 3 submitted actions + 1 draft
-- **Game #4**: 2 submitted actions
-- Variety of content lengths and styles
+
+Verified 2026-08-26 against the demo fixtures (`title NOT LIKE 'E2E%'`):
+
+| Game | Submissions |
+|---|---|
+| The Heist at Goldstone Bank | 4 |
+| COMPLETED: Tales of the Arcane | 9 |
+
+`action_submissions` has **no draft flag** — the table is
+`(id, game_id, phase_id, user_id, character_id, content, submitted_at, …)`.
+An unsubmitted row is one with `submitted_at IS NULL`; the demo fixtures
+currently contain none.
 
 ### Action Results
-- **Game #3**: 3 published results + 1 draft
-- Demonstrates GM storytelling and cliffhangers
+
+| Game | Published | Draft |
+|---|---|---|
+| Starfall Station | 8 | 1 |
+| COMPLETED: Tales of the Arcane | 12 | 0 |
+
+Draft vs. published is `action_results.is_published`. Note this flag means
+"the GM has published these results", not phase visibility.
 
 ## Edge Cases Covered
 
@@ -1154,7 +1136,7 @@ After applying all fixtures, you will have:
 To update fixtures:
 
 1. Modify the appropriate SQL file in `test_fixtures/`
-2. Run `just reset-test-data && just test-fixtures`
+2. Run `just test-data reload`
 3. Verify changes in the application
 
 ### Adding New Scenarios
@@ -1221,18 +1203,15 @@ chmod +x backend/pkg/db/test_fixtures/apply_all.sh
 
 If you get unique constraint errors:
 ```bash
-# Ensure you reset first
-just reset-test-data
-
-# Then apply fixtures
-just test-fixtures
+# Reset and reload in one step
+just test-data reload
 ```
 
 ## Quick Reference
 
 ```bash
 # Full reset and reload
-just reset-test-data && just test-fixtures
+just test-data reload
 
 # Login as GM
 # Email: test_gm@example.com

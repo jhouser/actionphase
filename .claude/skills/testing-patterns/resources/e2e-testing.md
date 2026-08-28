@@ -71,38 +71,38 @@ curl -sf http://localhost:5173
 ### Basic Commands
 
 ```bash
-# Headless (CI mode) - auto-loads fixtures
+# Desktop (chromium) - auto-loads fixtures
+just e2e-desktop
+
+# Mobile (Pixel 5)
+just e2e-mobile
+
+# Both, sequentially
 just e2e
 
-# With visible browser
-just e2e-test headed
+# A single spec file
+just e2e-test file e2e/smoke/health-check.spec.ts
 
-# Interactive UI mode
-just e2e-test ui
-
-# Debug specific test
-just e2e-test debug
+# HTML report from the last run
+just e2e-test report
 ```
+
+`just e2e-test` accepts only **`headless`, `report`, and `file`**. Headed, UI,
+and debug modes need a display and cannot run in the E2E container — see
+`just dev-help`.
 
 ### Advanced Options
 
+Anything Playwright supports can be passed to the container directly:
+
 ```bash
-# Run specific test file
-npx playwright test e2e/journeys/critical/user-onboarding.spec.ts
+PW="docker compose -f docker-compose.dev.yml --profile e2e run --rm playwright"
+just load-e2e                                  # fixtures first
 
-# Run tests matching pattern
-npx playwright test -g "submit action"
-
-# View HTML report
-just e2e-test report
-
-# Update snapshots
-npx playwright test --update-snapshots
+$PW npx playwright test e2e/gameplay/          # a directory
+$PW npx playwright test -g "submit action"     # by name
+$PW npx playwright test --reporter=list        # detailed output
 ```
-
----
-
-## E2E Test Structure
 
 ### File Organization
 
@@ -471,40 +471,29 @@ export default defineConfig({
 ### 1. Check Test Output
 
 ```bash
-# Run with reporter that shows details
-npx playwright test --reporter=list
-
-# Output shows:
-# - Which test failed
-# - Assertion that failed
-# - Timeout details
-# - Screenshots/traces saved
+PW="docker compose -f docker-compose.dev.yml --profile e2e run --rm playwright"
+just load-e2e
+$PW npx playwright test --reporter=list
 ```
 
 ### 2. View HTML Report
 
 ```bash
 just e2e-test report
-# Opens interactive HTML report
-# Shows screenshots, traces, network activity
+# Screenshots, traces, and network activity for the last run
 ```
 
-### 3. Run in Headed Mode
+### 3. Tail Application Logs
 
 ```bash
-# Watch test execute in real browser
-just e2e-test headed
+just dev-logs backend
+just dev-logs frontend
 ```
 
-### 4. Use Debug Mode
+### 4. Headed / Debug Modes
 
-```bash
-# Pause execution, step through test
-just e2e-test debug
-
-# Or debug specific test
-npx playwright test --debug -g "test name"
-```
+Playwright Inspector, `--headed`, and `--ui` require a display, so they are not
+available in the E2E container. `just dev-help` documents the host-only path.
 
 ### 5. Use Playwright MCP (Primary Method)
 
@@ -519,11 +508,17 @@ See "Playwright MCP Debugging" section above.
 E2E tests run in CI via GitHub Actions:
 
 ```yaml
-- name: Run E2E tests
-  run: |
-    npm run build
-    npx playwright test --reporter=github
+# .github/workflows/e2e.yml (abridged)
+- run: cd frontend && npx playwright install --with-deps chromium
+- run: |
+    for i in 0 1 2 3 4 5; do
+      DB_NAME=actionphase ./pkg/db/test_fixtures/apply_e2e_worker.sh $i
+    done
+- run: npm run test:e2e
 ```
+
+CI installs Playwright on the runner directly rather than using the compose
+service, and seeds fixtures for all six workers first.
 
 **CI-specific behavior**:
 - Retries: 2 (flaky test protection)

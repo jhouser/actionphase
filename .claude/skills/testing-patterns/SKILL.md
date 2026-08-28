@@ -160,17 +160,23 @@ just test-mocks            # Fast unit tests (no DB, ~300ms)
 just test-integration      # DB integration tests only
 just ci-test               # Full CI suite (lint + test + race)
 
-# Run specific package or test
-TEST_DATABASE_URL="postgres://postgres:example@localhost:5432/actionphase_test?sslmode=disable" \
-  SKIP_DB_TESTS=false go test -p=1 ./pkg/games/... -run TestGameAPI_ListAll -v
+# Run specific package or test (runs in the backend container)
+just test-run TestGameAPI_ListAll
+
+# Note: do NOT pass `go test -p=1`. Each test package clones its own database
+# from a migrated template, so packages are safe to run in parallel. Set
+# TEST_P=1 only when serializing to debug.
 
 # Frontend
-just test-frontend         # All frontend tests
+just test-fe run           # All frontend tests
 just test-fe watch         # Watch mode
 
 # E2E
-just e2e                   # Headless
-just e2e-test headed       # Visible browser
+just e2e                   # Desktop + mobile
+just e2e-desktop           # chromium only
+just e2e-mobile            # Pixel 5 only
+just e2e-test file <spec>  # One spec file
+just e2e-test report       # HTML report
 just load-e2e              # Load E2E fixtures
 ```
 
@@ -199,4 +205,4 @@ just load-e2e              # Load E2E fixtures
 | Full pattern reference with examples | `.claude/context/TESTING.md` |
 | E2E rules, debugging, fixtures | [e2e-testing.md](resources/e2e-testing.md) |
 | Test fixture data and setup | [test-fixtures.md](resources/test-fixtures.md) |
-| Frontend component testing | [frontend-testing.md](resources/frontend-testing.md) |
+| Frontend component testing | `.claude/context/TESTING.md` (Frontend section) |

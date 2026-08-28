@@ -143,3 +143,67 @@ type GameListingResponse struct {
 func (rd *GameListingResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
+
+// Audience response types.
+//
+// Moved here from api_audience.go when that file's handlers were converted;
+// they are response shapes like everything else in this file.
+
+type AudienceMemberResponse struct {
+	ID       int32     `json:"id"`
+	GameID   int32     `json:"game_id"`
+	UserID   int32     `json:"user_id"`
+	Username string    `json:"username"`
+	Role     string    `json:"role"`
+	Status   string    `json:"status"`
+	JoinedAt time.Time `json:"joined_at"`
+}
+
+type ListAudienceMembersResponse struct {
+	AudienceMembers []AudienceMemberResponse `json:"audience_members"`
+}
+
+type PrivateConversationResponse struct {
+	ConversationID          int32       `json:"conversation_id"`
+	Subject                 *string     `json:"subject"`
+	ConversationType        string      `json:"conversation_type"`
+	CreatedAt               string      `json:"created_at"`
+	MessageCount            int64       `json:"message_count"`
+	LastMessageAt           interface{} `json:"last_message_at"`
+	ParticipantNames        interface{} `json:"participant_names"`
+	ParticipantUsernames    interface{} `json:"participant_usernames"`
+	ParticipantCharacterIDs interface{} `json:"participant_character_ids"`
+	LastMessageContent      *string     `json:"last_message_content"`
+	LastSenderName          *string     `json:"last_sender_name"`
+	LastSenderUsername      *string     `json:"last_sender_username"`
+	LastSenderCharacterID   *int32      `json:"last_sender_character_id"`
+}
+
+type ActionSubmissionResponse struct {
+	ID            int32   `json:"id"`
+	GameID        int32   `json:"game_id"`
+	UserID        int32   `json:"user_id"`
+	PhaseID       int32   `json:"phase_id"`
+	CharacterID   *int32  `json:"character_id"`
+	Content       string  `json:"content"`
+	SubmittedAt   *string `json:"submitted_at"`
+	UpdatedAt     *string `json:"updated_at"`
+	Username      string  `json:"username"`
+	CharacterName *string `json:"character_name"`
+	PhaseType     string  `json:"phase_type"`
+	PhaseNumber   int32   `json:"phase_number"`
+	PhaseTitle    string  `json:"phase_title"`
+}
+
+type AudienceMessageResponse struct {
+	ID                  int32   `json:"id"`
+	ConversationID      int32   `json:"conversation_id"`
+	SenderUserID        *int32  `json:"sender_user_id"`
+	SenderCharacterID   *int32  `json:"sender_character_id"`
+	Content             string  `json:"content"`
+	CreatedAt           string  `json:"created_at"`
+	UpdatedAt           string  `json:"updated_at"`
+	IsDeleted           bool    `json:"is_deleted"`
+	SenderUsername      string  `json:"sender_username"`
+	SenderCharacterName *string `json:"sender_character_name"`
+}

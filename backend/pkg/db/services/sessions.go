@@ -5,9 +5,10 @@ import (
 	db "actionphase/pkg/db/models"
 	"actionphase/pkg/observability"
 	"context"
+	"time"
+
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"time"
 )
 
 type SessionService struct {
@@ -103,7 +104,7 @@ func (s *SessionService) createSessionInternal(ctx context.Context, us *core.Ses
 	params := db.CreateSessionParams{
 		UserID:  int32(us.User.ID),
 		Data:    us.Token,
-		Expires: pgtype.Timestamptz{Time: time.Now().Add(time.Hour * 24 * 7), Valid: true},
+		Expires: pgtype.Timestamptz{Time: time.Now().Add(core.SessionLifetime), Valid: true},
 	}
 	if us.IPAddress != nil {
 		params.IpAddress = pgtype.Text{String: *us.IPAddress, Valid: true}

@@ -2,149 +2,154 @@
 
 Quick reference for the actual justfile commands available in ActionPhase.
 
-**Last Updated**: October 27, 2025
-**Last Verified**: October 27, 2025
+**Last Verified**: August 2026 — regenerated from `just --list`.
+
+> **Local dev is fully containerized.** The host needs only `just`, `docker`, and
+> `docker-compose`. Every app command below execs inside a container. There is no
+> `just dev` or `just build` — the stack runs via `just up`, and code hot-reloads
+> (Air for Go, Vite HMR for the frontend).
 
 ## 🚀 Quick Start
 
 ```bash
-just help           # Show all available commands
-just dev-setup      # Complete setup (database + environment + dependencies)
-just dev            # Start backend development server
-just status         # Check system status
+just dev-setup      # First-time: create .env, build images, start the stack
+just up             # Subsequently: start db + backend + frontend
+just dev-help       # Containerized-dev cheatsheet
+just ps             # Container status
+just status         # Full system status check
 ```
 
-## 📦 Development Commands
+Stack URLs: frontend `http://localhost:5173`, backend `http://localhost:3000`,
+Postgres `localhost:5432`, Delve `localhost:2345`.
 
-### Environment Setup
+## 📦 Stack Lifecycle
+
 ```bash
-just dev-setup      # Complete development environment setup
-just dev            # Start backend server with .env loading
-just claude         # Open Claude Code in browser
+just up [build]         # Start the stack ('build' forces a rebuild)
+just down               # Stop (containers removed, data preserved)
+just restart [service]  # Restart backend|frontend|db|all (default: backend)
+just rebuild [service]  # Rebuild a service image
+just dev-logs [service] # Tail logs; omit service for all
+just sh [service]       # Shell into a container (default: backend)
 ```
 
-### Code Quality
+`just sh` is the escape hatch for one-off `go` / `npm` / `psql` commands — use it
+instead of running those on the host.
+
+## 🗄️ Database
+
 ```bash
-just fmt            # Format Go code
-just vet            # Run Go vet
-just lint           # Format and vet code
-just tidy           # Clean up go.mod
-just build          # Build backend packages
+just db <action>              # up, down, reset, create, setup
+just migrate                  # Apply migrations to the dev database
+just migration create <name>  # Create a new up/down migration pair
+just migration status         # Show current migration version
+just migration rollback       # Roll back the last migration
+just migration test           # Apply migrations to the test database
+just reset-test-db            # Rebuild test DB + migrated template
+just sqlgen                   # Generate Go code from SQL queries
 ```
 
-### Frontend
-```bash
-just install-frontend    # Install frontend dependencies
-just test-frontend       # Run frontend tests
-just lint-frontend       # Lint frontend code
-just preview-frontend    # Preview production build
-```
-
-## 🗄️ Database Commands
-
-### Migrations
-```bash
-just migrate        # Apply database migrations to actionphase database
-just sqlgen         # Generate Go code from SQL queries
-```
+> `just make_migration` and `just migrate_status` do **not** exist.
 
 ### Test Data
+
 ```bash
-just test-fixtures  # Load standard test fixtures
-just load-common    # Load common test data
-just load-demo      # Load demo data
-just load-e2e       # Load E2E test fixtures
-just load-all       # Load all test data
+just test-data reload   # Reset and reload test data
+just test-fixtures      # Apply fixtures to the dev database
+just load-common        # Common base data (users + config)
+just load-demo          # Demo data for staging/showcase
+just load-e2e           # E2E fixtures (worker-specific, for parallel runs)
+just load-all           # Everything (dev only)
 ```
 
-## 🧪 Testing Commands
+## 🧪 Testing
 
-### Backend Testing
+### Backend
+
 ```bash
-just test           # Run all backend tests
-just test-mocks     # Fast unit tests (no database required)
-just test-integration  # Integration tests (requires database)
-just test-coverage  # Generate coverage report
-just test-race      # Run tests with race detection
-just test-clean     # Clean test cache
+just test               # All backend tests (sets SKIP_DB_TESTS=false itself)
+just test-mocks         # Fast mock tests, no database
+just test-integration   # Database service integration tests only
+just test-run <pattern> # Single test by name (passed to `go test -run`)
+just test-coverage      # Coverage report → backend/coverage.out
+just test-race          # Race detector
+just test-clean         # Clean test cache
 ```
 
-### Frontend Testing
+Each test **package** clones its own DB from a migrated template, so packages run
+in parallel. Do not add `-p=1`; set `TEST_P=1` only to debug.
+
+### Frontend
+
 ```bash
-just test-frontend  # Run frontend tests
+just test-fe run [file]   # Run frontend tests (optionally one file)
+just test-fe watch        # Watch mode
+just lint-frontend        # eslint
+just type-check           # tsc
+just knip                 # Dead-export detection
+just relock-frontend      # Regenerate package-lock.json in a Linux container
 ```
 
-### E2E Testing
+> `just test-frontend` does **not** exist — it is `just test-fe run`.
+
+### E2E
+
 ```bash
-just e2e            # Run Playwright E2E tests
+just e2e                       # Desktop + mobile (sequential)
+just e2e-desktop               # Chrome only
+just e2e-mobile                # Pixel 5 only
+just e2e-test headless         # Headless run
+just e2e-test file <path>      # A single spec — ONLY `file` mode takes a path
 ```
 
-### Complete Test Suite
+> Passing a path to `headless` silently runs the **whole suite**. Headed/ui/debug
+> modes need a display and are host-only.
+
+### Everything
+
 ```bash
-just test-all       # Run all tests (backend + frontend + E2E)
-just ci-test        # Full CI test suite (lint + test + race)
+just test-all   # Backend + frontend
+just ci-test    # Full CI suite (lint + test + race)
+just verify       # pre-push gate: all checks + backend & frontend builds (parallel)
+just verify-quick # fast non-mutating checks, no builds (what the Stop hook runs)
 ```
 
-## 🛠️ Utility Commands
+## 🛠️ Code Quality
 
 ```bash
-just status         # Check system status
-just clean          # Clean build artifacts
-just help           # Show all available commands
+just fmt         # Format Go code
+just vet         # go vet
+just lint        # fmt + vet + cross-tree consistency checks
+just tidy        # go.mod maintenance
+just dead-code   # Unreachable Go code
+just clean       # Clean build artifacts and caches
 ```
 
-## 📊 Common Workflows
-
-### Starting Development
+## 📚 Documentation
 
 ```bash
-# First time setup
-just dev-setup
-
-# Daily development
-just migrate        # Apply any new migrations
-just dev            # Start backend
-# In another terminal:
-cd frontend && npm run dev  # Start frontend
+just docs-dev       # Docs dev server (http://localhost:5174)
+just docs-build     # Build the docs site
+just docs-preview   # Preview the build (http://localhost:5175)
+just docs-embed     # Build + embed docs into the backend
+just check-api-docs # Verify the OpenAPI spec matches registered routes
 ```
 
-### Running Tests
+## 🚢 Production
 
 ```bash
-# Quick feedback during development
-just test-mocks     # < 1 second
-
-# Before committing
-just test           # Full backend tests
-just test-frontend  # Frontend tests
-
-# Before merging
-just ci-test        # Complete CI suite
+just deploy [no-cache]                    # Deploy on the server (from /opt/actionphase)
+just prod-logs [target] [lines] [follow]  # backend|frontend|nginx|postgres|all
+just prod-log-grep <pattern> [level] [lines]
 ```
 
-### Working with Database
+## 🔌 API Testing
+
+Not a justfile command — use the script directly:
 
 ```bash
-# Apply migrations
-just migrate
+./backend/scripts/api-test.sh login-player   # token → /tmp/api-token.txt
 
-# Load test data
-just test-fixtures  # Standard test data
-just load-e2e       # E2E test data
-
-# After schema changes
-just sqlgen         # Regenerate Go code
-```
-
-### API Testing
-
-The justfile doesn't include API testing commands. Use the script directly:
-
-```bash
-# Login and save token
-./backend/scripts/api-test.sh login-player
-
-# Use saved token
 curl -s -H "Authorization: Bearer $(cat /tmp/api-token.txt)" \
   "http://localhost:3000/api/v1/games" | jq '.'
 ```
@@ -152,42 +157,75 @@ curl -s -H "Authorization: Bearer $(cat /tmp/api-token.txt)" \
 ## 📝 Notes
 
 - Database name is `actionphase` (not `database`)
-- Backend runs on port 3000
-- Frontend runs on port 5173
+- From the host: `postgres://postgres:example@localhost:5432/actionphase`
+- Inside the compose network the host is `db`, not `localhost`
+- Backend port 3000, frontend port 5173
 - Test fixtures use password: `testpassword123`
 
-## Available Commands (from `just --list`)
+## Full Listing (from `just --list`)
 
 ```
-build              # Build backend packages
-ci-test            # Full CI test suite
-claude             # Open Claude Code
-clean              # Clean artifacts
-dev                # Start backend development server
-dev-setup          # Complete setup
-e2e                # Run E2E tests
-fmt                # Format code
-help               # Show help
-install-frontend   # Install frontend dependencies
-lint               # Lint backend code
-lint-frontend      # Lint frontend code
-load-all           # Load all fixtures
-load-common        # Load common fixtures
-load-demo          # Load demo data
-load-e2e           # Load E2E fixtures
-migrate            # Run migrations
-preview-frontend   # Preview frontend build
-sqlgen             # Generate from SQL
-status             # System status
-test               # Run backend tests
-test-all           # Run all tests
-test-clean         # Clean test cache
-test-coverage      # Coverage report
-test-fixtures      # Load test fixtures
-test-frontend      # Run frontend tests
-test-integration   # Integration tests
-test-mocks         # Mock tests (fast)
-test-race          # Race detection
-tidy               # Clean go.mod
-vet                # Run go vet
+check-api-docs                                   # Verify the OpenAPI spec agrees with the routes registered in root.go
+check-game-states                                # host bash — contributors on Windows get the same check as everyone else.
+ci-test                                          # Run CI test suite
+claude                                           # Launch Claude Code editor
+clean                                            # Clean build artifacts and caches (in containers)
+db action="help"                                 # Database operations on the dev stack: up, down, reset, create, setup
+dead-code                                        # Find unreachable/dead code in backend (excludes test helpers and mocks)
+deploy no_cache=""                               # Deploy latest changes on this server (run from /opt/actionphase); use 'just deploy no-cache' to force full rebuild
+dev-help                                         # Print the containerized-dev workflow cheatsheet.
+dev-logs service=""                              # Tail logs for a dev service (backend, frontend, db). Omit for all services.
+dev-setup                                        # Complete first-time dev setup: create .env, then build images + start the container stack.
+docs-build                                       # Build documentation site
+docs-dev                                         # Start documentation development server (http://localhost:5174)
+docs-embed                                       # Build and embed documentation in backend
+docs-preview                                     # Preview built documentation (http://localhost:5175)
+down                                             # Stop the dev stack (containers removed, volumes/data preserved).
+e2e                                              # Run E2E tests on both desktop and mobile (sequential to avoid fixture conflicts)
+e2e-desktop                                      # Run E2E tests on desktop only (Chrome)
+e2e-mobile                                       # Run E2E tests on mobile only (Pixel 5)
+e2e-test mode="headless" file=""                 # Note: headed/ui/debug need a display and are host-only — see 'just dev-help'.
+fmt                                              # Format Go code
+help                                             # Show available commands
+knip                                             # Dead-export detection (in frontend container)
+lint                                             # Run backend linters (fmt + vet) plus cross-tree consistency checks
+lint-frontend                                    # Lint frontend code (in frontend container)
+load-all                                         # Load all data (dev only) - same as test-fixtures but with new structure
+load-common                                      # Load only common base data (users and config)
+load-demo                                        # Load demo data for staging/showcase
+load-e2e                                         # Load E2E test fixtures (worker-specific for parallel execution)
+migrate                                          # Apply migrations to development database (in backend container)
+migration action="" name=""                      # Migration operations: create, status, rollback, test (runs in backend container)
+prod-log-grep pattern="" level="all" lines="200" # Examples: just prod-log-grep "user_id" | just prod-log-grep "" error | just prod-log-grep "correlation_id" all 500
+prod-logs target="backend" lines="50" follow="false" # Targets: backend (default), frontend, nginx, postgres, all
+ps                                               # Show status of the dev stack containers.
+rebuild service=""                               # volume here so the fresh image re-seeds it on the next `just up`.
+relock-frontend                                  # Regenerate frontend/package-lock.json in a Linux container (run after dep changes).
+reset-test-db                                    # Use when the test DB gets into a dirty/broken migration state.
+restart service="backend"                        # Pass a service name (backend|frontend|db) or 'all' to restart the whole stack.
+sh service="backend"                             # Full-purity escape hatch: run one-off go/npm/psql commands in-container.
+sqlgen                                           # Generate SQL code using sqlc (in backend container)
+status                                           # Complete system status check (containerized dev stack)
+test                                             # parallel safely (no -p=1). Set TEST_P (e.g. TEST_P=1) to override concurrency.
+test-all                                         # Run full test suite (backend + frontend)
+test-clean                                       # Clean test cache
+test-coverage                                    # Run tests with coverage report
+test-data action="reload"                        # Reset and reload test data
+test-fe mode="run" file=""                       # Interactive modes (watch/ui) use a TTY-attached exec.
+test-fixtures                                    # Apply test data fixtures to development database
+test-integration                                 # Run database service integration tests only
+test-mocks                                       # Run fast mock tests only (no database required)
+test-race                                        # Run tests with race detector
+test-run pattern                                 # Run specific test by name
+tidy                                             # Go module maintenance
+type-check                                       # TypeScript type-check (in frontend container)
+up build=""                                      # Start the full dev stack (db + backend + frontend). Add 'build' to force a rebuild.
+verify                                           # Pre-push gate: all code-quality checks + backend/frontend production builds (parallel)
+verify-quick                                     # Fast non-mutating checks, no builds (Stop hook)
+build                                            # Build backend + frontend
+build-backend                                    # Compile the Go binary
+build-frontend                                   # Production frontend build (tsc -b && vite build)
+tidy-check                                       # go mod tidy -diff (non-mutating)
+fmt-check                                        # gofmt -l (non-mutating)
+vet                                              # Run Go vet
 ```

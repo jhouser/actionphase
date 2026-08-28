@@ -26,7 +26,7 @@ export const SettingsSidebar = ({ sections, activeSection }: SettingsSidebarProp
             id="section-select"
             value={activeSection}
             onChange={(e) => navigate(`/settings?tab=${e.target.value}`, { replace: true })}
-            className="block w-full py-3 pl-4 pr-10 text-base font-semibold surface-raised text-content-primary border border-border-primary rounded-lg shadow-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-interactive-primary focus:border-interactive-primary transition-all"
+            className="block w-full py-3 pl-4 pr-10 text-base font-semibold surface-raised text-content-primary border border-theme-default rounded-lg shadow-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-interactive-primary focus:border-interactive-primary transition-all"
             style={{ backgroundImage: 'none' }}
           >
             {sections.map((section) => (
@@ -59,7 +59,7 @@ export const SettingsSidebar = ({ sections, activeSection }: SettingsSidebarProp
                   transition-all duration-200
                   ${isActive
                     ? 'bg-interactive-primary text-white shadow-sm'
-                    : 'text-content-primary hover:bg-bg-secondary'
+                    : 'text-content-primary hover:surface-raised'
                   }
                 `}
               >

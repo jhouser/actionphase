@@ -121,7 +121,7 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
     <Card variant="bordered" padding="md">
       <CardBody>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <h4 className="text-lg font-semibold text-text-heading mb-4">Create New Poll</h4>
+          <h4 className="text-lg font-semibold text-content-primary mb-4">Create New Poll</h4>
 
           {/* Question */}
           <Input
@@ -152,7 +152,7 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
 
           {/* Options */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-text-primary">
+            <label className="block text-sm font-medium text-content-secondary">
               Options (minimum 2)
             </label>
             {options.map((option, index) => (
@@ -185,7 +185,7 @@ export function CreatePollForm({ gameId, currentPhaseId, onSuccess, onCancel }: 
           </div>
 
           {/* Settings */}
-          <div className="space-y-3 border-t border-border-primary pt-4">
+          <div className="space-y-3 border-t border-theme-default pt-4">
             <Checkbox
               id="poll-show-individual-votes"
               label="Show individual votes to all players"

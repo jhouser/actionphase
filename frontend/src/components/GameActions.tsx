@@ -186,7 +186,7 @@ export function GameActions({
               {hasEditAction && (
                 <>
                   {hasStateActions && (
-                    <div className="border-t border-border-primary my-1" />
+                    <div className="border-t border-theme-default my-1" />
                   )}
                   <button
                     onClick={() => {
@@ -205,7 +205,7 @@ export function GameActions({
               {hasDeleteAction && (
                 <>
                   {(hasEditAction || hasStateActions) && (
-                    <div className="border-t border-border-primary my-1" />
+                    <div className="border-t border-theme-default my-1" />
                   )}
                   <button
                     onClick={() => {

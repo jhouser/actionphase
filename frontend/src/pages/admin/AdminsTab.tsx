@@ -4,6 +4,7 @@ import { apiClient } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { ConfirmModal } from '../../components/ConfirmModal';
+import { Badge } from '../../components/ui';
 import type { AdminUser } from '../../lib/api/admin';
 
 export function AdminsTab() {
@@ -55,9 +56,9 @@ export function AdminsTab() {
                 <div className="flex-1">
                   <div className="flex items-center space-x-3">
                     <h3 className="text-lg font-medium text-content-primary">{user.username}</h3>
-                    <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">ADMIN</span>
+                    <Badge variant="primary" size="sm">ADMIN</Badge>
                     {user.id === currentUserId && (
-                      <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">YOU</span>
+                      <Badge variant="neutral" size="sm">YOU</Badge>
                     )}
                   </div>
                   <p className="text-sm text-content-secondary mt-1">{user.email}</p>

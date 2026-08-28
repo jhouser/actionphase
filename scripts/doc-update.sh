@@ -120,28 +120,7 @@ if [ -f "$TESTING_FILE" ]; then
     update_date "$TESTING_FILE"
 fi
 
-# 3. Update TEST_COVERAGE_REFERENCE.md
-COVERAGE_FILE="docs/testing/TEST_COVERAGE_REFERENCE.md"
-if [ -f "$COVERAGE_FILE" ]; then
-    update_value "$COVERAGE_FILE" \
-        "Backend Test Count:.*" \
-        "Backend Test Count: $BACKEND_TEST_FUNCS tests across $BACKEND_TEST_FILES files" \
-        "backend metrics"
-
-    update_value "$COVERAGE_FILE" \
-        "Frontend Test Count:.*" \
-        "Frontend Test Count: $FRONTEND_TEST_CASES tests across $FRONTEND_TEST_FILES files" \
-        "frontend metrics"
-
-    update_value "$COVERAGE_FILE" \
-        "E2E Test Count:.*" \
-        "E2E Test Count: $E2E_TEST_CASES tests across $E2E_TEST_FILES files" \
-        "E2E metrics"
-
-    update_date "$COVERAGE_FILE"
-fi
-
-# 4. Count and update other metrics
+# 3. Count and update other metrics
 echo ""
 echo "3. Updating code metrics..."
 echo "---------------------------"
@@ -158,7 +137,7 @@ echo "Go: $GO_FILES files, ~$GO_LINES lines"
 echo "TypeScript: $TS_FILES files, ~$TS_LINES lines"
 echo ""
 
-# 5. Update port references if needed
+# 4. Update port references if needed
 echo "4. Checking configuration consistency..."
 echo "----------------------------------------"
 
@@ -172,7 +151,7 @@ if [ -f ".env" ]; then
 fi
 echo ""
 
-# 6. Generate metrics file
+# 5. Generate metrics file
 echo "5. Generating metrics file..."
 echo "-----------------------------"
 

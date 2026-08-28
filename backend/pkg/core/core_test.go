@@ -3,8 +3,6 @@ package core
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -265,20 +263,19 @@ func TestCreateNotificationRequest_Validate(t *testing.T) {
 
 // --- email_verification_middleware.go ---
 
-func TestRequireEmailVerificationMiddleware_Disabled(t *testing.T) {
+// TestRequireVerifiedEmailCtx_Disabled covers the development escape hatch.
+//
+// Repointed from RequireEmailVerificationMiddleware, which was deleted with the
+// huma migration: handlers take a context now, so the middleware had no callers
+// left. The Ctx twin reads the same environment variable, and this is the only
+// direct test of that branch.
+func TestRequireVerifiedEmailCtx_Disabled(t *testing.T) {
 	t.Setenv("REQUIRE_EMAIL_VERIFICATION", "false")
 
-	reached := false
-	mw := RequireEmailVerificationMiddleware(nil) // pool not used when disabled
-	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reached = true
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	req := httptest.NewRequest("GET", "/", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	assert.True(t, reached, "handler should be called when verification is disabled")
-	assert.Equal(t, http.StatusOK, rec.Code)
+	// A nil pool is safe here precisely because the flag short-circuits before
+	// any lookup — if that ever stops being true, this panics rather than
+	// silently passing.
+	if errResp := RequireVerifiedEmailCtx(context.Background(), nil); errResp != nil {
+		t.Fatalf("expected nil when verification is disabled, got %#v", errResp)
+	}
 }

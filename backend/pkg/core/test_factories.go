@@ -88,6 +88,14 @@ func (b *UserBuilder) Create() db.User {
 		b.factory.t.Fatalf("Should be able to create test user: %v", err)
 	}
 
+	// Verified, matching CreateTestUser: write endpoints gate on
+	// RequireVerifiedEmail(Ctx), so an unverified builder user is forbidden from
+	// every action a test would want it to take.
+	if err := queries.MarkUserEmailVerified(context.Background(), user.ID); err != nil {
+		b.factory.t.Fatalf("Should be able to mark test user email verified: %v", err)
+	}
+	user.EmailVerified = true
+
 	return user
 }
 

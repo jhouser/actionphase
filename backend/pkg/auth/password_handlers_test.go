@@ -14,6 +14,7 @@ import (
 
 	db "actionphase/pkg/db/models"
 	dbsvc "actionphase/pkg/db/services"
+
 	"github.com/go-chi/jwtauth/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -200,14 +201,14 @@ func TestV1ChangePassword(t *testing.T) {
 			bodyBytes, err := json.Marshal(tt.requestBody)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPost, "/auth/change-password", bytes.NewReader(bodyBytes))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/change-password", bytes.NewReader(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 
 			// Add authenticated user to context (simulates RequireAuthenticationMiddleware)
 			req = addAuthContextToRequest(t, req, pool, userID)
 
 			w := httptest.NewRecorder()
-			handler.V1ChangePassword(w, req)
+			serveAuthHuma(w, req, &handler)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
@@ -286,11 +287,11 @@ func TestV1RequestPasswordReset(t *testing.T) {
 			bodyBytes, err := json.Marshal(requestBody)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPost, "/auth/request-password-reset", bytes.NewReader(bodyBytes))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/request-password-reset", bytes.NewReader(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 
 			w := httptest.NewRecorder()
-			handler.V1RequestPasswordReset(w, req)
+			serveAuthHuma(w, req, &handler)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
@@ -421,11 +422,11 @@ func TestV1ResetPassword(t *testing.T) {
 			bodyBytes, err := json.Marshal(requestBody)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewReader(bodyBytes))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/reset-password", bytes.NewReader(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 
 			w := httptest.NewRecorder()
-			handler.V1ResetPassword(w, req)
+			serveAuthHuma(w, req, &handler)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
@@ -528,14 +529,14 @@ func TestV1ValidateResetToken(t *testing.T) {
 			userID := tt.setupUser()
 			token := tt.setupToken(userID)
 
-			url := "/auth/validate-reset-token"
+			url := "/api/v1/auth/validate-reset-token"
 			if token != "" {
 				url = fmt.Sprintf("%s?token=%s", url, token)
 			}
 
 			req := httptest.NewRequest(http.MethodGet, url, nil)
 			w := httptest.NewRecorder()
-			handler.V1ValidateResetToken(w, req)
+			serveAuthHuma(w, req, &handler)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 

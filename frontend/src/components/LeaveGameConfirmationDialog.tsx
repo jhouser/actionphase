@@ -45,7 +45,7 @@ export function LeaveGameConfirmationDialog({
           Are you sure you want to leave <strong>{gameTitle}</strong>?
         </p>
 
-        <div className="surface-raised border border-border-warning rounded-md p-4">
+        <div className="surface-raised border border-semantic-warning rounded-md p-4">
           <p className="text-sm text-content-secondary">
             <strong>Warning:</strong> Leaving this game will:
           </p>

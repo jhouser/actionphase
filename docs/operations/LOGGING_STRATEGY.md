@@ -1,5 +1,25 @@
 # Production Logging Strategy
 
+> **Status: Option 2 was implemented (2025-11-08).** This document is kept for
+> the decision rationale and the CloudWatch comparison. The "Recommended
+> Solutions" below are **not open questions** — `docker-compose.logging.yml` and
+> the logrotate config in `terraform/user-data.sh` are live.
+>
+> **Where the shipped config differs from the proposal below:**
+>
+> | Setting | Proposed here | Actually deployed |
+> |---|---|---|
+> | logrotate `rotate` | 30 days | **14 days** (`terraform/user-data.sh:181`) |
+> | logrotate scope | `/opt/actionphase/logs/**/*.log` | Per-directory blocks: `backend/`, `nginx/`, `frontend/`, plus `backups/` weekly ×4 |
+> | `db` container | not covered | `max-size: 20m`, `max-file: 5` |
+> | backend / nginx | `100m` × 10 | matches |
+> | frontend | `50m` × 5 | matches |
+>
+> Read `docker-compose.logging.yml` and `terraform/user-data.sh` for current
+> values; the YAML in Option 2 is the original proposal, not a mirror of what
+> runs.
+
+
 ## Current State (Container Logs)
 
 ### JSON File Logging (Current)
@@ -388,7 +408,7 @@ resource "aws_cloudwatch_log_group" "backend" {
 ```
 
 ### Local Volumes
-Handled by logrotate configuration (30 days default).
+Handled by logrotate configuration (**14 days**; see `terraform/user-data.sh`).
 
 ---
 

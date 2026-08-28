@@ -36,7 +36,6 @@ export const themes = {
     '--color-content-tertiary': '107 114 128',    // gray-500 - muted text
     '--color-content-disabled': '156 163 175',    // gray-400 - disabled state
     '--color-content-inverse': '255 255 255',     // white - text on dark backgrounds
-    '--color-text-heading': '17 24 39',           // gray-900 - heading text
 
     // Interactive colors - buttons and actions
     '--color-interactive-primary': '37 99 235',         // blue-600 - primary buttons
@@ -88,7 +87,6 @@ export const themes = {
     '--color-content-tertiary': '156 163 175',    // gray-400 - muted text
     '--color-content-disabled': '107 114 128',    // gray-500 - disabled state
     '--color-content-inverse': '17 24 39',        // gray-900 - text on light backgrounds
-    '--color-text-heading': '255 255 255',        // white - heading text
 
     // Interactive colors - buttons and actions
     '--color-interactive-primary': '59 130 246',        // blue-500 - primary buttons
@@ -142,7 +140,6 @@ export const themes = {
     '--color-content-tertiary': '70 70 70',       // dark gray - muted text
     '--color-content-disabled': '150 150 150',    // mid gray - disabled
     '--color-content-inverse': '255 255 255',     // pure white - text on dark
-    '--color-text-heading': '0 0 0',              // pure black - heading text
 
     // Interactive colors - bold and distinct
     '--color-interactive-primary': '0 0 180',           // strong blue
@@ -196,7 +193,6 @@ export const themes = {
     '--color-content-tertiary': '180 180 180',    // medium gray - muted text
     '--color-content-disabled': '100 100 100',    // dark gray - disabled
     '--color-content-inverse': '0 0 0',           // pure black - text on light
-    '--color-text-heading': '255 255 255',        // pure white - heading text
 
     // Interactive colors - bright and bold
     '--color-interactive-primary': '100 150 255',       // bright blue
@@ -251,7 +247,6 @@ export const themes = {
     '--color-content-tertiary': '75 85 99',       // gray-600 - muted
     '--color-content-disabled': '156 163 175',    // gray-400 - disabled
     '--color-content-inverse': '255 255 255',     // white - text on dark
-    '--color-text-heading': '17 24 39',           // gray-900 - heading text
 
     // Interactive colors - strong cyan-blue (universally distinguishable)
     '--color-interactive-primary': '6 182 212',         // cyan-600 - very distinct

@@ -13,12 +13,11 @@ type Handler struct {
 	NotificationService     core.NotificationServiceInterface
 }
 
-// All handler methods are organized into separate files:
-// - api_crud.go: Phase CRUD operations (Create, Get, Update, etc.)
-// - api_lifecycle.go: Phase lifecycle (Activate, Publish, etc.)
-// - api_actions.go: Action submissions (Submit, Get user/game actions)
-// - api_results.go: Action results (Create, Get, Update results)
+// All handler methods live in huma_api.go, registered by
+// RegisterHumaGamePhases (the /games/{gameID} routes) and RegisterHumaPhases
+// (the /phases/{id} routes).
 //
-// Request and response types are in:
-// - requests.go: All request types with Bind methods
-// - responses.go: All response types with Render methods
+// Supporting types:
+// - requests.go:  request payload shapes, kept for the tests
+// - responses.go: response types
+// - converters.go: model -> response conversion

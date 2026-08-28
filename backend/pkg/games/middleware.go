@@ -11,6 +11,22 @@ import (
 	"github.com/go-chi/render"
 )
 
+// renderError logs and renders an error response, at Error level for 5xx and
+// Warn for 4xx.
+//
+// The only remaining chi-style error path in this package: GameMiddleware is an
+// http.Handler wrapper and stays on chi, because every converted package's
+// game-scoped routes depend on the context values it sets. The handlers use
+// logAndErr in huma_api.go instead.
+func (h *Handler) renderError(ctx context.Context, w http.ResponseWriter, r *http.Request, errResp render.Renderer, msg string, args ...any) {
+	if resp, ok := errResp.(*core.ErrResponse); ok && resp.HTTPStatusCode >= 500 {
+		h.App.ObsLogger.Error(ctx, msg, args...)
+	} else {
+		h.App.ObsLogger.Warn(ctx, msg, args...)
+	}
+	render.Render(w, r, errResp)
+}
+
 func (h *Handler) GameMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

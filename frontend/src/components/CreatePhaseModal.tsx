@@ -135,7 +135,7 @@ export function CreatePhaseModal({ onClose, onSubmit, isSubmitting }: CreatePhas
 
             {/* Draft opening post section — only for Common Room phases */}
             {formData.phase_type === 'common_room' && (
-              <div className="border border-border-default rounded-lg overflow-hidden">
+              <div className="border border-theme-default rounded-lg overflow-hidden">
                 <Button
                   variant="ghost"
                   onClick={() => setShowDraftSection(prev => !prev)}

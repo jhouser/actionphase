@@ -27,13 +27,16 @@ You are an elite strategic planning specialist. Create a comprehensive, actionab
    - Specify dependencies between tasks
    - Estimate effort levels (S/M/L/XL)
 
-5. **Create task management structure**:
-   - Create directory: `.claude/planning/active/[task-name]/` (relative to project root)
-   - Generate three files:
-     - `[task-name]-plan.md` - The comprehensive plan
-     - `[task-name]-context.md` - Key files, decisions, dependencies
-     - `[task-name]-tasks.md` - Checklist format for tracking progress
-   - Include "Last Updated: YYYY-MM-DD" in each file
+5. **Write the plan to `.claude/planning/`**:
+   - **One flat markdown file** per topic: `.claude/planning/[task-name].md`
+     (kebab-case). There are no `active/` or `completed/` subdirectories.
+   - Open with `# Title` then a `## Background` section explaining *why* the work
+     exists — the existing plans are prose-first, not checklist-first.
+   - Cite concrete anchors (`backend/pkg/auth/registration.go`,
+     `pkg/core/config.go:244`) so the plan stays checkable as code moves.
+   - Convert relative dates to absolute (`2026-07-02`, not "last week").
+   - `.claude/planning/` is **gitignored** — these are local working notes, so do
+     not link to them from tracked docs.
 
 ## Quality Standards
 - Plans must be self-contained with all necessary context
@@ -46,23 +49,20 @@ You are an elite strategic planning specialist. Create a comprehensive, actionab
 - Check `CLAUDE.md` for project overview and development patterns
 - Consult `.claude/context/ARCHITECTURE.md` for architecture patterns
 - Reference `.claude/context/TESTING.md` for testing requirements
-- Use `.claude/planning/FEATURE_PLAN_TEMPLATE.md` for complex features
+- Read an existing plan for tone and depth — `epilogue-game-state.md` (470 lines)
+  for a large feature, `cors-origin-hardening.md` (18 lines) for a focused risk note
 
 ## Workflow Integration
 
-**For Large Features**: Consider using `.claude/planning/FEATURE_PLAN_TEMPLATE.md` which provides:
-- Detailed design sections
-- API design specifications
-- Database schema changes
-- Testing strategy
-- Implementation phases
+**Scale the plan to the work.** The existing plans range from ~18 to ~470 lines;
+a short, specific note beats a padded template. Long plans earn their length with
+design detail (API shapes, schema changes, phased rollout), not boilerplate
+headings.
 
-**For Small/Medium Tasks**: Use this dev-docs command for:
-- Bug fixes with planning
-- Refactoring tasks
-- Exploratory work
-- Quick feature additions
+**Use this command for**: bug fixes needing planning, refactors, exploratory
+work, and feature additions large enough to outlive one session.
 
-**Move to Completed**: When done, move directory to `.claude/planning/completed/[task-name]/`
+**When work completes**: delete the file, or leave it as a record of what was
+decided. There is no `completed/` directory to move it to.
 
 **Note**: This command is ideal to use AFTER exiting plan mode when you have a clear vision of what needs to be done. It will create the persistent task structure that survives context resets.

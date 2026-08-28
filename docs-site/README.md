@@ -4,36 +4,28 @@ This directory contains the ActionPhase documentation built with [VitePress](htt
 
 ## Quick Start
 
+Use the `just` recipes from the **project root**. They run VitePress in a
+`node:24` container against this directory, so no host Node is required:
+
 ```bash
-# Install dependencies
-npm install
-
-# Start development server (http://localhost:5173)
-npm run docs:dev
-
-# Build for production
-npm run docs:build
-
-# Preview production build
-npm run docs:preview
+just docs-dev       # Dev server with hot reload → http://localhost:5174
+just docs-build     # Production build → .vitepress/dist
+just docs-preview   # Preview the built site
+just docs-embed     # Embed built docs into the backend (backend/pkg/docs/dist)
 ```
 
-## Using Justfile Commands
+There is no `just docs-install` — `docs-dev` runs `npm install` inside the
+container each time.
 
-From the project root:
+### Running VitePress directly
+
+The npm scripts live in `docs-site/package.json`, **not** the root
+`package.json` (which has no scripts). They need Node on the host:
 
 ```bash
-# Start documentation dev server
-just docs-dev
-
-# Build documentation
-just docs-build
-
-# Preview built docs
-just docs-preview
-
-# Install dependencies
-just docs-install
+cd docs-site
+npm install
+npm run docs:dev       # or docs:build / docs:preview
 ```
 
 ## Directory Structure
@@ -43,29 +35,31 @@ docs-site/
 ├── .vitepress/
 │   ├── config.mjs         # VitePress configuration
 │   └── dist/              # Build output (generated)
-├── user/                  # User-facing documentation
-│   ├── getting-started/   # Account & first steps
-│   ├── game-guide/        # Playing games
-│   └── gm-guide/          # Running games
+├── index.md               # Site landing page
+├── guide/                 # User-facing guide (players & GMs)
 ├── developer/             # Developer documentation
+│   ├── index.md
 │   ├── getting-started/   # Developer onboarding
 │   ├── architecture/      # System design & ADRs
-│   ├── api/              # API reference
-│   └── testing/          # Testing guides
-├── package.json          # NPM configuration
-└── README.md             # This file
+│   ├── api/               # API reference
+│   └── testing/           # Testing guides
+├── STATUS.md              # Per-feature doc status tracker
+├── package.json           # VitePress scripts & deps
+└── README.md              # This file
 ```
 
 ## Content Organization
 
-### User Documentation (`/user/`)
+### User Documentation (`/guide/`)
 
-Documentation for players and Game Masters:
+Documentation for players and Game Masters — one flat directory, not the
+`getting-started` / `game-guide` / `gm-guide` split an earlier version of this
+README described. Topics include getting started, notifications, user settings
+and profiles, game states and settings, player applications, deadlines,
+characters, common room, handouts, private messages, action phases, audience,
+history, and phases.
 
-- **Getting Started**: Account creation, joining games, first character
-- **Game Guide**: Game phases, common room, action submission
-- **GM Guide**: Creating games, managing players, running phases
-- **FAQ**: Common questions and troubleshooting
+`STATUS.md` tracks the review status and last-updated date of each file.
 
 ### Developer Documentation (`/developer/`)
 
@@ -139,10 +133,10 @@ location /docs/ {
 
 ## Development Workflow
 
-1. **Edit** markdown files in `user/` or `developer/`
-2. **Test** with `npm run docs:dev` (hot reload)
-3. **Build** with `npm run docs:build`
-4. **Preview** with `npm run docs:preview`
+1. **Edit** markdown files in `guide/` or `developer/`
+2. **Test** with `just docs-dev` (hot reload)
+3. **Build** with `just docs-build`
+4. **Preview** with `just docs-preview`
 
 ## Features
 
@@ -176,7 +170,7 @@ location /docs/ {
 
 **Port 5173 already in use**:
 - Kill the existing process: `lsof -ti:5173 | xargs kill`
-- Or use a different port: `npm run docs:dev -- --port 5174`
+- `just docs-dev` publishes port **5174**; change it in the `docs-dev` recipe if it clashes
 
 **Build fails**:
 - Check for invalid frontmatter in markdown files

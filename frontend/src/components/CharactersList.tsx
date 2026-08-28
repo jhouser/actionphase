@@ -428,7 +428,7 @@ export function CharactersList({
 
             {deleteCharacterMutation.isError && (
               <div className="p-3 bg-danger/10 border border-danger rounded-md">
-                <p className="text-sm text-danger">
+                <p className="text-sm text-semantic-danger">
                   {(deleteCharacterMutation.error as Error & { response?: { data?: { error?: string } } })?.response?.data?.error ||
                    'Failed to delete character. The character may have existing activity.'}
                 </p>

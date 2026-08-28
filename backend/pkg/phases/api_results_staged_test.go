@@ -73,7 +73,7 @@ func postStagedChain(t *testing.T, router http.Handler, gameID int32, token stri
 func TestPhaseAPI_CreateStagedResultChain(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -166,7 +166,7 @@ func TestPhaseAPI_CreateStagedResultChain(t *testing.T) {
 func TestPhaseAPI_CancelPendingStagedPart(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -250,7 +250,7 @@ func TestPhaseAPI_CancelPendingStagedPart(t *testing.T) {
 func TestPhaseAPI_AppendStagedPart(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -385,7 +385,7 @@ func TestPhaseAPI_AppendStagedPart(t *testing.T) {
 func TestPhaseAPI_UpdateStagedPartDelay(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -512,7 +512,7 @@ func TestPhaseAPI_UpdateStagedPartDelay(t *testing.T) {
 func TestPhaseAPI_StagedPart_CrossGameMismatch(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "notifications", "action_results", "action_submissions", "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "notifications", "action_results", "action_submissions", "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
