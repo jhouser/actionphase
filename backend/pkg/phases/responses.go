@@ -1,11 +1,16 @@
 package phases
 
 import (
-	"net/http"
 	"time"
 )
 
-// PhaseResponse represents a phase response
+// PhaseResponse represents a phase response.
+//
+// TimeRemaining and IsExpired are calculated, not stored. Under chi they were
+// filled by a Render method at serialization time; huma marshals the struct
+// directly and never calls Render, so withCalculatedFields in huma_api.go fills
+// them before the handler returns. Anything constructing a PhaseResponse for a
+// response body must go through that helper or the countdown UI gets nothing.
 type PhaseResponse struct {
 	ID          int32      `json:"id"`
 	GameID      int32      `json:"game_id"`
@@ -26,21 +31,6 @@ type PhaseResponse struct {
 	IsExpired     bool   `json:"is_expired"`
 }
 
-func (rd *PhaseResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	// Calculate time remaining and expiry status
-	if rd.Deadline != nil {
-		remaining := time.Until(*rd.Deadline)
-		if remaining > 0 {
-			seconds := int64(remaining.Seconds())
-			rd.TimeRemaining = &seconds
-			rd.IsExpired = false
-		} else {
-			rd.IsExpired = true
-		}
-	}
-	return nil
-}
-
 // ActionResponse represents an action response
 type ActionResponse struct {
 	ID          int32     `json:"id"`
@@ -51,10 +41,6 @@ type ActionResponse struct {
 	Content     string    `json:"content"`
 	SubmittedAt time.Time `json:"submitted_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-func (rd *ActionResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
 }
 
 // ActionWithDetailsResponse represents an action with additional details
@@ -73,10 +59,6 @@ type ActionWithDetailsResponse struct {
 	PhaseNumber   *int32    `json:"phase_number,omitempty"`
 }
 
-func (rd *ActionWithDetailsResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
-
 // ActionResultResponse represents an action result
 type ActionResultResponse struct {
 	ID          int32      `json:"id"`
@@ -87,10 +69,6 @@ type ActionResultResponse struct {
 	Content     string     `json:"content"`
 	IsPublished bool       `json:"is_published"`
 	SentAt      *time.Time `json:"sent_at,omitempty"`
-}
-
-func (rd *ActionResultResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
 }
 
 // ActionResultWithDetailsResponse represents an action result with additional details
@@ -136,10 +114,6 @@ type ActionResultWithDetailsResponse struct {
 	RevealDelayMinutes *int32 `json:"reveal_delay_minutes,omitempty"`
 }
 
-func (rd *ActionResultWithDetailsResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
-
 // DraftCharacterUpdateResponse represents a draft character update
 type DraftCharacterUpdateResponse struct {
 	ID             int32     `json:"id"`
@@ -152,8 +126,4 @@ type DraftCharacterUpdateResponse struct {
 	Operation      string    `json:"operation"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
-}
-
-func (rd *DraftCharacterUpdateResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
 }

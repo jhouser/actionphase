@@ -281,36 +281,11 @@ func (h *Handler) Start() {
 					GameService:             &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					NotificationService:     db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 				}
-				r.Post("/phases", phaseHandler.CreatePhase)
-				r.Get("/current-phase", phaseHandler.GetCurrentPhase)
-				r.Get("/phases", phaseHandler.GetGamePhases)
-				r.Post("/actions", phaseHandler.SubmitAction)
-				r.Get("/actions", phaseHandler.GetGameActions)
-				r.Get("/actions/mine", phaseHandler.GetUserActions)
-
-				// Action results management
-				r.Post("/results", phaseHandler.CreateActionResult)
-				r.Post("/results/staged", phaseHandler.CreateStagedResultChain)
-				r.Get("/results", phaseHandler.GetGameActionResults)
-				r.Get("/results/mine", phaseHandler.GetUserActionResults)
-				r.Put("/results/{resultId}", phaseHandler.UpdateActionResult)
-				r.Delete("/results/{resultId}", phaseHandler.DeleteActionResult)
-				// Cancels a scheduled-but-unreleased part. Separate from the
-				// delete above, which is guarded on is_published = false and so
-				// matches nothing for a published-but-unreleased part.
-				r.Delete("/results/{resultId}/pending", phaseHandler.CancelPendingStagedPart)
-				r.Post("/results/{resultId}/parts", phaseHandler.AppendStagedPart)
-				r.Put("/results/{resultId}/delay", phaseHandler.UpdateStagedPartDelay)
-				r.Post("/results/{resultId}/publish", phaseHandler.PublishActionResult)
-				r.Post("/phases/{phaseId}/results/publish", phaseHandler.PublishAllPhaseResults)
-				r.Get("/phases/{phaseId}/results/unpublished-count", phaseHandler.GetUnpublishedResultsCount)
-
-				// Draft character updates for action results
-				r.Post("/results/{resultId}/character-updates", phaseHandler.CreateDraftCharacterUpdate)
-				r.Get("/results/{resultId}/character-updates", phaseHandler.GetDraftCharacterUpdates)
-				r.Get("/results/{resultId}/character-updates/count", phaseHandler.GetDraftUpdateCount)
-				r.Put("/results/{resultId}/character-updates/{draftId}", phaseHandler.UpdateDraftCharacterUpdate)
-				r.Delete("/results/{resultId}/character-updates/{draftId}", phaseHandler.DeleteDraftCharacterUpdate)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				// Registers the action, result, staged-chain and draft
+				// character-update operations too.
+				phases.RegisterHumaGamePhases(gameScopedAPI, &phaseHandler)
 
 				// Common Room messages (posts and comments)
 				messageHandler := messages.Handler{
@@ -458,8 +433,6 @@ func (h *Handler) Start() {
 	apiV1Router.Mount("/characters", charactersRouter)
 
 	// Phases API (for phase-specific operations)
-	// phasesAPI is captured for the generated spec; only the draft-post routes
-	// are huma so far (see .claude/planning/huma-migration.md).
 	var phasesAPI huma.API
 	phasesRouter := chi.NewRouter()
 	phasesRouter.Route("/", func(r chi.Router) {
@@ -481,12 +454,6 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			// Phase management
-			r.Post("/{id}/activate", phaseHandler.ActivatePhase)
-			r.Put("/{id}/deadline", phaseHandler.UpdatePhaseDeadline)
-			r.Put("/{id}", phaseHandler.UpdatePhase)
-			r.Delete("/{id}", phaseHandler.DeletePhase)
-
 			// Draft post management (GM only)
 			messageHandler := messages.Handler{
 				App:            h.App,
@@ -494,10 +461,10 @@ func (h *Handler) Start() {
 				MessageService: &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
 			}
 			// huma / type-first -- paths are relative to this /phases mount.
-			// The rest of this router is still chi; pkg/phases converts next,
-			// and must register onto this same API rather than creating a
-			// second one (see huma-migration.md gotcha 3).
+			// Both pkg/phases and pkg/messages register on this one API, since
+			// they share the router and its middleware (gotcha 3).
 			phasesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			phases.RegisterHumaPhases(phasesAPI, &phaseHandler)
 			messages.RegisterHumaPhaseDraftPosts(phasesAPI, &messageHandler)
 		})
 	})

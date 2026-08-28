@@ -8,6 +8,7 @@ import (
 	dbmessages "actionphase/pkg/db/services/messages"
 	phasesvc "actionphase/pkg/db/services/phases"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -59,12 +60,14 @@ func setupPhaseAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux 
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
+				r.Use(core.AdminModeMiddleware)
 				r.Use(gameHandler.GameMiddleware())
 
-				// Phase routes (mirroring root.go)
-				r.Post("/phases", phaseHandler.CreatePhase)
-				r.Get("/current-phase", phaseHandler.GetCurrentPhase)
-				r.Get("/phases", phaseHandler.GetGamePhases)
+				// huma / type-first, mirroring root.go. Registering the whole
+				// game-scoped set rather than the three this file exercises
+				// keeps the router a copy of production rather than a subset,
+				// which is what makes the assertions describe the real API.
+				RegisterHumaGamePhases(humaconfig.New(r, "ActionPhase API", "1.0.0"), &phaseHandler)
 			})
 		})
 
@@ -82,10 +85,9 @@ func setupPhaseAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux 
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
+				r.Use(core.AdminModeMiddleware)
 
-				r.Put("/{id}", phaseHandler.UpdatePhase)
-				r.Delete("/{id}", phaseHandler.DeletePhase)
-				r.Post("/{id}/activate", phaseHandler.ActivatePhase)
+				RegisterHumaPhases(humaconfig.New(r, "ActionPhase API", "1.0.0"), &phaseHandler)
 			})
 		})
 	})

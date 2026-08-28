@@ -16,6 +16,7 @@ import (
 	dbmessages "actionphase/pkg/db/services/messages"
 	phasesvc "actionphase/pkg/db/services/phases"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -220,34 +221,11 @@ func setupFullPhaseAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
+				r.Use(core.AdminModeMiddleware)
 				r.Use(gameHandler.GameMiddleware())
 
-				r.Post("/phases", phaseHandler.CreatePhase)
-				r.Get("/current-phase", phaseHandler.GetCurrentPhase)
-				r.Get("/phases", phaseHandler.GetGamePhases)
-				r.Post("/actions", phaseHandler.SubmitAction)
-				r.Get("/actions", phaseHandler.GetGameActions)
-				r.Get("/actions/mine", phaseHandler.GetUserActions)
-
-				// Action results
-				r.Post("/results", phaseHandler.CreateActionResult)
-				r.Post("/results/staged", phaseHandler.CreateStagedResultChain)
-				r.Get("/results", phaseHandler.GetGameActionResults)
-				r.Get("/results/mine", phaseHandler.GetUserActionResults)
-				r.Put("/results/{resultId}", phaseHandler.UpdateActionResult)
-				r.Delete("/results/{resultId}/pending", phaseHandler.CancelPendingStagedPart)
-				r.Post("/results/{resultId}/parts", phaseHandler.AppendStagedPart)
-				r.Put("/results/{resultId}/delay", phaseHandler.UpdateStagedPartDelay)
-				r.Post("/results/{resultId}/publish", phaseHandler.PublishActionResult)
-				r.Post("/phases/{phaseId}/results/publish", phaseHandler.PublishAllPhaseResults)
-				r.Get("/phases/{phaseId}/results/unpublished-count", phaseHandler.GetUnpublishedResultsCount)
-
-				// Draft character updates
-				r.Post("/results/{resultId}/character-updates", phaseHandler.CreateDraftCharacterUpdate)
-				r.Get("/results/{resultId}/character-updates", phaseHandler.GetDraftCharacterUpdates)
-				r.Get("/results/{resultId}/character-updates/count", phaseHandler.GetDraftUpdateCount)
-				r.Put("/results/{resultId}/character-updates/{draftId}", phaseHandler.UpdateDraftCharacterUpdate)
-				r.Delete("/results/{resultId}/character-updates/{draftId}", phaseHandler.DeleteDraftCharacterUpdate)
+				// huma / type-first, mirroring root.go.
+				RegisterHumaGamePhases(humaconfig.New(r, "ActionPhase API", "1.0.0"), &phaseHandler)
 			})
 		})
 
@@ -264,11 +242,9 @@ func setupFullPhaseAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
+				r.Use(core.AdminModeMiddleware)
 
-				r.Put("/{id}", phaseHandler.UpdatePhase)
-				r.Put("/{id}/deadline", phaseHandler.UpdatePhaseDeadline)
-				r.Delete("/{id}", phaseHandler.DeletePhase)
-				r.Post("/{id}/activate", phaseHandler.ActivatePhase)
+				RegisterHumaPhases(humaconfig.New(r, "ActionPhase API", "1.0.0"), &phaseHandler)
 			})
 		})
 	})
