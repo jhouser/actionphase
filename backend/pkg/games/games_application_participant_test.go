@@ -40,6 +40,7 @@ func TestGameAPI_ApplicationManagement(t *testing.T) {
 		Email:    "appmanagement@example.com",
 	})
 	core.AssertNoError(t, err, "Player user creation should succeed")
+	testDB.MarkUserVerified(t, playerUser.ID)
 
 	playerToken, err := core.CreateTestJWTTokenForUser(app, playerUser)
 	core.AssertNoError(t, err, "Player token creation should succeed")
@@ -212,6 +213,7 @@ func TestGameAPI_AudienceMemberCanRejoinAfterLeaving(t *testing.T) {
 		Email:    "rejoin_audience@example.com",
 	})
 	core.AssertNoError(t, err, "Audience user creation should succeed")
+	testDB.MarkUserVerified(t, audienceUser.ID)
 
 	audienceToken, err := core.CreateTestJWTTokenForUser(app, audienceUser)
 	core.AssertNoError(t, err, "Audience token creation should succeed")
@@ -323,6 +325,7 @@ func TestGameAPI_AudienceMemberCanRejoinAfterLeaving(t *testing.T) {
 			Email:    "preexisting_stale_audience@example.com",
 		})
 		core.AssertNoError(t, err, "User creation should succeed")
+		testDB.MarkUserVerified(t, otherUser.ID)
 		otherToken, err := core.CreateTestJWTTokenForUser(app, otherUser)
 		core.AssertNoError(t, err, "Token creation should succeed")
 
@@ -369,6 +372,7 @@ func TestGameAPI_RejectedAudienceApplicationShowsRejected(t *testing.T) {
 		Email:    "rejected_audience@example.com",
 	})
 	core.AssertNoError(t, err, "Audience user creation should succeed")
+	testDB.MarkUserVerified(t, audienceUser.ID)
 	audienceToken, err := core.CreateTestJWTTokenForUser(app, audienceUser)
 	core.AssertNoError(t, err, "Audience token creation should succeed")
 
@@ -468,6 +472,7 @@ func TestGameAPI_ParticipantManagementAdvanced(t *testing.T) {
 		Email:    "participant1@example.com",
 	})
 	core.AssertNoError(t, err, "Player 1 creation should succeed")
+	testDB.MarkUserVerified(t, player1.ID)
 
 	player1Token, err := core.CreateTestJWTTokenForUser(app, player1)
 	core.AssertNoError(t, err, "Player 1 token creation should succeed")
@@ -478,6 +483,7 @@ func TestGameAPI_ParticipantManagementAdvanced(t *testing.T) {
 		Email:    "participant2@example.com",
 	})
 	core.AssertNoError(t, err, "Player 2 creation should succeed")
+	testDB.MarkUserVerified(t, player2.ID)
 
 	_, err = core.CreateTestJWTTokenForUser(app, player2)
 	core.AssertNoError(t, err, "Player 2 token creation should succeed")
