@@ -99,7 +99,7 @@ func setupPhaseAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux 
 func TestPhaseAPI_CreatePhase(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "phases", "games", "users")
+	defer testDB.CleanupTables(t, "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupPhaseAPITestRouter(app, testDB)
@@ -185,7 +185,7 @@ func TestPhaseAPI_CreatePhase(t *testing.T) {
 func TestPhaseAPI_ActivatePhase(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "phases", "games", "users")
+	defer testDB.CleanupTables(t, "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupPhaseAPITestRouter(app, testDB)
@@ -281,7 +281,7 @@ func TestPhaseAPI_ActivatePhase(t *testing.T) {
 func TestPhaseAPI_UpdatePhase(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "phases", "games", "users")
+	defer testDB.CleanupTables(t, "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupPhaseAPITestRouter(app, testDB)
@@ -360,7 +360,7 @@ func TestPhaseAPI_UpdatePhase(t *testing.T) {
 func TestPhaseAPI_DeletePhase(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "phases", "games", "users")
+	defer testDB.CleanupTables(t, "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupPhaseAPITestRouter(app, testDB)
@@ -460,7 +460,7 @@ func TestPhaseAPI_DeletePhase(t *testing.T) {
 func TestPhaseAPI_GetPhases(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "phases", "games", "users")
+	defer testDB.CleanupTables(t, "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupPhaseAPITestRouter(app, testDB)
@@ -544,7 +544,7 @@ func TestPhaseAPI_GetPhases(t *testing.T) {
 func TestPhaseAPI_AuthorizationEdgeCases(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "phases", "games", "users")
+	defer testDB.CleanupTables(t, "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupPhaseAPITestRouter(app, testDB)
@@ -608,7 +608,7 @@ func TestPhaseAPI_AuthorizationEdgeCases(t *testing.T) {
 func TestPhaseAPI_CreateInterludePhase(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "phases", "games", "users")
+	defer testDB.CleanupTables(t, "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupPhaseAPITestRouter(app, testDB)

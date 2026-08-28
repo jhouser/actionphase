@@ -1212,7 +1212,7 @@ func TestConversationAPI_MarkAsRead(t *testing.T) {
 func TestConversationAPI_AddParticipant(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "phases", "games", "users")
+	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupConversationAPITestRouter(app, testDB)
@@ -1316,7 +1316,7 @@ func TestConversationAPI_AddParticipant(t *testing.T) {
 func TestConversationAPI_UpdateMessage(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "phases", "games", "users")
+	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupConversationAPITestRouter(app, testDB)
@@ -1504,7 +1504,7 @@ func TestConversationAPI_UpdateMessage(t *testing.T) {
 func TestConversationAPI_InterludePhaseMessaging(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "phases", "games", "users")
+	defer testDB.CleanupTables(t, "conversations", "characters", "game_participants", "game_phases", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupConversationAPITestRouter(app, testDB)
@@ -1638,7 +1638,7 @@ func TestConversationAPI_InterludePhaseMessaging(t *testing.T) {
 func TestConversationAPI_GetUserConversations_UnreadOnly(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversation_read_receipts", "conversation_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "conversation_reads", "private_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupConversationAPITestRouter(app, testDB)

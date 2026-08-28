@@ -174,7 +174,7 @@ func TestGameAPI_UpdateAutoAcceptAudience(t *testing.T) {
 func TestGameAPI_ListAllPrivateConversations(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversation_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "private_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupGameTestRouter(app, testDB)
@@ -257,7 +257,7 @@ func TestGameAPI_ListAllPrivateConversations(t *testing.T) {
 func TestGameAPI_GetConversationParticipants(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversation_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "private_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupGameTestRouter(app, testDB)
@@ -343,7 +343,7 @@ func TestGameAPI_GetConversationParticipants(t *testing.T) {
 func TestGameAPI_GetAudienceConversationMessages(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversation_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "private_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupGameTestRouter(app, testDB)
@@ -431,7 +431,7 @@ func TestGameAPI_GetAudienceConversationMessages(t *testing.T) {
 func TestGameAPI_ListAllActionSubmissions(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_submissions", "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "action_submissions", "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupGameTestRouter(app, testDB)

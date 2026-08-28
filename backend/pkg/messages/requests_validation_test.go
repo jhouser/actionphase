@@ -24,7 +24,7 @@ import (
 func TestMessageRequestValidation(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "messages", "character_mentions", "characters", "game_participants", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "messages", "characters", "game_participants", "games", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupMessageTestRouter(app, testDB)

@@ -196,7 +196,7 @@ func TestAdminAPI_GrantRevokeAdmin(t *testing.T) {
 func TestAdminAPI_BanUnbanUser(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "banned_users", "users")
+	defer testDB.CleanupTables(t, "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupAdminTestRouter(app, testDB)
@@ -247,7 +247,7 @@ func TestAdminAPI_BanUnbanUser(t *testing.T) {
 func TestAdminAPI_ListBannedUsers(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "banned_users", "users")
+	defer testDB.CleanupTables(t, "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupAdminTestRouter(app, testDB)

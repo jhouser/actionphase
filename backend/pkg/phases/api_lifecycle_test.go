@@ -28,7 +28,7 @@ import (
 func TestPhaseAPI_PublishAllPhaseResults(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -108,7 +108,7 @@ func TestPhaseAPI_PublishAllPhaseResults(t *testing.T) {
 func TestPhaseAPI_GetUnpublishedResultsCount(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -256,7 +256,7 @@ func setupFullPhaseAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.
 func TestPhaseAPI_UpdatePhaseDeadline(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)

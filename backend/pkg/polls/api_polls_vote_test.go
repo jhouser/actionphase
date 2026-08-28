@@ -180,7 +180,7 @@ func TestPollVote_Outsider_CannotVote_403(t *testing.T) {
 func TestPollVote_AudienceMember_CannotVote_403(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "poll_votes", "poll_options", "common_room_polls", "game_audience", "game_participants", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "poll_votes", "poll_options", "common_room_polls", "game_participants", "games", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupVoteRouter(app, testDB)

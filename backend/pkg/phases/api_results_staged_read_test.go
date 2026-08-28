@@ -45,7 +45,7 @@ func getResults(t *testing.T, router http.Handler, path, token string) (*httptes
 func TestPhaseAPI_StagedReadShape(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -145,7 +145,7 @@ func TestPhaseAPI_StagedReadShape(t *testing.T) {
 func TestPhaseAPI_StagedReadShape_Audience(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -193,7 +193,7 @@ func TestPhaseAPI_StagedReadShape_Audience(t *testing.T) {
 func TestPhaseAPI_OrdinaryResultsUnchanged(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)

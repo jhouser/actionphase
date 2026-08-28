@@ -254,7 +254,12 @@ func (td *TestDatabase) CleanupTables(t TestingInterface, tables ...string) {
 		if exists {
 			existingTables = append(existingTables, table)
 		} else {
-			t.Logf("Note: Table %s does not exist, skipping cleanup", table)
+			// A name that matches no table is a typo, not a no-op. Skipping it
+			// silently leaves that table's rows and id sequence untouched while
+			// the rest of the list is reset, which later surfaces as a
+			// duplicate-key failure in an unrelated test. Fail at the typo.
+			t.Fatalf("CleanupTables: no table named %q exists; "+
+				"check the name against the schema (e.g. phases -> game_phases)", table)
 		}
 	}
 

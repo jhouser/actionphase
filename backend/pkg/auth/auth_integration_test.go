@@ -2086,7 +2086,7 @@ func TestAuthFlow_RevokeAllSessionsEdgeCases(t *testing.T) {
 func TestAuthFlow_CompleteEmailChange(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "email_change_tokens", "registration_attempts", "sessions", "users")
+	defer testDB.CleanupTables(t, "email_verification_tokens", "registration_attempts", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupAuthTestRouter(app)
