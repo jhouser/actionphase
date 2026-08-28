@@ -177,7 +177,8 @@ ActionPhase has **two separate documentation systems**:
 - **URL**: `https://api.action-phase.com/api/v1/docs/`
 - **Purpose**: Interactive API reference (Swagger UI)
 - **Audience**: Frontend developers, mobile developers, API consumers
-- **Source**: `backend/pkg/docs/openapi.yaml`
+- **Source**: generated from the huma operations' Go types, plus the document
+  metadata in `backend/pkg/docs/spec_metadata.go`
 - **Technology**: OpenAPI 3.0.3 + Swagger UI
 
 ### 2. User Documentation (for players/GMs)
@@ -193,14 +194,22 @@ ActionPhase has **two separate documentation systems**:
 
 ### API Documentation (OpenAPI)
 
-1. Edit `backend/pkg/docs/openapi.yaml`
-2. Rebuild backend:
+The spec is generated from the code, so there is nothing to edit by hand:
+changing a handler's input/output structs changes the documentation.
+
+1. Change the huma operation (struct tags carry `doc:`, `enum:`, `minLength:`
+   and the `Responses` map)
+2. Regenerate the committed copy so reviewers see the API diff:
    ```bash
-   cd backend
-   go build -o actionphase main.go
+   just gen-openapi
    ```
-3. Deploy updated binary to production
+3. Rebuild and deploy the backend
 4. Verify: `https://api.action-phase.com/api/v1/docs/`
+
+The served document is assembled in memory at request time from the registered
+operations, so it cannot go stale relative to the deployed binary. The committed
+`openapi.gen.yaml` exists for review and for client generation;
+`just check-api-docs` fails when it falls behind.
 
 ### User Documentation (VitePress)
 
@@ -225,16 +234,14 @@ curl http://localhost:3000/ping
 # 2. Are routes registered?
 curl http://localhost:3000/api/v1/debug/routes | jq  # Dev only
 
-# 3. Is openapi.yaml embedded?
-ls -lh backend/pkg/docs/openapi.yaml
+# 3. Does the spec render?
+curl -s http://localhost:3000/api/v1/docs/openapi.yaml | head -5
 ```
 
 **Fix**:
-Rebuild backend after editing `openapi.yaml`:
-```bash
-cd backend
-go build -o actionphase main.go
-```
+The spec is built in memory from the registered operations, so a 404 here means
+the docs routes are not registered rather than a missing file. Check that
+`docsHandler.RegisterRoutes` still runs in `pkg/http/root.go`.
 
 ### Nginx returns 502 Bad Gateway
 
@@ -270,8 +277,8 @@ docker-compose restart backend
 
 Before deploying API documentation updates:
 
-- [ ] Edit `backend/pkg/docs/openapi.yaml`
-- [ ] Run `just api-docs-validate` to check coverage
+- [ ] Run `just gen-openapi` and commit `backend/pkg/docs/openapi.gen.yaml`
+- [ ] Run `just check-api-docs` to verify the spec matches registered routes
 - [ ] Replace all `TODO:` placeholders
 - [ ] Test locally: `http://localhost:3000/api/v1/docs/`
 - [ ] Rebuild backend: `go build -o actionphase main.go`
@@ -297,4 +304,4 @@ Before deploying API documentation updates:
 
 ---
 
-**Summary**: Production is **ready to serve API documentation**. No nginx changes needed. Just rebuild backend after updating `openapi.yaml`.
+**Summary**: Production is **ready to serve API documentation**. No nginx changes needed. Just rebuild the backend after changing the API.

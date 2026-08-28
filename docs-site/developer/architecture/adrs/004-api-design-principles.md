@@ -157,76 +157,89 @@ We adopted **RESTful API design principles** with modern enhancements:
 Base URL: /api/v1/
 
 Resources:
-GET    /api/v1/games              # List games
-POST   /api/v1/games              # Create game
-GET    /api/v1/games/{id}         # Get specific game
-PUT    /api/v1/games/{id}         # Update game
-DELETE /api/v1/games/{id}         # Delete game
+GET    /api/v1/games                  # List games (filtered)
+POST   /api/v1/games                  # Create game
+GET    /api/v1/games/{gameID}         # Get specific game
+PUT    /api/v1/games/{gameID}         # Update game
+DELETE /api/v1/games/{gameID}         # Delete game
 
 Nested Resources:
-GET    /api/v1/games/{id}/characters    # Game characters
-POST   /api/v1/games/{id}/characters    # Create character
-GET    /api/v1/games/{id}/phases        # Game phases
-POST   /api/v1/games/{id}/phases        # Create phase
+GET    /api/v1/games/{gameID}/characters    # Game characters
+POST   /api/v1/games/{gameID}/characters    # Create character
+GET    /api/v1/games/{gameID}/phases        # Game phases
+POST   /api/v1/games/{gameID}/phases        # Create phase
 
 Authentication:
 POST   /api/v1/auth/register      # User registration
 POST   /api/v1/auth/login         # User login
-POST   /api/v1/auth/refresh       # Token refresh
+GET    /api/v1/auth/refresh       # Token rotation (GET, not POST)
 POST   /api/v1/auth/logout        # User logout
 ```
 
+> Two corrections from the original text (verified 2026-08-26 against
+> `backend/pkg/http/root.go`):
+> - The path parameter is **`{gameID}`**, not `{id}`.
+> - **`/auth/refresh` is a `GET`** (`root.go:126`). It requires a currently
+>   valid token and mints a new one; there is no refresh-token body to POST.
+>   See ADR-003's divergence section.
+
 ### Request/Response Format
+
+> ❌ **The envelope originally documented here was never implemented.** It
+> specified a `data` wrapper, an `error: {code, message, details[]}` object, and
+> a `meta` block on every response. None of that ships. Replaced below with
+> responses captured live from the running API on 2026-08-26.
+
 ```json
-// Standard Success Response
+// Single resource — returned bare, with no "data" wrapper and no "meta"
 {
-  "data": {
-    "id": 123,
-    "title": "Epic Campaign",
-    "created_at": "2025-08-07T10:30:00Z"
-  },
-  "meta": {
-    "correlation_id": "corr_abc123",
-    "timestamp": "2025-08-07T10:30:00Z"
-  }
+  "id": 50718,
+  "title": "Chronicles of Westmarch",
+  "state": "in_progress",
+  "created_at": "2026-06-27T20:33:51.798299Z"
 }
 
-// Standard Error Response
+// Collection — keyed by RESOURCE NAME (not "data"), paginated under "metadata"
 {
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request validation failed",
-    "details": [
-      {
-        "field": "title",
-        "error": "Title is required"
-      }
-    ]
-  },
-  "meta": {
-    "correlation_id": "corr_abc123",
-    "timestamp": "2025-08-07T10:30:00Z"
-  }
-}
-
-// Collection Response
-{
-  "data": [
-    {"id": 1, "title": "Game 1"},
-    {"id": 2, "title": "Game 2"}
+  "games": [
+    {"id": 50718, "title": "Chronicles of Westmarch"},
+    {"id": 50717, "title": "..."}
   ],
-  "pagination": {
+  "metadata": {
+    "total_count": 7,
+    "filtered_count": 7,
+    "available_states": ["completed", "in_progress", "recruitment"],
     "page": 1,
-    "per_page": 20,
-    "total": 45,
-    "total_pages": 3
-  },
-  "meta": {
-    "correlation_id": "corr_abc123",
-    "timestamp": "2025-08-07T10:30:00Z"
+    "page_size": 2,
+    "total_pages": 4,
+    "has_next_page": true,
+    "has_previous_page": false
   }
+}
+
+// Error — a flat {status, error} pair. No error code, no field-level details.
+{
+  "status": "Invalid request.",
+  "error": "title is required; description is required"
 }
 ```
+
+Notable differences from the original design, worth knowing before writing a
+client:
+
+- **No `data` envelope.** Single resources are returned bare; collections use
+  the resource name as the key (`games`, `characters`, …).
+- **Pagination is `metadata`**, not `pagination`, and uses `page_size` /
+  `total_count` (not `per_page` / `total`). It also carries `filtered_count`,
+  `available_states`, and `has_next_page` / `has_previous_page`.
+- **Errors are flat.** Multiple validation failures are joined into one
+  `error` string (`"title is required; description is required"`) rather than a
+  structured `details[]` array — so clients cannot reliably attribute an error
+  to a field.
+- **No `meta.correlation_id` in the body.** Correlation IDs travel in the
+  `X-Correlation-ID` response header instead.
+- Some unauthenticated failures return **plain text**, not JSON (e.g.
+  `GET /api/v1/games/1` without a token returns `no token found`).
 
 ### HTTP Status Code Usage
 ```
@@ -258,9 +271,9 @@ Accept: application/json
 ```
 
 ### Field Naming Conventions
-- **JSON Fields**: snake_case (user_id, created_at, game_config)
-- **Go Structs**: PascalCase (UserID, CreatedAt, GameConfig)
-- **Database Columns**: snake_case (user_id, created_at, game_config)
+- **JSON Fields**: snake_case (user_id, created_at, max_players)
+- **Go Structs**: PascalCase (UserID, CreatedAt, MaxPlayers)
+- **Database Columns**: snake_case (user_id, created_at, max_players)
 - **HTTP Headers**: Kebab-Case (X-Correlation-ID, Content-Type)
 
 ### Validation Strategy

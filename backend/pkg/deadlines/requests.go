@@ -1,32 +1,25 @@
 package deadlines
 
 import (
-	"net/http"
 	"time"
-
-	"actionphase/pkg/core"
 )
 
-// CreateDeadlineRequest represents the request to create a new deadline
+// CreateDeadlineRequest is the create-deadline body.
+//
+// Validation now lives on the huma input struct in huma_api.go (the tags there
+// are what the server enforces and what the spec publishes). This type is
+// retained as the named, JSON-tagged shape of that body for callers and tests.
 type CreateDeadlineRequest struct {
-	Title       string    `json:"title" validate:"required,min=1,max=100"`
+	Title       string    `json:"title"`
 	Description string    `json:"description"`
-	Deadline    time.Time `json:"deadline" validate:"required"`
+	Deadline    time.Time `json:"deadline"`
 }
 
-func (r *CreateDeadlineRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
-}
-
-// UpdateDeadlineRequest represents the request to update a deadline
+// UpdateDeadlineRequest is the update-deadline body. See CreateDeadlineRequest.
 type UpdateDeadlineRequest struct {
-	Title       string    `json:"title" validate:"required,min=1,max=100"`
+	Title       string    `json:"title"`
 	Description string    `json:"description"`
-	Deadline    time.Time `json:"deadline" validate:"required"`
-}
-
-func (r *UpdateDeadlineRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
+	Deadline    time.Time `json:"deadline"`
 }
 
 // DeadlineResponse represents a deadline in API responses

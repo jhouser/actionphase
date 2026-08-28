@@ -50,7 +50,7 @@ export function HelpTooltip({ text, align = 'left' }: HelpTooltipProps) {
           invisible group-hover:visible
           absolute ${alignClasses} bottom-full mb-2
           w-64 p-3 rounded-lg
-          bg-surface-raised border border-border-primary shadow-lg
+          bg-surface-raised border border-theme-default shadow-lg
           text-xs text-content-primary font-normal
           z-50 pointer-events-none
           whitespace-normal text-left

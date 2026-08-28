@@ -157,13 +157,13 @@ export function AddParticipantModal({ gameId, role, isOpen, onClose, onSuccess, 
         width: dropdownPos.width,
         zIndex: 9999,
       }}
-      className="bg-surface-overlay border border-border-primary rounded-lg shadow-xl max-h-56 overflow-y-auto"
+      className="bg-surface-overlay border border-theme-default rounded-lg shadow-xl max-h-56 overflow-y-auto"
     >
       {isSearching && (
-        <p className="px-4 py-3 text-sm text-text-secondary">Searching...</p>
+        <p className="px-4 py-3 text-sm text-content-secondary">Searching...</p>
       )}
       {!isSearching && searchResults.length === 0 && searchQuery.trim() && (
-        <p className="px-4 py-3 text-sm text-text-secondary">No users found matching "{searchQuery}"</p>
+        <p className="px-4 py-3 text-sm text-content-secondary">No users found matching "{searchQuery}"</p>
       )}
       {!isSearching && searchResults.map((user) => (
         <button
@@ -174,10 +174,10 @@ export function AddParticipantModal({ gameId, role, isOpen, onClose, onSuccess, 
             e.preventDefault();
             handleSelectUser(user);
           }}
-          className="w-full px-4 py-3 text-left bg-surface-overlay hover:bg-bg-secondary transition-colors border-b border-border-primary last:border-b-0"
+          className="w-full px-4 py-3 text-left bg-surface-overlay hover:surface-raised transition-colors border-b border-theme-default last:border-b-0"
         >
-          <div className="font-medium text-text-heading">{user.username}</div>
-          <div className="text-sm text-text-secondary">
+          <div className="font-medium text-content-primary">{user.username}</div>
+          <div className="text-sm text-content-secondary">
             Joined {new Date(user.created_at).toLocaleDateString()}
           </div>
         </button>
@@ -188,7 +188,7 @@ export function AddParticipantModal({ gameId, role, isOpen, onClose, onSuccess, 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={config.title}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="p-4 rounded-lg bg-semantic-info-subtle border border-border-primary">
+        <div className="p-4 rounded-lg bg-semantic-info-subtle border border-theme-default">
           <p className="text-sm text-content-primary">{config.description}</p>
         </div>
 

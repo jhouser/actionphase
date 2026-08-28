@@ -3,6 +3,7 @@ package auth
 import (
 	"actionphase/pkg/core"
 	db "actionphase/pkg/db/services"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -395,12 +396,16 @@ func TestAuthAPI_ContentTypeHandling(t *testing.T) {
 			description:    "Registration with invalid JSON should fail",
 		},
 		{
-			name:           "register_wrong_content_type",
-			endpoint:       "/api/v1/auth/register",
-			method:         "POST",
-			contentType:    "text/plain",
-			payload:        `{"username":"testuser","email":"test@example.com","password":"testpassword123"}`,
-			expectedStatus: 400,
+			name:        "register_wrong_content_type",
+			endpoint:    "/api/v1/auth/register",
+			method:      "POST",
+			contentType: "text/plain",
+			payload:     `{"username":"testuser","email":"test@example.com","password":"testpassword123"}`,
+			// 415, not 400: huma rejects an unsupported media type before
+			// parsing, which is the more accurate code. The chi handler read
+			// the body regardless of Content-Type and failed later as a 400.
+			// Either way the request is refused.
+			expectedStatus: 415,
 			description:    "Registration with wrong content type should fail",
 		},
 		{
@@ -502,17 +507,23 @@ func setupAuthAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 		r.Route("/auth", func(r chi.Router) {
 			authHandler := newTestHandler(app.Pool)
 			authHandler.App = app
-			r.Post("/register", authHandler.V1Register)
-			r.Post("/login", authHandler.V1Login)
+
+			// Mirrors production's middleware groups (see pkg/http/root.go):
+			// public, then the Verifier-only probe, then fully authenticated.
+			r.Group(func(r chi.Router) {
+				RegisterHumaAuthRateLimited(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
+			})
+			// /me carries Verifier but NOT Authenticator, which is what lets it
+			// answer 200 with a null user instead of 401.
+			r.Group(func(r chi.Router) {
+				r.Use(jwtauth.Verifier(tokenAuth))
+				RegisterHumaAuthProbe(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
+			})
 			r.Group(func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
-				r.Get("/refresh", authHandler.V1Refresh)
-				r.Get("/me", authHandler.V1Me)
-				r.Get("/preferences", authHandler.V1GetPreferences)
-				r.Put("/preferences", authHandler.V1UpdatePreferences)
-				r.Get("/users/search", authHandler.V1SearchUsers)
+				RegisterHumaAuthProtected(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
 			})
 		})
 	})
@@ -532,13 +543,15 @@ func setupAuthAPITestRouterWithRateLimitProduction(app *core.App, testDB *core.T
 		r.Route("/auth", func(r chi.Router) {
 			authHandler := newTestHandler(app.Pool)
 			authHandler.App = app
-			r.With(ratelimitmw.StrictRateLimit(false)).Post("/register", authHandler.V1Register)
-			r.With(ratelimitmw.StrictRateLimit(false)).Post("/login", authHandler.V1Login)
+			r.Group(func(r chi.Router) {
+				r.Use(ratelimitmw.StrictRateLimit(false))
+				RegisterHumaAuthRateLimited(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
+			})
 			r.Group(func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
-				r.Get("/refresh", authHandler.V1Refresh)
+				RegisterHumaAuthProtected(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
 			})
 		})
 	})
@@ -558,14 +571,19 @@ func setupAuthAPITestRouterWithRateLimit(app *core.App, testDB *core.TestDatabas
 		r.Route("/auth", func(r chi.Router) {
 			authHandler := newTestHandler(app.Pool)
 			authHandler.App = app
-			r.With(ratelimitmw.StrictRateLimit(true)).Post("/register", authHandler.V1Register)
-			r.With(ratelimitmw.StrictRateLimit(true)).Post("/login", authHandler.V1Login)
+			r.Group(func(r chi.Router) {
+				r.Use(ratelimitmw.StrictRateLimit(true))
+				RegisterHumaAuthRateLimited(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
+			})
+			r.Group(func(r chi.Router) {
+				r.Use(jwtauth.Verifier(tokenAuth))
+				RegisterHumaAuthProbe(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
+			})
 			r.Group(func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
-				r.Get("/refresh", authHandler.V1Refresh)
-				r.Get("/me", authHandler.V1Me)
+				RegisterHumaAuthProtected(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
 			})
 		})
 	})
@@ -670,23 +688,38 @@ func TestAuthAPI_V1Me(t *testing.T) {
 		core.AssertEqual(t, "", response["Token"], "Token should be empty")
 	})
 
-	t.Run("unauthorized_without_token", func(t *testing.T) {
+	// /me is a probe: it is mounted with jwtauth.Verifier but deliberately
+	// without Authenticator, so it answers 200 with a null user rather than
+	// 401. The frontend polls it to decide auth state without console errors.
+	// These cases previously asserted 401 because the test router mounted /me
+	// behind Authenticator, which production never did.
+	t.Run("null_user_without_token", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/auth/me", nil)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
 
-		core.AssertEqual(t, 401, w.Code, "Should return 401 Unauthorized")
+		core.AssertEqual(t, 200, w.Code, "Probe should return 200, not 401")
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		core.AssertNoError(t, err, "Response should be valid JSON")
+		core.AssertEqual(t, nil, response["user"], "User should be null")
 	})
 
-	t.Run("invalid_token", func(t *testing.T) {
+	t.Run("null_user_for_invalid_token", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/auth/me", nil)
 		req.Header.Set("Authorization", "Bearer invalid.token.here")
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
 
-		core.AssertEqual(t, 401, w.Code, "Should return 401 Unauthorized for invalid token")
+		core.AssertEqual(t, 200, w.Code, "Probe should return 200 for an invalid token")
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		core.AssertNoError(t, err, "Response should be valid JSON")
+		core.AssertEqual(t, nil, response["user"], "User should be null")
 	})
 }
 
@@ -732,9 +765,9 @@ func TestAuthAPI_Preferences(t *testing.T) {
 	t.Run("update_preferences", func(t *testing.T) {
 		payload := map[string]interface{}{
 			"preferences": map[string]interface{}{
-				"theme":                 "dark",
-				"notifications_enabled": true,
-				"email_notifications":   false,
+				"theme":             "dark",
+				"comment_read_mode": "auto",
+				"font_size":         "medium",
 			},
 		}
 		payloadBytes, _ := json.Marshal(payload)

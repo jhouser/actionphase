@@ -1,9 +1,10 @@
 package core
 
 import (
+	"time"
+
 	"github.com/go-playground/validator/v10"
 	"golang.org/x/crypto/bcrypt"
-	"time"
 )
 
 // PreferencesData represents the structured user preferences object.

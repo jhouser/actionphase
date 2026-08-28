@@ -32,7 +32,7 @@ This document describes the interaction patterns between different components in
 │                     Database Layer                              │
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │ Repository  │  │    sqlc     │  │ PostgreSQL  │              │
+│  │  Services   │  │    sqlc     │  │ PostgreSQL  │              │
 │  │ Interfaces  │  │  Generated  │  │  Database   │              │
 │  │             │  │   Queries   │  │             │              │
 │  └─────────────┘  └─────────────┘  └─────────────┘              │
@@ -48,7 +48,7 @@ This document describes the interaction patterns between different components in
 ```
 User Action → React Component → Custom Hook → API Client → HTTP Request
      ↓
-HTTP Middleware Stack → Route Handler → Service Layer → Repository
+HTTP Middleware Stack → Route Handler → Service Layer → sqlc Queries
      ↓
 Database Query → Results → Response → React Query Cache → UI Update
 ```
@@ -64,7 +64,7 @@ Database Query → Results → Response → React Query Cache → UI Update
    - Metrics records request start time
 6. **Handler Processing**: Game handler validates and processes request
 7. **Service Layer**: Business logic validation and orchestration
-8. **Repository Layer**: Database interaction via sqlc-generated queries
+8. **Data Access**: Services call sqlc-generated queries directly (no repository layer)
 9. **Response Chain**: Results bubble back up through layers
 10. **UI Update**: React Query updates cache and re-renders components
 
@@ -213,45 +213,50 @@ POST   /api/v1/games/{id}/join       → GameHandler.JoinGame()
 
 ### 2. Database Access Pattern
 
-**Repository Pattern Implementation:**
+**Service Layer Implementation:**
+
+> ❌ **There is no repository layer.** The sample originally here described a
+> `GameRepositoryInterface` / `GameRepository` pair that does not exist — as does
+> "Repository" in the diagram and request-flow list above. Services depend on the
+> pgx pool directly and call sqlc-generated queries. Corrected below from
+> `backend/pkg/db/services/games.go` (verified 2026-08-26).
+
 ```go
-// Interface in core package
-type GameRepositoryInterface interface {
-    CreateGame(ctx context.Context, game *Game) (*Game, error)
-    GetGame(ctx context.Context, id int) (*Game, error)
-    ListGamesByUser(ctx context.Context, userID int) ([]*Game, error)
-    UpdateGameStatus(ctx context.Context, id int, status string) error
+// Interface in core package (pkg/core/interfaces.go)
+type GameServiceInterface interface {
+    CreateGame(ctx context.Context, req CreateGameRequest) (*models.Game, error)
+    GetGame(ctx context.Context, gameID int32) (*models.Game, error)
+    GetGamesByUser(ctx context.Context, userID int32) ([]*models.Game, error)
 }
 
-// Implementation in db package
-type GameRepository struct {
-    DB *pgxpool.Pool
-    Queries *db.Queries // sqlc generated
+// Implementation in pkg/db/services — no repository, just the pool
+type GameService struct {
+    DB     *pgxpool.Pool
+    Logger *observability.Logger
 }
 
-func (r *GameRepository) CreateGame(ctx context.Context, game *Game) (*Game, error) {
-    // Use sqlc generated query
-    dbGame, err := r.Queries.CreateGame(ctx, db.CreateGameParams{
-        Title:      game.Title,
-        GmUserID:   int32(game.GMUserID),
-        MaxPlayers: int32(game.MaxPlayers),
-        GameConfig: game.GameConfig,
+// Compile-time check that the implementation satisfies the interface
+var _ core.GameServiceInterface = (*GameService)(nil)
+
+func (s *GameService) CreateGame(ctx context.Context, req core.CreateGameRequest) (*models.Game, error) {
+    queries := models.New(s.DB)
+
+    game, err := queries.CreateGame(ctx, models.CreateGameParams{
+        Title:      req.Title,
+        GmUserID:   req.GMUserID,
+        MaxPlayers: req.MaxPlayers,
+        // ... 20 columns total; character_sheet is COALESCE'd to '{}'
     })
     if err != nil {
         return nil, fmt.Errorf("creating game: %w", err)
     }
 
-    // Convert to domain model
-    return &Game{
-        ID:         int(dbGame.ID),
-        Title:      dbGame.Title,
-        GMUserID:   int(dbGame.GmUserID),
-        MaxPlayers: int(dbGame.MaxPlayers),
-        GameConfig: dbGame.GameConfig,
-        CreatedAt:  dbGame.CreatedAt,
-    }, nil
+    return &game, nil
 }
 ```
+
+Note that sqlc's generated types **are** the domain models here (`models.Game`),
+so there is no separate DB-model-to-domain-model conversion step.
 
 ### 3. Error Handling Pattern
 
@@ -267,21 +272,23 @@ func (e ValidationError) Error() string {
     return fmt.Sprintf("%s: %s", e.Field, e.Message)
 }
 
-// Service layer error handling
-func (s *GameService) CreateGame(ctx context.Context, game *Game) (*Game, error) {
+// Service layer error handling.
+// NOTE: there is no repository layer — services hold the pgx pool and call
+// sqlc-generated queries directly.
+func (s *GameService) CreateGame(ctx context.Context, req core.CreateGameRequest) (*models.Game, error) {
     // Validate business rules
-    if err := s.validateGame(game); err != nil {
+    if err := s.validateGame(req); err != nil {
         return nil, ValidationError{Field: "game", Message: err.Error()}
     }
 
-    // Call repository
-    createdGame, err := s.repository.CreateGame(ctx, game)
+    queries := models.New(s.DB)
+    createdGame, err := queries.CreateGame(ctx, models.CreateGameParams{ /* ... */ })
     if err != nil {
         // Wrap database errors
         return nil, fmt.Errorf("failed to create game: %w", err)
     }
 
-    return createdGame, nil
+    return &createdGame, nil
 }
 
 // Handler layer error response
@@ -455,13 +462,15 @@ const queryClient = new QueryClient({
 
 **Database Batch Queries:**
 ```go
-// Batch character creation
-func (r *CharacterRepository) CreateCharactersBatch(ctx context.Context, characters []*Character) error {
+// Batch character creation.
+// NOTE: `characters` has no `character_data` column — sheet content lives in
+// the separate EAV `character_data` TABLE (see ADR-002).
+func (s *CharacterService) CreateCharactersBatch(ctx context.Context, characters []*Character) error {
     batch := &pgx.Batch{}
 
     for _, char := range characters {
-        batch.Queue("INSERT INTO characters (game_id, user_id, name, character_data) VALUES ($1, $2, $3, $4)",
-            char.GameID, char.UserID, char.Name, char.CharacterData)
+        batch.Queue("INSERT INTO characters (game_id, user_id, name, character_type) VALUES ($1, $2, $3, $4)",
+            char.GameID, char.UserID, char.Name, char.CharacterType)
     }
 
     results := r.DB.SendBatch(ctx, batch)
@@ -566,17 +575,26 @@ HTTP Body      Struct Tags    Custom Validators   Service Logic    SQL Constrain
 
 **Validation Implementation:**
 ```go
+// Abridged from backend/pkg/games/requests.go. There is no `game_config` field.
 type CreateGameRequest struct {
-    Title       string                 `json:"title" validate:"required,min=1,max=100"`
-    Description string                 `json:"description" validate:"max=1000"`
-    MaxPlayers  int                    `json:"max_players" validate:"required,min=1,max=8"`
-    GameConfig  map[string]interface{} `json:"game_config"`
+    Title       string  `json:"title" validate:"required,min=3,max=255"`
+    Description string  `json:"description" validate:"required,min=10"`
+    Genre       string  `json:"genre,omitempty"`
+    MaxPlayers  int32   `json:"max_players,omitempty"`
+    IsAnonymous bool    `json:"is_anonymous"`
+    // ... plus scheduling fields and a sparse character_sheet override
 }
 
-func (h *GameHandler) validateCreateGame(req *CreateGameRequest) error {
-    validate := validator.New()
-    if err := validate.Struct(req); err != nil {
-        return fmt.Errorf("validation failed: %w", err)
+// Validation runs in Bind, NOT in the handler or service.
+//
+// A `validate` tag alone enforces nothing — something must call ValidateStruct.
+// And putting the check in the service is worse than useless for the caller:
+// a service-layer rejection renders as a 500 "unexpected error", so a user
+// typing a 2-character title would be told the server broke. Bind failures
+// render as 400 with the message, which is what bad input actually is.
+func (r *CreateGameRequest) Bind(req *http.Request) error {
+    if err := core.ValidateStruct(r); err != nil {
+        return err
     }
 
     // Business rule validation

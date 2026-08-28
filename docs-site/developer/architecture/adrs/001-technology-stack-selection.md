@@ -14,6 +14,13 @@ ActionPhase requires a technology stack that can support:
 
 The decision needed to balance performance, development speed, ecosystem maturity, and team expertise.
 
+> **Version note (checked 2026-08-26):** the versions below are those chosen
+> when this decision was made and are kept as the historical record. Current
+> versions in use: **Go 1.25**, **React 19**, **PostgreSQL 17**, **Vite 7**,
+> **Tailwind CSS 4** (CSS-first `@theme` config — no `tailwind.config.js`),
+> **TanStack Query 5**, **React Router 7**. The technology *choices* below all
+> still hold.
+
 ## Decision
 We selected the following technology stack:
 

@@ -2,7 +2,7 @@
  * UI Component Library
  *
  * Reusable components with built-in dark mode support using CSS variables.
- * All components use semantic color classes (bg-bg-primary, text-text-heading, etc.)
+ * All components use semantic color classes (surface-base, text-content-primary, etc.)
  * instead of manual dark: classes.
  *
  * @example

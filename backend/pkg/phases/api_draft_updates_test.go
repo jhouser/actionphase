@@ -80,7 +80,7 @@ func setupDraftUpdatesTestState(t *testing.T, testDB *core.TestDatabase, app *co
 func TestPhaseAPI_CreateDraftCharacterUpdate(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "draft_character_updates", "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_result_character_updates", "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -162,7 +162,7 @@ func TestPhaseAPI_CreateDraftCharacterUpdate(t *testing.T) {
 func TestPhaseAPI_GetDraftCharacterUpdates(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "draft_character_updates", "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_result_character_updates", "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -216,7 +216,7 @@ func TestPhaseAPI_GetDraftCharacterUpdates(t *testing.T) {
 func TestPhaseAPI_GetDraftUpdateCount(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "draft_character_updates", "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_result_character_updates", "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -283,7 +283,7 @@ func TestPhaseAPI_GetDraftUpdateCount(t *testing.T) {
 func TestPhaseAPI_UpdateDraftCharacterUpdate(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "draft_character_updates", "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_result_character_updates", "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -350,7 +350,7 @@ func TestPhaseAPI_UpdateDraftCharacterUpdate(t *testing.T) {
 func TestPhaseAPI_DraftCharacterUpdate_CrossGameMismatch(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "draft_character_updates", "action_results", "action_submissions", "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "action_result_character_updates", "action_results", "action_submissions", "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -404,7 +404,7 @@ func TestPhaseAPI_DraftCharacterUpdate_CrossGameMismatch(t *testing.T) {
 func TestPhaseAPI_DeleteDraftCharacterUpdate(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "draft_character_updates", "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_result_character_updates", "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)

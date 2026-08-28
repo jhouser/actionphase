@@ -2,22 +2,29 @@
 
 ## Deploying with Log Persistence
 
-### Option 1: Basic Deployment (Current - Logs NOT Persisted)
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
-⚠️ **Warning**: Logs are lost when containers are removed
+**Log persistence is already the default.** `scripts/deploy-production.sh` sets:
 
-### Option 2: With Log Persistence (Recommended)
 ```bash
-# Create log directories
-mkdir -p logs/{backend,frontend,nginx,postgres,backup}
-chown -R ubuntu:ubuntu logs/
-
-# Deploy with logging enabled
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.logging.yml up -d
+COMPOSE_FILES="-f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.logging.yml"
 ```
-✅ Logs persist even when containers are removed
+
+and falls back to the two-file form only if `docker-compose.logging.yml` is
+missing. Normal deploys need no special flags:
+
+```bash
+./scripts/deploy-production.sh
+```
+
+For manual invocations, export the same variable once per shell so every
+command targets the full stack:
+
+```bash
+export COMPOSE_FILES="-f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.logging.yml"
+docker-compose $COMPOSE_FILES up -d
+```
+
+> A bare `docker-compose <cmd>` uses only `docker-compose.yml` and will miss the
+> prod and logging overrides entirely.
 
 ---
 
@@ -26,16 +33,16 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compos
 ### Live Container Logs (Real-time)
 ```bash
 # All services
-docker-compose logs -f
+docker-compose $COMPOSE_FILES logs -f
 
 # Specific service
-docker-compose logs -f backend
+docker-compose $COMPOSE_FILES logs -f backend
 
 # Multiple services
-docker-compose logs -f backend nginx
+docker-compose $COMPOSE_FILES logs -f backend nginx
 
 # Last 100 lines
-docker-compose logs --tail 100 backend
+docker-compose $COMPOSE_FILES logs --tail 100 backend
 ```
 
 ### Persisted Application Logs (After enabling logging.yml)
@@ -60,13 +67,13 @@ tail -f logs/postgres/postgresql.log
 ### Search Container Logs
 ```bash
 # Search all backend logs for errors
-docker-compose logs backend | grep -i error
+docker-compose $COMPOSE_FILES logs backend | grep -i error
 
 # Search for specific correlation ID
-docker-compose logs backend | grep "correlation_id=abc123"
+docker-compose $COMPOSE_FILES logs backend | grep "correlation_id=abc123"
 
 # Search for user activity
-docker-compose logs backend | grep "user_id=42"
+docker-compose $COMPOSE_FILES logs backend | grep "user_id=42"
 ```
 
 ### Search Persisted Logs (JSON)
@@ -330,10 +337,10 @@ journalctl -u docker -since "2025-01-01" > docker-journal.log
 
 ```bash
 # View live backend logs
-docker-compose logs -f backend
+docker-compose $COMPOSE_FILES logs -f backend
 
 # Search for errors
-docker-compose logs backend | grep -i error
+docker-compose $COMPOSE_FILES logs backend | grep -i error
 
 # View last 100 backend logs as JSON
 tail -100 logs/backend/app.log | jq .

@@ -100,7 +100,7 @@ export function EditGameModal({ game, isOpen, onClose, onGameUpdated }: EditGame
   const bannerUpload = (
     <div className="space-y-2">
       <div className="flex items-center gap-1">
-        <label className="block text-sm font-medium text-text-primary">Game Banner <span className="text-content-secondary font-normal">(optional)</span></label>
+        <label className="block text-sm font-medium text-content-secondary">Game Banner <span className="text-content-secondary font-normal">(optional)</span></label>
         <HelpTooltip text="A wide horizontal image shown at the top of your game page. Best at 6:1 aspect ratio (e.g. 1200×200px) — images will be cropped to fit." />
       </div>
 

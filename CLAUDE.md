@@ -67,9 +67,8 @@ When an E2E test fails, you MUST:
 3. Check **`/backend/pkg/db/test_fixtures/`** for actual SQL files
 
 **Before E2E Testing**:
-1. Review **`frontend/e2e/STATUS.md`** for current E2E coverage
-2. Check **`frontend/e2e/README.md`** for complete guide and patterns
-3. Check **`/docs-site/developer/testing/E2E_QUICK_START.md`** for quick reference commands
+1. Check **`frontend/e2e/README.md`** for complete guide and patterns
+2. Check **`/docs-site/developer/testing/E2E_QUICK_START.md`** for quick reference commands
 
 ### Context File Quick Reference
 
@@ -219,7 +218,7 @@ curl -s -H "Authorization: Bearer $(cat /tmp/api-token.txt)" "http://localhost:3
 **Frontend Development**:
 ```bash
 # The frontend container serves Vite with HMR (started by `just up`).
-just test-frontend            # Run frontend tests (in container)
+just test-fe run              # Run frontend tests (in container)
 just test-fe watch            # Watch mode for development
 just lint-frontend            # eslint (in container)
 ```
@@ -228,7 +227,7 @@ just lint-frontend            # eslint (in container)
 ```bash
 just migration create <name> # Create new migration
 just migrate                  # Apply migrations to actionphase database
-just migrate_test             # Apply migrations to test database
+just reset-test-db            # Rebuild the test DB if it gets into a dirty state
 
 # ⚠️ CRITICAL: Always use 'actionphase' database name
 # Inside the compose network the host is `db`, not localhost:
@@ -259,19 +258,21 @@ just migrate_test             # Apply migrations to test database
 ```
 
 **Backend**:
+- Each test package clones its own database from a migrated template, so packages
+  run in parallel safely. Set `TEST_P=1` to serialize if debugging.
 - Unit tests with mocks: `just test-mocks` (FAST - run first)
-- Integration tests with DB: `SKIP_DB_TESTS=false just test`
+- Integration tests with DB: `just test` (sets `SKIP_DB_TESTS=false` itself) or `just test-integration`
 - API verification: `curl http://localhost:3000/api/v1/endpoint | jq`
 - Target: >80% coverage on service layer
 
 **Frontend**:
-- Component tests: `just test-frontend` (run before E2E)
+- Component tests: `just test-fe run` (run before E2E)
 - Watch mode: `just test-fe watch`
 - Test user interactions, not implementation
 
 **E2E Tests**:
 - **ONLY after unit + API + component tests pass**
-- Run synchronously: `npx playwright test --reporter=list` (NO `&`)
+- Run via `just e2e-desktop` / `just e2e-mobile` / `just e2e`, synchronously (NO `&`)
 - One concern per test
 - Use `data-testid` selectors, not class names
 - See `.claude/context/TESTING.md` E2E section for rules
@@ -303,12 +304,12 @@ just migrate_test             # Apply migrations to test database
 8. Run tests → `just test`
 
 **Frontend Flow**:
-1. API client method → `frontend/src/lib/api.ts`
+1. API client method → `frontend/src/lib/api/<domain>.ts`
 2. Custom hooks → `frontend/src/hooks/*.ts`
 3. **Write hook tests** → `*.test.ts`
 4. Implement components → `frontend/src/components/*.tsx`
 5. **Write component tests** → `*.test.tsx`
-6. Run tests → `just test-frontend`
+6. Run tests → `just test-fe run`
 
 **Then**: Test complete feature in UI before moving on
 
@@ -320,7 +321,8 @@ just migrate_test             # Apply migrations to test database
 
 ### Backend Core
 - `backend/pkg/core/interfaces.go` - All service interfaces
-- `backend/pkg/core/models.go` - Domain models
+- `backend/pkg/core/*.go` - Domain models, split per bounded context
+  (`games.go`, `characters.go`, `phases.go`, `notifications.go`, `constants.go`, `permissions.go`, ...)
 - `backend/pkg/http/root.go` - API routing and middleware
 - `backend/pkg/db/queries/` - SQL queries (generates code via sqlc)
 - `backend/pkg/db/services/` - Service implementations
@@ -330,7 +332,8 @@ just migrate_test             # Apply migrations to test database
   - Other services (games, characters, users, sessions, notifications)
 
 ### Frontend Core
-- `frontend/src/lib/api.ts` - API client with JWT interceptors
+- `frontend/src/lib/api/` - API client, split per domain (`client.ts` holds the
+  axios instance + JWT/refresh interceptors; `games.ts`, `characters.ts`, etc.)
 - `frontend/src/contexts/AuthContext.tsx` - Centralized auth state
 - `frontend/src/App.tsx` - Application setup
 - `frontend/src/hooks/` - Custom hooks
@@ -382,7 +385,6 @@ Location: `.claude/reference/`
 - **`/docs-site/developer/testing/COVERAGE_STATUS.md`** - Test coverage status and recommendations
 - **`/docs-site/developer/testing/TEST_DATA.md`** - Detailed test fixture documentation
 - **`/docs-site/developer/testing/E2E_QUICK_START.md`** - Quick reference for E2E testing (developer reference)
-- **`frontend/e2e/STATUS.md`** - Current E2E test coverage and plan
 - **`frontend/e2e/README.md`** - Complete E2E testing guide
 
 ---
@@ -437,8 +439,10 @@ import { Card, CardBody, Input, Button } from '@/components/ui';
 **Available UI Components:**
 
 **Layout Components:**
-- `<Card variant="default|elevated|bordered">` - Container with sections
+- `<Card variant="default|elevated|bordered|danger|warning|success">` - Container with sections
 - `<CardHeader>`, `<CardBody>`, `<CardFooter>` - Card sections
+- `<Modal>` - Dialog overlay
+- `<Drawer>` - Slide-in panel
 
 **Form Components:**
 - `<Input label="..." />` - Text input with label and validation
@@ -446,14 +450,17 @@ import { Card, CardBody, Input, Button } from '@/components/ui';
 - `<Select label="...">` - Dropdown select
 - `<Checkbox label="..." />` - Checkbox with label
 - `<Radio label="..." />` - Radio button
+- `<Toggle label="..." />` - On/off switch
 - `<DateTimeInput label="..." />` - Date/time picker
 - `<Label required optional>` - Standalone form label
 
 **Interactive Components:**
-- `<Button variant="primary|secondary|danger|ghost">` - Action buttons
-- `<Badge variant="primary|success|warning|danger">` - Status indicators
+- `<Button variant="primary|secondary|outline|danger|warning|success|ghost">` - Action buttons
+- `<Badge variant="primary|secondary|success|warning|danger|neutral">` - Status indicators (default `neutral`)
 - `<Alert variant="info|success|warning|danger">` - Notification boxes
-- `<Spinner size="sm|md|lg|xl">` - Loading indicator
+- `<Spinner size="sm|md|lg|xl" variant="primary|secondary|inverse">` - Loading indicator
+- `<HelpTooltip>` - Inline help
+- `<MetadataItem>`, `<MetadataGroup>`, `<MetadataSeparator>` - Metadata display
 
 **Common Patterns:**
 
@@ -521,9 +528,12 @@ import { MarkdownPreview } from '@/components/MarkdownPreview';
 **When You Can't Use UI Components:**
 
 For layout-only elements (flexbox containers, grids, etc.), use semantic CSS tokens:
-- `bg-bg-primary`, `bg-bg-secondary` - Backgrounds
-- `text-text-heading`, `text-text-primary` - Text colors
-- `border-border-primary` - Borders
+- `surface-base`, `surface-raised`, `surface-sunken` - Backgrounds
+- `text-content-primary`, `text-content-secondary` - Text colors
+- `border-theme-default`, `border-theme-strong` - Borders
+
+⚠️ **`bg-bg-*` and `border-border-*` are retired — they emit no CSS and render
+nothing.** Full verified list: `frontend/src/components/ui/README.md`.
 
 **Pre-Flight Checklist for New Components:**
 
@@ -533,7 +543,7 @@ Before committing any new React component, verify:
 - [ ] Uses `<Card>` instead of manual `<div>` containers
 - [ ] Uses `<Badge>` for status indicators
 - [ ] Uses `<Alert>` for notifications
-- [ ] Layout containers use `bg-bg-*` and `text-text-*` tokens
+- [ ] Layout containers use `surface-*`, `text-content-*`, `border-theme-*` tokens
 - [ ] Component tested in both light AND dark mode
 - [ ] Markdown content uses MarkdownPreview component
 

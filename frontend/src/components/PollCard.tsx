@@ -102,10 +102,10 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
       <CardHeader>
         <div className="flex justify-between items-start gap-4">
           <div className="flex-1">
-            <h4 className="text-lg font-semibold text-text-heading">{poll.question}</h4>
+            <h4 className="text-lg font-semibold text-content-primary">{poll.question}</h4>
 
             {/* Metadata row */}
-            <div className="flex items-center gap-3 mt-2 text-sm text-text-secondary">
+            <div className="flex items-center gap-3 mt-2 text-sm text-content-secondary">
               <span>
                 {deadlineInfo.isExpired ? 'Ended' : 'Ends'}: {deadlineInfo.text}
               </span>
@@ -135,12 +135,12 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
 
         {/* Your vote summary: shown to anyone who has voted on an active poll */}
         {canVote && !isExpired && poll.user_has_voted && !showVotingForm && (
-          <div className="mb-4 p-3 rounded-lg bg-bg-secondary border border-border-primary text-sm">
-            <span className="font-medium text-text-secondary">Your vote: </span>
+          <div className="mb-4 p-3 rounded-lg surface-raised border border-theme-default text-sm">
+            <span className="font-medium text-content-secondary">Your vote: </span>
             {fullPoll?.user_vote_other_response ? (
-              <span className="text-text-primary italic">"{fullPoll.user_vote_other_response}"</span>
+              <span className="text-content-secondary italic">"{fullPoll.user_vote_other_response}"</span>
             ) : fullPoll?.user_vote_option_id ? (
-              <span className="text-text-primary">
+              <span className="text-content-secondary">
                 {fullPoll.options?.find(o => o.id === fullPoll.user_vote_option_id)?.option_text ?? '—'}
               </span>
             ) : null}
@@ -225,11 +225,11 @@ export function PollCard({ poll, gameId, isGM, isAudience = false, gameState }: 
         {/* Hidden results: explain the absence rather than leaving a dead card */}
         {resultsHiddenFromMe && !showVotingForm && (
           <div
-            className="mt-4 flex items-start gap-2 p-3 rounded-lg bg-bg-secondary border border-border-primary"
+            className="mt-4 flex items-start gap-2 p-3 rounded-lg surface-raised border border-theme-default"
             data-testid="poll-results-hidden-notice"
           >
             <span aria-hidden="true">🔒</span>
-            <p className="text-sm text-text-secondary">
+            <p className="text-sm text-content-secondary">
               {isExpired
                 ? 'This poll is closed. The GM has hidden the results.'
                 : 'The GM has hidden the results of this poll.'}

@@ -1,6 +1,6 @@
 ---
 name: skill-developer
-description: Create and manage Claude Code skills following Anthropic best practices. Use when creating new skills, modifying skill-rules.json, understanding trigger patterns, working with hooks, debugging skill activation, or implementing progressive disclosure. Covers skill structure, YAML frontmatter, trigger types (keywords, intent patterns, file paths, content patterns), enforcement levels (block, suggest, warn), hook mechanisms (UserPromptSubmit, PreToolUse), session tracking, and the 500-line rule.
+description: Create and manage Claude Code skills following Anthropic best practices. Use when creating new skills, modifying skill-rules.json, understanding trigger patterns, working with hooks, debugging skill activation, or implementing progressive disclosure. Covers skill structure, YAML frontmatter, trigger types (keywords, intent patterns, file paths, content patterns), enforcement levels (block, suggest, warn), the UserPromptSubmit activation hook, and the 500-line rule.
 ---
 
 # Skill Developer Guide
@@ -27,23 +27,26 @@ Automatically activates when you mention:
 
 ## System Overview
 
-### Two-Hook Architecture
+### Activation Architecture
 
-**1. UserPromptSubmit Hook** (Proactive Suggestions)
+Skill activation rests on a **single hook**:
+
+**UserPromptSubmit Hook** (Proactive Suggestions)
 - **File**: `.claude/hooks/skill-activation-prompt.ts`
-- **Trigger**: BEFORE Claude sees user's prompt
+  (invoked by `skill-activation-prompt.sh`)
+- **Trigger**: BEFORE Claude sees the user's prompt
 - **Purpose**: Suggest relevant skills based on keywords + intent patterns
-- **Method**: Injects formatted reminder as context (stdout → Claude's input)
-- **Use Cases**: Topic-based skills, implicit work detection
+- **Method**: Injects a formatted reminder as context (stdout → Claude's input)
+- **Registered in**: `.claude/settings.local.json`
 
-**2. Stop Hook - Error Handling Reminder** (Gentle Reminders)
-- **File**: `.claude/hooks/error-handling-reminder.ts`
-- **Trigger**: AFTER Claude finishes responding
-- **Purpose**: Gentle reminder to self-assess error handling in code written
-- **Method**: Analyzes edited files for risky patterns, displays reminder if needed
-- **Use Cases**: Error handling awareness without blocking friction
+**Activation is advisory, not enforced.** Every skill uses
+`enforcement: "suggest"`; nothing blocks a tool call if a skill is skipped.
+There is **no `PreToolUse` hook**, no verification guard, and no session-state
+tracking in this project.
 
-**Philosophy Change (2025-10-27):** We moved away from blocking PreToolUse for Sentry/error handling. Instead, use gentle post-response reminders that don't block workflow but maintain code quality awareness.
+The other two registered hooks are unrelated to skills: `PostToolUse` tracks
+edited files, and `Stop` runs `just verify-quick`. See
+`.claude/hooks/README.md`.
 
 ### Configuration File
 
@@ -73,7 +76,7 @@ Defines:
 - Session-aware (don't repeat nag in same session)
 
 **Examples:**
-- `database-verification` - Verify table/column names before Prisma queries
+- `database-verification` - Verify table/column names before sqlc queries
 - `frontend-dev-guidelines` - Enforce React/TypeScript patterns
 
 **When to Use:**
@@ -165,11 +168,11 @@ echo '{"session_id":"test","prompt":"your test prompt"}' | \
   npx tsx .claude/hooks/skill-activation-prompt.ts
 ```
 
-**Test PreToolUse:**
+**Verify file triggers actually match.** A glob that matches nothing is a
+silently dead trigger — confirm before committing it:
+
 ```bash
-cat <<'EOF' | npx tsx .claude/hooks/skill-verification-guard.ts
-{"session_id":"test","tool_name":"Edit","tool_input":{"file_path":"test.ts"}}
-EOF
+ls frontend/src/components/**/*Poll*.tsx
 ```
 
 ### Step 4: Refine Patterns
@@ -177,7 +180,7 @@ EOF
 Based on testing:
 - Add missing keywords
 - Refine intent patterns to reduce false positives
-- Adjust file path patterns
+- Adjust file path patterns, re-checking that each still matches real files
 - Test content patterns against actual files
 
 ### Step 5: Follow Anthropic Best Practices
@@ -223,17 +226,6 @@ Based on testing:
 
 ## Skip Conditions & User Control
 
-### 1. Session Tracking
-
-**Purpose:** Don't nag repeatedly in same session
-
-**How it works:**
-- First edit → Hook blocks, updates session state
-- Second edit (same session) → Hook allows
-- Different session → Blocks again
-
-**State File:** `.claude/hooks/state/skills-used-{session_id}.json`
-
 ### 2. File Markers
 
 **Purpose:** Permanent skip for verified files
@@ -243,7 +235,7 @@ Based on testing:
 **Usage:**
 ```typescript
 // @skip-validation
-import { PrismaService } from './prisma';
+import { Queries } from './sqlc';
 // This file has been manually verified
 ```
 
@@ -253,16 +245,10 @@ import { PrismaService } from './prisma';
 
 **Purpose:** Emergency disable, temporary override
 
-**Global disable:**
-```bash
-export SKIP_SKILL_GUARDRAILS=true  # Disables ALL PreToolUse blocks
-```
-
-**Skill-specific:**
-```bash
-export SKIP_DB_VERIFICATION=true
-export SKIP_ERROR_REMINDER=true
-```
+Nothing to disable: activation is advisory, so no environment variable is
+needed (and none is implemented — `SKIP_SKILL_GUARDRAILS` and friends do not
+exist). To silence suggestions entirely, remove the `UserPromptSubmit` entry
+from `.claude/settings.local.json`.
 
 ---
 
@@ -314,15 +300,12 @@ Complete skill-rules.json schema:
 ### [HOOK_MECHANISMS.md](HOOK_MECHANISMS.md)
 Deep dive into hook internals:
 - UserPromptSubmit flow (detailed)
-- PreToolUse flow (detailed)
-- Exit code behavior table (CRITICAL)
-- Session state management
+- Exit code behavior table
 - Performance considerations
 
 ### [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 Comprehensive debugging guide:
 - Skill not triggering (UserPromptSubmit)
-- PreToolUse not blocking
 - False positives (too many triggers)
 - Hook not executing at all
 - Performance issues
@@ -372,9 +355,8 @@ See [TRIGGER_TYPES.md](TRIGGER_TYPES.md) for complete details.
 
 ### Skip Conditions
 
-- **Session tracking**: Automatic (prevents repeated nags)
-- **File markers**: `// @skip-validation` (permanent skip)
-- **Env vars**: `SKIP_SKILL_GUARDRAILS` (emergency disable)
+None. Suggestions are advisory and always shown when triggers match — there is
+no session tracking, no file marker, and no env override implemented.
 
 ### Anthropic Best Practices
 
@@ -393,10 +375,6 @@ Test hooks manually:
 # UserPromptSubmit
 echo '{"prompt":"test"}' | npx tsx .claude/hooks/skill-activation-prompt.ts
 
-# PreToolUse
-cat <<'EOF' | npx tsx .claude/hooks/skill-verification-guard.ts
-{"tool_name":"Edit","tool_input":{"file_path":"test.ts"}}
-EOF
 ```
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for complete debugging guide.
@@ -407,12 +385,11 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for complete debugging guide.
 
 **Configuration:**
 - `.claude/skills/skill-rules.json` - Master configuration
-- `.claude/hooks/state/` - Session tracking
-- `.claude/settings.json` - Hook registration
+- `.claude/settings.local.json` - Hook registration (there is no `settings.json`)
 
 **Hooks:**
-- `.claude/hooks/skill-activation-prompt.ts` - UserPromptSubmit
-- `.claude/hooks/error-handling-reminder.ts` - Stop event (gentle reminders)
+- `.claude/hooks/skill-activation-prompt.ts` - UserPromptSubmit (skill activation)
+- `.claude/hooks/README.md` - The other two hooks (PostToolUse, Stop)
 
 **All Skills:**
 - `.claude/skills/*/SKILL.md` - Skill content files

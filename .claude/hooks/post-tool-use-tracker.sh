@@ -77,14 +77,11 @@ get_build_command() {
 
     case "$repo" in
         frontend)
-            # Frontend uses npm build
-            if [[ -f "$project_root/frontend/package.json" ]]; then
-                echo "cd $project_root/frontend && npm run build"
-            fi
+            # Run through the container; host node_modules is stale/unmanaged.
+            echo "just build-frontend"
             ;;
         backend)
-            # Backend uses Go build via justfile
-            echo "cd $project_root && just test"
+            echo "just test"
             ;;
         *)
             echo ""
@@ -99,12 +96,11 @@ get_tsc_command() {
 
     case "$repo" in
         frontend)
-            # Frontend has Vite-specific TypeScript config
-            if [[ -f "$project_root/frontend/tsconfig.app.json" ]]; then
-                echo "cd $project_root/frontend && npx tsc --project tsconfig.app.json --noEmit"
-            elif [[ -f "$project_root/frontend/tsconfig.json" ]]; then
-                echo "cd $project_root/frontend && npx tsc --noEmit"
-            fi
+            # Use `just type-check` (which runs `tsc -b --force` in the frontend
+            # container). Never `tsc --noEmit` against frontend/tsconfig.json:
+            # it is a solution-style file ("files": [] + project references), so
+            # --noEmit checks ZERO files and exits 0 even with type errors.
+            echo "just type-check"
             ;;
         backend)
             # Backend is Go, no TypeScript

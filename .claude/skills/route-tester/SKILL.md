@@ -23,12 +23,19 @@ This skill provides patterns for testing authenticated routes in ActionPhase usi
 
 ActionPhase uses:
 - **JWT Bearer tokens** (Authorization header)
-- **Token lifetime**: 15 minutes (access token)
-- **Refresh tokens**: 7 days (stored in database sessions)
-- **Token storage**: Frontend stores in memory + localStorage
+- **One token, not two.** A single bearer token is issued at login with a
+  **7-day** lifetime (`core.SessionLifetime`). There is no separate refresh token
+  and no 15-minute access token.
+- **Claims**: `sub` (user ID, stringified), `session_id`, `exp`
+- **Session-backed**: every authenticated request revalidates the `session_id`
+  against Postgres (`ValidateSessionMiddleware`), so deleting a session row
+  revokes the token immediately
 - **Backend**: Go with Chi router + JWT middleware
 
-**See**: `/docs/adrs/003-authentication-strategy.md` for complete details
+Practical consequence for testing: a saved token in `/tmp/api-token.txt` stays
+valid for days, but is killed instantly by a logout or session revocation.
+
+**See**: `/docs-site/developer/architecture/adrs/003-authentication-strategy.md`
 
 ---
 
@@ -330,7 +337,7 @@ GET    /api/v1/games/{game_id}/phases/current         # Get current phase
 
 Before testing a route:
 
-- [ ] Backend server is running (`just dev`)
+- [ ] Backend server is running (`just up`)
 - [ ] Database is migrated (`just migrate`)
 - [ ] Test fixtures are loaded (if needed)
 - [ ] You have a valid token (`./api-test.sh login-player`)
@@ -357,7 +364,7 @@ actionphase=# SELECT * FROM posts WHERE game_id = 164 ORDER BY created_at DESC L
 actionphase=# SELECT * FROM sessions WHERE username = 'TestPlayer1';
 
 # Or use justfile command
-just psql
+just sh backend   # then: PGPASSWORD=example psql -h db -U postgres -d actionphase
 ```
 
 **Quick queries**:
@@ -390,7 +397,8 @@ WHERE id = 164;
 
 **Possible causes**:
 1. No token provided
-2. Token expired (15 minute lifetime)
+2. Token expired (7-day lifetime) — or its **session row was revoked/swept**,
+   which invalidates a token that is still within its `exp`
 3. Invalid token format
 4. JWT secret mismatch
 
@@ -426,7 +434,7 @@ cat /tmp/api-token.txt
 ./backend/scripts/api-test.sh test-token
 
 # Verify ownership in database
-just psql
+just sh backend   # then: PGPASSWORD=example psql -h db -U postgres -d actionphase
 ```
 
 ### 404 Not Found
@@ -443,7 +451,7 @@ just psql
 grep -r "your-route" backend/pkg/http/
 
 # Verify resource exists
-just psql
+just sh backend   # then: PGPASSWORD=example psql -h db -U postgres -d actionphase
 # Then: SELECT * FROM games WHERE id = 164;
 
 # Check server logs
@@ -467,7 +475,7 @@ just psql
 docker ps | grep postgres
 
 # Verify request body structure
-# Compare with models in backend/pkg/core/models.go
+# Compare with the domain models in backend/pkg/core/*.go (games.go, characters.go, ...)
 
 # Check correlation ID in error response
 # Search logs for that correlation ID
@@ -485,9 +493,9 @@ docker ps | grep postgres
 
 1. **Write/modify backend code**
 2. **Run unit tests**: `just test-mocks`
-3. **Start backend**: `just dev`
+3. **Start backend**: `just up`
 4. **Test API with curl/api-test.sh** ← **This skill**
-5. **Verify in database**: `just psql`
+5. **Verify in database**: `just sh backend   # then: PGPASSWORD=example psql -h db -U postgres -d actionphase`
 6. **Test in UI manually**
 7. **Write E2E tests**: Only after API works
 
@@ -520,15 +528,19 @@ docker ps | grep postgres
 # The API endpoint is confirmed working
 ```
 
-### Use with justfile Commands
+### Note on justfile Integration
+
+There are **no** `just api-*` recipes. Invoke the script directly:
 
 ```bash
-# justfile integrates api-test.sh
-just api-login          # Login as player
-just api-login-gm       # Login as GM
-just api-games          # List games
-just api-game 164       # Get game 164
+./backend/scripts/api-test.sh login-player
+./backend/scripts/api-test.sh games
+./backend/scripts/api-test.sh game 164
 ```
+
+Full subcommand list: `health`, `status`, `login`, `login-player`, `login-gm`,
+`test-token`, `games`, `game`, `characters`, `posts`, `create-post`, `comments`,
+`create-comment`, `test-mentions`.
 
 ---
 
@@ -550,7 +562,7 @@ API_BASE_URL=http://localhost:8080 ./backend/scripts/api-test.sh health
 
 ```bash
 # 1. Start backend
-just dev
+just up
 
 # 2. Login
 ./backend/scripts/api-test.sh login-player
@@ -563,7 +575,7 @@ curl -s -X POST \
   "http://localhost:3000/api/v1/your-endpoint" | jq '.'
 
 # 4. Verify in database
-just psql
+just sh backend   # then: PGPASSWORD=example psql -h db -U postgres -d actionphase
 # Then: SELECT * FROM your_table ORDER BY created_at DESC LIMIT 1;
 
 # 5. Test error cases

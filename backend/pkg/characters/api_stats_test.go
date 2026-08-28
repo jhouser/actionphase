@@ -15,6 +15,7 @@ import (
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -27,7 +28,7 @@ func setupStatsTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 	userService := &services.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
 	router := chi.NewRouter()
-	router.Route("/api/v1/characters/{id}", func(r chi.Router) {
+	router.Route("/api/v1/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(jwtauth.Authenticator(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -38,7 +39,7 @@ func setupStatsTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 			GameService:         &services.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 			NotificationService: services.NewNotificationService(testDB.Pool, app.ObsLogger),
 		}
-		r.Get("/stats", handler.GetCharacterStats)
+		RegisterHumaCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 	})
 	return router
 }
@@ -60,7 +61,7 @@ func setupGameStatsTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux
 	}
 
 	router := chi.NewRouter()
-	router.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
+	router.Route("/api/v1/games/{gameID}", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(jwtauth.Authenticator(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -72,7 +73,7 @@ func setupGameStatsTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux
 			GameService:         &services.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 			NotificationService: services.NewNotificationService(testDB.Pool, app.ObsLogger),
 		}
-		r.Get("/stats", handler.GetGameCharacterStats)
+		RegisterHumaGameCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 	})
 	return router
 }

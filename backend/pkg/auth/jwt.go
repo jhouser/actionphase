@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/golang-jwt/jwt/v5"
 	"net/http"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // Removed global tokenAuth - now using instance method with config secret
@@ -58,7 +59,7 @@ func (j *JWTHandler) CreateToken(user *core.User, meta SessionMetadata) (string,
 	tempToken := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
 			"sub": strconv.Itoa(user.ID),
-			"exp": time.Now().Add(time.Hour * 24 * 7).Unix(),
+			"exp": time.Now().Add(core.SessionLifetime).Unix(),
 		})
 
 	secretKey := []byte(j.App.Config.JWT.Secret)
@@ -79,7 +80,7 @@ func (j *JWTHandler) CreateToken(user *core.User, meta SessionMetadata) (string,
 		jwt.MapClaims{
 			"sub":        strconv.Itoa(user.ID),
 			"session_id": session.ID,
-			"exp":        time.Now().Add(time.Hour * 24 * 7).Unix(),
+			"exp":        time.Now().Add(core.SessionLifetime).Unix(),
 		})
 
 	finalTokenString, err := finalToken.SignedString(secretKey)

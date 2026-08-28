@@ -1,19 +1,29 @@
 package games
 
+// Request payload shapes, retained for the package's tests.
+//
+// The handlers no longer read these -- huma binds its own body types (see
+// huma_api.go), which carry the tags that are actually enforced. These remain
+// because the tests marshal them to build request bodies, and they are
+// serialization-identical to what the huma types accept.
+//
+// The `validate:` tags are deliberately gone. Unlike most packages, they really
+// did run here, via Bind calling core.ValidateStruct -- but nothing calls Bind
+// any more, so leaving them would suggest a guarantee that no longer holds. The
+// same limits now live on the huma body structs, where huma enforces them.
+
 import (
-	"actionphase/pkg/core"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"strings"
 	"time"
+
+	"actionphase/pkg/core"
 )
 
 // CreateGameRequest represents the request to create a new game
 type CreateGameRequest struct {
-	Title                   string              `json:"title" validate:"required,min=3,max=255"`
-	Description             string              `json:"description" validate:"required,min=10"`
+	Title                   string              `json:"title"`
+	Description             string              `json:"description"`
 	Genre                   string              `json:"genre,omitempty"`
 	StartDate               *core.LocalDateTime `json:"start_date,omitempty"`
 	EndDate                 *core.LocalDateTime `json:"end_date,omitempty"`
@@ -29,124 +39,62 @@ type CreateGameRequest struct {
 	CommonRoomCloseDay      *int16              `json:"common_room_close_day,omitempty"`
 	CommonRoomCloseTime     *string             `json:"common_room_close_time,omitempty"`
 	ScheduleTimezone        *string             `json:"schedule_timezone,omitempty"`
-	// Sparse per-game character sheet overrides. Absent means "all defaults",
-	// which the frontend owns; the server never fills them in.
-	//
-	// Kept as RawMessage rather than the typed struct because render.Bind decodes
-	// with a permissive decoder: an unknown key would be silently discarded here
-	// instead of rejected, defeating the whole point of the strict schema. It is
-	// parsed by core.UnmarshalCharacterSheetConfig in Bind below.
-	CharacterSheet json.RawMessage `json:"character_sheet,omitempty"`
-
-	// Parsed form of CharacterSheet, populated by Bind.
-	characterSheet core.CharacterSheetConfig
-}
-
-func (r *CreateGameRequest) Bind(req *http.Request) error {
-	// Run the `validate` tags first, so a blank title is reported as the bad
-	// field it is rather than being shadowed by a later, more specialized check.
-	if err := core.ValidateStruct(r); err != nil {
-		return err
-	}
-
-	// Parsed AND validated here, not only in the service. The service validates
-	// too (its invariants are its own to hold), but a violation surfacing there
-	// renders as a 500 "unexpected error" — so a GM typing a 25-character tab
-	// label would be told the server broke. Bind failures render as 400 with the
-	// message, which is what a bad label actually is.
-	parsed, err := core.UnmarshalCharacterSheetConfig(r.CharacterSheet)
-	if err != nil {
-		return err
-	}
-	validated, err := core.ValidateCharacterSheetConfig(parsed)
-	if err != nil {
-		return err
-	}
-	r.characterSheet = validated
-
-	return validateScheduleFields(r.CommonRoomOpenDay, r.CommonRoomCloseDay, r.CommonRoomOpenTime, r.CommonRoomCloseTime, r.ScheduleTimezone)
-}
-
-// CharacterSheetConfig returns the parsed per-game sheet config.
-func (r *CreateGameRequest) CharacterSheetConfig() core.CharacterSheetConfig {
-	return r.characterSheet
+	// Typed here, unlike the chi version's json.RawMessage: that was a
+	// workaround for render.Bind's permissive decoder silently dropping unknown
+	// keys, and huma rejects them natively.
+	CharacterSheet *core.CharacterSheetConfig `json:"character_sheet,omitempty"`
 }
 
 // UpdateGameStateRequest represents the request to update a game's state
 type UpdateGameStateRequest struct {
-	State string `json:"state" validate:"required"`
-}
-
-func (r *UpdateGameStateRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
+	State string `json:"state"`
 }
 
 // UpdateGameRequest represents the request to update game details
 type UpdateGameRequest struct {
-	Title                   string     `json:"title" validate:"required,min=3,max=255"`
-	Description             string     `json:"description" validate:"required,min=10"`
-	Genre                   string     `json:"genre,omitempty"`
-	StartDate               *time.Time `json:"start_date,omitempty"`
-	EndDate                 *time.Time `json:"end_date,omitempty"`
-	RecruitmentDeadline     *time.Time `json:"recruitment_deadline,omitempty"`
-	MaxPlayers              int32      `json:"max_players,omitempty"`
-	IsPublic                bool       `json:"is_public"`
-	IsAnonymous             bool       `json:"is_anonymous"`
-	AutoAcceptAudience      bool       `json:"auto_accept_audience"`
-	AllowGroupConversations bool       `json:"allow_group_conversations"`
-	PortraitAvatars         bool       `json:"portrait_avatars"`
-	BannerURL               *string    `json:"banner_url,omitempty"`
-	CommonRoomOpenDay       *int16     `json:"common_room_open_day,omitempty"`
-	CommonRoomOpenTime      *string    `json:"common_room_open_time,omitempty"`
-	CommonRoomCloseDay      *int16     `json:"common_room_close_day,omitempty"`
-	CommonRoomCloseTime     *string    `json:"common_room_close_time,omitempty"`
-	ScheduleTimezone        *string    `json:"schedule_timezone,omitempty"`
-	// Sparse per-game character sheet overrides. Absent means "all defaults",
-	// which the frontend owns; the server never fills them in.
-	//
-	// Kept as RawMessage rather than the typed struct because render.Bind decodes
-	// with a permissive decoder: an unknown key would be silently discarded here
-	// instead of rejected, defeating the whole point of the strict schema. It is
-	// parsed by core.UnmarshalCharacterSheetConfig in Bind below.
-	CharacterSheet json.RawMessage `json:"character_sheet,omitempty"`
-
-	// Parsed form of CharacterSheet, populated by Bind.
-	characterSheet core.CharacterSheetConfig
+	Title                   string                     `json:"title"`
+	Description             string                     `json:"description"`
+	Genre                   string                     `json:"genre,omitempty"`
+	StartDate               *time.Time                 `json:"start_date,omitempty"`
+	EndDate                 *time.Time                 `json:"end_date,omitempty"`
+	RecruitmentDeadline     *time.Time                 `json:"recruitment_deadline,omitempty"`
+	MaxPlayers              int32                      `json:"max_players,omitempty"`
+	IsPublic                bool                       `json:"is_public"`
+	IsAnonymous             bool                       `json:"is_anonymous"`
+	AutoAcceptAudience      bool                       `json:"auto_accept_audience"`
+	AllowGroupConversations bool                       `json:"allow_group_conversations"`
+	PortraitAvatars         bool                       `json:"portrait_avatars"`
+	BannerURL               *string                    `json:"banner_url,omitempty"`
+	CommonRoomOpenDay       *int16                     `json:"common_room_open_day,omitempty"`
+	CommonRoomOpenTime      *string                    `json:"common_room_open_time,omitempty"`
+	CommonRoomCloseDay      *int16                     `json:"common_room_close_day,omitempty"`
+	CommonRoomCloseTime     *string                    `json:"common_room_close_time,omitempty"`
+	ScheduleTimezone        *string                    `json:"schedule_timezone,omitempty"`
+	CharacterSheet          *core.CharacterSheetConfig `json:"character_sheet,omitempty"`
+	// EndTime has no counterpart here — see the huma updateGameBody for why
+	// this one takes RFC3339 where create also accepts datetime-local.
 }
 
-func (r *UpdateGameRequest) Bind(req *http.Request) error {
-	// Run the `validate` tags first, so a blank title is reported as the bad
-	// field it is rather than being shadowed by a later, more specialized check.
-	if err := core.ValidateStruct(r); err != nil {
-		return err
-	}
-
-	// Parsed AND validated here, not only in the service. The service validates
-	// too (its invariants are its own to hold), but a violation surfacing there
-	// renders as a 500 "unexpected error" — so a GM typing a 25-character tab
-	// label would be told the server broke. Bind failures render as 400 with the
-	// message, which is what a bad label actually is.
-	parsed, err := core.UnmarshalCharacterSheetConfig(r.CharacterSheet)
-	if err != nil {
-		return err
-	}
-	validated, err := core.ValidateCharacterSheetConfig(parsed)
-	if err != nil {
-		return err
-	}
-	r.characterSheet = validated
-
-	return validateScheduleFields(r.CommonRoomOpenDay, r.CommonRoomCloseDay, r.CommonRoomOpenTime, r.CommonRoomCloseTime, r.ScheduleTimezone)
+// ApplyToGameRequest represents the request to apply to join a game
+type ApplyToGameRequest struct {
+	Role    string `json:"role"`
+	Message string `json:"message,omitempty"`
 }
 
-// CharacterSheetConfig returns the parsed per-game sheet config.
-func (r *UpdateGameRequest) CharacterSheetConfig() core.CharacterSheetConfig {
-	return r.characterSheet
+// UpdateAutoAcceptAudienceRequest represents the request to toggle whether
+// audience applications are accepted without review.
+type UpdateAutoAcceptAudienceRequest struct {
+	AutoAcceptAudience bool `json:"auto_accept_audience"`
 }
 
+// validateScheduleFields enforces the all-or-nothing common room schedule rule.
+//
+// Still used: the huma create and update bodies call it from Resolve, so this is
+// live validation rather than a leftover.
 func validateScheduleFields(openDay, closeDay *int16, openTime, closeTime *string, tz *string) error {
 	// All five fields must be set together or all omitted — no partial schedules.
-	// The frontend tracks 4 visible fields; schedule_timezone is auto-appended from the browser on submit.
+	// The frontend tracks 4 visible fields; schedule_timezone is auto-appended
+	// from the browser on submit.
 	filledCount := 0
 	for _, v := range []bool{openDay != nil, closeDay != nil, openTime != nil, closeTime != nil, tz != nil} {
 		if v {
@@ -157,6 +105,8 @@ func validateScheduleFields(openDay, closeDay *int16, openTime, closeTime *strin
 		return errors.New("all schedule fields (open_day, open_time, close_day, close_time, schedule_timezone) must be set together or all omitted")
 	}
 
+	// Day range is also declared as minimum/maximum on the huma bodies, so this
+	// arm is only reachable through a direct call.
 	for _, day := range []*int16{openDay, closeDay} {
 		if day != nil && (*day < 0 || *day > 6) {
 			return errors.New("common room day must be 0 (Sunday) through 6 (Saturday)")
@@ -175,69 +125,4 @@ func validateScheduleFields(openDay, closeDay *int16, openTime, closeTime *strin
 		}
 	}
 	return nil
-}
-
-// ApplyToGameRequest represents the request to apply to join a game
-type ApplyToGameRequest struct {
-	Role    string `json:"role" validate:"required"`
-	Message string `json:"message,omitempty"`
-}
-
-func (r *ApplyToGameRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
-}
-
-// ReviewApplicationRequest represents the request to review a game application
-type ReviewApplicationRequest struct {
-	Action string `json:"action" validate:"required"` // "approve" or "reject"
-}
-
-func (r *ReviewApplicationRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
-}
-
-// LootTableItemRequest is a single item within a loot table. Data is the
-// GM-authored JSON blob describing the item; it is stored verbatim and parsed by
-// the frontend when the item is granted, so it must be present and well-formed.
-type LootTableItemRequest struct {
-	Name string `json:"name" validate:"required"`
-	Data string `json:"data" validate:"required"`
-}
-
-// validateLootTableItems enforces the `validate` tags above. The struct tags are
-// not executed anywhere in this package (see .claude/planning/request-validation.md),
-// so the checks are explicit.
-func validateLootTableItems(items []LootTableItemRequest) error {
-	for i, item := range items {
-		if strings.TrimSpace(item.Name) == "" {
-			return fmt.Errorf("loot table item %d: name is required", i+1)
-		}
-		if strings.TrimSpace(item.Data) == "" {
-			return fmt.Errorf("loot table item %d: data is required", i+1)
-		}
-		if !json.Valid([]byte(item.Data)) {
-			return fmt.Errorf("loot table item %d (%q): data must be valid JSON", i+1, item.Name)
-		}
-	}
-	return nil
-}
-
-type UpdateLootTableRequest struct {
-	Name  string                 `json:"name" validate:"required"`
-	Items []LootTableItemRequest `json:"items"`
-}
-
-func (r *UpdateLootTableRequest) Bind(req *http.Request) error {
-	if strings.TrimSpace(r.Name) == "" {
-		return errors.New("loot table name is required")
-	}
-	return validateLootTableItems(r.Items)
-}
-
-type UpdateLootTableContentsRequest struct {
-	Items []LootTableItemRequest `json:"items"`
-}
-
-func (r *UpdateLootTableContentsRequest) Bind(req *http.Request) error {
-	return validateLootTableItems(r.Items)
 }

@@ -77,7 +77,7 @@ export function InactiveCharactersList({ gameId }: InactiveCharactersListProps) 
             {characters.map((character) => (
               <div
                 key={character.id}
-                className="p-4 rounded-lg border border-border-primary bg-surface-raised"
+                className="p-4 rounded-lg border border-theme-default bg-surface-raised"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">

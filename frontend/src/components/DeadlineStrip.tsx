@@ -178,7 +178,7 @@ export function DeadlineStrip({
 
   return (
     <>
-      <div className="border-t border-border-primary pt-4 pb-4">
+      <div className="border-t border-theme-default pt-4 pb-4">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2 min-w-0">
@@ -378,7 +378,7 @@ export function DeadlineStrip({
                 max="720"
                 value={extendHours}
                 onChange={(e) => setExtendHours(Math.max(1, Math.min(720, parseInt(e.target.value) || 24)))}
-                className="w-24 px-3 py-2 border border-border-primary rounded bg-surface-secondary text-content-primary focus:outline-none focus:ring-2 focus:ring-interactive-primary"
+                className="w-24 px-3 py-2 border border-theme-default rounded bg-surface-secondary text-content-primary focus:outline-none focus:ring-2 focus:ring-interactive-primary"
               />
             </div>
 
@@ -388,7 +388,7 @@ export function DeadlineStrip({
                 const currentDate = new Date(currentDeadline.deadline);
                 const newDate = new Date(currentDate.getTime() + extendHours * 60 * 60 * 1000);
                 return (
-                  <div className="mt-4 p-3 bg-surface-tertiary border border-border-primary rounded">
+                  <div className="mt-4 p-3 bg-surface-tertiary border border-theme-default rounded">
                     <p className="text-xs text-content-tertiary mb-1">Current deadline:</p>
                     <p className="text-sm text-content-secondary mb-2">
                       {currentDate.toLocaleString()}

@@ -414,7 +414,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
     return (
       <div className="flex justify-center items-center py-12">
         <Spinner size="lg" />
-        <p className="ml-3 text-text-secondary">Loading comment...</p>
+        <p className="ml-3 text-content-secondary">Loading comment...</p>
       </div>
     );
   }
@@ -459,7 +459,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
       </div>
 
       {/* Tab Navigation */}
-      <div className="border-b border-border-primary mb-6">
+      <div className="border-b border-theme-default mb-6">
         <nav className="flex space-x-6 md:space-x-8">
           <button
             onClick={() => {
@@ -469,8 +469,8 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
             }}
             className={`py-3 md:py-2 px-1 border-b-[3px] md:border-b-2 font-semibold md:font-medium text-base md:text-sm transition-colors ${
               activeTab === 'posts'
-                ? 'border-accent-primary text-interactive-primary'
-                : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border-secondary'
+                ? 'border-interactive-primary text-interactive-primary'
+                : 'border-transparent text-content-secondary hover:text-content-secondary hover:border-theme-strong'
             }`}
           >
             Posts
@@ -483,8 +483,8 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
             }}
             className={`py-3 md:py-2 px-1 border-b-[3px] md:border-b-2 font-semibold md:font-medium text-base md:text-sm transition-colors ${
               activeTab === 'newComments'
-                ? 'border-accent-primary text-interactive-primary'
-                : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border-secondary'
+                ? 'border-interactive-primary text-interactive-primary'
+                : 'border-transparent text-content-secondary hover:text-content-secondary hover:border-theme-strong'
             }`}
           >
             New Comments
@@ -497,12 +497,12 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
             }}
             className={`py-3 md:py-2 px-1 border-b-[3px] md:border-b-2 font-semibold md:font-medium text-base md:text-sm transition-colors ${
               activeTab === 'polls'
-                ? 'border-accent-primary text-interactive-primary'
-                : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border-secondary'
+                ? 'border-interactive-primary text-interactive-primary'
+                : 'border-transparent text-content-secondary hover:text-content-secondary hover:border-theme-strong'
             }`}
           >
             Polls {unvotedPollsCount > 0 && !pollsLoading && (
-              <span className="ml-1 inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-accent-primary text-white">
+              <span className="ml-1 inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-interactive-primary text-white">
                 {unvotedPollsCount}
               </span>
             )}
@@ -525,9 +525,9 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
         <>
           {/* Draft Post Preview — GM only, pending phase only */}
           {isPendingPhase && draftPost && (
-            <div className="border border-dashed border-border-default rounded-lg p-4 mb-4 bg-bg-secondary" data-testid="draft-post-preview">
+            <div className="border border-dashed border-theme-default rounded-lg p-4 mb-4 surface-raised" data-testid="draft-post-preview">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary bg-bg-tertiary px-2 py-0.5 rounded">
+                <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary surface-sunken px-2 py-0.5 rounded">
                   DRAFT — not visible to players
                 </span>
               </div>

@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"testing"
 
+	"actionphase/pkg/humaconfig"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
 )
@@ -38,18 +40,27 @@ func setupApplicationsTestRouter(app *core.App, testDB *core.TestDatabase) *chi.
 				ActionSubmissionService: &dbactions.ActionSubmissionService{DB: testDB.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(testDB.Pool, app.ObsLogger)},
 			}
 
-			// Public routes (no authentication required)
+			// Public routes (no authentication required), mirroring
+			// production's grouping: Verifier without Authenticator, plus
+			// GameMiddleware for the game-scoped route.
 			r.Group(func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
-				r.With(gameHandler.GameMiddleware()).Get("/{gameID}/applicants", gameHandler.GetPublicGameApplicants)
+				r.Group(func(r chi.Router) {
+					r.Use(gameHandler.GameMiddleware())
+					RegisterHumaGamesPublicApplicants(humaconfig.New(r, "ActionPhase API", "1.0.0"), &gameHandler)
+				})
 			})
 
 			// Authenticated routes
 			r.Group(func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
+				r.Use(core.AdminModeMiddleware)
 
-				r.With(gameHandler.GameMiddleware()).Get("/{gameID}/applications", gameHandler.GetGameApplications)
+				r.Route("/{gameID}", func(r chi.Router) {
+					r.Use(gameHandler.GameMiddleware())
+					RegisterHumaGameScoped(humaconfig.New(r, "ActionPhase API", "1.0.0"), &gameHandler)
+				})
 			})
 		})
 	})
@@ -85,6 +96,7 @@ func TestGetPublicGameApplicants_Success(t *testing.T) {
 		Email:    "player1@example.com",
 	})
 	core.AssertNoError(t, err, "Player 1 creation should succeed")
+	testDB.MarkUserVerified(t, player1.ID)
 
 	player2, err := userService.CreateUser(&core.User{
 		Username: "testplayer2",
@@ -92,6 +104,7 @@ func TestGetPublicGameApplicants_Success(t *testing.T) {
 		Email:    "player2@example.com",
 	})
 	core.AssertNoError(t, err, "Player 2 creation should succeed")
+	testDB.MarkUserVerified(t, player2.ID)
 
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	applicationService := &db.GameApplicationService{DB: testDB.Pool}

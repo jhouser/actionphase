@@ -3,8 +3,12 @@ package http
 import (
 	"actionphase/pkg/auth"
 	dbsvc "actionphase/pkg/db/services"
+	"actionphase/pkg/humaconfig"
 	"os"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/jwtauth/v5"
 )
 
 // TestHandlerTestContext_Example demonstrates how to use the handler test infrastructure
@@ -31,8 +35,15 @@ func TestHandlerTestContext_Example(t *testing.T) {
 		IPBanService:          &dbsvc.IPBanService{DB: pool, Logger: ctx.App.ObsLogger},
 		FingerprintBanService: &dbsvc.FingerprintBanService{DB: pool, Logger: ctx.App.ObsLogger},
 	}
-	ctx.Router.Post("/api/v1/auth/login", authHandler.V1Login)
-	ctx.Router.Get("/api/v1/auth/me", authHandler.V1Me)
+	// Auth is huma-registered. /me sits in its own group with Verifier only,
+	// matching production, so it answers 200 with a null user when anonymous.
+	ctx.Router.Route("/api/v1/auth", func(r chi.Router) {
+		auth.RegisterHumaAuthRateLimited(humaconfig.New(r, "ActionPhase API", "1.0.0"), authHandler)
+		r.Group(func(r chi.Router) {
+			r.Use(jwtauth.Verifier(jwtauth.New("HS256", []byte(ctx.App.Config.JWT.Secret), nil)))
+			auth.RegisterHumaAuthProbe(humaconfig.New(r, "ActionPhase API", "1.0.0"), authHandler)
+		})
+	})
 
 	t.Run("login with valid credentials", func(t *testing.T) {
 		resp := ctx.POST("/api/v1/auth/login", map[string]string{
@@ -109,7 +120,10 @@ func TestHandlerTestContext_ErrorResponses(t *testing.T) {
 		IPBanService:          &dbsvc.IPBanService{DB: pool, Logger: ctx.App.ObsLogger},
 		FingerprintBanService: &dbsvc.FingerprintBanService{DB: pool, Logger: ctx.App.ObsLogger},
 	}
-	ctx.Router.Post("/api/v1/auth/login", authHandler.V1Login)
+	// Auth is huma-registered.
+	ctx.Router.Route("/api/v1/auth", func(r chi.Router) {
+		auth.RegisterHumaAuthRateLimited(humaconfig.New(r, "ActionPhase API", "1.0.0"), authHandler)
+	})
 
 	t.Run("login with missing username", func(t *testing.T) {
 		resp := ctx.POST("/api/v1/auth/login", map[string]string{

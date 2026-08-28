@@ -15,6 +15,7 @@ import (
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -53,14 +54,11 @@ func setupCharacterManagementTestRouter(app *core.App, testDB *core.TestDatabase
 			GameService:         &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 			NotificationService: db.NewNotificationService(testDB.Pool, app.ObsLogger),
 		}
-		r.Put("/{id}/rename", handler.RenameCharacter)
-		r.Delete("/{id}", handler.DeleteCharacter)
-		r.Post("/{id}/approve", handler.ApproveCharacter)
-		r.Post("/{id}/assign", handler.AssignNPC)
-		r.Put("/{id}/reassign", handler.ReassignCharacter)
-		r.Post("/{id}/data", handler.SetCharacterData)
+		RegisterHumaCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 	})
-	router.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
+	// Mounted at the game root rather than .../characters: the huma operations
+	// carry the /characters segment themselves, matching production.
+	router.Route("/api/v1/games/{gameID}", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(jwtauth.Authenticator(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -73,7 +71,7 @@ func setupCharacterManagementTestRouter(app *core.App, testDB *core.TestDatabase
 			GameService:         &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 			NotificationService: db.NewNotificationService(testDB.Pool, app.ObsLogger),
 		}
-		r.Get("/inactive", handler.ListInactiveCharacters)
+		RegisterHumaGameCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 	})
 	return router
 }

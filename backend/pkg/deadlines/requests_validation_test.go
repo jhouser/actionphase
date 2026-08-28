@@ -14,8 +14,8 @@ import (
 	db "actionphase/pkg/db/services"
 )
 
-// TestDeadlineRequestValidation covers the `validate` struct tags in
-// requests.go, which are executed by core.ValidateStruct from each Bind.
+// TestDeadlineRequestValidation covers request validation for the deadline
+// endpoints, now enforced by the huma input tags in huma_api.go.
 //
 // Both request types require a title and a deadline; description is optional
 // and the frontend sends it as "" when the GM leaves it blank, so that case is
@@ -63,25 +63,29 @@ func TestDeadlineRequestValidation(t *testing.T) {
 		w := post(t, fmt.Sprintf(`{"description": "d", "deadline": %q}`, future))
 
 		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Missing title should be rejected")
-		if !bytes.Contains(w.Body.Bytes(), []byte("title is required")) {
-			t.Errorf("expected 'title is required' in body, got %q", w.Body.String())
+		if !bytes.Contains(w.Body.Bytes(), []byte("required property title")) {
+			t.Errorf("expected a missing-title message, got %q", w.Body.String())
 		}
 	})
 
 	t.Run("rejects a whitespace-only title", func(t *testing.T) {
+		// Regression guard: huma's minLength counts raw characters, so without
+		// the trimming resolver (humaconfig.TrimStrings, wired from
+		// deadlineBody.Resolve) this returned 201 and stored a blank title.
 		w := post(t, fmt.Sprintf(`{"title": "   ", "description": "d", "deadline": %q}`, future))
 
 		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Whitespace-only title should be rejected")
+		if !bytes.Contains(w.Body.Bytes(), []byte("must not be blank")) {
+			t.Errorf("expected a blank-title message, got %q", w.Body.String())
+		}
 	})
 
 	t.Run("rejects a missing deadline", func(t *testing.T) {
-		// A zero time.Time fails `required` because the validator is built with
-		// WithRequiredStructEnabled, which makes it descend into struct fields.
 		w := post(t, `{"title": "No date", "description": "d"}`)
 
 		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Missing deadline should be rejected")
-		if !bytes.Contains(w.Body.Bytes(), []byte("deadline is required")) {
-			t.Errorf("expected 'deadline is required' in body, got %q", w.Body.String())
+		if !bytes.Contains(w.Body.Bytes(), []byte("required property deadline")) {
+			t.Errorf("expected a missing-deadline message, got %q", w.Body.String())
 		}
 	})
 
@@ -94,14 +98,14 @@ func TestDeadlineRequestValidation(t *testing.T) {
 	})
 
 	t.Run("rejects a title longer than the column", func(t *testing.T) {
-		// game_deadlines.title is VARCHAR(100). The tag said max=255, so a
-		// 150-character title passed validation and then failed on INSERT --
+		// game_deadlines.title is VARCHAR(100). An earlier tag said max=255, so
+		// a 150-character title passed validation and then failed on INSERT --
 		// a 500 for what is really a bad request.
 		w := post(t, fmt.Sprintf(`{"title": %q, "description": "d", "deadline": %q}`,
 			strings.Repeat("a", 150), future))
 
 		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Over-length title should be rejected")
-		if !bytes.Contains(w.Body.Bytes(), []byte("title must be at most 100 characters")) {
+		if !bytes.Contains(w.Body.Bytes(), []byte("expected length <= 100")) {
 			t.Errorf("expected a max-length message, got %q", w.Body.String())
 		}
 	})

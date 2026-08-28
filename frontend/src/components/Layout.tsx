@@ -126,11 +126,11 @@ export const Layout = ({ children }: LayoutProps) => {
                   {/* Desktop Dropdown Menu */}
                   {isUserMenuOpen && (
                     <div className="absolute right-0 top-full pt-1 w-48 z-50">
-                      <div className="surface-raised rounded-md shadow-lg border border-border-primary">
+                      <div className="surface-raised rounded-md shadow-lg border border-theme-default">
                         <div className="py-1">
                           <Link
                             to="/settings"
-                            className="block px-4 py-2 text-sm text-content-primary hover:bg-bg-secondary transition-colors"
+                            className="block px-4 py-2 text-sm text-content-primary hover:surface-raised transition-colors"
                             onClick={() => setIsUserMenuOpen(false)}
                           >
                             <div className="flex items-center space-x-2">
@@ -146,7 +146,7 @@ export const Layout = ({ children }: LayoutProps) => {
                           {currentUser?.is_admin && (
                             <Link
                               to="/admin"
-                              className="block px-4 py-2 text-sm text-content-primary hover:bg-bg-secondary transition-colors"
+                              className="block px-4 py-2 text-sm text-content-primary hover:surface-raised transition-colors"
                               onClick={() => setIsUserMenuOpen(false)}
                             >
                               <div className="flex items-center space-x-2">
@@ -158,11 +158,11 @@ export const Layout = ({ children }: LayoutProps) => {
                             </Link>
                           )}
 
-                          <div className="border-t border-border-primary my-1"></div>
+                          <div className="border-t border-theme-default my-1"></div>
 
                           <button
                             onClick={handleLogout}
-                            className="w-full text-left px-4 py-2 text-sm text-content-primary hover:bg-bg-secondary transition-colors"
+                            className="w-full text-left px-4 py-2 text-sm text-content-primary hover:surface-raised transition-colors"
                           >
                             <div className="flex items-center space-x-2">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -45,7 +45,7 @@ export function VerifyEmailPage() {
   // Loading state while verifying
   if (isValidating) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-bg-primary">
+      <div className="flex items-center justify-center min-h-screen surface-base">
         <Card variant="elevated" padding="md" className="max-w-md w-full">
           <CardBody>
             <div className="flex flex-col items-center justify-center py-8">
@@ -61,7 +61,7 @@ export function VerifyEmailPage() {
   // Success state
   if (success) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-bg-primary">
+      <div className="flex items-center justify-center min-h-screen surface-base">
         <Card variant="elevated" padding="md" className="max-w-md w-full">
           <CardHeader>
             <h2 className="text-2xl font-bold text-content-primary">Email Verified!</h2>
@@ -86,7 +86,7 @@ export function VerifyEmailPage() {
 
   // Error state
   return (
-    <div className="flex items-center justify-center min-h-screen bg-bg-primary">
+    <div className="flex items-center justify-center min-h-screen surface-base">
       <Card variant="elevated" padding="md" className="max-w-md w-full">
         <CardHeader>
           <h2 className="text-2xl font-bold text-content-primary">Verification Failed</h2>

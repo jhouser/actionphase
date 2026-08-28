@@ -17,6 +17,7 @@ import (
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -54,9 +55,13 @@ func setupVoteRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				CharacterService:    &dbservices.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger},
 				NotificationService: dbservices.NewNotificationService(testDB.Pool, app.ObsLogger),
 			}
-			r.With(gameHandler.GameMiddleware()).Post("/games/{gameID}/polls", handler.CreatePoll)
-			r.Post("/polls/{pollId}/vote", handler.SubmitVote)
-			r.Get("/polls/{pollId}", handler.GetPoll)
+			r.Route("/games/{gameID}", func(r chi.Router) {
+				r.Use(gameHandler.GameMiddleware())
+				RegisterHumaGamePolls(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
+			})
+			r.Route("/polls", func(r chi.Router) {
+				RegisterHumaPolls(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
+			})
 		})
 	})
 
@@ -175,7 +180,7 @@ func TestPollVote_Outsider_CannotVote_403(t *testing.T) {
 func TestPollVote_AudienceMember_CannotVote_403(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "poll_votes", "poll_options", "common_room_polls", "game_audience", "game_participants", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "poll_votes", "poll_options", "common_room_polls", "game_participants", "games", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupVoteRouter(app, testDB)

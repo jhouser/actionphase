@@ -1,25 +1,31 @@
 ---
 name: frontend-dev-guidelines
-description: Frontend development guidelines for ActionPhase React/TypeScript application. Modern patterns including Suspense, lazy loading, useSuspenseQuery, file organization with features directory, Tailwind CSS styling with custom UI components, React Router, dark mode with CSS variables, performance optimization, and TypeScript best practices. Use when creating components, pages, features, fetching data, styling, routing, or working with frontend code.
+description: Frontend development guidelines for the ActionPhase React/TypeScript app. Covers the real component layout (flat components/ + pages/, no features directory), TanStack Query data fetching with useQuery, React Router 7 createBrowserRouter, the @/components/ui library, Tailwind v4 semantic tokens for dark mode, and TypeScript standards. Use when creating components, pages, fetching data, styling, routing, or working with frontend code.
 ---
 
 # Frontend Development Guidelines
 
 ## Purpose
 
-Comprehensive guide for modern React development, emphasizing Suspense-based data fetching, lazy loading, proper file organization, and performance optimization.
+Guide for React development in ActionPhase as the codebase actually is: a flat
+`components/` + `pages/` layout, TanStack Query with `useQuery`, React Router 7's
+data-router API, and an in-house UI component library styled with Tailwind v4
+semantic tokens.
+
+> **Rewritten 2026-08-26.** The previous version of this skill described a
+> different project: it prescribed a `features/` directory, `useSuspenseQuery` as
+> the primary fetching pattern, a `SuspenseLoader` component, a `routes/`
+> directory, and a component template importing **MUI** (`@mui/material`). None
+> of those exist here — MUI is not a dependency. Everything below is verified
+> against the codebase; see `.claude/DOC_AUDIT_INVENTORY.md`.
 
 ## When to Use This Skill
 
-- Creating new components or pages
-- Building new features
-- Fetching data with TanStack Query (React Query)
-- Setting up routing with React Router
-- Styling components with Tailwind CSS and UI component library
-- Implementing dark mode with CSS variables
-- Performance optimization
-- Organizing frontend code
-- TypeScript best practices
+- Creating components or pages
+- Fetching data with TanStack Query
+- Adding routes
+- Styling components / dark mode
+- TypeScript patterns in the frontend
 
 ---
 
@@ -27,379 +33,293 @@ Comprehensive guide for modern React development, emphasizing Suspense-based dat
 
 ### New Component Checklist
 
-Creating a component? Follow this checklist:
+- [ ] Put it in `frontend/src/components/` (flat, or an existing topical subdir)
+- [ ] Export as a **named** `export const`/`export function` — this is the
+      dominant convention (~180 files vs 6 using default exports)
+- [ ] Use the UI library first: `@/components/ui` (`Button`, `Input`, `Card`, …)
+- [ ] Colors via semantic tokens (`text-content-primary`, `surface-base`), never
+      `dark:` variants or raw palette colors
+- [ ] Co-locate the test: `ComponentName.test.tsx`
+- [ ] Fetch with `useQuery` / `useMutation` from an `@/hooks` hook
+- [ ] `useCallback` for handlers passed to memoized children
 
-- [ ] Use `React.FC<Props>` pattern with TypeScript
-- [ ] Lazy load if heavy component: `React.lazy(() => import())`
-- [ ] Wrap in `<SuspenseLoader>` for loading states
-- [ ] Use `useSuspenseQuery` for data fetching
-- [ ] Import aliases: `@/` (resolves to src/)
-- [ ] Use UI component library: `@/components/ui`
-- [ ] Style with Tailwind classes and CSS variables for dark mode
-- [ ] Use `useCallback` for event handlers passed to children
-- [ ] Default export at bottom
-- [ ] No early returns with loading spinners
-- [ ] Use toast/notification pattern for user feedback
+Typing the component with `React.FC<Props>` or as a plain function are **both**
+in live use. Match the file you're editing; neither is mandated.
 
-### New Feature Checklist
+**[📖 resources/component-patterns.md](resources/component-patterns.md)** — ⚠️ its
+`SuspenseLoader` and default-export guidance no longer applies.
 
-Creating a feature? Set up this structure:
+### Adding a Feature
 
-- [ ] Create `features/{feature-name}/` directory
-- [ ] Create subdirectories: `api/`, `components/`, `hooks/`, `helpers/`, `types/`
-- [ ] Create API service file: `api/{feature}Api.ts`
-- [ ] Set up TypeScript types in `types/`
-- [ ] Create route in `routes/{feature-name}/index.tsx`
-- [ ] Lazy load feature components
-- [ ] Use Suspense boundaries
-- [ ] Export public API from feature `index.ts`
+There is no `features/` directory and no per-feature scaffold. Work lands in the
+existing directories:
 
----
-
-## Import Aliases Quick Reference
-
-| Alias | Resolves To | Example |
-|-------|-------------|---------|
-| `@/` | `src/` | `import { api } from '@/lib/api'` |
-
-ActionPhase uses the `@/` alias for all imports from the src directory. No other aliases are configured.
+| Layer | Location |
+|---|---|
+| API method | `frontend/src/lib/api/<domain>.ts` (exported via `apiClient`) |
+| Hook | `frontend/src/hooks/use<Thing>.ts` |
+| Component | `frontend/src/components/` |
+| Page | `frontend/src/pages/` |
+| Route | a route object in `frontend/src/App.tsx` |
+| Types | `frontend/src/types/<domain>.ts` |
 
 ---
 
-## Common Imports Cheatsheet
+## Import Aliases
+
+| Alias | Resolves To |
+|---|---|
+| `@/` | `frontend/src/` |
+
+`@/` is the **only** configured alias (`frontend/vite.config.ts`). There is no
+`~types/`. Relative imports (`../lib/api`) are also common in `hooks/`.
+
+---
+
+## Common Imports
 
 ```typescript
-// React & Lazy Loading
-import React, { useState, useCallback, useMemo } from 'react';
-const Heavy = React.lazy(() => import('./Heavy'));
+import { useState, useCallback, useMemo, lazy } from 'react';
 
-// UI Components (ActionPhase)
+// UI component library
 import { Button, Input, Card, CardBody, Badge, Alert, Spinner } from '@/components/ui';
 
-// TanStack Query (React Query - Suspense)
-import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
+// TanStack Query
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-// React Router
-import { Route, Routes, Navigate, useNavigate, useParams } from 'react-router-dom';
+// React Router 7
+import { useNavigate, useParams, Navigate, Outlet } from 'react-router-dom';
 
-// Project Components
-import { SuspenseLoader } from '@/components/SuspenseLoader';
+// API client — note: `apiClient`, not `api`
+import { apiClient } from '@/lib/api';
 
-// Auth & Hooks
+// Contexts
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { useToast } from '@/contexts/ToastContext';
 
-// Types
-import type { Game, Character, Message } from '@/types';
+import type { Game, Character } from '@/types/games';
 ```
 
 ---
 
-## Topic Guides
+## Data Fetching
 
-### 🎨 Component Patterns
+**Primary pattern: `useQuery`.** It is used in ~54 files; `useSuspenseQuery`
+appears in exactly one (`components/ActiveSessions.tsx`) and is not the house
+style. Do not convert existing code to Suspense fetching.
 
-**Modern React components use:**
-- `React.FC<Props>` for type safety
-- `React.lazy()` for code splitting
-- `SuspenseLoader` for loading states
-- Named const + default export pattern
-
-**Key Concepts:**
-- Lazy load heavy components (DataGrid, charts, editors)
-- Always wrap lazy components in Suspense
-- Use SuspenseLoader component (with fade animation)
-- Component structure: Props → Hooks → Handlers → Render → Export
-
-**[📖 Complete Guide: resources/component-patterns.md](resources/component-patterns.md)**
-
----
-
-### 📊 Data Fetching
-
-**PRIMARY PATTERN: useSuspenseQuery**
-- Use with Suspense boundaries
-- Cache-first strategy (check grid cache before API)
-- Replaces `isLoading` checks
-- Type-safe with generics
-
-**API Service Layer:**
-- Create `features/{feature}/api/{feature}Api.ts`
-- Use `apiClient` axios instance
-- Centralized methods per feature
-- Route format: `/form/route` (NOT `/api/form/route`)
-
-**[📖 Complete Guide: resources/data-fetching.md](resources/data-fetching.md)**
-
----
-
-### 📁 File Organization
-
-**features/ vs components/:**
-- `features/`: Domain-specific (posts, comments, auth)
-- `components/`: Truly reusable (SuspenseLoader, CustomAppBar)
-
-**Feature Subdirectories:**
-```
-features/
-  my-feature/
-    api/          # API service layer
-    components/   # Feature components
-    hooks/        # Custom hooks
-    helpers/      # Utility functions
-    types/        # TypeScript types
-```
-
-**[📖 Complete Guide: resources/file-organization.md](resources/file-organization.md)**
-
----
-
-### 🎨 Styling
-
-**Primary Methods:**
-- Use UI Component Library (`@/components/ui`) for standard elements
-- Use Tailwind CSS for layout and custom styling
-- Use CSS variables for dark mode support
-
-**Dark Mode Rules:**
-```tsx
-// ✅ CORRECT - CSS variables
-<div className="bg-bg-primary text-text-primary">
-
-// ❌ WRONG - Manual dark classes
-<div className="bg-white dark:bg-gray-800">
-```
-
-**Component Priority:**
-1. Use UI components when available (Button, Input, Card, etc.)
-2. Use Tailwind for layout (flex, grid, spacing)
-3. Use CSS variables for colors (always)
-
-**[📖 Complete Guide: resources/styling-guide.md](resources/styling-guide.md)**
-
----
-
-### 🛣️ Routing
-
-**React Router - Traditional Setup:**
-- Routes defined in `App.tsx`
-- Protected routes with `AuthContext`
-- Lazy load pages for code splitting
-- Use `useNavigate` for programmatic navigation
-
-**Example:**
-```typescript
-import { Route, Routes, Navigate } from 'react-router-dom';
-import { lazy } from 'react';
-
-const GamePage = lazy(() => import('@/pages/GamePage'));
-
-// In App.tsx
-<Routes>
-  <Route path="/games/:id" element={
-    <ProtectedRoute>
-      <GamePage />
-    </ProtectedRoute>
-  } />
-</Routes>
-```
-
-**[📖 Complete Guide: resources/routing-guide.md](resources/routing-guide.md)**
-
----
-
-### ⏳ Loading & Error States
-
-**CRITICAL RULE: No Early Returns**
+Hooks live in `frontend/src/hooks/` and call through `apiClient`:
 
 ```typescript
-// ❌ NEVER - Causes layout shift
-if (isLoading) {
-    return <LoadingSpinner />;
+export function useUnreadCommentIDs(gameId?: number) {
+  return useQuery({
+    queryKey: ['unreadCommentIDs', gameId],
+    queryFn: async () => {
+      if (!gameId) throw new Error('Game ID required');
+      const response = await apiClient.messages.getUnreadCommentIDs(gameId);
+      return response.data;
+    },
+    enabled: !!gameId,
+    staleTime: 5 * 60 * 1000,
+  });
 }
-
-// ✅ ALWAYS - Consistent layout
-<SuspenseLoader>
-    <Content />
-</SuspenseLoader>
 ```
 
-**Why:** Prevents Cumulative Layout Shift (CLS), better UX
+Mutations invalidate the affected query keys explicitly:
 
-**Error Handling:**
-- Use toast notifications or Alert component for user feedback
-- NEVER `react-toastify`
-- TanStack Query `onError` callbacks
+```typescript
+export function useRenameCharacter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ characterId, name }: { characterId: number; name: string }) =>
+      apiClient.characters.renameCharacter(characterId, { name }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['character', variables.characterId] });
+    },
+  });
+}
+```
 
-**[📖 Complete Guide: resources/loading-and-error-states.md](resources/loading-and-error-states.md)**
-
----
-
-### ⚡ Performance
-
-**Optimization Patterns:**
-- `useMemo`: Expensive computations (filter, sort, map)
-- `useCallback`: Event handlers passed to children
-- `React.memo`: Expensive components
-- Debounced search (300-500ms)
-- Memory leak prevention (cleanup in useEffect)
-
-**[📖 Complete Guide: resources/performance.md](resources/performance.md)**
+**[📖 resources/data-fetching.md](resources/data-fetching.md)** — ⚠️ built around
+`useSuspenseQuery`; treat its Suspense guidance as inapplicable.
 
 ---
 
-### 📘 TypeScript
+## Loading & Error States
 
-**Standards:**
-- Strict mode, no `any` type
-- Explicit return types on functions
-- Type imports: `import type { User } from '~types/user'`
-- Component prop interfaces with JSDoc
+Because fetching is `useQuery`-based, components **do** branch on `isLoading` and
+`error`. Use `<Spinner>` and `<Alert>` from the UI library. Route-level code
+splitting uses `lazy()` + `<Suspense fallback={<PageLoader />}>` in `App.tsx`.
 
-**[📖 Complete Guide: resources/typescript-standards.md](resources/typescript-standards.md)**
+User feedback goes through `useToast()` from `@/contexts/ToastContext`, or the
+`<Alert>` component for inline messages. `react-toastify` is not a dependency.
 
----
-
-### 🔧 Common Patterns
-
-**Covered Topics:**
-- React Hook Form with Zod validation
-- DataGrid wrapper contracts
-- Dialog component standards
-- `useAuth` hook for current user
-- Mutation patterns with cache invalidation
-
-**[📖 Complete Guide: resources/common-patterns.md](resources/common-patterns.md)**
+**[📖 resources/loading-and-error-states.md](resources/loading-and-error-states.md)**
+— ⚠️ assumes Suspense fetching and a nonexistent `SuspenseLoader`.
 
 ---
 
-### 📚 Complete Examples
+## Styling
 
-**Full working examples:**
-- Modern component with all patterns
-- Complete feature structure
-- API service layer
-- Route with lazy loading
-- Suspense + useSuspenseQuery
-- Form with validation
+- Use `@/components/ui` for standard elements
+- Tailwind **v4** (CSS-first: `@import "tailwindcss"` + `@theme` in
+  `src/index.css`). There is **no `tailwind.config.js`**.
+- Colors always via semantic tokens:
 
-**[📖 Complete Guide: resources/complete-examples.md](resources/complete-examples.md)**
+```tsx
+<div className="surface-base text-content-primary">   // ✅
+<div className="bg-white dark:bg-gray-800">           // ❌
+```
+
+Use the `surface-*` / `text-content-*` / `border-theme-*` families. A second,
+older set of names (`bg-bg-*`, `border-border-*`) is **retired**: those tokens are
+declared in `@theme` but were never assigned values, so Tailwind emits **no CSS
+rule at all** and elements using them render with no background or border. They
+were removed from app code on 2026-08-26 (~180 usages across ~50 files, including
+invisible skeleton loaders, poll result bars, and active-tab underlines).
+
+| Use | Not (retired — renders nothing) |
+|---|---|
+| `surface-base` | `bg-bg-primary` |
+| `surface-raised` | `bg-bg-secondary` |
+| `surface-sunken` | `bg-bg-tertiary`, `bg-bg-input` |
+| `border-theme-default` | `border-border-primary`, `border-border-default` |
+| `border-theme-strong` | `border-border-secondary`, `border-border-input` |
+| `bg-interactive-primary` | `bg-primary`, `bg-accent-primary` |
+| `text-semantic-danger` | `text-danger`, `text-danger-text` |
+| `text-content-primary` | `text-text-heading` |
+| `text-content-secondary` | `text-text-primary`, `text-text-secondary` |
+| `text-content-tertiary` | `text-text-muted`, `text-text-tertiary` |
+
+The `text-text-*` family was also retired (2026-08-26) and its classes deleted
+from `index.css`. It was the worst of the set: `text-text-primary` resolved to
+`--color-content-secondary` — *not* `-primary` — so the name misrepresented the
+color it produced, and `text-text-muted`/`-disabled` referenced variables no
+theme assigns, silently inheriting instead of rendering. The renames above are
+exact no-ops: the deleted `--color-text-*` values were byte-identical to their
+`--color-content-*` counterparts in all five themes.
+
+**Opacity modifiers do not work** on these classes: use
+`bg-interactive-primary-subtle`, never `bg-interactive-primary/10`.
+
+**Authoritative list:** `frontend/src/components/ui/README.md`. Verify any new
+token against the built CSS — declaration alone does not mean it renders.
+
+**[📖 resources/styling-guide.md](resources/styling-guide.md)** — accurate.
+The fuller reference is **`frontend/src/components/ui/README.md`** (verified
+token list + every exported UI component); prefer it when they disagree.
 
 ---
 
-## Navigation Guide
+## Routing
 
-| Need to... | Read this resource |
-|------------|-------------------|
-| Create a component | [component-patterns.md](resources/component-patterns.md) |
-| Fetch data | [data-fetching.md](resources/data-fetching.md) |
-| Organize files/folders | [file-organization.md](resources/file-organization.md) |
-| Style components | [styling-guide.md](resources/styling-guide.md) |
-| Set up routing | [routing-guide.md](resources/routing-guide.md) |
-| Handle loading/errors | [loading-and-error-states.md](resources/loading-and-error-states.md) |
-| Optimize performance | [performance.md](resources/performance.md) |
-| TypeScript types | [typescript-standards.md](resources/typescript-standards.md) |
-| Forms/Auth/DataGrid | [common-patterns.md](resources/common-patterns.md) |
-| See full examples | [complete-examples.md](resources/complete-examples.md) |
+React Router **7**, using the data-router API. Routes are objects passed to
+`createBrowserRouter` in `App.tsx` and rendered via `<RouterProvider>` — **not**
+`<Routes>`/`<Route>` JSX. Pages are `lazy()`-imported for code splitting.
+
+```typescript
+const router = createBrowserRouter([
+  { path: '/', element: <RootLayout />, children: [ /* ... */ ] },
+]);
+```
+
+Read `App.tsx` for the current route table — there is no separate routing guide.
+
+---
+
+## TypeScript
+
+Strict mode, no `any`, `import type` for type-only imports, prop interfaces.
+
+**[📖 resources/typescript-standards.md](resources/typescript-standards.md)** — accurate.
+
+---
+
+## Performance
+
+`useMemo` for expensive computation, `useCallback` for handlers passed to
+children, `React.memo` for expensive components, cleanup in `useEffect`.
+
+**[📖 resources/performance.md](resources/performance.md)** — patterns are sound;
+its examples use `React.FC` and occasionally Suspense fetching.
+
+---
+
+## Resource Accuracy
+
+The surviving `resources/` deep dives predate this rewrite (Oct 2025). Four were
+deleted outright as unsalvageable — `file-organization.md` (entirely
+`features/`-based), `routing-guide.md` (React Router v6 `<Routes>` JSX),
+`common-patterns.md` (react-hook-form, Zod, Zustand, DataGrid — none installed),
+and `complete-examples.md` (`features/` + Suspense + MUI). For the rest:
+
+| Resource | Status |
+|---|---|
+| `styling-guide.md` | ✅ Accurate |
+| `typescript-standards.md` | ✅ Accurate |
+| `performance.md` | ⚠️ Sound patterns, dated examples |
+| `component-patterns.md` | ⚠️ `SuspenseLoader` (nonexistent), default-export rule |
+| `data-fetching.md` | ⚠️ `useSuspenseQuery`-first, `features/` API layer |
+| `loading-and-error-states.md` | ⚠️ "no early returns" rule contradicts real code |
+
+When a resource conflicts with this file or with the codebase, the codebase wins.
 
 ---
 
 ## Core Principles
 
-1. **Lazy Load Everything Heavy**: Routes, DataGrid, charts, editors
-2. **Suspense for Loading**: Use SuspenseLoader, not early returns
-3. **useSuspenseQuery**: Primary data fetching pattern for new code
-4. **Features are Organized**: api/, components/, hooks/, helpers/ subdirs
-5. **Styles Based on Size**: <100 inline, >100 separate
-6. **Import Aliases**: Use @/ for all src/ imports
-7. **No Early Returns**: Prevents layout shift
-8. **Toast/Alert**: For all user notifications
+1. **Read neighboring code first** — conventions vary; match the file you're in
+2. **`useQuery` is the fetching pattern**, not Suspense
+3. **Named exports** for components
+4. **UI library first**, Tailwind for layout, semantic tokens for all color
+5. **`@/` alias** for src imports
+6. **Co-locate tests** as `ComponentName.test.tsx`
 
 ---
 
-## Quick Reference: File Structure
-
-```
-src/
-  features/
-    my-feature/
-      api/
-        myFeatureApi.ts       # API service
-      components/
-        MyFeature.tsx         # Main component
-        SubComponent.tsx      # Related components
-      hooks/
-        useMyFeature.ts       # Custom hooks
-        useSuspenseMyFeature.ts  # Suspense hooks
-      helpers/
-        myFeatureHelpers.ts   # Utilities
-      types/
-        index.ts              # TypeScript types
-      index.ts                # Public exports
-
-  components/
-    SuspenseLoader/
-      SuspenseLoader.tsx      # Reusable loader
-    CustomAppBar/
-      CustomAppBar.tsx        # Reusable app bar
-
-  routes/
-    my-route/
-      index.tsx               # Route component
-      create/
-        index.tsx             # Nested route
-```
-
----
-
-## Modern Component Template (Quick Copy)
+## Component Template
 
 ```typescript
-import React, { useState, useCallback } from 'react';
-import { Box, Paper } from '@mui/material';
-import { useSuspenseQuery } from '@tanstack/react-query';
-import { featureApi } from '../api/featureApi';
-import type { FeatureData } from '~types/feature';
+import { useCallback, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Card, CardBody, Button, Spinner, Alert } from '@/components/ui';
+import { apiClient } from '@/lib/api';
 
 interface MyComponentProps {
-    id: number;
-    onAction?: () => void;
+  id: number;
+  onAction?: () => void;
 }
 
-export const MyComponent: React.FC<MyComponentProps> = ({ id, onAction }) => {
-    const [state, setState] = useState<string>('');
+export const MyComponent = ({ id, onAction }: MyComponentProps) => {
+  const [isOpen, setIsOpen] = useState(false);
 
-    const { data } = useSuspenseQuery({
-        queryKey: ['feature', id],
-        queryFn: () => featureApi.getFeature(id),
-    });
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['thing', id],
+    queryFn: async () => (await apiClient.games.getGame(id)).data,
+  });
 
-    const handleAction = useCallback(() => {
-        setState('updated');
-        onAction?.();
-    }, [onAction]);
+  const handleAction = useCallback(() => {
+    setIsOpen(true);
+    onAction?.();
+  }, [onAction]);
 
-    return (
-        <Box sx={{ p: 2 }}>
-            <Paper sx={{ p: 3 }}>
-                {/* Content */}
-            </Paper>
-        </Box>
-    );
+  if (isLoading) return <Spinner size="md" />;
+  if (error) return <Alert variant="danger">Failed to load.</Alert>;
+
+  return (
+    <Card variant="default" padding="md">
+      <CardBody>
+        <p className="text-content-primary">{data?.name}</p>
+        <Button variant="primary" onClick={handleAction}>Open</Button>
+      </CardBody>
+    </Card>
+  );
 };
-
-export default MyComponent;
 ```
-
-For complete examples, see [resources/complete-examples.md](resources/complete-examples.md)
 
 ---
 
 ## Related Skills
 
-- **error-tracking**: Error tracking with Sentry (applies to frontend too)
-- **backend-dev-guidelines**: Backend API patterns that frontend consumes
-
----
-
-**Skill Status**: Modular structure with progressive loading for optimal context management
+- **backend-dev-guidelines** — the API this frontend consumes
+- **testing-patterns** — component and E2E test rules

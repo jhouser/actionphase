@@ -7,18 +7,18 @@ function GameCardSkeleton() {
   return (
     <div className="surface-base rounded-lg shadow-md border-2 border-theme-default animate-pulse">
       <div className="p-4 border-b border-theme-default">
-        <div className="h-6 bg-bg-secondary rounded w-3/4 mb-3"></div>
+        <div className="h-6 surface-raised rounded w-3/4 mb-3"></div>
         <div className="flex gap-2">
-          <div className="h-5 bg-bg-secondary rounded-full w-16"></div>
-          <div className="h-5 bg-bg-secondary rounded-full w-20"></div>
+          <div className="h-5 surface-raised rounded-full w-16"></div>
+          <div className="h-5 surface-raised rounded-full w-20"></div>
         </div>
       </div>
       <div className="p-4">
-        <div className="h-4 bg-bg-secondary rounded w-full mb-2"></div>
-        <div className="h-4 bg-bg-secondary rounded w-5/6 mb-4"></div>
+        <div className="h-4 surface-raised rounded w-full mb-2"></div>
+        <div className="h-4 surface-raised rounded w-5/6 mb-4"></div>
         <div className="grid grid-cols-2 gap-2">
-          <div className="h-4 bg-bg-secondary rounded w-24"></div>
-          <div className="h-4 bg-bg-secondary rounded w-20"></div>
+          <div className="h-4 surface-raised rounded w-24"></div>
+          <div className="h-4 surface-raised rounded w-20"></div>
         </div>
       </div>
     </div>

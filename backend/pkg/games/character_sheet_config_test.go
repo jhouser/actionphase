@@ -1,23 +1,60 @@
 package games
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/go-chi/render"
+	"actionphase/pkg/humaconfig"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/go-chi/chi/v5"
 )
 
-// bindCreate runs a JSON body through the same render.Bind path the handler uses.
-func bindCreate(t *testing.T, body string) (*CreateGameRequest, error) {
+// bindThroughHuma runs a JSON body through huma's real decode-and-resolve path
+// and hands back the bound body.
+//
+// These tests used to call render.Bind on CreateGameRequest. That pipeline is
+// gone: huma owns request binding now, and it is huma's strictness -- not a
+// json.RawMessage plus DisallowUnknownFields -- that keeps an unknown key from
+// being silently dropped. Exercising the real path is the whole point of the
+// unknown-key cases below.
+func bindThroughHuma[T any](t *testing.T, method, body string) (*T, error) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/games", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
 
-	data := &CreateGameRequest{}
-	return data, render.Bind(req, data)
+	type in struct{ Body *T }
+
+	var bound *T
+	r := chi.NewRouter()
+	api := humaconfig.New(r, "test", "1.0.0")
+	huma.Register(api, huma.Operation{
+		OperationID: "bind",
+		Method:      method,
+		Path:        "/bind",
+	}, func(ctx context.Context, i *in) (*struct{}, error) {
+		bound = i.Body
+		return &struct{}{}, nil
+	})
+
+	req := httptest.NewRequest(method, "/bind", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code >= 400 {
+		return nil, fmt.Errorf("rejected with %d: %s", rec.Code, rec.Body.String())
+	}
+	return bound, nil
+}
+
+func bindCreate(t *testing.T, body string) (*createGameBody, error) {
+	t.Helper()
+	return bindThroughHuma[createGameBody](t, http.MethodPost, body)
 }
 
 // validBody wraps a character_sheet fragment in an otherwise-valid game body, so
@@ -32,8 +69,8 @@ func TestCreateGameRequestCharacterSheetBinding(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if data.CharacterSheetConfig().Labels != nil {
-			t.Errorf("expected no labels, got %+v", data.CharacterSheetConfig().Labels)
+		if data.CharacterSheet != nil {
+			t.Errorf("expected no sheet, got %+v", data.CharacterSheet)
 		}
 	})
 
@@ -42,16 +79,16 @@ func TestCreateGameRequestCharacterSheetBinding(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		labels := data.CharacterSheetConfig().Labels
-		if labels == nil || labels.Skills != "Approaches" {
-			t.Fatalf("expected skills override, got %+v", labels)
+		if data.CharacterSheet == nil || data.CharacterSheet.Labels == nil ||
+			data.CharacterSheet.Labels.Skills != "Approaches" {
+			t.Fatalf("expected skills override, got %+v", data.CharacterSheet)
 		}
 	})
 
-	// The reason CharacterSheet is a json.RawMessage rather than the typed struct.
-	// render.Bind decodes permissively, so binding straight into the struct would
-	// DISCARD an unknown key silently and report success. If this test fails, the
-	// strict decode has been bypassed and the blob can accumulate junk again.
+	// Huma rejects unknown properties on nested objects, which is what replaced
+	// the json.RawMessage + DisallowUnknownFields workaround the chi version
+	// needed. If this test fails, the strict decode has been bypassed and the
+	// blob can accumulate junk again.
 	t.Run("unknown key is rejected, not silently dropped", func(t *testing.T) {
 		if _, err := bindCreate(t, validBody(`{"labels":{},"tabs":["skills"]}`)); err == nil {
 			t.Fatal("expected unknown key 'tabs' to be rejected")
@@ -64,21 +101,20 @@ func TestCreateGameRequestCharacterSheetBinding(t *testing.T) {
 		}
 	})
 
-	// Label validation runs in Bind as well as in the service. The service is
+	// Label validation runs in Resolve as well as in the service. The service is
 	// the real guard, but an error raised there renders as a 500 "unexpected
-	// error" — so a GM typing an over-long tab label would be told the server
-	// broke. Failing in Bind makes it the 400 it actually is. Verified over the
-	// wire: this returned 500 before the Bind-side check was added.
+	// error" -- so a GM typing an over-long tab label would be told the server
+	// broke. Failing during request binding makes it the 400 it actually is.
 	t.Run("over-long label is rejected at bind time, not left to the service", func(t *testing.T) {
 		long := strings.Repeat("a", 40)
 		if _, err := bindCreate(t, validBody(`{"labels":{"skills":"`+long+`"}}`)); err == nil {
-			t.Fatal("expected an over-long label to be rejected during Bind")
+			t.Fatal("expected an over-long label to be rejected during binding")
 		}
 	})
 
 	t.Run("control characters are rejected at bind time", func(t *testing.T) {
 		if _, err := bindCreate(t, validBody(`{"labels":{"skills":"Ap\nproaches"}}`)); err == nil {
-			t.Fatal("expected a newline in a label to be rejected during Bind")
+			t.Fatal("expected a newline in a label to be rejected during binding")
 		}
 	})
 
@@ -87,8 +123,8 @@ func TestCreateGameRequestCharacterSheetBinding(t *testing.T) {
 		if err != nil {
 			t.Fatalf("whitespace-only is an unset label, not an error: %v", err)
 		}
-		if data.CharacterSheetConfig().Labels != nil {
-			t.Errorf("expected the label to collapse away, got %+v", data.CharacterSheetConfig().Labels)
+		if data.CharacterSheet != nil && data.CharacterSheet.Labels != nil {
+			t.Errorf("expected the label to collapse away, got %+v", data.CharacterSheet.Labels)
 		}
 	})
 
@@ -97,19 +133,16 @@ func TestCreateGameRequestCharacterSheetBinding(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		labels := data.CharacterSheetConfig().Labels
-		if labels == nil || labels.Skills != "Approaches" {
-			t.Fatalf("expected a trimmed label, got %+v", labels)
+		if data.CharacterSheet == nil || data.CharacterSheet.Labels == nil ||
+			data.CharacterSheet.Labels.Skills != "Approaches" {
+			t.Fatalf("expected a trimmed label, got %+v", data.CharacterSheet)
 		}
 	})
 }
 
 func TestUpdateGameRequestCharacterSheetBinding(t *testing.T) {
-	bindUpdate := func(body string) (*UpdateGameRequest, error) {
-		req := httptest.NewRequest(http.MethodPut, "/api/v1/games/1", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		data := &UpdateGameRequest{}
-		return data, render.Bind(req, data)
+	bindUpdate := func(body string) (*updateGameBody, error) {
+		return bindThroughHuma[updateGameBody](t, http.MethodPut, body)
 	}
 
 	t.Run("labels bind through", func(t *testing.T) {
@@ -117,9 +150,9 @@ func TestUpdateGameRequestCharacterSheetBinding(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		labels := data.CharacterSheetConfig().Labels
-		if labels == nil || labels.Numbers != "Resources" {
-			t.Fatalf("expected numbers override, got %+v", labels)
+		if data.CharacterSheet == nil || data.CharacterSheet.Labels == nil ||
+			data.CharacterSheet.Labels.Numbers != "Resources" {
+			t.Fatalf("expected numbers override, got %+v", data.CharacterSheet)
 		}
 	})
 

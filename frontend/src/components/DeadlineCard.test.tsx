@@ -152,7 +152,7 @@ describe('DeadlineCard', () => {
       const { container } = render(<DeadlineCard deadline={deadline} isGM={false} />);
 
       const card = container.firstChild as HTMLElement;
-      expect(card).toHaveClass('border-border-secondary');
+      expect(card).toHaveClass('border-theme-strong');
     });
   });
 

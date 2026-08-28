@@ -15,9 +15,6 @@ import (
 	"time"
 
 	"actionphase/pkg/core"
-
-	"github.com/go-chi/jwtauth/v5"
-	"github.com/go-chi/render"
 )
 
 // DiscordConnectResponse is returned by GET /api/v1/auth/discord/connect
@@ -80,104 +77,6 @@ func (h *Handler) verifyDiscordState(state string) (int32, error) {
 	}
 
 	return int32(uid), nil
-}
-
-// getUserIDFromJWT extracts the user ID from the JWT in the request context.
-// Returns an error if the token is missing or the sub claim is invalid.
-func getUserIDFromJWT(r *http.Request) (int32, error) {
-	token, _, err := jwtauth.FromContext(r.Context())
-	if err != nil || token == nil {
-		return 0, fmt.Errorf("missing or invalid token")
-	}
-
-	userIDStr, ok := token.Get("sub")
-	if !ok {
-		return 0, fmt.Errorf("sub claim missing")
-	}
-
-	var uid int
-	if _, err := fmt.Sscanf(userIDStr.(string), "%d", &uid); err != nil || uid == 0 {
-		return 0, fmt.Errorf("invalid sub claim")
-	}
-
-	return int32(uid), nil
-}
-
-// V1DiscordConnect returns the Discord OAuth2 authorization URL for the current user.
-// GET /api/v1/auth/discord/connect (protected)
-func (h *Handler) V1DiscordConnect(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	defer h.App.ObsLogger.LogOperation(ctx, "api_discord_connect")()
-
-	userID, err := getUserIDFromJWT(r)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("invalid token"), "Unauthorized")
-		return
-	}
-
-	state := h.buildDiscordState(userID)
-
-	params := url.Values{}
-	params.Set("client_id", h.App.Config.Discord.OAuthClientID)
-	params.Set("redirect_uri", h.App.Config.Discord.OAuthRedirectURL)
-	params.Set("response_type", "code")
-	params.Set("scope", "identify")
-	params.Set("state", state)
-
-	authURL := "https://discord.com/api/oauth2/authorize?" + params.Encode()
-
-	h.App.ObsLogger.Info(ctx, "Discord connect URL generated", "user_id", userID)
-	render.Render(w, r, &DiscordConnectResponse{URL: authURL})
-}
-
-// V1DiscordStatus returns whether the current user has a Discord account linked.
-// GET /api/v1/auth/discord/status (protected)
-func (h *Handler) V1DiscordStatus(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	defer h.App.ObsLogger.LogOperation(ctx, "api_discord_status")()
-
-	userID, err := getUserIDFromJWT(r)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("invalid token"), "Unauthorized")
-		return
-	}
-
-	discordSvc := h.DiscordService
-	acct, err := discordSvc.GetDiscordAccount(ctx, userID)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to get Discord account", "error", err, "user_id", userID)
-		return
-	}
-
-	resp := &DiscordStatusResponse{Linked: false}
-	if acct != nil {
-		resp.Linked = true
-		resp.DiscordUsername = &acct.DiscordUsername
-	}
-
-	render.Render(w, r, resp)
-}
-
-// V1DiscordDisconnect unlinks the current user's Discord account.
-// DELETE /api/v1/auth/discord/disconnect (protected)
-func (h *Handler) V1DiscordDisconnect(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	defer h.App.ObsLogger.LogOperation(ctx, "api_discord_disconnect")()
-
-	userID, err := getUserIDFromJWT(r)
-	if err != nil {
-		h.renderError(ctx, w, r, core.ErrUnauthorized("invalid token"), "Unauthorized")
-		return
-	}
-
-	discordSvc := h.DiscordService
-	if err := discordSvc.DeleteDiscordAccount(ctx, userID); err != nil {
-		h.renderError(ctx, w, r, core.ErrInternalError(err), "Failed to delete Discord account", "error", err, "user_id", userID)
-		return
-	}
-
-	h.App.ObsLogger.Info(ctx, "Discord account unlinked", "user_id", userID)
-	render.JSON(w, r, map[string]string{"message": "Discord account disconnected"})
 }
 
 // discordTokenResponse models the Discord OAuth2 token endpoint response.

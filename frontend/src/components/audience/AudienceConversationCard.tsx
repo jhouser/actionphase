@@ -76,7 +76,7 @@ export const AudienceConversationCard: React.FC<AudienceConversationCardProps> =
         transition-all
         duration-200
         hover:shadow-lg
-        ${isSelected ? 'border border-border-primary border-l-4 border-l-blue-500 bg-bg-secondary' : 'border border-border-primary hover:bg-bg-secondary'}
+        ${isSelected ? 'border border-theme-default border-l-4 border-l-blue-500 surface-raised' : 'border border-theme-default hover:surface-raised'}
       `}
     >
       <CardBody>

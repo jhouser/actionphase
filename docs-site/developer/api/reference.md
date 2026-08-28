@@ -44,33 +44,44 @@ Authorization: Bearer <your-jwt-token>
 **Authentication**:
 - `POST /auth/register` - Create new account
 - `POST /auth/login` - Login and get JWT token
-- `POST /auth/refresh` - Refresh expired token
-- `POST /auth/logout` - Logout and invalidate session
+- `GET /auth/refresh` - Rotate token (**GET**, and it requires a *valid*
+  token — it cannot recover an expired session)
+- `POST /auth/logout` - Logout (clears the JWT cookie; the session row is not
+  deleted)
 
 **Games**:
 - `GET /games` - List available games
 - `POST /games` - Create a new game (GM only)
-- `GET /games/{id}` - Get game details
-- `PUT /games/{id}` - Update game (GM only)
-- `POST /games/{id}/apply` - Apply to join game
+- `GET /games/{gameID}` - Get game details
+- `PUT /games/{gameID}` - Update game (GM only)
+- `POST /games/{gameID}/apply` - Apply to join game
 
 **Characters**:
-- `GET /games/{gameId}/characters` - List game characters
-- `POST /games/{gameId}/characters` - Create character
+- `GET /games/{gameID}/characters` - List game characters
+- `POST /games/{gameID}/characters` - Create character
 - `GET /characters/{id}` - Get character details
-- `PUT /characters/{id}` - Update character
-- `DELETE /characters/{id}` - Delete character
+- `GET /characters/{id}/data` - Get character sheet fields
+- `POST /characters/{id}/data` - Set character sheet fields
+- `PUT /characters/{id}/rename` - Rename (GM or owner)
+- `PUT /characters/{id}/reassign` - Reassign an inactive character (GM)
+- `DELETE /characters/{id}` - Delete character with no activity (GM)
+
+> There is no bare `PUT /characters/{id}`. Updates are split into the specific
+> operations above.
 
 **Phases**:
-- `GET /games/{gameId}/phases` - List game phases
-- `POST /games/{gameId}/phases` - Create phase (GM only)
-- `PUT /phases/{id}/activate` - Activate phase (GM only)
+- `GET /games/{gameID}/phases` - List game phases
+- `POST /games/{gameID}/phases` - Create phase (GM only)
+- `POST /phases/{id}/activate` - Activate phase (GM only) — **POST**, not PUT
 
 **Actions & Results**:
-- `POST /games/{gameId}/actions` - Submit action
-- `GET /games/{gameId}/actions/me` - Get my actions
-- `POST /games/{gameId}/results` - Create result (GM only)
-- `GET /games/{gameId}/results/me` - Get my results
+- `POST /games/{gameID}/actions` - Submit action
+- `GET /games/{gameID}/actions` - List game actions (GM)
+- `GET /games/{gameID}/actions/mine` - Get my actions (**`/mine`**, not `/me`)
+- `POST /games/{gameID}/results` - Create result (GM only)
+- `POST /games/{gameID}/results/staged` - Create a staged result chain (GM)
+- `GET /games/{gameID}/results` - List game results (GM)
+- `GET /games/{gameID}/results/mine` - Get my results (**`/mine`**, not `/me`)
 
 **Messages**:
 - `GET /games/{gameId}/posts` - Get common room posts
@@ -145,7 +156,7 @@ ActionPhase includes API test scripts:
 
 The complete API specification is available in OpenAPI 3.0.3 format:
 
-- **Location**: `backend/pkg/docs/openapi.yaml`
+- **Location**: `backend/pkg/docs/openapi.gen.yaml` (generated — run `just gen-openapi`, never edit by hand)
 - **Lines**: 868
 - **Version**: Synchronized with backend code
 

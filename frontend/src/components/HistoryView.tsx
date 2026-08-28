@@ -347,7 +347,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
             </h3>
 
             {/* Tab Navigation */}
-            <div className="flex border-b border-border-primary mb-6">
+            <div className="flex border-b border-theme-default mb-6">
               <button
                 onClick={() => setActiveTab('submissions')}
                 className={`px-4 py-2 font-medium transition-colors ${
@@ -373,7 +373,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
 
             {/* Character filter — applies to both Submissions and Results */}
             {activeTab !== 'polls' && characterFilterOptions.length > 0 && (
-              <div className="border border-border-primary rounded-lg p-4 bg-bg-secondary mb-6">
+              <div className="border border-theme-default rounded-lg p-4 surface-raised mb-6">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-semibold text-content-primary">Filter by Character</h4>
                   {selectedCharacterIds.size > 0 && (
@@ -399,7 +399,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                           px-3 py-1.5 rounded-full text-sm font-medium transition-colors
                           ${isSelected
                             ? 'bg-interactive-primary text-white'
-                            : 'bg-bg-primary border border-border-primary text-content-primary hover:bg-bg-tertiary'
+                            : 'surface-base border border-theme-default text-content-primary hover:surface-sunken'
                           }
                         `}
                       >

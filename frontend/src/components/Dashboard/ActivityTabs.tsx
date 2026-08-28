@@ -36,12 +36,12 @@ export function ActivityTabs({ deadlines, messages }: ActivityTabsProps) {
   return (
     <div className="surface-base rounded-lg shadow-md overflow-hidden">
       {/* Tab Headers */}
-      <div className="flex border-b border-border-primary">
+      <div className="flex border-b border-theme-default">
         <button
           onClick={() => setActiveTab('deadlines')}
           className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
             activeTab === 'deadlines'
-              ? 'text-interactive-primary border-b-2 border-interactive-primary bg-bg-secondary'
+              ? 'text-interactive-primary border-b-2 border-interactive-primary surface-raised'
               : 'text-content-secondary hover:text-content-primary'
           }`}
         >
@@ -51,7 +51,7 @@ export function ActivityTabs({ deadlines, messages }: ActivityTabsProps) {
           onClick={() => setActiveTab('activity')}
           className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
             activeTab === 'activity'
-              ? 'text-interactive-primary border-b-2 border-interactive-primary bg-bg-secondary'
+              ? 'text-interactive-primary border-b-2 border-interactive-primary surface-raised'
               : 'text-content-secondary hover:text-content-primary'
           }`}
         >
