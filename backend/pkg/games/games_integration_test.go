@@ -6,6 +6,7 @@ import (
 	db "actionphase/pkg/db/services"
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -737,13 +738,15 @@ func setupAuthTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				FingerprintBanService:  &db.FingerprintBanService{DB: testDB.Pool, Logger: app.ObsLogger},
 				DiscordService:         &db.DiscordAccountService{DB: testDB.Pool, Logger: app.ObsLogger},
 			}
-			r.Post("/register", authHandler.V1Register)
-			r.Post("/login", authHandler.V1Login)
+			// Auth is huma-registered; mirror production's grouping.
+			r.Group(func(r chi.Router) {
+				auth.RegisterHumaAuthRateLimited(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
+			})
 			r.Group(func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
-				r.Get("/refresh", authHandler.V1Refresh)
+				auth.RegisterHumaAuthProtected(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
 			})
 		})
 	})

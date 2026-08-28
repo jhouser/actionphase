@@ -12,6 +12,7 @@
 package humaconfig
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -101,7 +102,11 @@ func New(r chi.Router, title, version string) huma.API {
 	cfg.DocsPath = ""
 	cfg.SchemasPath = ""
 	cfg.CreateHooks = nil
-	return humachi.New(r, cfg)
+	api := humachi.New(r, cfg)
+	// Lets handlers reach the underlying request for client IP, user agent and
+	// cookie writes; see RequestMiddleware.
+	api.UseMiddleware(RequestMiddleware)
+	return api
 }
 
 // Trimming request strings
@@ -162,4 +167,56 @@ func TrimStrings(v any) []error {
 		}
 	}
 	return errs
+}
+
+// Reaching the underlying *http.Request from a huma handler
+//
+// Huma handlers receive a context.Context, not a *http.Request, which is
+// normally the point: inputs arrive as typed struct fields. A few operations
+// genuinely need the raw request anyway --
+//
+//   - core.GetClientIP reads X-Real-IP, X-Forwarded-For *and* RemoteAddr, and
+//     RemoteAddr has no struct-tag equivalent;
+//   - setting a cookie needs the http.ResponseWriter.
+//
+// pkg/auth needs both (login/register record the client IP and user agent on
+// the session, and issue the jwt cookie). Rather than reimplement IP extraction
+// against huma.Context -- which would fork the precedence rules that decide
+// which header wins behind a proxy -- RequestMiddleware stashes the request and
+// writer that humachi already holds, so the existing helpers keep working
+// unchanged.
+
+type requestCtxKey struct{}
+
+type requestPair struct {
+	r *http.Request
+	w http.ResponseWriter
+}
+
+// RequestMiddleware makes the underlying request and response writer available
+// to handlers via RequestFrom. Register it on any API whose operations need
+// client IP, user agent, or cookie access.
+func RequestMiddleware(ctx huma.Context, next func(huma.Context)) {
+	// humachi's context can hand back the pair it wrapped. Any adapter that
+	// cannot is simply skipped: RequestFrom then reports false and the caller
+	// falls back, rather than panicking.
+	type unwrapper interface {
+		Unwrap() (*http.Request, http.ResponseWriter)
+	}
+	if u, ok := ctx.(unwrapper); ok {
+		r, w := u.Unwrap()
+		ctx = huma.WithValue(ctx, requestCtxKey{}, &requestPair{r: r, w: w})
+	}
+	next(ctx)
+}
+
+// RequestFrom returns the *http.Request and http.ResponseWriter for the current
+// operation. It reports false when RequestMiddleware is not installed on the
+// API, so callers must handle absence rather than assume.
+func RequestFrom(ctx context.Context) (*http.Request, http.ResponseWriter, bool) {
+	pair, ok := ctx.Value(requestCtxKey{}).(*requestPair)
+	if !ok || pair == nil {
+		return nil, nil, false
+	}
+	return pair.r, pair.w, true
 }

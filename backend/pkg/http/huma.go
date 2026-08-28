@@ -38,40 +38,49 @@ func newHumaAPI(r chi.Router, title, version string) huma.API {
 // a router mounted at /api/v1/admin), because that is what makes routing work.
 // The spec, however, is served against a base URL of /api/v1, so the mount
 // prefix has to be added back for the documented URL to be correct.
-func generatedSpecFor(apis map[string]huma.API) ([]byte, error) {
+//
+// A prefix maps to a *slice* of APIs because one mount may need several, when
+// its routes divide into groups with different middleware. /auth is the case
+// that forced this: rate-limited, public, probe (Verifier only) and fully
+// protected routes are four chi groups under one mount, and huma binds to a
+// router, so each group needs its own API. Their paths are disjoint, so merging
+// the documents is safe; keying by a bare huma.API silently dropped all but one.
+func generatedSpecFor(apis map[string][]huma.API) ([]byte, error) {
 	merged := map[string]any{"paths": map[string]any{}, "components": map[string]any{"schemas": map[string]any{}}}
 	paths := merged["paths"].(map[string]any)
 	schemas := merged["components"].(map[string]any)["schemas"].(map[string]any)
 
-	for prefix, api := range apis {
-		if api == nil {
-			continue
-		}
-		raw, err := api.OpenAPI().YAML()
-		if err != nil {
-			return nil, err
-		}
-		var doc map[string]any
-		if err := yaml.Unmarshal(raw, &doc); err != nil {
-			return nil, err
-		}
-		if p, ok := doc["paths"].(map[string]any); ok {
-			for path, item := range p {
-				// A package's index operation registers as "/" relative to its
-				// mount, which would document "/dashboard/" — a second,
-				// trailing-slash entry sitting beside the hand-written
-				// "/dashboard" rather than superseding it.
-				full := prefix + path
-				if path == "/" {
-					full = prefix
-				}
-				paths[full] = item
+	for prefix, group := range apis {
+		for _, api := range group {
+			if api == nil {
+				continue
 			}
-		}
-		if comp, ok := doc["components"].(map[string]any); ok {
-			if s, ok := comp["schemas"].(map[string]any); ok {
-				for name, schema := range s {
-					schemas[name] = schema
+			raw, err := api.OpenAPI().YAML()
+			if err != nil {
+				return nil, err
+			}
+			var doc map[string]any
+			if err := yaml.Unmarshal(raw, &doc); err != nil {
+				return nil, err
+			}
+			if p, ok := doc["paths"].(map[string]any); ok {
+				for path, item := range p {
+					// A package's index operation registers as "/" relative to
+					// its mount, which would document "/dashboard/" — a second,
+					// trailing-slash entry sitting beside the hand-written
+					// "/dashboard" rather than superseding it.
+					full := prefix + path
+					if path == "/" {
+						full = prefix
+					}
+					paths[full] = item
+				}
+			}
+			if comp, ok := doc["components"].(map[string]any); ok {
+				if s, ok := comp["schemas"].(map[string]any); ok {
+					for name, schema := range s {
+						schemas[name] = schema
+					}
 				}
 			}
 		}

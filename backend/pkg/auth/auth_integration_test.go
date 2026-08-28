@@ -3,6 +3,7 @@ package auth
 import (
 	"actionphase/pkg/core"
 	db "actionphase/pkg/db/services"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -32,7 +33,7 @@ func TestAuthFlow_Registration(t *testing.T) {
 		Password: "testpassword123",
 	}
 
-	registerPayload, _ := json.Marshal(testUser)
+	registerPayload := registrationPayload(testUser)
 	req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(registerPayload))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -65,7 +66,7 @@ func TestAuthFlow_Login(t *testing.T) {
 	}
 
 	// Register user first
-	registerPayload, _ := json.Marshal(testUser)
+	registerPayload := registrationPayload(testUser)
 	registerReq := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(registerPayload))
 	registerReq.Header.Set("Content-Type", "application/json")
 	registerW := httptest.NewRecorder()
@@ -113,7 +114,7 @@ func TestAuthFlow_ProtectedEndpointAccess(t *testing.T) {
 		Password: "testpassword123",
 	}
 
-	registerPayload, _ := json.Marshal(testUser)
+	registerPayload := registrationPayload(testUser)
 	registerReq := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(registerPayload))
 	registerReq.Header.Set("Content-Type", "application/json")
 	registerW := httptest.NewRecorder()
@@ -155,7 +156,7 @@ func TestAuthFlow_TokenRefresh(t *testing.T) {
 		Password: "testpassword123",
 	}
 
-	registerPayload, _ := json.Marshal(testUser)
+	registerPayload := registrationPayload(testUser)
 	registerReq := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(registerPayload))
 	registerReq.Header.Set("Content-Type", "application/json")
 	registerW := httptest.NewRecorder()
@@ -323,7 +324,7 @@ func TestAuthFlow_DuplicateRegistration(t *testing.T) {
 	}
 
 	// First registration should succeed
-	registerPayload, _ := json.Marshal(testUser)
+	registerPayload := registrationPayload(testUser)
 	req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(registerPayload))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -579,7 +580,7 @@ func TestAuthFlow_Logout(t *testing.T) {
 		Password: "testpassword123",
 	}
 
-	registerPayload, _ := json.Marshal(testUser)
+	registerPayload := registrationPayload(testUser)
 	registerReq := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(registerPayload))
 	registerReq.Header.Set("Content-Type", "application/json")
 	registerW := httptest.NewRecorder()
@@ -636,15 +637,23 @@ func setupAuthTestRouter(app *core.App) *chi.Mux {
 		r.Route("/auth", func(r chi.Router) {
 			authHandler := newTestHandler(app.Pool)
 			authHandler.App = app
-			// Public routes (no authentication required)
-			r.Post("/register", authHandler.V1Register)
-			r.Post("/login", authHandler.V1Login)
-			r.Post("/logout", authHandler.V1Logout)
-			r.Post("/request-password-reset", authHandler.V1RequestPasswordReset)
-			r.Post("/reset-password", authHandler.V1ResetPassword)
-			r.Get("/validate-reset-token", authHandler.V1ValidateResetToken)
-			r.Post("/verify-email", authHandler.V1VerifyEmail)
-			r.Post("/complete-email-change", authHandler.V1CompleteEmailChange)
+
+			// Mirrors production's middleware groups (see pkg/http/root.go).
+			// Rate limiting is omitted here deliberately -- the dedicated
+			// rate-limit routers in auth_api_integration_test.go cover it, and
+			// applying it would throttle these flows' repeated logins.
+			r.Group(func(r chi.Router) {
+				api := humaconfig.New(r, "ActionPhase API", "1.0.0")
+				RegisterHumaAuthPublic(api, &authHandler)
+				RegisterHumaAuthRateLimited(api, &authHandler)
+			})
+
+			// /me: Verifier but NOT Authenticator, so an anonymous or invalid
+			// token yields 200 with a null user rather than 401.
+			r.Group(func(r chi.Router) {
+				r.Use(jwtauth.Verifier(tokenAuth))
+				RegisterHumaAuthProbe(humaconfig.New(r, "ActionPhase API", "1.0.0"), &authHandler)
+			})
 
 			// Protected routes (require authentication)
 			r.Group(func(r chi.Router) {
@@ -653,16 +662,9 @@ func setupAuthTestRouter(app *core.App) *chi.Mux {
 				// Add RequireAuthenticationMiddleware for session endpoints
 				userService := &db.UserService{DB: app.Pool, Logger: app.ObsLogger}
 				r.Use(core.RequireAuthenticationMiddleware(userService))
-				r.Get("/refresh", authHandler.V1Refresh)
-				r.Get("/me", authHandler.V1Me)
-				r.Post("/change-password", authHandler.V1ChangePassword)
-				r.Post("/resend-verification", authHandler.V1ResendVerificationEmail)
-				r.Get("/sessions", authHandler.V1ListSessions)
-				r.Delete("/sessions/{sessionID}", authHandler.V1RevokeSession)
-				r.Post("/revoke-all-sessions", authHandler.V1RevokeAllSessions)
-				r.Get("/preferences", authHandler.V1GetPreferences)
-				r.Put("/preferences", authHandler.V1UpdatePreferences)
-				r.Delete("/account", authHandler.V1DeleteAccount)
+				api := humaconfig.New(r, "ActionPhase API", "1.0.0")
+				RegisterHumaAuthProtected(api, &authHandler)
+				RegisterHumaAuthRateLimitedProtected(api, &authHandler)
 			})
 		})
 	})
@@ -689,7 +691,7 @@ func BenchmarkAuthFlow_Registration(b *testing.B) {
 			Password: "benchpassword123",
 		}
 
-		payload, _ := json.Marshal(testUser)
+		payload := registrationPayload(testUser)
 		req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(payload))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -748,7 +750,7 @@ func TestAuthFlow_RefreshEdgeCases(t *testing.T) {
 		Password: "testpassword123",
 	}
 
-	registerPayload, _ := json.Marshal(testUser)
+	registerPayload := registrationPayload(testUser)
 	registerReq := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(registerPayload))
 	registerReq.Header.Set("Content-Type", "application/json")
 	registerW := httptest.NewRecorder()
@@ -892,7 +894,7 @@ func TestAuthFlow_SessionManagement(t *testing.T) {
 		Password: "testpassword123",
 	}
 
-	registerPayload, _ := json.Marshal(testUser)
+	registerPayload := registrationPayload(testUser)
 	registerReq := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(registerPayload))
 	registerReq.Header.Set("Content-Type", "application/json")
 	registerW := httptest.NewRecorder()
@@ -1478,47 +1480,43 @@ func TestAuthFlow_CurrentUserEndpoint(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 	router := setupAuthTestRouter(app)
 
-	t.Run("me_requires_authentication", func(t *testing.T) {
-		// Call /me without authentication header
+	// /me never returns 401. It is mounted with jwtauth.Verifier but
+	// deliberately without Authenticator, so an anonymous, malformed or
+	// expired credential yields 200 with {"user": null} and the frontend can
+	// poll auth state without provoking console errors. These subtests used to
+	// assert 401 because the test router mounted /me behind Authenticator,
+	// a shape production has never used.
+	assertNullUser := func(t *testing.T, authHeader string, set bool, msg string) {
+		t.Helper()
 		meReq := httptest.NewRequest("GET", "/api/v1/auth/me", nil)
+		if set {
+			meReq.Header.Set("Authorization", authHeader)
+		}
 		meW := httptest.NewRecorder()
 		router.ServeHTTP(meW, meReq)
 
-		// Should return 401 Unauthorized
-		core.AssertEqual(t, 401, meW.Code, "Request without auth should return 401")
+		core.AssertEqual(t, 200, meW.Code, msg)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(meW.Body.Bytes(), &response)
+		core.AssertNoError(t, err, "Response should be valid JSON")
+		core.AssertEqual(t, nil, response["user"], "User should be null")
+	}
+
+	t.Run("me_without_auth_returns_null_user", func(t *testing.T) {
+		assertNullUser(t, "", false, "Request without auth should return 200")
 	})
 
 	t.Run("me_with_invalid_token", func(t *testing.T) {
-		// Call /me with malformed token
-		meReq := httptest.NewRequest("GET", "/api/v1/auth/me", nil)
-		meReq.Header.Set("Authorization", "Bearer invalid.jwt.token")
-		meW := httptest.NewRecorder()
-		router.ServeHTTP(meW, meReq)
-
-		// Should return 401 Unauthorized
-		core.AssertEqual(t, 401, meW.Code, "Invalid token should return 401")
+		assertNullUser(t, "Bearer invalid.jwt.token", true, "Invalid token should return 200")
 	})
 
 	t.Run("me_with_malformed_authorization_header", func(t *testing.T) {
-		// Call /me with missing "Bearer" prefix
-		meReq := httptest.NewRequest("GET", "/api/v1/auth/me", nil)
-		meReq.Header.Set("Authorization", "not-a-bearer-token")
-		meW := httptest.NewRecorder()
-		router.ServeHTTP(meW, meReq)
-
-		// Should return 401 Unauthorized
-		core.AssertEqual(t, 401, meW.Code, "Malformed auth header should return 401")
+		assertNullUser(t, "not-a-bearer-token", true, "Malformed auth header should return 200")
 	})
 
 	t.Run("me_with_empty_authorization_header", func(t *testing.T) {
-		// Call /me with empty Authorization header
-		meReq := httptest.NewRequest("GET", "/api/v1/auth/me", nil)
-		meReq.Header.Set("Authorization", "")
-		meW := httptest.NewRecorder()
-		router.ServeHTTP(meW, meReq)
-
-		// Should return 401 Unauthorized
-		core.AssertEqual(t, 401, meW.Code, "Empty auth header should return 401")
+		assertNullUser(t, "", true, "Empty auth header should return 200")
 	})
 
 	t.Run("me_includes_user_fields", func(t *testing.T) {
@@ -2007,7 +2005,7 @@ func TestAuthFlow_RevokeAllSessionsEdgeCases(t *testing.T) {
 		Password: "testpassword123",
 	}
 
-	registerPayload, _ := json.Marshal(testUser)
+	registerPayload := registrationPayload(testUser)
 	registerReq := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(registerPayload))
 	registerReq.Header.Set("Content-Type", "application/json")
 	registerW := httptest.NewRecorder()
@@ -2150,7 +2148,7 @@ func TestAuthFlow_DeleteAccount(t *testing.T) {
 		Password: "testpassword123",
 	}
 
-	registerPayload, _ := json.Marshal(testUser)
+	registerPayload := registrationPayload(testUser)
 	registerReq := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(registerPayload))
 	registerReq.Header.Set("Content-Type", "application/json")
 	registerW := httptest.NewRecorder()

@@ -15,11 +15,6 @@
 #   GET /api/v1/games/public   — documented with no handler behind it
 
 GET    /api/v1/auth/discord/callback
-GET    /api/v1/auth/discord/connect
-GET    /api/v1/auth/discord/status
-GET    /api/v1/auth/preferences
-PUT    /api/v1/auth/preferences
-GET    /api/v1/auth/users/search
 GET    /api/v1/games
 GET    /api/v1/games/{}/action-submissions/all
 GET    /api/v1/games/{}/actions
@@ -44,12 +39,6 @@ PUT    /api/v1/games/{}/results/{}/delay
 PUT    /api/v1/games/{}/settings/auto-accept-audience
 GET    /api/v1/games/{}/stats
 GET    /api/v1/uploads/*
-POST   /api/v1/auth/change-username
-POST   /api/v1/auth/complete-email-change
-POST   /api/v1/auth/request-email-change
-POST   /api/v1/auth/resend-verification
-POST   /api/v1/auth/revoke-all-sessions
-POST   /api/v1/auth/verify-email
 POST   /api/v1/games/{}/banner
 POST   /api/v1/games/{}/loot-tables
 POST   /api/v1/games/{}/loot-tables/{}/contents
@@ -63,8 +52,6 @@ POST   /api/v1/games/{}/results/{}/character-updates
 POST   /api/v1/games/{}/results/{}/parts
 POST   /api/v1/games/{}/results/{}/publish
 POST   /api/v1/games/{}/results/staged
-DELETE /api/v1/auth/account
-DELETE /api/v1/auth/discord/disconnect
 DELETE /api/v1/games/{}/banner
 DELETE /api/v1/games/{}/loot-tables/{}
 DELETE /api/v1/games/{}/participants/{}

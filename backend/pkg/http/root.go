@@ -89,6 +89,14 @@ func (h *Handler) Start() {
 
 	apiV1Router := chi.NewRouter()
 
+	// One huma API per middleware group under /auth; see the groups below.
+	var (
+		authPublicAPI               huma.API
+		authRateLimitedAPI          huma.API
+		authProbeAPI                huma.API
+		authProtectedAPI            huma.API
+		authRateLimitedProtectedAPI huma.API
+	)
 	authRouter := chi.NewRouter()
 	authRouter.Route("/", func(r chi.Router) {
 		authHandler := auth.Handler{
@@ -101,23 +109,39 @@ func (h *Handler) Start() {
 			DiscordService:         &db.DiscordAccountService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 		}
 
-		// Public routes (no authentication required)
-		// Apply strict rate limiting to sensitive endpoints
-		// In development mode, rate limiting is relaxed for E2E testing
+		// In development mode, rate limiting is relaxed for E2E testing.
 		isDev := h.App.Config.IsDevelopment()
-		r.With(ratelimitmw.StrictRateLimit(isDev)).Post("/register", authHandler.V1Register)
-		r.With(ratelimitmw.StrictRateLimit(isDev)).Post("/login", authHandler.V1Login)
-		r.Post("/logout", authHandler.V1Logout) // Logout endpoint (clears JWT cookie)
-		r.With(ratelimitmw.StrictRateLimit(isDev)).Post("/request-password-reset", authHandler.V1RequestPasswordReset)
-		r.Post("/reset-password", authHandler.V1ResetPassword)
-		r.Get("/validate-reset-token", authHandler.V1ValidateResetToken)
-		r.Post("/verify-email", authHandler.V1VerifyEmail)                  // Verify email with token
-		r.Post("/complete-email-change", authHandler.V1CompleteEmailChange) // Complete email change with token
 
-		// Probe endpoint: returns current user if authenticated, null if not (no 401)
-		r.With(jwtauth.Verifier(h.getTokenAuth())).Get("/me", authHandler.V1Me)
+		// Auth's routes do not share one middleware stack, and huma binds an
+		// API to a chi router -- so each group gets its own API and inherits
+		// that group's middleware unchanged. generatedSpecFor merges the five
+		// documents under the single /auth prefix.
 
-		// Discord OAuth callback (public — Discord redirects here after authorization)
+		// Public, unlimited.
+		r.Group(func(r chi.Router) {
+			authPublicAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			auth.RegisterHumaAuthPublic(authPublicAPI, &authHandler)
+		})
+
+		// Public, strictly rate limited: the credential-guessing surface.
+		r.Group(func(r chi.Router) {
+			r.Use(ratelimitmw.StrictRateLimit(isDev))
+			authRateLimitedAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			auth.RegisterHumaAuthRateLimited(authRateLimitedAPI, &authHandler)
+		})
+
+		// Probe: Verifier only, deliberately no Authenticator, so /me answers
+		// 200 with a null user rather than 401 when the caller is anonymous.
+		r.Group(func(r chi.Router) {
+			r.Use(jwtauth.Verifier(h.getTokenAuth()))
+			authProbeAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			auth.RegisterHumaAuthProbe(authProbeAPI, &authHandler)
+		})
+
+		// Discord OAuth callback (public — Discord redirects here after
+		// authorization). Left on chi: it answers a 302 redirect and writes
+		// plain-text errors, so there is no JSON shape to generate, the same
+		// reasoning that leaves /ping unconverted.
 		r.Get("/discord/callback", authHandler.V1DiscordCallback)
 
 		// Protected routes (require authentication)
@@ -129,22 +153,16 @@ func (h *Handler) Start() {
 			r.Use(jwtauth.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
-			r.Get("/refresh", authHandler.V1Refresh)
-			r.Get("/preferences", authHandler.V1GetPreferences)    // Get user preferences
-			r.Put("/preferences", authHandler.V1UpdatePreferences) // Update user preferences
-			r.Get("/users/search", authHandler.V1SearchUsers)      // Search for users
-			// Discord OAuth routes (protected)
-			r.Get("/discord/connect", authHandler.V1DiscordConnect)                                                        // Get Discord OAuth URL
-			r.Get("/discord/status", authHandler.V1DiscordStatus)                                                          // Check Discord link status
-			r.Delete("/discord/disconnect", authHandler.V1DiscordDisconnect)                                               // Unlink Discord account
-			r.Post("/change-password", authHandler.V1ChangePassword)                                                       // Change password (authenticated users)
-			r.With(ratelimitmw.StrictRateLimit(isDev)).Post("/resend-verification", authHandler.V1ResendVerificationEmail) // Resend email verification with rate limiting
-			r.Post("/change-username", authHandler.V1ChangeUsername)                                                       // Change username
-			r.Post("/request-email-change", authHandler.V1RequestEmailChange)                                              // Request email change
-			r.Delete("/account", authHandler.V1DeleteAccount)                                                              // Soft delete account
-			r.Get("/sessions", authHandler.V1ListSessions)                                                                 // List active sessions
-			r.Delete("/sessions/{sessionID}", authHandler.V1RevokeSession)                                                 // Revoke specific session
-			r.Post("/revoke-all-sessions", authHandler.V1RevokeAllSessions)                                                // Revoke all sessions except current
+
+			authProtectedAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			auth.RegisterHumaAuthProtected(authProtectedAPI, &authHandler)
+
+			// Authenticated *and* rate limited, so it needs its own group.
+			r.Group(func(r chi.Router) {
+				r.Use(ratelimitmw.StrictRateLimit(isDev))
+				authRateLimitedProtectedAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+				auth.RegisterHumaAuthRateLimitedProtected(authRateLimitedProtectedAPI, &authHandler)
+			})
 		})
 	})
 	apiV1Router.Mount("/auth", authRouter)
@@ -724,20 +742,24 @@ func (h *Handler) Start() {
 	// .claude/planning/huma-migration.md improves the docs automatically.
 	docsHandler := &docs.Handler{
 		GeneratedSpec: func() ([]byte, error) {
-			return generatedSpecFor(map[string]huma.API{
-				"/admin":      adminAPI,
-				"/dashboard":  dashboardAPI,
-				"/characters": charactersAPI,
-				"/exports":    exportDownloadsAPI,
+			return generatedSpecFor(map[string][]huma.API{
+				"/admin":      {adminAPI},
+				"/dashboard":  {dashboardAPI},
+				"/characters": {charactersAPI},
+				"/exports":    {exportDownloadsAPI},
 				// Registered on the /{gameID} subrouter, so the documented URL
 				// needs that segment added back.
-				"/deadlines":      deadlinesAPI,
-				"/users":          usersAPI,
-				"/notifications":  notificationsAPI,
-				"/polls":          pollsAPI,
-				"/handouts":       handoutsAPI,
-				"/phases":         phasesAPI,
-				"/games/{gameID}": gameScopedAPI,
+				"/deadlines":      {deadlinesAPI},
+				"/users":          {usersAPI},
+				"/notifications":  {notificationsAPI},
+				"/polls":          {pollsAPI},
+				"/handouts":       {handoutsAPI},
+				"/phases":         {phasesAPI},
+				"/games/{gameID}": {gameScopedAPI},
+				// Four APIs, one mount: /auth's routes split across chi groups
+				// with different middleware (rate-limited, public, Verifier-only
+				// probe, fully protected). Their paths are disjoint.
+				"/auth": {authPublicAPI, authRateLimitedAPI, authProbeAPI, authProtectedAPI, authRateLimitedProtectedAPI},
 			})
 		},
 	}
