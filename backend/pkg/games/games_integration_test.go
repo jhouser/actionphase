@@ -361,6 +361,7 @@ func TestGameAPI_ParticipantManagement(t *testing.T) {
 	_ = secondUser.HashPassword()
 	createdSecondUser, err := userService.CreateUser(secondUser)
 	core.AssertNoError(t, err, "Second user creation should succeed")
+	testDB.MarkUserVerified(t, createdSecondUser.ID)
 
 	secondUserToken, _ := core.CreateTestJWTTokenForUser(app, createdSecondUser)
 
@@ -449,6 +450,7 @@ func TestGameAPI_Authorization(t *testing.T) {
 	_ = nonOwner.HashPassword()
 	createdNonOwner, err := userService.CreateUser(nonOwner)
 	core.AssertNoError(t, err, "Non-owner user creation should succeed")
+	testDB.MarkUserVerified(t, createdNonOwner.ID)
 
 	ownerToken, _ := core.CreateTestJWTTokenForUser(app, fixtures.TestUser)
 	nonOwnerToken, _ := core.CreateTestJWTTokenForUser(app, createdNonOwner)
@@ -810,6 +812,7 @@ func TestGameAPI_GameApplications(t *testing.T) {
 		Email:    "player1@example.com",
 	})
 	core.AssertNoError(t, err, "Player user creation should succeed")
+	testDB.MarkUserVerified(t, playerUser.ID)
 
 	playerToken, err := core.CreateTestJWTTokenForUser(app, playerUser)
 	core.AssertNoError(t, err, "Player token creation should succeed")
@@ -974,6 +977,7 @@ func TestGameAPI_GameApplications(t *testing.T) {
 			Email:    "player2@example.com",
 		})
 		core.AssertNoError(t, err, "Player 2 creation should succeed")
+		testDB.MarkUserVerified(t, player2.ID)
 
 		player2Token, err := core.CreateTestJWTTokenForUser(app, player2)
 		core.AssertNoError(t, err, "Player 2 token creation should succeed")
@@ -1016,6 +1020,7 @@ func TestGameAPI_GameApplications(t *testing.T) {
 			Email:    "player3@example.com",
 		})
 		core.AssertNoError(t, err, "Player 3 creation should succeed")
+		testDB.MarkUserVerified(t, player3.ID)
 
 		player3Token, err := core.CreateTestJWTTokenForUser(app, player3)
 		core.AssertNoError(t, err, "Player 3 token creation should succeed")
@@ -1097,6 +1102,7 @@ func TestGameAPI_AudienceManagement(t *testing.T) {
 		Email:    "audience1@example.com",
 	})
 	core.AssertNoError(t, err, "Audience user creation should succeed")
+	testDB.MarkUserVerified(t, audienceUser.ID)
 
 	audienceToken, err := core.CreateTestJWTTokenForUser(app, audienceUser)
 	core.AssertNoError(t, err, "Audience token creation should succeed")
@@ -1169,6 +1175,7 @@ func TestGameAPI_AudienceManagement(t *testing.T) {
 			Email:    "audience2@example.com",
 		})
 		core.AssertNoError(t, err, "User creation should succeed")
+		testDB.MarkUserVerified(t, user2.ID)
 
 		token2, err := core.CreateTestJWTTokenForUser(app, user2)
 		core.AssertNoError(t, err, "Token creation should succeed")
@@ -1323,6 +1330,7 @@ func TestGameAPI_AudienceManagement(t *testing.T) {
 			Email:    "charaudience@example.com",
 		})
 		core.AssertNoError(t, err, "User creation should succeed")
+		testDB.MarkUserVerified(t, charCreationAudienceUser.ID)
 
 		charCreationAudienceToken, err := core.CreateTestJWTTokenForUser(app, charCreationAudienceUser)
 		core.AssertNoError(t, err, "Token creation should succeed")
@@ -1376,6 +1384,7 @@ func TestGetGameParticipants_IncludesAvatarUrl(t *testing.T) {
 		Email:    "testgm@example.com",
 	})
 	core.AssertNoError(t, err, "GM user creation should succeed")
+	testDB.MarkUserVerified(t, gmUser.ID)
 
 	// Create user WITH avatar
 	userWithAvatar, err := userService.CreateUser(&core.User{
@@ -1384,6 +1393,7 @@ func TestGetGameParticipants_IncludesAvatarUrl(t *testing.T) {
 		Email:    "withavatar@example.com",
 	})
 	core.AssertNoError(t, err, "User with avatar creation should succeed")
+	testDB.MarkUserVerified(t, userWithAvatar.ID)
 
 	// Update user to have an avatar URL
 	_, err = testDB.Pool.Exec(context.Background(),
@@ -1398,6 +1408,7 @@ func TestGetGameParticipants_IncludesAvatarUrl(t *testing.T) {
 		Email:    "noavatar@example.com",
 	})
 	core.AssertNoError(t, err, "User without avatar creation should succeed")
+	testDB.MarkUserVerified(t, userWithoutAvatar.ID)
 
 	// Create a game
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}

@@ -96,6 +96,7 @@ func TestGetPublicGameApplicants_Success(t *testing.T) {
 		Email:    "player1@example.com",
 	})
 	core.AssertNoError(t, err, "Player 1 creation should succeed")
+	testDB.MarkUserVerified(t, player1.ID)
 
 	player2, err := userService.CreateUser(&core.User{
 		Username: "testplayer2",
@@ -103,6 +104,7 @@ func TestGetPublicGameApplicants_Success(t *testing.T) {
 		Email:    "player2@example.com",
 	})
 	core.AssertNoError(t, err, "Player 2 creation should succeed")
+	testDB.MarkUserVerified(t, player2.ID)
 
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	applicationService := &db.GameApplicationService{DB: testDB.Pool}
