@@ -122,29 +122,26 @@ just <recipe> --help                 # signature is right
 
 Same for SQL columns, API paths, and file paths in examples.
 
-### API routes — run the checker
+### API routes — regenerate the spec
 
-If the diff touches `backend/pkg/http/root.go` or any `RegisterRoutes` helper,
+If the diff touches `backend/pkg/http/root.go` or any package's `huma_api.go`,
 run:
 
 ```bash
 just check-api-docs
 ```
 
-It compares every route registered in the router against the paths in
-`backend/pkg/docs/openapi.yaml` and reports three failure modes: routes missing
-from the spec, documented paths with no handler, and paths unreachable at the
-spec's `/api/v1` base. **Fix what it reports for the routes this branch
-touched** — add the path entry, or delete the phantom.
+The OpenAPI spec is generated from the huma operations' Go types, so this is a
+diff: it regenerates the document and fails if `backend/pkg/docs/openapi.gen.yaml`
+is stale. The fix is always the same — run `just gen-openapi` and commit the
+result alongside the code change.
 
-Do not add this branch's routes to `scripts/api-docs-baseline.txt`. That file is
-a ledger of pre-existing debt, not an escape hatch; adding to it converts a
-fixable defect into permanent backlog. If a route genuinely cannot be documented
-now, say so in the output and explain why.
+A new tag needs adding to `specTags()` in `backend/pkg/docs/spec_metadata.go`,
+or `TestSpecTagsCoverEveryOperation` fails.
 
-The spec is a doc that looks like code, so Pass 1's greps never match it — a
-removed handler leaves its YAML block behind with nothing to flag it. This
-checker is the only thing that catches that.
+Because the spec is derived from the code, a removed handler takes its
+documentation with it — the stale-YAML-block problem that motivated the old
+route-parsing checker cannot happen any more.
 
 ## Output
 

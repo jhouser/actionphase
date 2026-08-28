@@ -12,21 +12,17 @@ import (
 //go:embed static/*
 var staticFiles embed.FS
 
-//go:embed *.yaml
-var specFiles embed.FS
-
 // Handler provides HTTP endpoints for serving API documentation.
 //
-// The served spec is a merge of two sources:
+// The served spec is assembled from two sources, both in Go:
 //
-//   - openapi.yaml — hand-maintained, covers packages not yet migrated
-//   - GeneratedSpec — derived from Go types by huma, for packages that have
-//     been converted (see .claude/planning/huma-migration.md)
+//   - specBase() — document metadata (info, servers, security, tags) plus the
+//     one operation that is not a huma handler, /ping
+//   - GeneratedSpec — paths and schemas derived from Go types by huma
 //
-// Generated paths win on conflict, so each converted package's entries in the
-// hand-written file are superseded automatically and the docs improve as the
-// migration proceeds. When every package is converted, openapi.yaml can be
-// deleted and this merge removed.
+// There is no hand-written openapi.yaml any more. It was deleted once every
+// package had been converted; until then it carried the not-yet-migrated
+// routes and the generated half was merged over it.
 type Handler struct {
 	// GeneratedSpec is the huma-produced OpenAPI document, or nil before any
 	// package has been migrated.
@@ -65,45 +61,51 @@ func (h *Handler) swaggerAssetServer() http.Handler {
 	return http.StripPrefix("/api/v1/docs/static/", http.FileServer(http.FS(assetFS)))
 }
 
-// serveOpenAPISpec serves the OpenAPI specification as YAML, merging the
-// generated portion over the hand-written one.
+// serveOpenAPISpec serves the OpenAPI specification as YAML.
 func (h *Handler) serveOpenAPISpec(w http.ResponseWriter, r *http.Request) {
-	spec, err := specFiles.ReadFile("openapi.yaml")
+	spec, err := h.Spec()
 	if err != nil {
-		http.Error(w, "OpenAPI spec not found", http.StatusNotFound)
+		http.Error(w, "OpenAPI spec unavailable", http.StatusInternalServerError)
 		return
 	}
-
-	if merged, err := h.mergeGenerated(spec); err == nil {
-		spec = merged
-	}
-	// On merge failure fall through to the hand-written spec: stale docs beat
-	// no docs, and the generated half is additive.
 
 	w.Header().Set("Content-Type", "application/yaml")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Write(spec)
 }
 
-// mergeGenerated overlays huma's generated paths and schemas onto the
-// hand-written spec. Generated entries win, since they are derived from the
-// code rather than maintained by hand.
-func (h *Handler) mergeGenerated(handWritten []byte) ([]byte, error) {
+// Spec renders the complete OpenAPI document as YAML.
+//
+// Exported so `just gen-openapi` can write the same bytes the server serves,
+// which is what makes check-api-docs a diff rather than a judgment call.
+func (h *Handler) Spec() ([]byte, error) {
+	base := specBase()
+	if err := h.mergeGenerated(base); err != nil {
+		return nil, err
+	}
+	return yaml.Marshal(base)
+}
+
+// mergeGenerated overlays huma's generated paths and schemas onto base,
+// mutating it in place.
+//
+// Generated entries win on conflict. Nothing should collide now that the
+// hand-written paths are gone — base contributes only /ping, which no huma
+// handler serves — but the precedence is kept: what the code says beats what a
+// human wrote.
+func (h *Handler) mergeGenerated(base map[string]any) error {
 	if h.GeneratedSpec == nil {
-		return handWritten, nil
+		return nil
 	}
 
 	genRaw, err := h.GeneratedSpec()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var base, gen map[string]any
-	if err := yaml.Unmarshal(handWritten, &base); err != nil {
-		return nil, err
-	}
+	var gen map[string]any
 	if err := yaml.Unmarshal(genRaw, &gen); err != nil {
-		return nil, err
+		return err
 	}
 
 	mergeSection(base, gen, "paths")
@@ -115,7 +117,7 @@ func (h *Handler) mergeGenerated(handWritten []byte) ([]byte, error) {
 		}
 	}
 
-	return yaml.Marshal(base)
+	return nil
 }
 
 // mergeSection copies every key of gen[name] over base[name].

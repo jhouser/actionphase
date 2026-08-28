@@ -53,7 +53,29 @@ func (h *Handler) sessionValidateMW() func(http.Handler) http.Handler {
 	return core.ValidateSessionMiddleware(sessionSvc)
 }
 
+// Start builds the router and serves it.
 func (h *Handler) Start() {
+	r, _ := h.Router()
+
+	// Wrap the router with OpenTelemetry HTTP instrumentation.
+	// This creates spans for every request when OTEL_ENABLED=true.
+	// When OTEL is disabled, the global provider is a no-op so this is zero cost.
+	// Span names are set to the chi route template (e.g. "GET /api/v1/games/{id}")
+	// by RouteTagMiddleware, which runs after chi has matched the route.
+	otelHandler := otelhttp.NewHandler(r, "actionphase-http")
+
+	h.serve(otelHandler)
+}
+
+// Router builds the complete route tree and returns it alongside the docs
+// handler that describes it.
+//
+// Split out of Start so the OpenAPI document can be rendered without listening
+// on a port: `just gen-openapi` calls this, takes the docs handler, and writes
+// the same bytes the server would serve. That is what lets check-api-docs be a
+// diff against a committed file rather than a heuristic comparison of the
+// router source against a hand-written spec.
+func (h *Handler) Router() (chi.Router, *docs.Handler) {
 	// Huma's default error body is RFC 7807, which the frontend cannot parse.
 	// Install the legacy shape before any huma API is built. See
 	// .claude/planning/rfc7807-error-format.md.
@@ -746,17 +768,15 @@ func (h *Handler) Start() {
 		})
 	}
 
-	// Wrap the router with OpenTelemetry HTTP instrumentation.
-	// This creates spans for every request when OTEL_ENABLED=true.
-	// When OTEL is disabled, the global provider is a no-op so this is zero cost.
-	// Span names are set to the chi route template (e.g. "GET /api/v1/games/{id}")
-	// by RouteTagMiddleware, which runs after chi has matched the route.
-	otelHandler := otelhttp.NewHandler(r, "actionphase-http")
+	return r, docsHandler
+}
 
+// serve runs the HTTP server until it stops.
+func (h *Handler) serve(handler http.Handler) {
 	// Create HTTP server with configuration
 	server := &http.Server{
 		Addr:         h.App.Config.GetServerAddress(),
-		Handler:      otelHandler,
+		Handler:      handler,
 		ReadTimeout:  h.App.Config.Server.ReadTimeout,
 		WriteTimeout: h.App.Config.Server.WriteTimeout,
 		IdleTimeout:  h.App.Config.Server.IdleTimeout,

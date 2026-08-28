@@ -156,7 +156,7 @@ ActionPhase includes API test scripts:
 
 The complete API specification is available in OpenAPI 3.0.3 format:
 
-- **Location**: `backend/pkg/docs/openapi.yaml`
+- **Location**: `backend/pkg/docs/openapi.gen.yaml` (generated — run `just gen-openapi`, never edit by hand)
 - **Lines**: 868
 - **Version**: Synchronized with backend code
 

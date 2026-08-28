@@ -117,62 +117,60 @@ docker compose -f docker-compose.dev.yml exec -T db \
 
 ### API Documentation
 
-The OpenAPI spec (`backend/pkg/docs/openapi.yaml`) is maintained by hand and
-verified by `just check-api-docs`, which compares it against the routes
-registered in `backend/pkg/http/root.go`.
+The OpenAPI spec is **generated from Go types**, not maintained by hand. Every
+route is a huma operation whose input and output structs describe the request
+and response; `backend/pkg/docs/spec_metadata.go` supplies the document
+metadata (info, servers, security, tag descriptions).
 
 ```bash
-just check-api-docs
+just gen-openapi      # regenerate backend/pkg/docs/openapi.gen.yaml
+just check-api-docs   # fail if the committed copy is stale
 ```
 
-It reports three kinds of drift:
+`check-api-docs` regenerates the document to a temp file and diffs it against
+the committed one, the same shape as `go mod tidy -diff` or `sqlc diff`. A
+failure means the API changed without `just gen-openapi` being run; the fix is
+to run it and commit the result. It runs as part of `just lint`, `just verify`
+and `just verify-quick`.
 
-- **undocumented** — a route exists but the spec omits it
-- **phantom** — the spec describes a path with no handler (auth middleware
-  returns 401 rather than 404, which disguises the cause)
-- **unreachable** — documented under `/api/v1` but registered at the root, so
-  the documented URL 404s
+Because the spec is derived from the code, the three drift states the previous
+checker looked for are no longer reachable: a route that exists is documented by
+construction, and a documented path cannot exist without a handler behind it.
+The `scripts/api-docs-baseline.txt` debt ledger was retired with it.
 
-Pre-existing gaps are listed in `scripts/api-docs-baseline.txt` and ignored, so
-the check fails only on *new* drift. It runs as part of `just lint`,
-`just verify`, and `just verify-quick`. Backfill progress for the baselined
-routes is tracked in `.claude/planning/openapi-backfill.md`.
-
-**Never add a new route to the baseline to make the check pass** — the baseline
-only shrinks.
-
-> Two earlier tools, `validate-api-docs.go` and `generate-doc-skeleton.go`
-> (`just api-docs-validate`), were removed in August 2026. Both read the
-> `/api/v1/debug/routes` endpoint, whose `listRoutes` in `pkg/http/debug.go`
-> walks the *matched* subrouter and skips any path containing `/*`. They saw 9
-> routes instead of ~195 and reported coverage of 688%. `just check-api-docs`
-> parses `root.go` directly and has no such dependency.
+Two chi routes are served but undocumented, and nothing will flag them — the
+generator only sees huma operations. Both are deliberate and are recorded in
+`spec_metadata.go`: the Discord OAuth callback (a 302 redirect with no JSON
+contract) and `/uploads/*` (a local-only static file server).
 
 ## Workflow
 
 ### When Adding New Routes
 
-1. **Implement the route** in your handler (e.g., `pkg/games/api.go`)
+1. **Implement the handler** as a huma operation — input and output structs plus
+   a `huma.Register` call in the package's `huma_api.go`. The struct tags are
+   the documentation: `doc:`, `minLength:`, `enum:` and the `Responses` map all
+   appear in the spec.
 
-2. **Register the route** in `pkg/http/root.go`
+2. **Register it** in `pkg/http/root.go` via the package's `RegisterHumaX`.
 
-3. **Document it** in `pkg/docs/openapi.yaml` — path, parameters, request body,
-   response schema, and the real error codes (`401` on authenticated routes,
-   `404` on `{id}` paths, `403` where permissions apply)
-
-4. **Verify**:
+3. **Regenerate and commit the spec**:
    ```bash
-   just check-api-docs
+   just gen-openapi
    ```
 
-5. **Check it renders** at http://localhost:3000/api/v1/docs/ (the backend
-   hot-reloads the embedded spec via Air)
+4. **Check it renders** at http://localhost:3000/api/v1/docs/ (the backend
+   hot-reloads via Air)
+
+If the operation introduces a new tag, add it to `specTags()` in
+`pkg/docs/spec_metadata.go` — `TestSpecTagsCoverEveryOperation` fails otherwise.
 
 ### Pre-Commit Checklist
 
-- [ ] `just check-api-docs` is green
-- [ ] Request/response schemas reference `components/schemas` where one fits
-- [ ] Error responses documented, not just the success case
+- [ ] `just check-api-docs` is green (the committed spec is current)
+- [ ] The operation has a `Summary` — `TestSpecCoversEveryOperationWithASummary`
+      enforces this
+- [ ] Real error codes declared in the `Responses` map, not just the success case
 - [ ] Swagger UI displays the endpoint correctly
 
 ---

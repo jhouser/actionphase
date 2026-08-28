@@ -635,11 +635,20 @@ lint: fmt vet check-game-states check-api-docs
 check-game-states:
   @{{BE}} bash /repo/scripts/check-game-states.sh
 
-# Catches undocumented routes, documented paths with no handler, and paths
-# unreachable at the spec's /api/v1 base. Pre-existing gaps live in
-# scripts/api-docs-baseline.txt, so this fails only on NEW drift. Runs in the
-# backend container against /repo, same as check-game-states.
-# Verify the OpenAPI spec agrees with the routes registered in root.go
+# Regenerate the committed OpenAPI spec from the Go types.
+#
+# The document is produced by huma from the registered operations, plus the
+# metadata in pkg/docs/spec_metadata.go. Run this after any API change and
+# commit the result; check-api-docs fails when it is stale.
+gen-openapi:
+  {{BE}} go run ./cmd/genopenapi -o pkg/docs/openapi.gen.yaml
+  @echo "✅ pkg/docs/openapi.gen.yaml regenerated — commit it with your change"
+
+# Verify the committed OpenAPI spec matches what the code generates.
+#
+# Since every package is huma-native the spec is derived from Go types, so this
+# is a diff rather than a judgment call: regenerate to a temp file and compare.
+# A failure means someone changed the API without running `just gen-openapi`.
 check-api-docs:
   @{{BE}} bash /repo/scripts/check-api-docs.sh
 

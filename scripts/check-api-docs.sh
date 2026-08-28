@@ -2,388 +2,84 @@
 
 # API Documentation Consistency Check
 #
-# The OpenAPI spec and the Chi router independently describe the same HTTP
-# surface, with nothing connecting them at compile time:
+# The OpenAPI spec is generated from the Go types of every registered huma
+# operation (see .claude/planning/huma-migration.md). The committed copy at
+# backend/pkg/docs/openapi.gen.yaml is what reviewers read and what any client
+# generator consumes, so it must not fall behind the code.
 #
-#   1. registered routes    backend/pkg/http/root.go (+ RegisterRoutes helpers)
-#   2. documented paths     backend/pkg/docs/openapi.yaml
+# This regenerates the document and diffs it against the committed file. A
+# failure means the API changed without `just gen-openapi` being run — the fix
+# is to run it and commit the result.
 #
-# They drift in three distinct ways, and each fails differently:
-#
-#   UNDOCUMENTED  a route exists but the spec omits it. Invisible to anyone
-#                 working from the docs.
-#   PHANTOM       the spec describes a path with no handler behind it. Worse
-#                 than missing: a caller writes against it and gets a 404. Auth
-#                 middleware usually turns that into a 401 first, which hides
-#                 the cause.
-#   UNREACHABLE   the spec's server base is /api/v1, so a route registered at
-#                 the root (e.g. /ping) is documented at a URL that 404s even
-#                 though the endpoint works.
-#
-# All three shipped to production before this check existed.
-#
-# This runs as a script rather than a unit test because it parses a YAML doc
-# and a Go source tree together, and because CI wants a pass/fail exit code
-# rather than a judgment call. `just check-api-docs` executes it inside the
-# backend container, where the repo root is bind-mounted read-only at /repo.
-#
-# The baseline (scripts/api-docs-baseline.txt) records drift that predates the
-# check. Anything in it is reported as a known gap and does not fail the build;
-# anything NEW fails. Documenting a baselined route means deleting its line —
-# the check tells you when a line has gone stale.
+# It replaces an older check that parsed root.go for route literals and compared
+# them against a hand-written openapi.yaml, tracking known gaps in a baseline
+# file. That was necessary while the two descriptions were maintained
+# independently and could drift in three different directions (undocumented
+# routes, phantom paths, unreachable URLs). With generation none of those states
+# is reachable: a route that exists is documented by construction, and a
+# documented path cannot exist without a handler behind it.
 #
 # Usage: just check-api-docs
-#    or: ./scripts/check-api-docs.sh   (directly, on a host with bash)
+#    or: ./scripts/check-api-docs.sh   (directly, on a host with bash and Go)
 
 set -euo pipefail
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
 NC='\033[0m'
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ROUTER="$ROOT/backend/pkg/http/root.go"
-SPEC="$ROOT/backend/pkg/docs/openapi.yaml"
-BASELINE="$ROOT/scripts/api-docs-baseline.txt"
+# In the container the repo is bind-mounted read-only at /repo while the build
+# tree lives at /app; on a host both are the same directory.
+BACKEND="$ROOT/backend"
+if [ -d /app/cmd/genopenapi ] && [ ! -w "$BACKEND" ]; then
+    BACKEND=/app
+fi
 
-for f in "$ROUTER" "$SPEC"; do
-    if [ ! -f "$f" ]; then
-        echo -e "${RED}✗ missing required file: $f${NC}"
+COMMITTED="$BACKEND/pkg/docs/openapi.gen.yaml"
+
+if [ ! -f "$COMMITTED" ]; then
+    echo -e "${RED}✗ missing $COMMITTED — run 'just gen-openapi'${NC}"
+    exit 1
+fi
+
+FRESH="$(mktemp)"
+trap 'rm -f "$FRESH"' EXIT
+
+if ! (cd "$BACKEND" && go run ./cmd/genopenapi -o "$FRESH"); then
+    echo -e "${RED}✗ failed to generate the OpenAPI spec${NC}"
+    exit 1
+fi
+
+if diff -u "$COMMITTED" "$FRESH" > /tmp/openapi-drift.diff 2>&1; then
+    # Counted by scanning the paths block. Indentation is the marshaller's
+    # (4 spaces), so these patterns move if that ever changes — hence the
+    # sanity check below rather than trusting the numbers silently.
+    paths=$(awk '/^paths:/{p=1;next} p&&/^[^ ]/{exit} p&&/^    \//{n++} END{print n+0}' "$COMMITTED")
+    ops=$(awk '/^paths:/{p=1;next} p&&/^[^ ]/{exit} p&&/^        (get|post|put|delete|patch|head|options):/{n++} END{print n+0}' "$COMMITTED")
+
+    if [ "$paths" -eq 0 ] || [ "$ops" -eq 0 ]; then
+        echo -e "${RED}✗ the spec parsed as empty — the counting patterns are stale${NC}"
         exit 1
     fi
-done
 
-# Not created if absent — /repo is mounted read-only in the container. A
-# missing baseline simply means "no known gaps".
+    echo -e "${GREEN}✓ OpenAPI spec is up to date${NC}"
+    echo "  $paths paths, $ops operations — all generated from Go types"
+    exit 0
+fi
 
-python3 - "$ROUTER" "$SPEC" "$BASELINE" "$ROOT/backend/pkg" <<'PYEOF'
-import os, re, sys
+echo -e "${RED}✗ backend/pkg/docs/openapi.gen.yaml is stale${NC}"
+echo
+echo "  The registered operations no longer match the committed spec."
+echo "  Run 'just gen-openapi' and commit the result."
+echo
+echo "  Difference (committed → generated), first 60 lines:"
+head -60 /tmp/openapi-drift.diff | sed 's/^/    /'
 
-RED, GREEN, YELLOW, NC = '\033[0;31m', '\033[0;32m', '\033[0;33m', '\033[0m'
+total=$(wc -l < /tmp/openapi-drift.diff | tr -d ' ')
+if [ "$total" -gt 60 ]; then
+    echo "    ... $((total - 60)) more lines (full diff: /tmp/openapi-drift.diff)"
+fi
 
-router_path, spec_path, baseline_path = sys.argv[1:4]
-
-# ---------------------------------------------------------------- real routes
-#
-# Chi builds the tree from nested Route()/Mount() calls, so a route literal
-# like r.Get("/logs", ...) says nothing about its final path on its own. We
-# reconstruct it by tracking brace depth: every Route("/x") pushes a prefix
-# that stays live until its closing brace, and every Mount("/y", subRouter)
-# records where a named router hangs off its parent.
-
-src = open(router_path).read().split('\n')
-
-mounts = {}
-for ln in src:
-    m = re.search(r'(\w+)\.Mount\("([^"]*)",\s*(\w+)\)', ln)
-    if m:
-        parent, prefix, child = m.groups()
-        mounts[child] = (parent, prefix)
-
-def full_prefix(var):
-    """Walk a router var up its Mount() chain to an absolute path prefix."""
-    parts, seen = [], set()
-    while var in mounts and var not in seen:
-        seen.add(var)
-        parent, prefix = mounts[var]
-        parts.insert(0, prefix)
-        var = parent
-    if var == 'apiV1Router':
-        parts.insert(0, '/api/v1')
-    return ''.join(parts)
-
-routes = []       # (METHOD, path) under a mounted router
-root_routes = []  # (METHOD, path) registered directly on the root router
-stack, cur_router, depth = [], None, 0
-
-for ln in src:
-    m = re.search(r'(\w+Router)\.Route\("([^"]*)"', ln)
-    if m:
-        cur_router = m.group(1)
-        stack.append((depth, m.group(2)))
-    elif re.search(r'r\.Route\("([^"]*)"', ln):
-        stack.append((depth, re.search(r'r\.Route\("([^"]*)"', ln).group(1)))
-
-    # Matches r.Get("/x", ...) and the middleware-chained form
-    # r.With(mw).Get("/x", ...) — the latter is used for rate-limited and
-    # optional-auth routes, and missing it reports live endpoints as phantoms.
-    rt = re.search(r'\br\.(?:With\(.*\)\.)?(Get|Post|Put|Patch|Delete)\("([^"]*)"', ln)
-    if rt:
-        method, p = rt.group(1).upper(), rt.group(2)
-        if cur_router:
-            path = (full_prefix(cur_router) + ''.join(s for _, s in stack) + p)
-        else:
-            # Registered on the bare root router, outside /api/v1.
-            path = p
-        path = re.sub(r'/+', '/', path)
-        if len(path) > 1:
-            path = path.rstrip('/')
-        (routes if cur_router else root_routes).append((method, path))
-
-    depth += ln.count('{') - ln.count('}')
-    while stack and stack[-1][0] >= depth:
-        stack.pop()
-
-# ------------------------------------------------- huma (type-first) routes
-# Converted packages register their operations with huma.Register in
-# <pkg>/huma_api.go rather than with r.Get(...) in root.go, so the chi scan
-# above cannot see them and would report every one as a PHANTOM.
-#
-# root.go still holds the mount point: a RegisterHumaX(api, h) call sits inside
-# the block that Mounts that package's router. Huma paths are registered
-# relative to that mount (see gotcha 4 in the migration plan), so the full path
-# is mount + huma path.
-PKG_DIR = sys.argv[4] if len(sys.argv) > 4 else ''
-
-def register_func_body(src_text, fname):
-    """The body of one RegisterHumaX function, or None if it is not defined.
-
-    A package may expose several registration functions mounted at different
-    prefixes -- pkg/polls registers /polls operations and game-scoped ones from
-    the same file. Scanning the whole file per call site would attribute every
-    operation to every mount, inventing routes like /games/{}/{}/vote.
-    """
-    mo = re.search(r'^func ' + re.escape(fname) + r'\b', src_text, re.M)
-    if not mo:
-        return None
-    d, started, out = 0, False, []
-    for ch in src_text[mo.start():]:
-        out.append(ch)
-        if ch == '{':
-            d += 1
-            started = True
-        elif ch == '}':
-            d -= 1
-            if started and d == 0:
-                break
-    return ''.join(out)
-
-
-def huma_routes():
-    """Routes registered through huma.Register in a converted package.
-
-    root.go holds the mount, but the router variable is not derivable from the
-    package name: pkg/avatars registers onto charactersRouter, because avatars
-    hang off /characters. So resolve the mount by finding which <x>Router.Route
-    block the RegisterHumaX call physically sits inside.
-    """
-    found = []
-    text = ''.join(src)
-
-    # Line number -> (enclosing "<name>Router.Route(" block, nested prefix).
-    #
-    # The nested part matters: gameScopedAPI is created inside
-    # gamesRouter.Route("/") > r.Route("/{gameID}"), so a package registering
-    # on it is served under /api/v1/games/{gameID}/..., not /api/v1/games/....
-    # Tracking only the named router drops that segment and every game-scoped
-    # package's routes get recorded at a URL nothing serves -- which silently
-    # exempts them from the drift check this script exists to perform.
-    owner, d, stack = {}, 0, []
-    for i, ln in enumerate(src):
-        mo = re.search(r'(\w+Router)\.Route\("', ln)
-        if mo:
-            stack.append((d, mo.group(1), ''))
-        else:
-            mi = re.search(r'\br\.Route\("([^"]*)"', ln)
-            if mi:
-                stack.append((d, None, mi.group(1)))
-        if stack:
-            router = next((n for _, n, _ in reversed(stack) if n), None)
-            # Only the prefixes nested *inside* that named router count; the
-            # router's own mount point comes from full_prefix.
-            seen_router, nested = False, []
-            for _, n, pfx in stack:
-                if n:
-                    seen_router, nested = True, []
-                elif seen_router:
-                    nested.append(pfx)
-            owner[i] = (router, ''.join(nested))
-        else:
-            owner[i] = (None, '')
-        d += ln.count('{') - ln.count('}')
-        while stack and stack[-1][0] >= d:
-            stack.pop()
-
-    for i, ln in enumerate(src):
-        m = re.search(r'(\w+)\.RegisterHuma(\w+)\(', ln)
-        if not m:
-            continue
-        pkg = m.group(1)
-        router, nested = owner.get(i, (None, ''))
-        if not router:
-            print(f"{RED}✗ {pkg}.RegisterHuma{m.group(2)} is not inside a "
-                  f"<name>Router.Route block; cannot resolve its mount{NC}")
-            sys.exit(1)
-        # full_prefix walks the router's Mount() chain, so the result is
-        # absolute (/api/v1/characters), matching the chi scan's paths.
-        prefix = full_prefix(router) + nested
-        f = os.path.join(PKG_DIR, pkg, 'huma_api.go')
-        if not os.path.isfile(f):
-            print(f"{RED}✗ {pkg}.RegisterHuma{m.group(2)} is registered but "
-                  f"{f} does not exist{NC}")
-            sys.exit(1)
-        body = register_func_body(open(f).read(), 'RegisterHuma' + m.group(2))
-        if body is None:
-            print(f"{RED}✗ {pkg}.RegisterHuma{m.group(2)} is registered but "
-                  f"no such function is defined in {f}{NC}")
-            sys.exit(1)
-        # huma.Operation literals: Method: http.MethodGet / "GET", Path: "/x"
-        for op in re.finditer(
-                r'Method:\s*(?:http\.Method(\w+)|"(\w+)")[^}]*?Path:\s*"([^"]*)"',
-                body, re.S):
-            found.append(((op.group(1) or op.group(2)).upper(), prefix, op.group(3)))
-        # The op(id, method, path, ...) helper form used by pkg/admin.
-        for op in re.finditer(
-                r'op\(\s*"[^"]*",\s*(?:http\.Method(\w+)|"(\w+)")\s*,\s*"([^"]*)"',
-                body):
-            found.append(((op.group(1) or op.group(2)).upper(), prefix, op.group(3)))
-    return found
-
-# Huma routes are documented by construction: the served spec merges huma's
-# generated paths over openapi.yaml (see pkg/docs/docs.go, mergeGenerated), so
-# they can never be undocumented. They are still recorded as real routes, so
-# that a spec entry duplicating one is not mistaken for a phantom.
-generated = set()
-for method, prefix, p in huma_routes():
-    path = re.sub(r'/+', '/', prefix + p)
-    if len(path) > 1:
-        path = path.rstrip('/')
-    routes.append((method, path))
-    generated.add((method, path))
-
-# ------------------------------------------------------------ documented spec
-# An operation may override the global server base with its own `servers:`
-# block (OpenAPI 3). /ping uses this because it is registered at the root
-# rather than under /api/v1. Such an operation is documented at its real URL,
-# so it must be compared against the root routes, not the /api/v1 ones —
-# otherwise the correct spec gets reported as unreachable.
-spec = open(spec_path).read().split('\n')
-documented, doc_root, path, op = [], [], None, None
-op_indent_re = re.compile(r'^    (get|post|put|patch|delete):\s*$')
-
-for idx, ln in enumerate(spec):
-    m = re.match(r'^  (/\S*):\s*$', ln)
-    if m:
-        path = m.group(1)
-    m2 = op_indent_re.match(ln)
-    if m2 and path:
-        method = m2.group(1).upper()
-        # Scan this operation's body for a `servers:` key at operation level
-        # (6 spaces), stopping at the next operation or path.
-        has_override = False
-        for nxt in spec[idx + 1:]:
-            if op_indent_re.match(nxt) or re.match(r'^  /\S*:\s*$', nxt):
-                break
-            if re.match(r'^      servers:\s*$', nxt):
-                has_override = True
-                break
-        if has_override:
-            doc_root.append((method, path))
-        else:
-            documented.append((method, '/api/v1' + path))
-
-# Path params are named inconsistently across both sources ({id}, {gameID},
-# {gameId}) and the name carries no routing meaning — normalise so we compare
-# shapes, not spellings. Without this every parameterised path is a false hit.
-def norm(mp):
-    method, p = mp
-    return (method, re.sub(r'\{[^}]*\}', '{}', p))
-
-real_n  = {norm(r) for r in routes}
-gen_n   = {norm(g) for g in generated}
-root_n  = {norm(r) for r in root_routes}
-doc_n   = {norm(d) for d in documented}
-# Operations documented at the root via a `servers:` override.
-doc_rt  = {norm(d) for d in doc_root}
-
-def fmt(mp):
-    return f"{mp[0]:<6} {mp[1]}"
-
-undocumented = sorted(real_n - doc_n - gen_n, key=lambda x: (x[1], x[0]))
-# A documented path with no route anywhere. A root-mounted endpoint is reported
-# as UNREACHABLE below rather than as a phantom; one correctly documented with a
-# `servers:` override is not a defect at all.
-phantom = sorted(
-    (doc_n - real_n - {(m, '/api/v1' + p) for m, p in root_n})
-    | (doc_rt - root_n),
-    key=lambda x: (x[1], x[0]))
-# Documented under /api/v1 but actually served at the root: the endpoint works,
-# the documented URL does not. An operation carrying its own `servers:` override
-# already documents the real URL, so it is excluded.
-unreachable = sorted({(m, p) for m, p in doc_n
-                      if (m, p.replace('/api/v1', '', 1)) in root_n},
-                     key=lambda x: (x[1], x[0]))
-
-baseline = set()
-try:
-    with open(baseline_path) as fh:
-        for ln in fh:
-            ln = ln.split('#')[0].strip()
-            if ln:
-                parts = ln.split()
-                if len(parts) == 2:
-                    baseline.add((parts[0], parts[1]))
-except FileNotFoundError:
-    pass
-
-def split_known(items):
-    new = [i for i in items if i not in baseline]
-    known = [i for i in items if i in baseline]
-    return new, known
-
-new_undoc, known_undoc = split_known(undocumented)
-new_phantom, known_phantom = split_known(phantom)
-new_unreach, known_unreach = split_known(unreachable)
-
-fail = 0
-
-def report(title, items, hint):
-    global fail
-    if not items:
-        return
-    fail = 1
-    print(f"{RED}✗ {len(items)} {title}{NC}")
-    for i in items:
-        print(f"    {fmt(i)}")
-    print(f"  {hint}\n")
-
-report("route(s) not in the OpenAPI spec",
-       new_undoc,
-       "Add a path entry to backend/pkg/docs/openapi.yaml.")
-report("documented path(s) with no handler",
-       new_phantom,
-       "Remove from the spec, or implement the route. Auth middleware makes\n"
-       "  these return 401 rather than 404, which hides the cause.")
-report("documented path(s) unreachable at the spec's base URL",
-       new_unreach,
-       "The spec's server base is /api/v1 but these are registered at the\n"
-       "  root. Document the real URL or move the route under /api/v1.")
-
-# Baselined entries that are now clean: the line is stale and should go.
-stale = [b for b in baseline
-         if b not in undocumented and b not in phantom and b not in unreachable]
-if stale:
-    print(f"{YELLOW}! {len(stale)} baseline entr(ies) no longer drifting{NC}")
-    for s in sorted(stale, key=lambda x: (x[1], x[0])):
-        print(f"    {fmt(s)}")
-    print("  Fixed since baselining — delete these lines from")
-    print("  scripts/api-docs-baseline.txt to lock the improvement in.\n")
-
-known_total = len(known_undoc) + len(known_phantom) + len(known_unreach)
-if fail:
-    print(f"API docs are out of sync with {router_path.split('/')[-1]}.")
-    if known_total:
-        print(f"({known_total} pre-existing gap(s) ignored via the baseline.)")
-    sys.exit(1)
-
-if known_total:
-    print(f"{GREEN}✓ no new API doc drift{NC}")
-    print(f"  {len(doc_n) + len(doc_rt)} documented, "
-          f"{len(real_n) + len(root_n)} registered, "
-          f"{known_total} known gap(s) in the baseline")
-else:
-    print(f"{GREEN}✓ API docs in sync — {len(doc_n) + len(doc_rt)} paths "
-          f"documented, {len(real_n) + len(root_n)} registered{NC}")
-PYEOF
+exit 1
