@@ -75,7 +75,11 @@ marked.use({
       const rendered = hasBlockContent
         ? this.parser.parse(token.tokens)
         : this.parser.parseInline(token.tokens);
-      return `<li class="ml-4 !text-content-primary">${rendered}</li>\n`;
+      // No left margin here: the indent for a list item is the parent
+      // <ul>/<ol>'s padding-left (see .prose in index.css). An ml-4 on top of
+      // that stacked a second, independent indent onto every level, which is
+      // what made deep nesting run out of horizontal room on phones.
+      return `<li class="!text-content-primary">${rendered}</li>\n`;
     },
 
     blockquote({ tokens }) {
