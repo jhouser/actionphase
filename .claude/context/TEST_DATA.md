@@ -423,7 +423,7 @@ const gameId = await getFixtureGameId(page, 'MY_FEATURE');
 ### Updating Fixtures
 
 1. Modify appropriate SQL file in `test_fixtures/`
-2. Run: `just reset-test-data && just test-fixtures`
+2. Run: `just test-data reload`
 3. Verify changes in application
 4. Update this documentation if needed
 
@@ -438,18 +438,18 @@ const gameId = await getFixtureGameId(page, 'MY_FEATURE');
 
 ### Common Issues
 
-**Schema Drift**: If tests fail with "column does not exist" errors:
+**Schema Drift**: If tests fail with "column does not exist" errors, the test
+template DB is stale. Rebuild it, then reapply fixtures:
 ```bash
-# Apply migrations to test database
-just migrate_test
-
-# Then reapply fixtures
+just reset-test-db      # drops + rebuilds the test DB and its migrated template
 just test-fixtures
 ```
+(Backend test packages each clone their DB from `actionphase_test_template`, so a
+stale template propagates to every package.)
 
-**Connection Errors**: Verify database is running:
+**Connection Errors**: Verify the stack is running:
 ```bash
-docker ps | grep postgres
+just ps
 ```
 
 **Permission Errors**: Make script executable:
@@ -459,7 +459,7 @@ chmod +x backend/pkg/db/test_fixtures/apply_all.sh
 
 **Unique Constraint Errors**: Reset first:
 ```bash
-just reset-test-data && just test-fixtures
+just test-data reload
 ```
 
 ## Integration with Tests

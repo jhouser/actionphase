@@ -81,7 +81,7 @@ const countAllPrivateConversations = `-- name: CountAllPrivateConversations :one
 WITH participants_agg AS (
   SELECT
     cp.conversation_id,
-    array_agg(COALESCE(ch.name, u.username) ORDER BY cp.id) as participant_names
+    array_agg(cp.character_id ORDER BY cp.id) as participant_character_ids
   FROM (
     SELECT DISTINCT ON (conversation_id, character_id)
       id, conversation_id, user_id, character_id
@@ -89,7 +89,6 @@ WITH participants_agg AS (
     ORDER BY conversation_id, character_id, id
   ) cp
   JOIN users u ON cp.user_id = u.id
-  LEFT JOIN characters ch ON cp.character_id = ch.id
   GROUP BY cp.conversation_id
 )
 SELECT COUNT(*)
@@ -98,21 +97,22 @@ LEFT JOIN participants_agg pa ON c.id = pa.conversation_id
 WHERE c.game_id = $1
   AND (
     CASE
-      WHEN $2::text[] IS NULL OR array_length($2::text[], 1) IS NULL THEN true
-      ELSE pa.participant_names::text[] @> $2::text[]
+      WHEN $2::int[] IS NULL
+        OR array_length($2::int[], 1) IS NULL THEN true
+      ELSE pa.participant_character_ids::int[] @> $2::int[]
     END
   )
 `
 
 type CountAllPrivateConversationsParams struct {
-	GameID           int32    `json:"game_id"`
-	ParticipantNames []string `json:"participant_names"`
+	GameID                  int32   `json:"game_id"`
+	ParticipantCharacterIds []int32 `json:"participant_character_ids"`
 }
 
 // Count total private conversations in a game, with optional participant filter
 // Uses the same filter logic as ListAllPrivateConversations
 func (q *Queries) CountAllPrivateConversations(ctx context.Context, arg CountAllPrivateConversationsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countAllPrivateConversations, arg.GameID, arg.ParticipantNames)
+	row := q.db.QueryRow(ctx, countAllPrivateConversations, arg.GameID, arg.ParticipantCharacterIds)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -149,6 +149,30 @@ func (q *Queries) CountMessagesByCharacter(ctx context.Context, characterID int3
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countPrivateMessagesByCharacter = `-- name: CountPrivateMessagesByCharacter :one
+SELECT (
+  (SELECT COUNT(*) FROM private_messages
+    WHERE sender_character_id = $1
+      AND is_deleted = false)
+  +
+  (SELECT COUNT(*) FROM conversation_participants
+    WHERE character_id = $1)
+)::bigint
+`
+
+// Count private messages sent by a specific character, plus conversations the
+// character participates in. Used alongside CountMessagesByCharacter to decide
+// whether a character can be deleted: deleting one with private-message history
+// would NULL out conversation_participants.character_id and
+// private_messages.sender_character_id via ON DELETE SET NULL, silently severing
+// those messages from their author.
+func (q *Queries) CountPrivateMessagesByCharacter(ctx context.Context, senderCharacterID pgtype.Int4) (int64, error) {
+	row := q.db.QueryRow(ctx, countPrivateMessagesByCharacter, senderCharacterID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const countTopLevelComments = `-- name: CountTopLevelComments :one
@@ -689,58 +713,64 @@ func (q *Queries) GetComment(ctx context.Context, id int32) (GetCommentRow, erro
 	return i, err
 }
 
-const getConversationParticipantNames = `-- name: GetConversationParticipantNames :many
+const getConversationParticipantCharacters = `-- name: GetConversationParticipantCharacters :many
 WITH participants_per_conv AS (
   SELECT
     cp.conversation_id,
-    array_agg(COALESCE(ch.name, u.username) ORDER BY cp.id) AS names
+    array_agg(cp.character_id ORDER BY cp.id) AS character_ids
   FROM conversation_participants cp
-  JOIN users u ON cp.user_id = u.id
-  LEFT JOIN characters ch ON cp.character_id = ch.id
   JOIN conversations c ON cp.conversation_id = c.id
   WHERE c.game_id = $1
+    AND cp.character_id IS NOT NULL
   GROUP BY cp.conversation_id
 ),
 matching_convs AS (
-  -- Conversations that contain ALL of the selected names (or all if none selected)
   SELECT conversation_id
   FROM participants_per_conv
   WHERE
     CASE
-      WHEN $2::text[] IS NULL
-        OR array_length($2::text[], 1) IS NULL
+      WHEN $2::int[] IS NULL
+        OR array_length($2::int[], 1) IS NULL
       THEN true
-      ELSE names::text[] @> $2::text[]
+      ELSE character_ids::int[] @> $2::int[]
     END
 )
-SELECT DISTINCT unnest(ppc.names) AS participant_name
+SELECT DISTINCT ch.id AS character_id, ch.name AS character_name
 FROM participants_per_conv ppc
 JOIN matching_convs mc ON ppc.conversation_id = mc.conversation_id
-ORDER BY participant_name
+CROSS JOIN LATERAL unnest(ppc.character_ids) AS pid(character_id)
+JOIN characters ch ON ch.id = pid.character_id
+ORDER BY ch.name
 `
 
-type GetConversationParticipantNamesParams struct {
-	GameID        int32    `json:"game_id"`
-	SelectedNames []string `json:"selected_names"`
+type GetConversationParticipantCharactersParams struct {
+	GameID               int32   `json:"game_id"`
+	SelectedCharacterIds []int32 `json:"selected_character_ids"`
 }
 
-// Get all character/user names that appear in at least one conversation in the game,
-// optionally narrowed to only those who share a conversation with ALL of the given names.
-// When selected_names is empty, returns every participant across all conversations.
-// When selected_names is non-empty, returns names that co-appear with all selected names.
-func (q *Queries) GetConversationParticipantNames(ctx context.Context, arg GetConversationParticipantNamesParams) ([]interface{}, error) {
-	rows, err := q.db.Query(ctx, getConversationParticipantNames, arg.GameID, arg.SelectedNames)
+type GetConversationParticipantCharactersRow struct {
+	CharacterID   int32  `json:"character_id"`
+	CharacterName string `json:"character_name"`
+}
+
+// Get the distinct characters that appear in at least one conversation in the game,
+// optionally narrowed to those sharing a conversation with ALL of the given character IDs.
+// Returns IDs alongside names: the UI displays names but filters by ID, since names
+// are mutable and non-unique.
+// When selected_character_ids is empty, returns every participating character.
+func (q *Queries) GetConversationParticipantCharacters(ctx context.Context, arg GetConversationParticipantCharactersParams) ([]GetConversationParticipantCharactersRow, error) {
+	rows, err := q.db.Query(ctx, getConversationParticipantCharacters, arg.GameID, arg.SelectedCharacterIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []interface{}
+	var items []GetConversationParticipantCharactersRow
 	for rows.Next() {
-		var participant_name interface{}
-		if err := rows.Scan(&participant_name); err != nil {
+		var i GetConversationParticipantCharactersRow
+		if err := rows.Scan(&i.CharacterID, &i.CharacterName); err != nil {
 			return nil, err
 		}
-		items = append(items, participant_name)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2028,11 +2058,13 @@ FROM conversation_messages cm
 LEFT JOIN participants_agg pa ON cm.conversation_id = pa.conversation_id
 LEFT JOIN last_messages lm ON cm.conversation_id = lm.conversation_id
 WHERE (
-  -- If participant_names filter is provided (not empty array), filter by it
-  -- Otherwise, show all conversations
+  -- Filter on character IDs, not names. Character names are mutable and not unique
+  -- within a game, so a rename or a name collision silently changed which
+  -- conversations matched. Empty/NULL filter shows all conversations.
   CASE
-    WHEN $2::text[] IS NULL OR array_length($2::text[], 1) IS NULL THEN true
-    ELSE pa.participant_names::text[] @> $2::text[]
+    WHEN $2::int[] IS NULL
+      OR array_length($2::int[], 1) IS NULL THEN true
+    ELSE pa.participant_character_ids::int[] @> $2::int[]
   END
 )
 ORDER BY cm.latest_message_at DESC NULLS LAST
@@ -2041,10 +2073,10 @@ OFFSET $3
 `
 
 type ListAllPrivateConversationsParams struct {
-	GameID           int32    `json:"game_id"`
-	ParticipantNames []string `json:"participant_names"`
-	ResultOffset     int32    `json:"result_offset"`
-	ResultLimit      int32    `json:"result_limit"`
+	GameID                  int32   `json:"game_id"`
+	ParticipantCharacterIds []int32 `json:"participant_character_ids"`
+	ResultOffset            int32   `json:"result_offset"`
+	ResultLimit             int32   `json:"result_limit"`
 }
 
 type ListAllPrivateConversationsRow struct {
@@ -2072,7 +2104,7 @@ type ListAllPrivateConversationsRow struct {
 func (q *Queries) ListAllPrivateConversations(ctx context.Context, arg ListAllPrivateConversationsParams) ([]ListAllPrivateConversationsRow, error) {
 	rows, err := q.db.Query(ctx, listAllPrivateConversations,
 		arg.GameID,
-		arg.ParticipantNames,
+		arg.ParticipantCharacterIds,
 		arg.ResultOffset,
 		arg.ResultLimit,
 	)

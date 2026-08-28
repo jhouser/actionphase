@@ -479,6 +479,75 @@ import { Label } from '@/components/ui';
 
 ---
 
+### 13. **Modal** - Dialog with Overlay
+
+```tsx
+import { Modal, Button } from '@/components/ui';
+
+<Modal
+  isOpen={isOpen}
+  onClose={() => setIsOpen(false)}
+  title="Confirm deletion"
+  size="md"                 // 'sm' | 'md' | 'lg' | 'xl' (default 'md')
+  showCloseButton           // optional
+  footer={
+    <>
+      <Button variant="secondary" onClick={close}>Cancel</Button>
+      <Button variant="danger" onClick={confirm}>Delete</Button>
+    </>
+  }
+>
+  This cannot be undone.
+</Modal>
+```
+
+### 14. **Drawer** - Sidebar / Bottom Sheet
+
+Responsive by default: a right sidebar at `lg+`, a bottom sheet below `lg`.
+
+```tsx
+import { Drawer } from '@/components/ui';
+
+<Drawer
+  open={open}
+  onClose={close}
+  title="Filters"
+  side="responsive"         // 'responsive' (default) | 'right' | 'bottom'
+>
+  {children}
+</Drawer>
+```
+
+`zIndexClass` sets the stacking tier — it defaults to the modal tier; the utility
+drawer passes `LAYERS.drawer` to sit above modals. Use the prop that suppresses
+the drawer's own backdrop when opening over an already-dimmed overlay.
+
+### 15. **HelpTooltip** - Inline Help Icon
+
+Use instead of parenthetical clarifications in labels.
+
+```tsx
+import { HelpTooltip } from '@/components/ui';
+
+<label className="flex items-center gap-1">
+  Deadline
+  <HelpTooltip text="When actions stop being accepted." align="left" />
+</label>
+```
+
+`align="right"` when the icon sits near the right edge — a left-anchored panel
+would overflow the container there.
+
+### 16. **MetadataItem** - Icon + Label + Value
+
+For information-dense areas: game cards, post headers.
+
+```tsx
+import { MetadataItem } from '@/components/ui';
+
+<MetadataItem icon={<ClockIcon />} label="Deadline" value="2 hours" />
+```
+
 ## Common Component Patterns
 
 ### Login Form
@@ -661,38 +730,76 @@ import { MarkdownPreview } from '@/components/MarkdownPreview';
 
 ## When You Can't Use UI Components
 
-For **layout-only elements** (flexbox containers, grids, spacers), use CSS variables:
+For **layout-only elements** (flexbox containers, grids, spacers), use semantic tokens:
 
 ```tsx
 // Layout container
-<div className="bg-bg-page min-h-screen">
-  <div className="bg-bg-primary border-border-primary rounded-lg p-4">
+<div className="surface-page min-h-screen">
+  <div className="surface-base border border-theme-default rounded-lg p-4">
     {/* UI components here */}
   </div>
 </div>
 
 // Text elements
-<h1 className="text-text-heading text-2xl font-bold">Heading</h1>
-<p className="text-text-primary">Body text</p>
-<span className="text-text-secondary">Secondary text</span>
+<h1 className="text-content-primary text-2xl font-bold">Heading</h1>
+<p className="text-content-secondary">Body text</p>
+<span className="text-content-tertiary">Secondary text</span>
 ```
 
-**Available CSS Variable Classes:**
+**Available semantic token classes**
 
-**Backgrounds:**
-- `bg-bg-page` - Page background
-- `bg-bg-primary` - Primary container
-- `bg-bg-secondary` - Secondary/subtle background
-- `bg-bg-hover` - Hover state
+> ⚠️ **Verified 2026-08-26 against the built CSS.** Being declared in `@theme` is
+> *not* sufficient — a token also needs a value assigned in
+> `frontend/src/lib/theme/themes.ts`. The `bg-bg-*` and `border-border-*`
+> families are declared but **never assigned**, so they emit no CSS and render
+> nothing. They were removed from app code; do not reintroduce them.
+> The authoritative list is `frontend/src/components/ui/README.md`.
 
-**Text:**
-- `text-text-heading` - Headings
-- `text-text-primary` - Body text
-- `text-text-secondary` - Secondary text
-- `text-text-muted` - Muted text
+**Surfaces (backgrounds):**
+- `surface-page` - Page background
+- `surface-base` - Cards, modals, primary containers
+- `surface-raised` - Hover states, active tabs, subtle contrast
+- `surface-overlay` - Dropdowns, popovers
+- `surface-sunken` - Input surfaces, wells, skeleton bars
+
+**Content (text):**
+- `text-content-primary` - Headings and body text
+- `text-content-secondary` - Supporting text
+- `text-content-tertiary` - De-emphasized text
+- `text-content-disabled` - Disabled text
+- `text-content-inverse` - Text on a filled background
+- (The `text-text-*` family was **retired 2026-08-26** — see below.)
 
 **Borders:**
-- `border-border-primary` - Standard borders
+- `border-theme-default` - Standard borders
+- `border-theme-subtle` - Low-emphasis dividers
+- `border-theme-strong` - High-emphasis borders
+
+**Interactive & semantic states:**
+- `bg-interactive-primary`, `bg-interactive-primary-subtle`, `bg-interactive-secondary`
+- `text-interactive-primary`, `text-accent-primary`
+- `bg-semantic-{danger,warning,success,info}-subtle`
+- `border-semantic-{danger,warning,success,info}`, `text-semantic-danger`
+
+**Retired — do not use.** The `text-text-*` family was removed on 2026-08-26.
+It was worse than merely dead: `text-text-primary` resolved to
+`--color-content-secondary` (*not* `-primary`), so the name actively lied about
+the color, and `text-text-muted` / `-disabled` referenced variables no theme
+assigns — producing an invalid color that silently inherited. Replacements:
+`text-content-primary`→`text-content-primary`, `text-text-primary`/`-secondary`→
+`text-content-secondary`, `text-text-muted`→`text-content-tertiary`.
+
+Also retired (emit no CSS): `bg-bg-*`, `border-border-*`, `bg-primary`,
+`bg-{danger,warning,success}-light`, `text-{danger,warning,success,primary}-text`,
+`text-danger`, `bg-accent-primary`, `border-accent-primary`,
+`placeholder-placeholder`, `ring-focus-ring`.
+
+**Opacity modifiers don't work** on these (they are hand-written utility classes,
+not `@theme` colors): use `bg-interactive-primary-subtle`, not
+`bg-interactive-primary/10`.
+
+If you need a token that isn't listed here, add it to `@theme` in
+`src/index.css` rather than reaching for a hardcoded Tailwind color.
 
 ---
 
@@ -747,7 +854,7 @@ Before submitting a PR with frontend changes:
 
 **Code Quality:**
 - [ ] No hardcoded colors (`bg-white`, `text-gray-900`, etc.)
-- [ ] Layout containers use `bg-bg-*` and `text-text-*` tokens
+- [ ] Layout containers use `surface-*`, `text-content-*`, and `border-theme-*` tokens
 - [ ] Markdown uses MarkdownPreview component
 - [ ] Forms include proper labels and error handling
 
@@ -824,8 +931,8 @@ export function GameCard({ game }: GameCardProps) {
   return (
     <Card variant="default" padding="md">
       <CardBody>
-        <h3 className="text-text-heading font-bold">{game.name}</h3>
-        <p className="text-text-secondary text-sm">{game.description}</p>
+        <h3 className="text-content-primary font-bold">{game.name}</h3>
+        <p className="text-content-secondary text-sm">{game.description}</p>
         <Button variant="primary" onClick={handleJoin}>
           Join Game
         </Button>

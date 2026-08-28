@@ -71,33 +71,64 @@ describe('EnhancedGameCard', () => {
   });
 
   describe('User Relationship Badges', () => {
-    it('should show "You are GM" badge for GM', () => {
+    it('should show "GM" badge for GM', () => {
       const gmGame = { ...mockGame, user_relationship: 'gm' as const };
       render(<EnhancedGameCard game={gmGame} />, { wrapper });
 
-      expect(screen.getByText('You are GM')).toBeInTheDocument();
+      expect(screen.getByText('GM')).toBeInTheDocument();
     });
 
-    it('should show "You are playing" badge for participant', () => {
+    it('should show "Co-GM" badge for co-GM', () => {
+      const coGmGame = { ...mockGame, user_relationship: 'co_gm' as const };
+      render(<EnhancedGameCard game={coGmGame} />, { wrapper });
+
+      expect(screen.getByText('Co-GM')).toBeInTheDocument();
+    });
+
+    it('should show "Player" badge for participant', () => {
       const participantGame = { ...mockGame, user_relationship: 'participant' as const };
       render(<EnhancedGameCard game={participantGame} />, { wrapper });
 
-      expect(screen.getByText('You are playing')).toBeInTheDocument();
+      expect(screen.getByText('Player')).toBeInTheDocument();
     });
 
-    it('should show "Application pending" badge for applied', () => {
+    it('should show "Audience" badge for audience, not "Player"', () => {
+      // Regression: audience members used to come back as 'participant' from
+      // the listing query and were labelled "You are playing".
+      const audienceGame = { ...mockGame, user_relationship: 'audience' as const };
+      render(<EnhancedGameCard game={audienceGame} />, { wrapper });
+
+      expect(screen.getByText('Audience')).toBeInTheDocument();
+      expect(screen.queryByText('Player')).not.toBeInTheDocument();
+    });
+
+    it('should show "Applied" badge for applied', () => {
       const appliedGame = { ...mockGame, user_relationship: 'applied' as const };
       render(<EnhancedGameCard game={appliedGame} />, { wrapper });
 
-      expect(screen.getByText('Application pending')).toBeInTheDocument();
+      expect(screen.getByText('Applied')).toBeInTheDocument();
+    });
+
+    it('should still show the badge on a completed game the user played in', () => {
+      // This is the case the state-based border scheme exists for: the card is
+      // muted, so the badge is the only thing saying "you were in this game".
+      const playedGame = {
+        ...mockGame,
+        state: 'completed' as const,
+        user_relationship: 'participant' as const,
+      };
+      render(<EnhancedGameCard game={playedGame} />, { wrapper });
+
+      expect(screen.getByText('Player')).toBeInTheDocument();
     });
 
     it('should not show badge for none relationship', () => {
       render(<EnhancedGameCard game={mockGame} />, { wrapper });
 
-      expect(screen.queryByText('You are GM')).not.toBeInTheDocument();
-      expect(screen.queryByText('You are playing')).not.toBeInTheDocument();
-      expect(screen.queryByText('Application pending')).not.toBeInTheDocument();
+      expect(screen.queryByText('GM')).not.toBeInTheDocument();
+      expect(screen.queryByText('Player')).not.toBeInTheDocument();
+      expect(screen.queryByText('Audience')).not.toBeInTheDocument();
+      expect(screen.queryByText('Applied')).not.toBeInTheDocument();
     });
   });
 
@@ -160,29 +191,62 @@ describe('EnhancedGameCard', () => {
   });
 
   describe('Visual Styling', () => {
-    it('should have blue border for participant games', () => {
-      const participantGame = { ...mockGame, user_relationship: 'participant' as const };
-      const { container } = render(<EnhancedGameCard game={participantGame} />, { wrapper });
+    // The card border encodes GAME STATE, not the viewer's relationship to the
+    // game. Relationship is carried by the badge (see "User Relationship Badge"),
+    // so that a completed game the user played in no longer looks like a CTA.
+    it('should tint the border green for recruiting games', () => {
+      const { container } = render(<EnhancedGameCard game={mockGame} />, { wrapper });
 
       const card = container.firstChild as HTMLElement;
-      expect(card.className).toContain('border-interactive-primary');
-      expect(card.className).toContain('bg-interactive-primary-subtle');
+      expect(card.className).toContain('border-semantic-success');
+      expect(card.className).toContain('bg-semantic-success-subtle');
     });
 
-    it('should have yellow border for applied games', () => {
-      const appliedGame = { ...mockGame, user_relationship: 'applied' as const };
-      const { container } = render(<EnhancedGameCard game={appliedGame} />, { wrapper });
+    it('should tint the border amber for in-progress games', () => {
+      const activeGame = { ...mockGame, state: 'in_progress' as const };
+      const { container } = render(<EnhancedGameCard game={activeGame} />, { wrapper });
 
       const card = container.firstChild as HTMLElement;
       expect(card.className).toContain('border-semantic-warning');
       expect(card.className).toContain('bg-semantic-warning-subtle');
     });
 
-    it('should have gray border for non-user games', () => {
-      const { container } = render(<EnhancedGameCard game={mockGame} />, { wrapper });
+    it('should mute completed games even when the user played in them', () => {
+      const playedGame = {
+        ...mockGame,
+        state: 'completed' as const,
+        user_relationship: 'participant' as const,
+      };
+      const { container } = render(<EnhancedGameCard game={playedGame} />, { wrapper });
 
       const card = container.firstChild as HTMLElement;
-      expect(card.className).toContain('border-theme-default');
+      expect(card.className).toContain('border-theme-subtle');
+      // Regression: participation must not re-introduce a highlight tint.
+      expect(card.className).not.toContain('bg-interactive-primary-subtle');
+      expect(card.className).not.toContain('bg-semantic-success-subtle');
+    });
+
+    it('should mute cancelled games', () => {
+      const cancelledGame = { ...mockGame, state: 'cancelled' as const };
+      const { container } = render(<EnhancedGameCard game={cancelledGame} />, { wrapper });
+
+      const card = container.firstChild as HTMLElement;
+      expect(card.className).toContain('border-theme-subtle');
+    });
+
+    it('should style the card by state independently of relationship', () => {
+      const asGm = { ...mockGame, user_relationship: 'gm' as const };
+      const asStranger = { ...mockGame, user_relationship: 'none' as const };
+
+      const { container: gmContainer } = render(<EnhancedGameCard game={asGm} />, { wrapper });
+      const { container: strangerContainer } = render(
+        <EnhancedGameCard game={asStranger} />,
+        { wrapper }
+      );
+
+      expect((gmContainer.firstChild as HTMLElement).className).toBe(
+        (strangerContainer.firstChild as HTMLElement).className
+      );
     });
 
     it('should be clickable when onClick is provided', () => {

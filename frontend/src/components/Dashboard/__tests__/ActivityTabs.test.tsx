@@ -230,7 +230,7 @@ describe('ActivityTabs', () => {
       // Check for border classes on tab header container
       const tabHeaderContainer = container.querySelector('.border-b');
       expect(tabHeaderContainer).toBeInTheDocument();
-      expect(tabHeaderContainer?.className).toContain('border-border-primary');
+      expect(tabHeaderContainer?.className).toContain('border-theme-default');
     });
 
     it('wraps tab content in padding container', () => {

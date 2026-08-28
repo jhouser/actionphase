@@ -30,3 +30,14 @@ var ErrCannotCancelPart = errors.New("cannot cancel staged part")
 // rather than by sending a malformed request, so handlers answer 409 rather
 // than 400 — the request was well formed, the world moved.
 var ErrCannotEditChain = errors.New("cannot edit staged chain")
+
+// ErrInvalidStateTransition is returned when a game state change is rejected by
+// the state machine (allowedTransitions, pkg/db/services/games.go) — for
+// example epilogue → in_progress, which is a deliberate one-way door.
+//
+// The request is well formed and the caller is authorized; the transition is
+// simply not legal from where the game currently is. That makes it a 409, not a
+// 500: nothing failed, and retrying verbatim will never succeed. Handlers
+// should surface it with ErrCodeInvalidGameState so a client can distinguish it
+// from a genuine server fault.
+var ErrInvalidStateTransition = errors.New("invalid game state transition")

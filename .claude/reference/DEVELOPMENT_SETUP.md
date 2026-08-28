@@ -70,7 +70,7 @@ just down            # stop it (data preserved in volumes)
 just ps              # container status
 just status          # health + migrations + git overview
 just dev-logs [svc]  # tail logs (backend|frontend|db)
-just dev-restart svc # restart one service (config changes / wedged container)
+just restart [svc]   # restart one service (config changes / wedged container)
 just sh [svc]        # shell into a container for one-off commands
 just rebuild [svc]   # rebuild image(s) after Dockerfile/dependency changes
 ```
@@ -85,7 +85,7 @@ These all exec inside the containers (the stack must be up — `just up`):
 ```bash
 just test            # full backend suite (integration + mocks)
 just test-mocks      # fast, DB-less unit tests
-just test-frontend   # frontend component tests
+just test-fe run     # frontend component tests
 just migrate         # apply migrations (also auto-runs on backend boot)
 just sqlgen          # regenerate Go from SQL (sqlc)
 just lint            # go fmt + vet
@@ -203,10 +203,10 @@ just migration status   # show current migration version
 | `just db create` | Create the `actionphase_test` database |
 | `just db setup` | Start + create databases |
 | `just migrate` | Apply migrations to the dev database |
-| `just migrate_test` | Apply migrations to the test database |
+| `just migration test` | Apply migrations to the test database |
 | `just migration status` | Show migration version |
 | `just migration rollback` | Roll back the last migration |
-| `just reset_test_db` | Drop + recreate + re-migrate the test DB (when it gets dirty) |
+| `just reset-test-db` | Drop + recreate + re-migrate the test DB and its template (when it gets dirty) |
 
 ## Development Workflow
 
@@ -234,7 +234,9 @@ Everything runs in containers from here — see the **Containerized Workflow** a
 | `just up` | Start the containerized stack |
 | `just down` | Stop the stack |
 | `just status` | Health + migrations + git overview |
-| `just build` | Compile-check the backend (in container) |
+| `just verify` | Pre-push gate: all code-quality checks **plus** backend + frontend production builds. Runs in parallel. |
+| `just verify-quick` | Fast, non-mutating subset with no builds (~10s). What the Stop hook runs. |
+| `just build` | Build backend + frontend |
 | `just tidy` | `go mod tidy` (in container) |
 | `just sh backend` | Shell into the backend container |
 
@@ -268,7 +270,7 @@ just test-integration
 just test
 
 # Automatically skips database tests if DB unavailable
-# Run in parallel for speed: just test-parallel
+# Run in parallel for speed: `just test`
 ```
 
 ### Test Setup
@@ -276,7 +278,7 @@ just test
 #### Database Tests Setup
 ```bash
 # One-time setup for database tests
-just test-db-setup
+`just db setup`
 
 # This creates test database and applies migrations
 # Run this before your first integration test
@@ -302,9 +304,9 @@ TEST_LOG_LEVEL=debug just test
 | `just test-mocks` | ⚡ Fastest | ❌ No | Unit tests with mocks |
 | `just test-integration` | 🐢 Slow | ✅ Yes | Integration tests |
 | `just test` | 🐢 Slow | ⚠️ Optional | All tests |
-| `just test-parallel` | ⚡ Fast | ⚠️ Optional | All tests in parallel |
+| `just test` | ⚡ Fast | ⚠️ Optional | All tests in parallel |
 | `just test-coverage` | 🐢 Slow | ⚠️ Optional | Tests with coverage report |
-| `just test-db-setup` | - | ✅ Yes | Setup test database |
+| `just db setup` | - | ✅ Yes | Setup test database |
 
 ## Code Quality
 
@@ -321,7 +323,7 @@ just vet
 just lint
 
 # Build project (includes compile-time checks)
-just build
+just verify
 ```
 
 ### Database Code Generation
@@ -339,18 +341,24 @@ just sqlgen
 ### Migration Management
 
 ```bash
-# Create new migration
-just make_migration add_user_preferences
+# Create new migration (writes an up/down pair)
+just migration create add_user_preferences
 
-# Apply migrations
+# Apply migrations to the dev database
 just migrate
 
 # Check status
-just migrate_status
+just migration status
 
 # Rollback (careful!)
-just rollback
+just migration rollback
+
+# Apply migrations to the test database
+just migration test
 ```
+
+> `just make_migration`, `just migrate_status`, and a bare `just rollback` do
+> **not** exist — all migration actions go through the `migration` recipe.
 
 ## Troubleshooting
 
@@ -362,14 +370,14 @@ just rollback
 
 **Solution:**
 ```bash
-# 1. Ensure Docker is running
-docker ps
+# 1. Check the stack
+just ps
 
-# 2. Start database
-just db_up
+# 2. Start the database
+just db up
 
-# 3. Wait a moment, then create databases
-just db_create
+# 3. Create the databases
+just db create
 
 # 4. Apply migrations
 just migrate
@@ -388,7 +396,7 @@ just test-mocks
 SKIP_DB_TESTS=true just test
 
 # For integration tests, ensure test DB is set up
-just test-db-setup
+`just db setup`
 ```
 
 #### Environment Variables Not Loading
@@ -441,10 +449,10 @@ just --list
 #### Log Levels
 ```bash
 # Debug mode (verbose logging)
-LOG_LEVEL=debug just dev
+LOG_LEVEL=debug just up
 
 # Quiet mode (errors only)
-LOG_LEVEL=error just dev
+LOG_LEVEL=error just up
 ```
 
 ### Database Utilities
@@ -462,9 +470,9 @@ psql -h localhost -U postgres actionphase_test
 #### Reset Database (Nuclear Option)
 ```bash
 # Stop database, remove data, start fresh
-just db_down
+`just db down`
 docker volume rm actionphase_pgdata  # WARNING: Destroys all data
-just db_setup
+`just db setup`
 just migrate
 ```
 
@@ -532,12 +540,12 @@ For more details, see [BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md).
 
 ```bash
 # Setup (one-time)
-just dev-setup && just migrate
+just dev-setup
 
 # Daily development
-just dev                    # Start backend
+just up                     # Start the stack (backend + frontend + db)
 just test-mocks            # Run fast tests
-just db_up                 # Start database
+`just db up`                 # Start database
 just migrate              # Apply new migrations
 
 # Troubleshooting

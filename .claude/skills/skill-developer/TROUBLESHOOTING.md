@@ -6,7 +6,6 @@ Complete debugging guide for skill activation problems.
 
 - [Skill Not Triggering](#skill-not-triggering)
   - [UserPromptSubmit Not Suggesting](#userpromptsubmit-not-suggesting)
-  - [PreToolUse Not Blocking](#pretooluse-not-blocking)
 - [False Positives](#false-positives)
 - [Hook Not Executing](#hook-not-executing)
 - [Performance Issues](#performance-issues)
@@ -113,143 +112,6 @@ Expected: Your skill should appear in the output.
 
 ---
 
-### PreToolUse Not Blocking
-
-**Symptoms:** Edit a file that should trigger a guardrail, but no block occurs.
-
-**Common Causes:**
-
-#### 1. File Path Doesn't Match Patterns
-
-**Check:**
-- File path being edited
-- `fileTriggers.pathPatterns` in skill-rules.json
-- Glob pattern syntax
-
-**Example:**
-```json
-"pathPatterns": [
-  "frontend/src/**/*.tsx"
-]
-```
-- Editing: `frontend/src/components/Dashboard.tsx` → ✅ Matches
-- Editing: `frontend/tests/Dashboard.test.tsx` → ✅ Matches (add exclusion!)
-- Editing: `backend/src/app.ts` → ❌ Doesn't match
-
-**Fix:** Adjust glob patterns or add the missing path
-
-#### 2. Excluded by pathExclusions
-
-**Check:**
-- Are you editing a test file?
-- Look at `fileTriggers.pathExclusions`
-
-**Example:**
-```json
-"pathExclusions": [
-  "**/*.test.ts",
-  "**/*.spec.ts"
-]
-```
-- Editing: `services/user.test.ts` → ❌ Excluded
-- Editing: `services/user.ts` → ✅ Not excluded
-
-**Fix:** If test exclusion too broad, narrow it or remove
-
-#### 3. Content Pattern Not Found
-
-**Check:**
-- Does the file actually contain the pattern?
-- Look at `fileTriggers.contentPatterns`
-- Is the regex correct?
-
-**Example:**
-```json
-"contentPatterns": [
-  "import.*[Pp]risma"
-]
-```
-- File has: `import { PrismaService } from './prisma'` → ✅ Matches
-- File has: `import { Database } from './db'` → ❌ Doesn't match
-
-**Debug:**
-```bash
-# Check if pattern exists in file
-grep -i "prisma" path/to/file.ts
-```
-
-**Fix:** Adjust content patterns or add missing imports
-
-#### 4. Session Already Used Skill
-
-**Check session state:**
-```bash
-ls .claude/hooks/state/
-cat .claude/hooks/state/skills-used-{session-id}.json
-```
-
-**Example:**
-```json
-{
-  "skills_used": ["database-verification"],
-  "files_verified": []
-}
-```
-
-If the skill is in `skills_used`, it won't block again in this session.
-
-**Fix:** Delete the state file to reset:
-```bash
-rm .claude/hooks/state/skills-used-{session-id}.json
-```
-
-#### 5. File Marker Present
-
-**Check file for skip marker:**
-```bash
-grep "@skip-validation" path/to/file.ts
-```
-
-If found, the file is permanently skipped.
-
-**Fix:** Remove the marker if verification is needed again
-
-#### 6. Environment Variable Override
-
-**Check:**
-```bash
-echo $SKIP_DB_VERIFICATION
-echo $SKIP_SKILL_GUARDRAILS
-```
-
-If set, the skill is disabled.
-
-**Fix:** Unset the environment variable:
-```bash
-unset SKIP_DB_VERIFICATION
-```
-
-#### Debug Command
-
-Test the hook manually:
-
-```bash
-cat <<'EOF' | npx tsx .claude/hooks/skill-verification-guard.ts 2>&1
-{
-  "session_id": "debug",
-  "tool_name": "Edit",
-  "tool_input": {"file_path": "/root/git/your-project/form/src/services/user.ts"}
-}
-EOF
-echo "Exit code: $?"
-```
-
-Expected:
-- Exit code 2 + stderr message if should block
-- Exit code 0 + no output if should allow
-
----
-
 ## False Positives
 
 **Symptoms:** Skill triggers when it shouldn't.
@@ -300,7 +162,7 @@ Expected:
 **Problem:**
 ```json
 "pathPatterns": [
-  "form/**"  // Matches everything in form/
+  "backend/**"  // Matches everything in form/
 ]
 ```
 - Triggers on: test files, config files, everything
@@ -308,8 +170,8 @@ Expected:
 **Solution:** Use narrower patterns
 ```json
 "pathPatterns": [
-  "form/src/services/**/*.ts",  // Only service files
-  "form/src/controllers/**/*.ts"
+  "backend/pkg/db/services/**/*.go",  // Only service files
+  "backend/pkg/http/**/*.go"
 ]
 ```
 
@@ -318,20 +180,24 @@ Expected:
 **Problem:**
 ```json
 "contentPatterns": [
-  "Prisma"  // Matches in comments, strings, etc.
+  "sqlc"  // Matches in comments, strings, etc.
 ]
 ```
-- Triggers on: `// Don't use Prisma here`
-- Triggers on: `const note = "Prisma is cool"`
+- Triggers on: `// regenerate with sqlc before committing`
+- Triggers on: `const note = "sqlc generates this"`
 
 **Solution:** Make patterns more specific
 ```json
 "contentPatterns": [
-  "import.*[Pp]risma",        // Only imports
-  "PrismaService\\.",         // Only actual usage
-  "prisma\\.(findMany|create)" // Specific methods
+  "import.*pkg/db/models",          // Only imports
+  "sqlc\\.New\\(",             // Only actual usage
+  "Queries\\.(Get|Create|Update)" // Specific generated methods
 ]
 ```
+
+> Remember that `contentPatterns` is inert in this project — no hook reads
+> `fileTriggers`. This section is about pattern *design*, useful if a
+> file-trigger hook is added later.
 
 ### 5. Adjust Enforcement Level
 
@@ -355,10 +221,9 @@ This makes it advisory instead of blocking.
 
 ### 1. Hook Not Registered
 
-**Check `.claude/settings.json`:**
+**Check `.claude/settings.local.json`** (this project has no `settings.json`):
 ```bash
-cat .claude/settings.json | jq '.hooks.UserPromptSubmit'
-cat .claude/settings.json | jq '.hooks.PreToolUse'
+jq '.hooks.UserPromptSubmit' .claude/settings.local.json
 ```
 
 Expected: Hook entries present
@@ -477,8 +342,8 @@ Expected: No output (no errors)
 **Solution:** Be more specific
 ```json
 "pathPatterns": [
-  "form/src/services/**/*.ts",  // Only specific directory
-  "form/src/controllers/**/*.ts"
+  "backend/pkg/db/services/**/*.go",  // Only specific directory
+  "backend/pkg/http/**/*.go"
 ]
 ```
 
@@ -496,15 +361,10 @@ Content pattern matching reads entire file - slow for large files.
 # UserPromptSubmit
 time echo '{"prompt":"test"}' | npx tsx .claude/hooks/skill-activation-prompt.ts
 
-# PreToolUse
-time cat <<'EOF' | npx tsx .claude/hooks/skill-verification-guard.ts
-{"tool_name":"Edit","tool_input":{"file_path":"test.ts"}}
-EOF
 ```
 
-**Target metrics:**
-- UserPromptSubmit: < 100ms
-- PreToolUse: < 200ms
+**Target metric:** UserPromptSubmit < 100ms. Most of the wall time is `npx tsx`
+process startup rather than pattern matching.
 
 ---
 

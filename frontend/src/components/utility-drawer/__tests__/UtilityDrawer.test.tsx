@@ -24,7 +24,7 @@ function makeGameCtx(overrides: Partial<GameUtilityContext> = {}): GameUtilityCo
     currentPhase: null,
     isGM: false,
     isAudience: false,
-    isGameCompleted: false,
+    isGameWritable: true,
     userRole: 'player',
     gameState: 'in_progress',
     isAnonymous: false,
@@ -288,5 +288,43 @@ describe('UtilityDrawer', () => {
     );
 
     expect(screen.getByTestId('utility-mark-all-read')).toBeInTheDocument();
+  });
+
+  it('keeps mark-all-read in an epilogue game, which is still writable', () => {
+    // The flag behind this used to be isGameCompleted, which conflated "the
+    // archive is open" with "the game is finished". Epilogue is both readable by
+    // everyone AND still writable — people are commenting on epilogue threads,
+    // so catching up on them is exactly as useful as during play.
+    renderWithProviders(
+      <UtilityDrawer
+        open
+        onClose={vi.fn()}
+        ctx={makeCtx({
+          gameState: 'epilogue',
+          isGameWritable: true,
+          currentPhase: { id: 5 } as GameUtilityContext['currentPhase'],
+          commentReadMode: 'manual',
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('utility-mark-all-read')).toBeInTheDocument();
+  });
+
+  it('drops mark-all-read once the game is no longer writable', () => {
+    renderWithProviders(
+      <UtilityDrawer
+        open
+        onClose={vi.fn()}
+        ctx={makeCtx({
+          gameState: 'completed',
+          isGameWritable: false,
+          currentPhase: { id: 5 } as GameUtilityContext['currentPhase'],
+          commentReadMode: 'manual',
+        })}
+      />
+    );
+
+    expect(screen.queryByTestId('utility-mark-all-read')).not.toBeInTheDocument();
   });
 });

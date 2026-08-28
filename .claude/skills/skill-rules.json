@@ -47,7 +47,7 @@
       "fileTriggers": {
         "pathPatterns": [
           "backend/pkg/**/*.go",
-          "backend/cmd/**/*.go",
+          "backend/main.go",
           "backend/pkg/db/queries/**/*.sql",
           "backend/pkg/db/migrations/**/*.sql"
         ],
@@ -184,9 +184,11 @@
           "backend/pkg/games/**/*.go",
           "backend/pkg/phases/**/*.go",
           "backend/pkg/characters/**/*.go",
-          "frontend/src/components/games/**/*.tsx",
-          "frontend/src/components/phases/**/*.tsx",
-          "frontend/src/components/characters/**/*.tsx"
+          "frontend/src/components/*Game*.tsx",
+          "frontend/src/components/*Phase*.tsx",
+          "frontend/src/components/*Character*.tsx",
+          "frontend/src/components/character-updates/**/*.tsx",
+          "frontend/src/pages/Game*.tsx"
         ],
         "contentPatterns": [
           "GameState",
@@ -314,7 +316,7 @@
       "type": "domain",
       "enforcement": "suggest",
       "priority": "high",
-      "description": "Small feature implementation guide for ActionPhase \u2014 end-to-end from database migration through backend service, API handler, frontend hook, and component, following the test pyramid at each layer",
+      "description": "Small feature implementation guide for ActionPhase \u2014 end-to-end from database migration through backend service, API handler, frontend hook, and component, following the test pyramid at each layer. NOTE: this is a COMMAND (.claude/commands/implement-feature.md), not a skill directory under .claude/skills/. It is listed here only so the activation hook can suggest it; Claude Code resolves the name to the command file.",
       "promptTriggers": {
         "keywords": [
           "implement feature",

@@ -174,7 +174,7 @@ func TestGameAPI_UpdateAutoAcceptAudience(t *testing.T) {
 func TestGameAPI_ListAllPrivateConversations(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversation_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "private_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupGameTestRouter(app, testDB)
@@ -253,11 +253,11 @@ func TestGameAPI_ListAllPrivateConversations(t *testing.T) {
 }
 
 // TestGameAPI_GetConversationParticipants tests GET /api/v1/games/{id}/private-messages/participants
-// Validates: response shape, access control, returns participant name list
+// Validates: response shape, access control, returns participating characters as {id, name}
 func TestGameAPI_GetConversationParticipants(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversation_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "private_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupGameTestRouter(app, testDB)
@@ -300,7 +300,7 @@ func TestGameAPI_GetConversationParticipants(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	t.Run("GM gets participant names", func(t *testing.T) {
+	t.Run("GM gets participant characters", func(t *testing.T) {
 		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/private-messages/participants", game.ID), nil)
 		req.Header.Set("Authorization", "Bearer "+gmToken)
 
@@ -312,16 +312,22 @@ func TestGameAPI_GetConversationParticipants(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 		participants, ok := response["participants"].([]interface{})
 		assert.True(t, ok, "response should have 'participants' array")
-		// Both character names should appear
+		// Participants are {id, name} objects: the UI displays the name but filters by ID.
 		names := make([]string, len(participants))
+		ids := make([]int32, len(participants))
 		for i, p := range participants {
-			names[i] = p.(string)
+			obj, ok := p.(map[string]interface{})
+			require.True(t, ok, "participant should be an object with id and name")
+			names[i] = obj["name"].(string)
+			ids[i] = int32(obj["id"].(float64))
 		}
 		assert.Contains(t, names, "AlphaChar")
 		assert.Contains(t, names, "BetaChar")
+		assert.Contains(t, ids, char1.ID)
+		assert.Contains(t, ids, char2.ID)
 	})
 
-	t.Run("outsider cannot get participant names", func(t *testing.T) {
+	t.Run("outsider cannot get participant characters", func(t *testing.T) {
 		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/private-messages/participants", game.ID), nil)
 		req.Header.Set("Authorization", "Bearer "+outsiderToken)
 
@@ -337,7 +343,7 @@ func TestGameAPI_GetConversationParticipants(t *testing.T) {
 func TestGameAPI_GetAudienceConversationMessages(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "conversation_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "private_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupGameTestRouter(app, testDB)
@@ -425,7 +431,7 @@ func TestGameAPI_GetAudienceConversationMessages(t *testing.T) {
 func TestGameAPI_ListAllActionSubmissions(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_submissions", "phases", "characters", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "action_submissions", "game_phases", "characters", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupGameTestRouter(app, testDB)

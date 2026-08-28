@@ -59,3 +59,9 @@ ignore:
   - "backend/pkg/core/test_helpers.go"
   - "backend/pkg/http/test_helpers.go"
   - "backend/pkg/http/root.go"
+  # Build-time spec generator: a main() that renders the OpenAPI document and
+  # writes it out. Its output is already verified by `just check-api-docs`,
+  # which regenerates the spec in CI and fails on any diff against the
+  # committed copy — a stronger check than a coverage percentage. Ignored
+  # alongside the pkg/docs spec it produces.
+  - "backend/cmd/genopenapi/**"

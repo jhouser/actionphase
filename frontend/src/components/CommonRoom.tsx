@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { isGameWritable } from '@/lib/gamePermissions';
 import { apiClient } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useGameContext } from '../contexts/GameContext';
@@ -34,7 +35,6 @@ interface CommonRoomProps {
   isCurrentPhase?: boolean;
   isGM?: boolean;
   isAudience?: boolean;
-  isGameCompleted?: boolean;
 }
 
 // Inner component so hooks run unconditionally with a known postId
@@ -62,7 +62,7 @@ function ThreadViewModalWithReadTracking(props: React.ComponentProps<typeof Thre
   );
 }
 
-export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, currentPhase, isCurrentPhase = true, isGM = false, isAudience = false, isGameCompleted = false }: CommonRoomProps) {
+export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, currentPhase, isCurrentPhase = true, isGM = false, isAudience = false }: CommonRoomProps) {
   // Get current user from AuthContext
   const { currentUser } = useAuth();
   const currentUserId = currentUser?.id;
@@ -70,11 +70,17 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
   const queryClient = useQueryClient();
   const commentReadMode = useCommentReadMode();
   const toggleCommentReadMutation = useToggleCommentRead();
-  const allowReadTracking = !isGameCompleted;
 
   // Read character data and game settings from GameContext — single source of truth
   const { userCharacters, allGameCharacters, userRole, game } = useGameContext();
   const gameState = game?.state ?? '';
+
+  // Read-tracking is pointless once a game is frozen, but an epilogue game is
+  // still actively read and written, so it keeps tracking. Derived from
+  // gameState directly: "the archive is open" (epilogue included) is a different
+  // question from "the game still takes writes", and read-tracking follows the
+  // latter.
+  const allowReadTracking = isGameWritable(gameState);
 
   // URL search params for deep linking to comments and sub-tab navigation
   const [searchParams, setSearchParams] = useSearchParams();
@@ -114,7 +120,9 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
       currentPhase,
       isGM,
       isAudience,
-      isGameCompleted,
+      // Same value as allowReadTracking, and for the same reason: this is the
+      // write gate, not "is the game finished". Epilogue is writable.
+      isGameWritable: allowReadTracking,
       userRole,
       gameState,
       isAnonymous,
@@ -129,7 +137,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
       currentPhase,
       isGM,
       isAudience,
-      isGameCompleted,
+      allowReadTracking,
       userRole,
       gameState,
       isAnonymous,
@@ -406,7 +414,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
     return (
       <div className="flex justify-center items-center py-12">
         <Spinner size="lg" />
-        <p className="ml-3 text-text-secondary">Loading comment...</p>
+        <p className="ml-3 text-content-secondary">Loading comment...</p>
       </div>
     );
   }
@@ -451,7 +459,7 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
       </div>
 
       {/* Tab Navigation */}
-      <div className="border-b border-border-primary mb-6">
+      <div className="border-b border-theme-default mb-6">
         <nav className="flex space-x-6 md:space-x-8">
           <button
             onClick={() => {
@@ -461,8 +469,8 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
             }}
             className={`py-3 md:py-2 px-1 border-b-[3px] md:border-b-2 font-semibold md:font-medium text-base md:text-sm transition-colors ${
               activeTab === 'posts'
-                ? 'border-accent-primary text-interactive-primary'
-                : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border-secondary'
+                ? 'border-interactive-primary text-interactive-primary'
+                : 'border-transparent text-content-secondary hover:text-content-secondary hover:border-theme-strong'
             }`}
           >
             Posts
@@ -475,8 +483,8 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
             }}
             className={`py-3 md:py-2 px-1 border-b-[3px] md:border-b-2 font-semibold md:font-medium text-base md:text-sm transition-colors ${
               activeTab === 'newComments'
-                ? 'border-accent-primary text-interactive-primary'
-                : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border-secondary'
+                ? 'border-interactive-primary text-interactive-primary'
+                : 'border-transparent text-content-secondary hover:text-content-secondary hover:border-theme-strong'
             }`}
           >
             New Comments
@@ -489,12 +497,12 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
             }}
             className={`py-3 md:py-2 px-1 border-b-[3px] md:border-b-2 font-semibold md:font-medium text-base md:text-sm transition-colors ${
               activeTab === 'polls'
-                ? 'border-accent-primary text-interactive-primary'
-                : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border-secondary'
+                ? 'border-interactive-primary text-interactive-primary'
+                : 'border-transparent text-content-secondary hover:text-content-secondary hover:border-theme-strong'
             }`}
           >
             Polls {unvotedPollsCount > 0 && !pollsLoading && (
-              <span className="ml-1 inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-accent-primary text-white">
+              <span className="ml-1 inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-interactive-primary text-white">
                 {unvotedPollsCount}
               </span>
             )}
@@ -517,9 +525,9 @@ export function CommonRoom({ gameId, phaseId, phaseTitle, phaseDescription, curr
         <>
           {/* Draft Post Preview — GM only, pending phase only */}
           {isPendingPhase && draftPost && (
-            <div className="border border-dashed border-border-default rounded-lg p-4 mb-4 bg-bg-secondary" data-testid="draft-post-preview">
+            <div className="border border-dashed border-theme-default rounded-lg p-4 mb-4 surface-raised" data-testid="draft-post-preview">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary bg-bg-tertiary px-2 py-0.5 rounded">
+                <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary surface-sunken px-2 py-0.5 rounded">
                   DRAFT — not visible to players
                 </span>
               </div>

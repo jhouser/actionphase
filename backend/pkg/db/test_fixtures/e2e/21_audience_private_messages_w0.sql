@@ -1,5 +1,16 @@
 -- E2E Test Fixture: Audience Private Messages View (Worker 0)
--- Game #360, conversations 9960/9961
+--
+-- Purpose: Pre-seeded conversations for audience-private-messages.spec.ts
+-- Game #360 has two conversations with messages from different senders so
+-- audience view tests don't need to create conversations at runtime.
+--
+-- Conversations:
+--   ID 9960: "Audience Test Conversation" — 2 messages from Char 1
+--   ID 9961: "Preview Test Conversation"  — 1 message ("Last message preview text")
+--
+-- Game IDs: 360. Unlike transformed fixtures, the 21_* worker files are
+-- PRE-OFFSET: each _wN file hardcodes its own IDs (w5 = 50360/59960/59961) and
+-- is applied verbatim, with no rewriting by apply_e2e_worker.sh.
 
 BEGIN;
 
@@ -57,6 +68,7 @@ BEGIN
     (9960, p2_id, char2_id, NOW() - INTERVAL '30 minutes')
   ON CONFLICT (conversation_id, user_id, character_id) DO NOTHING;
 
+  -- Used by: test 1 (enhanced UI), test 3 (message grouping + date dividers)
   INSERT INTO private_messages (id, conversation_id, sender_user_id, sender_character_id, content, created_at, is_deleted)
   VALUES
     (99601, 9960, p1_id, char1_id, 'First message from Player 1',  NOW() - INTERVAL '25 minutes', false),
@@ -65,6 +77,7 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET content = EXCLUDED.content;
 
   -- Conversation 2: last message preview test
+  -- Used by: test 5 (last message preview on conversation cards)
   INSERT INTO conversations (id, game_id, title, conversation_type, created_by_user_id, created_at)
   VALUES (9961, 360, 'Preview Test Conversation', 'direct', p1_id, NOW() - INTERVAL '15 minutes')
   ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, game_id = EXCLUDED.game_id;

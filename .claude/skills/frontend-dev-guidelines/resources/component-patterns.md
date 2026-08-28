@@ -274,13 +274,13 @@ export const MyComponent: React.FC<MyComponentProps> = ({
     return (
         <Card variant="default" padding="md">
             <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-text-heading">My Component</h2>
+                <h2 className="text-xl font-semibold text-content-primary">My Component</h2>
                 <Button variant="primary" onClick={handleSave}>Save</Button>
             </div>
 
             <CardBody>
                 {filteredData.map(item => (
-                    <div key={item.id} className="py-2 border-b border-border-primary">
+                    <div key={item.id} className="py-2 border-b border-theme-default">
                         {item.name}
                     </div>
                 ))}
@@ -492,4 +492,3 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 **See Also:**
 - [data-fetching.md](data-fetching.md) - useSuspenseQuery details
 - [loading-and-error-states.md](loading-and-error-states.md) - Suspense best practices
-- [complete-examples.md](complete-examples.md) - Full working examples

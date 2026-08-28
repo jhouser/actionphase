@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/jwtauth/v5"
@@ -52,7 +53,34 @@ func (h *Handler) sessionValidateMW() func(http.Handler) http.Handler {
 	return core.ValidateSessionMiddleware(sessionSvc)
 }
 
+// Start builds the router and serves it.
 func (h *Handler) Start() {
+	r, _ := h.Router()
+
+	// Wrap the router with OpenTelemetry HTTP instrumentation.
+	// This creates spans for every request when OTEL_ENABLED=true.
+	// When OTEL is disabled, the global provider is a no-op so this is zero cost.
+	// Span names are set to the chi route template (e.g. "GET /api/v1/games/{id}")
+	// by RouteTagMiddleware, which runs after chi has matched the route.
+	otelHandler := otelhttp.NewHandler(r, "actionphase-http")
+
+	h.serve(otelHandler)
+}
+
+// Router builds the complete route tree and returns it alongside the docs
+// handler that describes it.
+//
+// Split out of Start so the OpenAPI document can be rendered without listening
+// on a port: `just gen-openapi` calls this, takes the docs handler, and writes
+// the same bytes the server would serve. That is what lets check-api-docs be a
+// diff against a committed file rather than a heuristic comparison of the
+// router source against a hand-written spec.
+func (h *Handler) Router() (chi.Router, *docs.Handler) {
+	// Huma's default error body is RFC 7807, which the frontend cannot parse.
+	// Install the legacy shape before any huma API is built. See
+	// .claude/planning/rfc7807-error-format.md.
+	InstallLegacyErrorFormat()
+
 	r := chi.NewRouter()
 
 	// Add observability middleware stack first
@@ -83,6 +111,14 @@ func (h *Handler) Start() {
 
 	apiV1Router := chi.NewRouter()
 
+	// One huma API per middleware group under /auth; see the groups below.
+	var (
+		authPublicAPI               huma.API
+		authRateLimitedAPI          huma.API
+		authProbeAPI                huma.API
+		authProtectedAPI            huma.API
+		authRateLimitedProtectedAPI huma.API
+	)
 	authRouter := chi.NewRouter()
 	authRouter.Route("/", func(r chi.Router) {
 		authHandler := auth.Handler{
@@ -95,23 +131,39 @@ func (h *Handler) Start() {
 			DiscordService:         &db.DiscordAccountService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 		}
 
-		// Public routes (no authentication required)
-		// Apply strict rate limiting to sensitive endpoints
-		// In development mode, rate limiting is relaxed for E2E testing
+		// In development mode, rate limiting is relaxed for E2E testing.
 		isDev := h.App.Config.IsDevelopment()
-		r.With(ratelimitmw.StrictRateLimit(isDev)).Post("/register", authHandler.V1Register)
-		r.With(ratelimitmw.StrictRateLimit(isDev)).Post("/login", authHandler.V1Login)
-		r.Post("/logout", authHandler.V1Logout) // Logout endpoint (clears JWT cookie)
-		r.With(ratelimitmw.StrictRateLimit(isDev)).Post("/request-password-reset", authHandler.V1RequestPasswordReset)
-		r.Post("/reset-password", authHandler.V1ResetPassword)
-		r.Get("/validate-reset-token", authHandler.V1ValidateResetToken)
-		r.Post("/verify-email", authHandler.V1VerifyEmail)                  // Verify email with token
-		r.Post("/complete-email-change", authHandler.V1CompleteEmailChange) // Complete email change with token
 
-		// Probe endpoint: returns current user if authenticated, null if not (no 401)
-		r.With(jwtauth.Verifier(h.getTokenAuth())).Get("/me", authHandler.V1Me)
+		// Auth's routes do not share one middleware stack, and huma binds an
+		// API to a chi router -- so each group gets its own API and inherits
+		// that group's middleware unchanged. generatedSpecFor merges the five
+		// documents under the single /auth prefix.
 
-		// Discord OAuth callback (public — Discord redirects here after authorization)
+		// Public, unlimited.
+		r.Group(func(r chi.Router) {
+			authPublicAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			auth.RegisterHumaAuthPublic(authPublicAPI, &authHandler)
+		})
+
+		// Public, strictly rate limited: the credential-guessing surface.
+		r.Group(func(r chi.Router) {
+			r.Use(ratelimitmw.StrictRateLimit(isDev))
+			authRateLimitedAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			auth.RegisterHumaAuthRateLimited(authRateLimitedAPI, &authHandler)
+		})
+
+		// Probe: Verifier only, deliberately no Authenticator, so /me answers
+		// 200 with a null user rather than 401 when the caller is anonymous.
+		r.Group(func(r chi.Router) {
+			r.Use(jwtauth.Verifier(h.getTokenAuth()))
+			authProbeAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			auth.RegisterHumaAuthProbe(authProbeAPI, &authHandler)
+		})
+
+		// Discord OAuth callback (public — Discord redirects here after
+		// authorization). Left on chi: it answers a 302 redirect and writes
+		// plain-text errors, so there is no JSON shape to generate, the same
+		// reasoning that leaves /ping unconverted.
 		r.Get("/discord/callback", authHandler.V1DiscordCallback)
 
 		// Protected routes (require authentication)
@@ -123,28 +175,28 @@ func (h *Handler) Start() {
 			r.Use(jwtauth.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
-			r.Get("/refresh", authHandler.V1Refresh)
-			r.Get("/preferences", authHandler.V1GetPreferences)    // Get user preferences
-			r.Put("/preferences", authHandler.V1UpdatePreferences) // Update user preferences
-			r.Get("/users/search", authHandler.V1SearchUsers)      // Search for users
-			// Discord OAuth routes (protected)
-			r.Get("/discord/connect", authHandler.V1DiscordConnect)                                                        // Get Discord OAuth URL
-			r.Get("/discord/status", authHandler.V1DiscordStatus)                                                          // Check Discord link status
-			r.Delete("/discord/disconnect", authHandler.V1DiscordDisconnect)                                               // Unlink Discord account
-			r.Post("/change-password", authHandler.V1ChangePassword)                                                       // Change password (authenticated users)
-			r.With(ratelimitmw.StrictRateLimit(isDev)).Post("/resend-verification", authHandler.V1ResendVerificationEmail) // Resend email verification with rate limiting
-			r.Post("/change-username", authHandler.V1ChangeUsername)                                                       // Change username
-			r.Post("/request-email-change", authHandler.V1RequestEmailChange)                                              // Request email change
-			r.Delete("/account", authHandler.V1DeleteAccount)                                                              // Soft delete account
-			r.Get("/sessions", authHandler.V1ListSessions)                                                                 // List active sessions
-			r.Delete("/sessions/{sessionID}", authHandler.V1RevokeSession)                                                 // Revoke specific session
-			r.Post("/revoke-all-sessions", authHandler.V1RevokeAllSessions)                                                // Revoke all sessions except current
+
+			authProtectedAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			auth.RegisterHumaAuthProtected(authProtectedAPI, &authHandler)
+
+			// Authenticated *and* rate limited, so it needs its own group.
+			r.Group(func(r chi.Router) {
+				r.Use(ratelimitmw.StrictRateLimit(isDev))
+				authRateLimitedProtectedAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+				auth.RegisterHumaAuthRateLimitedProtected(authRateLimitedProtectedAPI, &authHandler)
+			})
 		})
 	})
 	apiV1Router.Mount("/auth", authRouter)
 
 	// Games API - All routes require authentication
 	gamesRouter := chi.NewRouter()
+	// gameScopedAPI is the single huma API for the /{gameID} subrouter. Several
+	// packages hang operations off that mount, and they must share one API:
+	// generatedSpecFor keys by mount prefix, so a second API on the same prefix
+	// would be dropped from the served spec.
+	var gameScopedAPI huma.API
+	var gamesAPI, gamesPublicListAPI, gamesPublicGameAPI huma.API
 	gamesRouter.Route("/", func(r chi.Router) {
 		gameHandler := games.Handler{
 			App:                     h.App,
@@ -162,10 +214,23 @@ func (h *Handler) Start() {
 		// Public routes (authentication optional - will enrich if present)
 		tokenAuth := h.getTokenAuth()
 		r.Group(func(r chi.Router) {
-			// Use verifier to extract token if present, but don't require authentication
+			// Verifier without Authenticator: a token is read if present, and
+			// its absence is not an error. The listing is simply unenriched for
+			// an anonymous caller.
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Get("/", gameHandler.GetFilteredGames)                                                              // Main game listing endpoint with filters
-			r.With(gameHandler.GameMiddleware()).Get("/{gameID}/applicants", gameHandler.GetPublicGameApplicants) // Public list of applicants (username + role only)
+
+			// Two APIs, not one, because the applicants route additionally needs
+			// GameMiddleware to load the game and the listing must not have it.
+			// A huma API binds to one router, so a differing middleware stack
+			// needs its own (gotcha 19).
+			gamesPublicListAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			games.RegisterHumaGamesPublicList(gamesPublicListAPI, &gameHandler)
+
+			r.Group(func(r chi.Router) {
+				r.Use(gameHandler.GameMiddleware())
+				gamesPublicGameAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+				games.RegisterHumaGamesPublicApplicants(gamesPublicGameAPI, &gameHandler)
+			})
 		})
 
 		// All routes below require authentication
@@ -176,54 +241,32 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			// Game listing and viewing
-			r.Get("/recruiting", gameHandler.GetRecruitingGames)
+			// huma / type-first -- the collection routes (/recruiting and
+			// POST /), which need no game context. The game-scoped operations
+			// register on gameScopedAPI inside the /{gameID} subrouter below,
+			// where GameMiddleware has loaded the game.
+			//
+			// Email verification for create-game now runs inside the handler
+			// (core.RequireVerifiedEmailCtx), since huma handlers take a
+			// context rather than a *http.Request (gotcha 15).
+			gamesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			games.RegisterHumaGamesCollection(gamesAPI, &gameHandler)
 
-			// Create game requires email verification
-			r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/", gameHandler.CreateGame)
 			r.Route("/{gameID}", func(r chi.Router) {
 				r.Use(gameHandler.GameMiddleware())
 
-				r.Get("/", gameHandler.GetGame)
-				r.Get("/details", gameHandler.GetGameWithDetails)
-				r.Get("/participants", gameHandler.GetGameParticipants)
+				// Shared by every converted package registering on this
+				// subrouter; see the declaration for why it must be one API.
+				gameScopedAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
 
-				// Game management
-				r.Put("/", gameHandler.UpdateGame)
-				r.Delete("/", gameHandler.DeleteGame)
-				r.Put("/state", gameHandler.UpdateGameState)
-				r.Post("/banner", gameHandler.UploadGameBanner)
-				r.Delete("/banner", gameHandler.DeleteGameBanner)
-
-				// Participant management
-				r.Delete("/leave", gameHandler.LeaveGame)
-				r.Delete("/participants/{userId}", gameHandler.RemovePlayer)           // GM removes player
-				r.Post("/participants/direct-add", gameHandler.AddParticipantDirectly) // GM adds player or audience member directly
-
-				// Co-GM management
-				r.Post("/participants/{userId}/promote-to-co-gm", gameHandler.PromoteToCoGM)         // GM promotes audience to co-GM
-				r.Post("/participants/{userId}/demote-from-co-gm", gameHandler.DemoteFromCoGM)       // GM demotes co-GM to audience
-				r.Post("/participants/{userId}/to-audience", gameHandler.TransitionPlayerToAudience) // GM moves player to audience (permadeath)
-
-				// Game application management
-				// Apply to game requires email verification
-				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/apply", gameHandler.ApplyToGame)
-				r.Get("/applications", gameHandler.GetGameApplications)
-				r.Get("/application/mine", gameHandler.GetMyGameApplication)
-				r.Put("/applications/{applicationId}/review", gameHandler.ReviewGameApplication)
-				r.Delete("/application", gameHandler.WithdrawGameApplication)
-
-				// Audience participation
-				r.Get("/audience", gameHandler.ListAudienceMembers)
-				r.Get("/characters/audience-npcs", gameHandler.ListAudienceNPCs)
-				r.Put("/settings/auto-accept-audience", gameHandler.UpdateAutoAcceptAudience)
-				r.Get("/private-messages/all", gameHandler.ListAllPrivateConversations)
-				r.Get("/private-messages/participants", gameHandler.GetConversationParticipants)
-				r.Get("/private-messages/conversations/{conversationId}", gameHandler.GetAudienceConversationMessages)
-				r.Get("/action-submissions/all", gameHandler.ListAllActionSubmissions)
-
-				// Post-game statistics (completed games only; handler enforces)
-				r.Get("/stats", gameHandler.GetGameStats)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				// Covers the game, participant, application, audience, log,
+				// stats, banner and loot-table operations. The email
+				// verification apply-to-game required now runs inside that
+				// handler (core.RequireVerifiedEmailCtx), since huma handlers
+				// take a context rather than a *http.Request.
+				games.RegisterHumaGameScoped(gameScopedAPI, &gameHandler)
 
 				// Character management within games
 				characterHandler := characters.Handler{
@@ -233,12 +276,12 @@ func (h *Handler) Start() {
 					GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 				}
-				// Create character requires email verification
-				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/characters", characterHandler.CreateCharacter)
-				r.Get("/characters", characterHandler.GetGameCharacters)
-				r.Get("/characters/stats", characterHandler.GetGameCharacterStats)
-				r.Get("/characters/controllable", characterHandler.GetUserControllableCharacters)
-				r.Get("/characters/inactive", characterHandler.ListInactiveCharacters) // GM views inactive characters
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter. The
+				// email-verification requirement on create now runs inside the
+				// handler (core.RequireVerifiedEmailCtx), since huma handlers
+				// take a context rather than a *http.Request.
+				characters.RegisterHumaGameCharacters(gameScopedAPI, &characterHandler)
 
 				// Phase management within games
 				phaseHandler := phases.Handler{
@@ -248,36 +291,11 @@ func (h *Handler) Start() {
 					GameService:             &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					NotificationService:     db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 				}
-				r.Post("/phases", phaseHandler.CreatePhase)
-				r.Get("/current-phase", phaseHandler.GetCurrentPhase)
-				r.Get("/phases", phaseHandler.GetGamePhases)
-				r.Post("/actions", phaseHandler.SubmitAction)
-				r.Get("/actions", phaseHandler.GetGameActions)
-				r.Get("/actions/mine", phaseHandler.GetUserActions)
-
-				// Action results management
-				r.Post("/results", phaseHandler.CreateActionResult)
-				r.Post("/results/staged", phaseHandler.CreateStagedResultChain)
-				r.Get("/results", phaseHandler.GetGameActionResults)
-				r.Get("/results/mine", phaseHandler.GetUserActionResults)
-				r.Put("/results/{resultId}", phaseHandler.UpdateActionResult)
-				r.Delete("/results/{resultId}", phaseHandler.DeleteActionResult)
-				// Cancels a scheduled-but-unreleased part. Separate from the
-				// delete above, which is guarded on is_published = false and so
-				// matches nothing for a published-but-unreleased part.
-				r.Delete("/results/{resultId}/pending", phaseHandler.CancelPendingStagedPart)
-				r.Post("/results/{resultId}/parts", phaseHandler.AppendStagedPart)
-				r.Put("/results/{resultId}/delay", phaseHandler.UpdateStagedPartDelay)
-				r.Post("/results/{resultId}/publish", phaseHandler.PublishActionResult)
-				r.Post("/phases/{phaseId}/results/publish", phaseHandler.PublishAllPhaseResults)
-				r.Get("/phases/{phaseId}/results/unpublished-count", phaseHandler.GetUnpublishedResultsCount)
-
-				// Draft character updates for action results
-				r.Post("/results/{resultId}/character-updates", phaseHandler.CreateDraftCharacterUpdate)
-				r.Get("/results/{resultId}/character-updates", phaseHandler.GetDraftCharacterUpdates)
-				r.Get("/results/{resultId}/character-updates/count", phaseHandler.GetDraftUpdateCount)
-				r.Put("/results/{resultId}/character-updates/{draftId}", phaseHandler.UpdateDraftCharacterUpdate)
-				r.Delete("/results/{resultId}/character-updates/{draftId}", phaseHandler.DeleteDraftCharacterUpdate)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				// Registers the action, result, staged-chain and draft
+				// character-update operations too.
+				phases.RegisterHumaGamePhases(gameScopedAPI, &phaseHandler)
 
 				// Common Room messages (posts and comments)
 				messageHandler := messages.Handler{
@@ -286,29 +304,13 @@ func (h *Handler) Start() {
 					MessageService: &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
 				}
 				// Create post requires email verification
-				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/posts", messageHandler.CreatePost)
-				r.Get("/posts", messageHandler.GetGamePosts)
-				r.Patch("/posts/{postId}", messageHandler.UpdatePost) // Edit post
-				// Create comment requires email verification
-				r.With(core.RequireEmailVerificationMiddleware(h.App.Pool)).Post("/posts/{postId}/comments", messageHandler.CreateComment)
-				r.Get("/posts/{postId}/comments", messageHandler.GetPostComments)
-				r.Get("/posts/{postId}/comments-with-threads", messageHandler.GetPostCommentsWithThreads) // NEW: Paginated with nested replies
-				r.Patch("/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)             // Edit comment
-				r.Delete("/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)            // Delete comment
-				r.Get("/messages/{messageId}", messageHandler.GetMessage)                                 // For deep linking to nested comments
-				r.Get("/messages/{messageId}/thread-context", messageHandler.GetMessageThreadContext)     // Target + full ancestor chain in one request
-				r.Get("/comments/recent", messageHandler.ListRecentCommentsWithParents)                   // New Comments view
-
-				// Read tracking for common room
-				r.Post("/posts/{postId}/mark-read", messageHandler.MarkPostRead)
-				r.Get("/read-markers", messageHandler.GetGameReadMarkers)
-				r.Get("/posts-unread-info", messageHandler.GetPostsUnreadInfo)
-				r.Get("/unread-comment-ids", messageHandler.GetUnreadCommentIDs)
-
-				// Manual read tracking (per-comment)
-				r.Post("/posts/{postId}/comments/{commentId}/toggle-read", messageHandler.ToggleCommentRead)
-				r.Get("/manual-read-comment-ids", messageHandler.GetManualReadCommentIDs)
-				r.Post("/phases/{phaseId}/mark-all-comments-read", messageHandler.MarkAllCommentsRead)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter. The
+				// email-verification requirement on create-post and
+				// create-comment now runs inside those handlers
+				// (core.RequireVerifiedEmailCtx), since huma handlers take a
+				// context rather than a *http.Request.
+				messages.RegisterHumaGameMessages(gameScopedAPI, &messageHandler)
 
 				// Private messages (conversations)
 				conversationHandler := &conversations.Handler{
@@ -318,7 +320,9 @@ func (h *Handler) Start() {
 					ConversationService: db.NewConversationService(h.App.Pool, h.App.ObsLogger),
 					PhaseService:        &dbphases.PhaseService{DB: h.App.Pool},
 				}
-				conversationHandler.RegisterRoutes(r)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				conversations.RegisterHumaConversations(gameScopedAPI, conversationHandler)
 
 				// Handouts
 				handoutHandler := &handouts.Handler{
@@ -328,13 +332,10 @@ func (h *Handler) Start() {
 					HandoutService:      db.NewHandoutService(h.App.Pool),
 					NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 				}
-				r.Post("/handouts", handoutHandler.CreateHandout)
-				r.Get("/handouts", handoutHandler.ListHandouts)
-				r.Get("/handouts/{handoutId}", handoutHandler.GetHandout)
-				r.Put("/handouts/{handoutId}", handoutHandler.UpdateHandout)
-				r.Delete("/handouts/{handoutId}", handoutHandler.DeleteHandout)
-				r.Post("/handouts/{handoutId}/publish", handoutHandler.PublishHandout)
-				r.Post("/handouts/{handoutId}/unpublish", handoutHandler.UnpublishHandout)
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				// Registers the comment operations too.
+				handouts.RegisterHumaGameHandouts(gameScopedAPI, handoutHandler)
 
 				// Game archive exports (completed games only). Read access is
 				// CanUserViewGame, so any authenticated user may export a
@@ -345,14 +346,9 @@ func (h *Handler) Start() {
 					GameService:   &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					ExportService: exports.NewService(h.App.Pool, h.App.Config.Storage.ArchivePath, h.App.ObsLogger),
 				}
-				r.Post("/exports", exportHandler.RequestExport)
-				r.Get("/exports/latest", exportHandler.GetLatestExport)
-
-				// Handout comments
-				r.Post("/handouts/{handoutId}/comments", handoutHandler.CreateHandoutComment)
-				r.Get("/handouts/{handoutId}/comments", handoutHandler.ListHandoutComments)
-				r.Patch("/handouts/{handoutId}/comments/{commentId}", handoutHandler.UpdateHandoutComment)
-				r.Delete("/handouts/{handoutId}/comments/{commentId}", handoutHandler.DeleteHandoutComment)
+				// huma / type-first — paths are relative to this /{gameID}
+				// subrouter (see huma-migration.md gotcha 4).
+				exports.RegisterHumaGameExports(gameScopedAPI, exportHandler)
 
 				// Deadlines
 				deadlineHandler := &deadlines.Handler{
@@ -361,8 +357,9 @@ func (h *Handler) Start() {
 					GameService:     &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					DeadlineService: &db.DeadlineService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 				}
-				r.Post("/deadlines", deadlineHandler.CreateDeadline)
-				r.Get("/deadlines", deadlineHandler.GetGameDeadlines)
+				// huma / type-first — shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				deadlines.RegisterHumaGameDeadlines(gameScopedAPI, deadlineHandler)
 
 				// Polls
 				pollHandler := &polls.Handler{
@@ -373,26 +370,18 @@ func (h *Handler) Start() {
 					CharacterService:    &db.CharacterService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 					NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 				}
-				r.Post("/polls", pollHandler.CreatePoll)
-				r.Get("/polls", pollHandler.ListGamePolls)
-				r.Get("/phases/{phaseId}/polls", pollHandler.ListPollsByPhase)
-
-				// Logs
-				r.Get("/logs", gameHandler.GetGameLogs)
-
-				r.Get("/loot-tables", gameHandler.GetGameLootTables)
-				r.Post("/loot-tables", gameHandler.AddGameLootTable)
-				r.Put("/loot-tables/{tableId}", gameHandler.UpdateGameLootTable)
-				r.Delete("/loot-tables/{tableId}", gameHandler.DeleteGameLootTable)
-				r.Get("/loot-tables/{tableId}/contents", gameHandler.GetGameLootTableContents)
-				r.Post("/loot-tables/{tableId}/contents", gameHandler.UpdateGameLootTableContent)
-				r.Post("/loot-tables/{tableId}/random/{characterId}", gameHandler.SetRandomLootForCharacter) // Assign random loot to character from table
+				// huma / type-first -- shares gameScopedAPI with the other
+				// packages registering on this same /{gameID} subrouter.
+				polls.RegisterHumaGamePolls(gameScopedAPI, pollHandler)
 			})
 		})
 	})
 	apiV1Router.Mount("/games", gamesRouter)
 
-	// Characters API (for character-specific operations)
+	// Characters API (for character-specific operations).
+	// charactersAPI is the single huma API for this mount: the characters and
+	// avatars packages both register onto it.
+	var charactersAPI huma.API
 	charactersRouter := chi.NewRouter()
 	charactersRouter.Route("/", func(r chi.Router) {
 		characterHandler := characters.Handler{
@@ -417,22 +406,14 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			// Cross-game character list for the current user. Static segment, so
-			// chi matches it ahead of the /{id} route below.
-			r.Get("/controllable", characterHandler.GetUserControllableCharactersAcrossGames)
+			// One huma API for this whole /characters mount: characters and
+			// avatars both register onto it, because generatedSpecFor keys by
+			// mount prefix and a second API here would be dropped.
+			charactersAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
 
-			// Character management
-			r.Get("/{id}", characterHandler.GetCharacter)
-			r.Post("/{id}/approve", characterHandler.ApproveCharacter)
-			r.Post("/{id}/assign", characterHandler.AssignNPC)
-			r.Put("/{id}/reassign", characterHandler.ReassignCharacter) // GM reassigns inactive character
-			r.Put("/{id}/rename", characterHandler.RenameCharacter)     // GM or owner renames character
-			r.Delete("/{id}", characterHandler.DeleteCharacter)         // GM deletes character with no activity
-			r.Post("/{id}/data", characterHandler.SetCharacterData)
-			r.Get("/{id}/data", characterHandler.GetCharacterData)
-
-			// Character activity stats
-			r.Get("/{id}/stats", characterHandler.GetCharacterStats)
+			// huma / type-first -- registers the cross-game /controllable list
+			// and every per-character operation.
+			characters.RegisterHumaCharacters(charactersAPI, &characterHandler)
 
 			// Character page - public activity feed
 			messageHandler := messages.Handler{
@@ -440,16 +421,18 @@ func (h *Handler) Start() {
 				UserService:    &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 				MessageService: &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
 			}
-			r.Get("/{id}/comments", messageHandler.GetCharacterComments)
+			// huma / type-first -- shares charactersAPI with the characters
+			// and avatars packages on this same /characters mount.
+			messages.RegisterHumaCharacterMessages(charactersAPI, &messageHandler)
 
-			// Avatar management
-			r.Post("/{id}/avatar", avatarHandler.UploadCharacterAvatar)
-			r.Delete("/{id}/avatar", avatarHandler.DeleteCharacterAvatar)
+			// Avatar management (huma / type-first)
+			avatars.RegisterHumaAvatars(charactersAPI, &avatarHandler)
 		})
 	})
 	apiV1Router.Mount("/characters", charactersRouter)
 
 	// Phases API (for phase-specific operations)
+	var phasesAPI huma.API
 	phasesRouter := chi.NewRouter()
 	phasesRouter.Route("/", func(r chi.Router) {
 		phaseHandler := phases.Handler{
@@ -470,27 +453,24 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			// Phase management
-			r.Post("/{id}/activate", phaseHandler.ActivatePhase)
-			r.Put("/{id}/deadline", phaseHandler.UpdatePhaseDeadline)
-			r.Put("/{id}", phaseHandler.UpdatePhase)
-			r.Delete("/{id}", phaseHandler.DeletePhase)
-
 			// Draft post management (GM only)
 			messageHandler := messages.Handler{
 				App:            h.App,
 				UserService:    &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 				MessageService: &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
 			}
-			r.Get("/{id}/draft-post", messageHandler.GetDraftPost)
-			r.Post("/{id}/draft-post", messageHandler.CreateDraftPost)
-			r.Put("/{id}/draft-post", messageHandler.UpdateDraftPost)
-			r.Delete("/{id}/draft-post", messageHandler.DeleteDraftPost)
+			// huma / type-first -- paths are relative to this /phases mount.
+			// Both pkg/phases and pkg/messages register on this one API, since
+			// they share the router and its middleware (gotcha 3).
+			phasesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			phases.RegisterHumaPhases(phasesAPI, &phaseHandler)
+			messages.RegisterHumaPhaseDraftPosts(phasesAPI, &messageHandler)
 		})
 	})
 	apiV1Router.Mount("/phases", phasesRouter)
 
 	// Deadlines API (for deadline-specific operations)
+	var deadlinesAPI huma.API
 	deadlinesRouter := chi.NewRouter()
 	deadlinesRouter.Route("/", func(r chi.Router) {
 		deadlineHandler := deadlines.Handler{
@@ -510,10 +490,9 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			// Deadline management
-			r.Get("/upcoming", deadlineHandler.GetUpcomingDeadlines) // Get upcoming deadlines across all user's games
-			r.Patch("/{deadlineId}", deadlineHandler.UpdateDeadline)
-			r.Delete("/{deadlineId}", deadlineHandler.DeleteDeadline)
+			// Deadline management (huma / type-first)
+			deadlinesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			deadlines.RegisterHumaDeadlines(deadlinesAPI, &deadlineHandler)
 		})
 	})
 	apiV1Router.Mount("/deadlines", deadlinesRouter)
@@ -522,6 +501,7 @@ func (h *Handler) Start() {
 	// because it spans every game the user is in, which is exactly what the
 	// global Utility Drawer needs when no game is in scope. Per-game handout
 	// routes remain under /games/{gameID}/handouts.
+	var handoutsAPI huma.API
 	handoutsRouter := chi.NewRouter()
 	handoutsRouter.Route("/", func(r chi.Router) {
 		handoutHandler := &handouts.Handler{
@@ -541,7 +521,9 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			r.Get("/", handoutHandler.ListHandoutsAcrossGames)
+			// huma / type-first -- paths are relative to this /handouts mount.
+			handoutsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			handouts.RegisterHumaHandouts(handoutsAPI, handoutHandler)
 		})
 	})
 	apiV1Router.Mount("/handouts", handoutsRouter)
@@ -550,6 +532,7 @@ func (h *Handler) Start() {
 	// id is the addressable resource; the handler resolves the game from the
 	// export row and re-checks CanUserViewGame, so a leaked export id grants
 	// nothing the caller could not already read.
+	var exportDownloadsAPI huma.API
 	exportsRouter := chi.NewRouter()
 	exportsRouter.Route("/", func(r chi.Router) {
 		exportHandler := &exports.Handler{
@@ -568,15 +551,17 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
 
-			r.Get("/{exportID}/download", exportHandler.DownloadExport)
+			exportDownloadsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			exports.RegisterHumaExportDownloads(exportDownloadsAPI, exportHandler)
 		})
 	})
 	apiV1Router.Mount("/exports", exportsRouter)
 
 	// Polls API (for poll-specific operations)
+	var pollsAPI huma.API
 	pollsRouter := chi.NewRouter()
 	pollsRouter.Route("/", func(r chi.Router) {
-		pollHandler := polls.Handler{
+		pollHandler := &polls.Handler{
 			App:                 h.App,
 			UserService:         &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 			GameService:         &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
@@ -596,19 +581,17 @@ func (h *Handler) Start() {
 			r.Use(core.AdminModeMiddleware)
 
 			// Poll management
-			r.Get("/{pollId}", pollHandler.GetPoll)
-			r.Get("/{pollId}/results", pollHandler.GetPollResults)
-			r.Post("/{pollId}/vote", pollHandler.SubmitVote)
-			r.Put("/{pollId}", pollHandler.UpdatePoll)
-			r.Delete("/{pollId}", pollHandler.DeletePoll)
+			pollsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			polls.RegisterHumaPolls(pollsAPI, pollHandler)
 		})
 	})
 	apiV1Router.Mount("/polls", pollsRouter)
 
-	// Notifications API
+	// Notifications API (huma / type-first -- see .claude/planning/huma-migration.md)
+	var notificationsAPI huma.API
 	notificationsRouter := chi.NewRouter()
 	notificationsRouter.Route("/", func(r chi.Router) {
-		notificationHandler := notifications.Handler{
+		notificationHandler := &notifications.Handler{
 			App:                 h.App,
 			NotificationService: db.NewNotificationService(h.App.Pool, h.App.ObsLogger),
 		}
@@ -622,19 +605,14 @@ func (h *Handler) Start() {
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 
-			// Notification management
-			r.Get("/", notificationHandler.GetNotifications)
-			r.Get("/unread-count", notificationHandler.GetUnreadCount)
-			r.Put("/mark-all-read", notificationHandler.MarkAllAsRead)
-			r.Get("/{id}", notificationHandler.GetNotification)
-			r.Put("/{id}/mark-read", notificationHandler.MarkNotificationAsRead)
-			r.Put("/{id}/mark-unread", notificationHandler.MarkNotificationAsUnread)
-			r.Delete("/{id}", notificationHandler.DeleteNotification)
+			notificationsAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			notifications.RegisterHumaNotifications(notificationsAPI, notificationHandler)
 		})
 	})
 	apiV1Router.Mount("/notifications", notificationsRouter)
 
-	// Dashboard API
+	// Dashboard API (huma / type-first — see .claude/planning/huma-migration.md)
+	var dashboardAPI huma.API
 	dashboardRouter := chi.NewRouter()
 	dashboardRouter.Route("/", func(r chi.Router) {
 		dashboardHandler := dashboard.Handler{
@@ -652,13 +630,14 @@ func (h *Handler) Start() {
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 
-			// Get user's dashboard
-			r.Get("/", dashboardHandler.GetUserDashboard)
+			dashboardAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			dashboard.RegisterHumaDashboard(dashboardAPI, &dashboardHandler)
 		})
 	})
 	apiV1Router.Mount("/dashboard", dashboardRouter)
 
 	// Users API - User profiles and avatars
+	var usersAPI huma.API
 	usersRouter := chi.NewRouter()
 	usersRouter.Route("/", func(r chi.Router) {
 		userHandler := users.Handler{
@@ -675,21 +654,18 @@ func (h *Handler) Start() {
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 
-			// Profile viewing (public - any authenticated user can view any profile)
-			r.Get("/{id}/profile", userHandler.GetUserProfile)
-			r.Get("/username/{username}/profile", userHandler.GetUserProfileByUsername)
-
-			// Profile editing (own profile only)
-			r.Patch("/me/profile", userHandler.UpdateUserProfile)
-
-			// Avatar management (own profile only)
-			r.Post("/me/avatar", userHandler.UploadUserAvatar)
-			r.Delete("/me/avatar", userHandler.DeleteUserAvatar)
+			// Profile viewing, profile editing and avatar management
+			// (huma / type-first)
+			usersAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			users.RegisterHumaUsers(usersAPI, &userHandler)
 		})
 	})
 	apiV1Router.Mount("/users", usersRouter)
 
-	// Admin API - All routes require authentication AND admin privileges
+	// Admin API - All routes require authentication AND admin privileges.
+	// adminAPI is captured so the docs handler can serve huma's generated spec
+	// for these routes (see below).
+	var adminAPI huma.API
 	adminRouter := chi.NewRouter()
 	adminRouter.Route("/", func(r chi.Router) {
 		adminHandler := admin.Handler{
@@ -711,43 +687,54 @@ func (h *Handler) Start() {
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(httpmiddleware.RequireAdmin(h.App))
 
-			// Admin management
-			r.Get("/admins", adminHandler.ListAdmins)
-
-			// User admin status management
-			r.Put("/users/{id}/admin", adminHandler.GrantAdminStatus)
-			r.Delete("/users/{id}/admin", adminHandler.RevokeAdminStatus)
-
-			// User banning
-			r.Post("/users/{id}/ban", adminHandler.BanUser)
-			r.Delete("/users/{id}/ban", adminHandler.UnbanUser)
-			r.Get("/users/banned", adminHandler.ListBannedUsers)
-
-			// User list, pending approval, sessions (fixed paths before parameterized)
-			r.Get("/users", adminHandler.ListUsers)
-			r.Get("/users/pending", adminHandler.ListPendingApprovalUsers)
-			r.Post("/users/{id}/approve", adminHandler.ApproveUser)
-			r.Post("/users/{id}/reject", adminHandler.RejectUser)
-			r.Get("/users/{id}/sessions", adminHandler.GetUserSessions)
-
-			// IP bans
-			r.Get("/ip-bans", adminHandler.ListIPBans)
-			r.Post("/ip-bans", adminHandler.CreateIPBan)
-			r.Delete("/ip-bans/{id}", adminHandler.DeleteIPBan)
-
-			// Device fingerprint bans
-			r.Get("/fingerprint-bans", adminHandler.ListFingerprintBans)
-			r.Post("/fingerprint-bans", adminHandler.CreateFingerprintBan)
-			r.Delete("/fingerprint-bans/{id}", adminHandler.DeleteFingerprintBan)
-
-			// Content moderation
-			r.Delete("/messages/{messageId}", adminHandler.DeleteMessage)
+			// Admin routes are type-first (huma): paths, params, schemas and
+			// status codes are derived from the Go types in
+			// pkg/admin/huma_api.go, so the OpenAPI spec cannot drift from
+			// the handlers. Huma mounts onto this same chi router, so the
+			// middleware above applies unchanged.
+			//
+			// Registered on adminRouter (not r) because huma paths are
+			// absolute and this group is mounted at /api/v1/admin.
+			adminAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			admin.RegisterHumaAdmin(adminAPI, &adminHandler)
 		})
 	})
 	apiV1Router.Mount("/admin", adminRouter)
 
 	// API Documentation routes (public) - register on apiV1Router BEFORE mounting
-	docsHandler := &docs.Handler{}
+	// The served spec merges huma's generated paths over the hand-written
+	// openapi.yaml, so migrated packages are documented from their Go types
+	// and the rest fall back to the manual file. Each package converted in
+	// .claude/planning/huma-migration.md improves the docs automatically.
+	docsHandler := &docs.Handler{
+		GeneratedSpec: func() ([]byte, error) {
+			return generatedSpecFor(map[string][]huma.API{
+				"/admin":      {adminAPI},
+				"/dashboard":  {dashboardAPI},
+				"/characters": {charactersAPI},
+				"/exports":    {exportDownloadsAPI},
+				// Registered on the /{gameID} subrouter, so the documented URL
+				// needs that segment added back.
+				"/deadlines":      {deadlinesAPI},
+				"/users":          {usersAPI},
+				"/notifications":  {notificationsAPI},
+				"/polls":          {pollsAPI},
+				"/handouts":       {handoutsAPI},
+				"/phases":         {phasesAPI},
+				"/games/{gameID}": {gameScopedAPI},
+				// Three APIs, one mount: the /games routes split across chi
+				// groups with different middleware (the public listing runs
+				// Verifier only, the public applicants list adds GameMiddleware,
+				// and the collection routes are fully authenticated). Their
+				// paths are disjoint.
+				"/games": {gamesAPI, gamesPublicListAPI, gamesPublicGameAPI},
+				// Four APIs, one mount: /auth's routes split across chi groups
+				// with different middleware (rate-limited, public, Verifier-only
+				// probe, fully protected). Their paths are disjoint.
+				"/auth": {authPublicAPI, authRateLimitedAPI, authProbeAPI, authProtectedAPI, authRateLimitedProtectedAPI},
+			})
+		},
+	}
 	docsHandler.RegisterRoutes(apiV1Router)
 
 	// Debug routes (development only) - exposed via /api/v1/debug/*
@@ -781,17 +768,15 @@ func (h *Handler) Start() {
 		})
 	}
 
-	// Wrap the router with OpenTelemetry HTTP instrumentation.
-	// This creates spans for every request when OTEL_ENABLED=true.
-	// When OTEL is disabled, the global provider is a no-op so this is zero cost.
-	// Span names are set to the chi route template (e.g. "GET /api/v1/games/{id}")
-	// by RouteTagMiddleware, which runs after chi has matched the route.
-	otelHandler := otelhttp.NewHandler(r, "actionphase-http")
+	return r, docsHandler
+}
 
+// serve runs the HTTP server until it stops.
+func (h *Handler) serve(handler http.Handler) {
 	// Create HTTP server with configuration
 	server := &http.Server{
 		Addr:         h.App.Config.GetServerAddress(),
-		Handler:      otelHandler,
+		Handler:      handler,
 		ReadTimeout:  h.App.Config.Server.ReadTimeout,
 		WriteTimeout: h.App.Config.Server.WriteTimeout,
 		IdleTimeout:  h.App.Config.Server.IdleTimeout,

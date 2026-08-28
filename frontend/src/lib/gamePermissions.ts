@@ -59,12 +59,13 @@ export interface GamePermissionFlags {
   /**
    * Audience-level read ACCESS, which is broader than the audience role.
    *
-   * A COMPLETED game is a public archive: every authenticated viewer — players,
-   * audience, and non-participants alike — may read all of it. The backend
-   * already works this way (CanUserViewGame, the 'completed' arm of
-   * GetGameActionResults, checkPollViewAccess, CanSeeUsernamesInAnonymousGame).
+   * A public-archive game (COMPLETED or EPILOGUE) is readable in full: every
+   * authenticated viewer — players, audience, and non-participants alike — may
+   * read all of it. The backend already works this way (CanUserViewGame,
+   * checkPollViewAccess, CanSeeUsernamesInAnonymousGame, all keyed on
+   * core.IsPublicArchive).
    *
-   * Anyone with GM powers is excluded, so completing a game does not demote a
+   * Anyone with GM powers is excluded, so opening the archive does not demote a
    * GM or co-GM to a spectator. Cancelled games are NOT public and keep the
    * play-time rules.
    */
@@ -78,9 +79,29 @@ export interface GamePermissionFlags {
   canViewAllActions: boolean;
 }
 
-/** A completed game is a public archive; a cancelled one is not. */
+/**
+ * Read gate: the whole game is visible to any authenticated viewer.
+ *
+ * Both completed and epilogue games are public archives; a cancelled one is
+ * not. Mirrors core.IsPublicArchive on the backend.
+ *
+ * This is a separate question from whether the game accepts writes — see
+ * isGameWritable. Epilogue is both readable by everyone AND writable, which is
+ * the whole reason the state exists.
+ */
 export function isPublicArchive(gameState: string | null | undefined): boolean {
-  return gameState === 'completed';
+  return gameState === 'completed' || gameState === 'epilogue';
+}
+
+/**
+ * Write gate: the game still accepts new content.
+ *
+ * Mirrors core.ValidateGameNotCompleted on the backend, which rejects only
+ * completed and cancelled. Epilogue IS writable — that is the point of it, so
+ * the GM can run epilogue and meta-discussion threads with the archive open.
+ */
+export function isGameWritable(gameState: string | null | undefined): boolean {
+  return gameState !== 'completed' && gameState !== 'cancelled';
 }
 
 /**

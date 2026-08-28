@@ -10,6 +10,7 @@ import (
 
 	"actionphase/pkg/core"
 	dbsvc "actionphase/pkg/db/services"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -27,18 +28,19 @@ func setupDiscordTestRouter(app *core.App) *chi.Mux {
 	h.App = app
 	handler := &h
 
-	// Public callback
+	// Public callback. Still a chi handler: it answers a 302 redirect and
+	// writes plain-text errors, so it was left unconverted.
 	r.Get("/api/v1/auth/discord/callback", handler.V1DiscordCallback)
 
-	// Protected routes
-	r.Group(func(r chi.Router) {
+	// Protected routes. Mounted at the prefix production uses, with the huma
+	// operations carrying the rest of the path, so the test exercises the URL
+	// that ships rather than one the test's own mount shape invented.
+	r.Route("/api/v1/auth", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(jwtauth.Authenticator(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
 
-		r.Get("/api/v1/auth/discord/connect", handler.V1DiscordConnect)
-		r.Get("/api/v1/auth/discord/status", handler.V1DiscordStatus)
-		r.Delete("/api/v1/auth/discord/disconnect", handler.V1DiscordDisconnect)
+		RegisterHumaAuthProtected(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 	})
 
 	return r

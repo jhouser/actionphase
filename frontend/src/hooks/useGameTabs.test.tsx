@@ -679,8 +679,15 @@ describe('useGameTabs', () => {
           <span data-testid="audienceConversation">{searchParams.get('audienceConversation') ?? ''}</span>
           <span data-testid="character">{searchParams.get('character') ?? ''}</span>
           <span data-testid="peopleTab">{searchParams.get('peopleTab') ?? ''}</span>
+          <span data-testid="phase">{searchParams.get('phase') ?? ''}</span>
+          <span data-testid="subTab">{searchParams.get('subTab') ?? ''}</span>
+          <span data-testid="characters">{searchParams.get('characters') ?? ''}</span>
+          <span data-testid="view">{searchParams.get('view') ?? ''}</span>
+          <span data-testid="poll">{searchParams.get('poll') ?? ''}</span>
           <button onClick={() => setActiveTab('common-room')}>go-common-room</button>
           <button onClick={() => setActiveTab('messages')}>go-messages</button>
+          <button onClick={() => setActiveTab('history')}>go-history</button>
+          <button onClick={() => setActiveTab('people')}>go-people</button>
         </div>
       );
     }
@@ -725,6 +732,41 @@ describe('useGameTabs', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('audienceConversation').textContent).toBe('');
+      });
+    });
+
+    it('should clear history phase/subTab/characters params when switching away from history', async () => {
+      render(
+        <MemoryRouter initialEntries={['/games/1?tab=history&phase=12&subTab=results&characters=3,4']}>
+          <TabParamSpy tabArgs={defaultTabArgs} />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByTestId('phase').textContent).toBe('12');
+
+      act(() => { screen.getByRole('button', { name: 'go-people' }).click(); });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('phase').textContent).toBe('');
+        expect(screen.getByTestId('subTab').textContent).toBe('');
+        expect(screen.getByTestId('characters').textContent).toBe('');
+      });
+    });
+
+    it('should clear common room view/poll params when switching away from common room', async () => {
+      render(
+        <MemoryRouter initialEntries={['/games/1?tab=common-room&view=polls&poll=9']}>
+          <TabParamSpy tabArgs={defaultTabArgs} />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByTestId('view').textContent).toBe('polls');
+
+      act(() => { screen.getByRole('button', { name: 'go-history' }).click(); });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('view').textContent).toBe('');
+        expect(screen.getByTestId('poll').textContent).toBe('');
       });
     });
 
@@ -920,6 +962,164 @@ describe('useGameTabs', () => {
       // Now messages tab exists and should be active
       await waitFor(() => {
         expect(screen.getByTestId('active-tab').textContent).toBe('messages');
+      });
+    });
+  });
+
+  describe('Epilogue: the writable public archive', () => {
+    // Epilogue is the union of two tab sets that used to be mutually exclusive:
+    // the in-progress set (the game is still writable) plus archive read access.
+    // Getting this wrong is silent — the GM simply finds a tab missing.
+    const epilogueTabs = (overrides: Record<string, unknown> = {}) =>
+      renderHook(
+        () =>
+          useGameTabs({
+            gameState: 'epilogue',
+            isGM: false,
+            participantCount: 3,
+            currentPhaseType: 'common_room',
+            isAudience: false,
+            isParticipant: true,
+            hasCharacters: true,
+            ...overrides,
+          }),
+        { wrapper }
+      );
+
+    it('keeps the in-progress tabs so the game can still be written in', () => {
+      const { result } = epilogueTabs();
+      const ids = result.current.tabs.map(t => t.id);
+      // Common Room is where epilogue and meta-discussion threads live.
+      expect(ids).toContain('common-room');
+      expect(ids).toContain('messages');
+      expect(ids).toContain('people');
+      expect(ids).toContain('handouts');
+    });
+
+    it('gives the GM the Phases tab so they can open an epilogue thread', () => {
+      // Without this the GM enters epilogue and has no way to create the
+      // common_room phase the epilogue threads go in — the feature is inert.
+      const { result } = epilogueTabs({ isGM: true });
+      expect(result.current.tabs.map(t => t.id)).toContain('phases');
+    });
+
+    it('opens the Audience tab to a plain player, unlike an in-progress game', () => {
+      // This is the disclosure the state exists for: audience-level read access
+      // for everyone, without the player holding the audience role.
+      const { result } = epilogueTabs();
+      expect(result.current.tabs.map(t => t.id)).toContain('audience');
+
+      const { result: live } = renderHook(
+        () =>
+          useGameTabs({
+            gameState: 'in_progress',
+            isGM: false,
+            participantCount: 3,
+            currentPhaseType: 'common_room',
+            isAudience: false,
+            isParticipant: true,
+            hasCharacters: true,
+          }),
+        { wrapper }
+      );
+      expect(live.current.tabs.map(t => t.id)).not.toContain('audience');
+    });
+
+    it('withholds Stats and Game Logs, which stay completed-only', () => {
+      // Stats on a moving game mislead, and the log is the GM's audit trail
+      // while they are still running epilogue content.
+      const { result } = epilogueTabs();
+      const ids = result.current.tabs.map(t => t.id);
+      expect(ids).not.toContain('stats');
+      expect(ids).not.toContain('logs');
+    });
+
+    it('waits for phase data before resolving the tab, like in_progress does', async () => {
+      // Regression: the initial-tab effect guarded on gameState === 'in_progress'
+      // only. In epilogue the guard fell through while currentPhaseType was
+      // still undefined, so the Common Room tab did not exist yet, the active
+      // tab was judged invalid, and the player was redirected away from it —
+      // Common Room then never appeared even after the phase loaded.
+      const { result, rerender } = renderHook(
+        ({ phaseType, loading }: { phaseType?: string; loading: boolean }) =>
+          useGameTabs({
+            gameState: 'epilogue',
+            isGM: false,
+            participantCount: 3,
+            currentPhaseType: phaseType,
+            isPhaseLoading: loading,
+            isAudience: false,
+            isParticipant: true,
+            hasCharacters: true,
+          }),
+        { wrapper, initialProps: { phaseType: undefined as string | undefined, loading: true } }
+      );
+
+      // While the phase is loading the tab list has no common-room entry yet.
+      expect(result.current.tabs.map(t => t.id)).not.toContain('common-room');
+
+      // Phase resolves as a common room.
+      rerender({ phaseType: 'common_room', loading: false });
+
+      await waitFor(() => {
+        expect(result.current.tabs.map(t => t.id)).toContain('common-room');
+        expect(result.current.activeTab).toBe('common-room');
+      });
+    });
+
+    describe('when the last phase was an action phase', () => {
+      // A GM can move to epilogue without first opening a common room, so the
+      // active phase is still an action phase. Play is over, though.
+      const actionEpilogue = (overrides: Record<string, unknown> = {}) =>
+        renderHook(
+          () =>
+            useGameTabs({
+              gameState: 'epilogue',
+              isGM: false,
+              participantCount: 3,
+              currentPhaseType: 'action',
+              isAudience: false,
+              isParticipant: true,
+              hasCharacters: true,
+              ...overrides,
+            }),
+          { wrapper }
+        );
+
+      it('does not offer the Actions tab to a player', () => {
+        // Regression: the tab was added on phase type alone while its content
+        // was gated on in_progress, so it rendered an empty pane that looked
+        // broken — labelled "Submit Action", implying play was still open.
+        expect(actionEpilogue().result.current.tabs.map(t => t.id)).not.toContain('actions');
+      });
+
+      it('does not offer the Actions tab to the GM either', () => {
+        expect(actionEpilogue({ isGM: true }).result.current.tabs.map(t => t.id)).not.toContain('actions');
+      });
+
+      it('still offers the archive and History, where the submissions now live', () => {
+        const ids = actionEpilogue().result.current.tabs.map(t => t.id);
+        expect(ids).toContain('history');
+        expect(ids).toContain('audience');
+      });
+
+      it('lands on a tab that actually has content', async () => {
+        // Whatever the default resolves to, it must be a real tab — the old
+        // behaviour could route to 'actions' and show a blank pane.
+        const { result } = actionEpilogue();
+        await waitFor(() => {
+          expect(result.current.activeTab).not.toBe('actions');
+          expect(result.current.tabs.map(t => t.id)).toContain(result.current.activeTab);
+        });
+      });
+    });
+
+    it('defaults to the common room rather than the history archive', async () => {
+      // A completed game lands on 'history' because there is nothing to do.
+      // An epilogue game has writing waiting for the player.
+      const { result } = epilogueTabs();
+      await waitFor(() => {
+        expect(result.current.activeTab).toBe('common-room');
       });
     });
   });

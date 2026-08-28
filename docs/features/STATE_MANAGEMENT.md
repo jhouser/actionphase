@@ -1,6 +1,9 @@
 # State Management - Comprehensive Guide
 
-**Last Updated:** October 2025
+**Last Updated:** October 2025 · **Verified:** 2026-08-26
+
+> Uses **TanStack Query v5** (`^5.84.1`). Query-filter methods take an object —
+> `invalidateQueries({ queryKey: [...] })` — not the v4 positional array form.
 
 This is the single source of truth for state management in the ActionPhase frontend application.
 
@@ -1103,7 +1106,7 @@ export function useCreateGame() {
     mutationFn: (data: CreateGameRequest) => apiClient.createGame(data),
     onSuccess: (newGame) => {
       // Invalidate and refetch games list
-      queryClient.invalidateQueries(['games']);
+      queryClient.invalidateQueries({ queryKey: ['games'] });
 
       // Optionally set the new game in cache
       queryClient.setQueryData(['games', newGame.id], newGame);
@@ -1128,7 +1131,7 @@ export function useUpdateGame(gameId: number) {
     // Optimistic update
     onMutate: async (updates) => {
       // Cancel outgoing queries
-      await queryClient.cancelQueries(['games', gameId]);
+      await queryClient.cancelQueries({ queryKey: ['games', gameId] });
 
       // Save current value for rollback
       const previousGame = queryClient.getQueryData(['games', gameId]);
@@ -1149,8 +1152,8 @@ export function useUpdateGame(gameId: number) {
 
     // Refetch on success
     onSuccess: () => {
-      queryClient.invalidateQueries(['games', gameId]);
-      queryClient.invalidateQueries(['games']); // Refresh list too
+      queryClient.invalidateQueries({ queryKey: ['games', gameId] });
+      queryClient.invalidateQueries({ queryKey: ['games'] }); // Refresh list too
     },
   });
 }

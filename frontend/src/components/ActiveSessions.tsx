@@ -85,8 +85,8 @@ export function ActiveSessions() {
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-text-heading">Active Sessions</h3>
-            <p className="text-sm text-text-secondary mt-1">
+            <h3 className="text-lg font-semibold text-content-primary">Active Sessions</h3>
+            <p className="text-sm text-content-secondary mt-1">
               Manage your active login sessions. You can revoke access from devices you no longer use.
             </p>
           </div>
@@ -133,18 +133,18 @@ export function ActiveSessions() {
             {sessions.map((session) => (
               <div
                 key={session.id}
-                className="flex items-center justify-between p-4 border border-border-primary rounded-lg bg-bg-secondary"
+                className="flex items-center justify-between p-4 border border-theme-default rounded-lg surface-raised"
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-text-primary">
+                    <span className="font-medium text-content-secondary">
                       Session #{session.id}
                     </span>
                     {session.is_current && (
                       <Badge variant="success">Current Session</Badge>
                     )}
                   </div>
-                  <div className="text-sm text-text-secondary space-y-1">
+                  <div className="text-sm text-content-secondary space-y-1">
                     {session.created_at && (
                       <div>Created: {formatDate(session.created_at)}</div>
                     )}

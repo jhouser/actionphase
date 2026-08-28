@@ -11,7 +11,7 @@ ActionPhase is a modern web application for hosting play-by-post RPG games with 
 │   Frontend      │    │   Backend       │    │   Database      │
 │   React/TypeScript   │    Go/Chi Router    │    PostgreSQL    │
 ├─────────────────┤    ├─────────────────┤    ├─────────────────┤
-│ • React 18      │◄──►│ • HTTP API      │◄──►│ • User Data     │
+│ • React 19      │◄──►│ • HTTP API      │◄──►│ • User Data     │
 │ • TypeScript    │    │ • JWT Auth      │    │ • Game State    │
 │ • Vite          │    │ • Business Logic│    │ • Sessions      │
 │ • React Query   │    │ • Database Layer│    │ • Characters    │
@@ -22,7 +22,7 @@ ActionPhase is a modern web application for hosting play-by-post RPG games with 
 ## System Components
 
 ### Frontend (React SPA)
-- **Framework**: React 18 with TypeScript
+- **Framework**: React 19 with TypeScript
 - **Build Tool**: Vite for fast development and optimized builds
 - **Styling**: Tailwind CSS for utility-first responsive design
 - **State Management**: React Query for server state, React hooks for local state
@@ -32,7 +32,7 @@ ActionPhase is a modern web application for hosting play-by-post RPG games with 
 ### Backend (Go HTTP API)
 - **Framework**: Chi router for HTTP routing and middleware
 - **Language**: Go 1.21+ for performance and type safety
-- **Authentication**: JWT with refresh tokens and session management
+- **Authentication**: a single JWT bearer token backed by a server-side session row (revocable on every request). There is **no separate refresh token** — see ADR-003's Implementation Divergence section.
 - **Database**: PostgreSQL with connection pooling (pgxpool)
 - **Code Generation**: sqlc for type-safe SQL queries
 - **Observability**: Structured logging, metrics, and request tracing
@@ -41,7 +41,7 @@ ActionPhase is a modern web application for hosting play-by-post RPG games with 
 - **Primary Database**: PostgreSQL 15+ with ACID compliance
 - **Schema Management**: golang-migrate for version-controlled migrations
 - **Connection Management**: pgxpool for efficient connection pooling
-- **Data Types**: JSONB for flexible game data, timestamps with timezone
+- **Data Types**: largely relational typed columns; JSONB in exactly two places (`games.character_sheet`, `user_preferences.preferences`); timestamps with timezone
 
 ## Directory Structure
 
@@ -233,7 +233,7 @@ Recovery         CORS           Handling    Domain Rules  Connection    Migratio
 - **Indexing Strategy**: Indexes on foreign keys and query patterns
 - **Connection Reuse**: Persistent connections via pgxpool
 - **Query Patterns**: Optimized for common access patterns
-- **JSONB Usage**: Efficient storage and querying of game data
+- **JSONB Usage**: sparing — character sheet *content* is the EAV `character_data` table, not a JSONB document (see ADR-002)
 
 ## Scalability Considerations
 
@@ -278,7 +278,7 @@ Recovery         CORS           Handling    Domain Rules  Connection    Migratio
 
 ### Health Monitoring
 - **Health Endpoint**: `/health` with service status checks
-- **Metrics Endpoint**: `/metrics` with real-time performance data
+- **Telemetry**: OpenTelemetry traces/metrics/logs pushed to Grafana Cloud via OTLP. There is **no `/metrics` endpoint**.
 - **Database Health**: Connection and query performance monitoring
 - **Error Rate Monitoring**: Automatic alerting on high error rates
 

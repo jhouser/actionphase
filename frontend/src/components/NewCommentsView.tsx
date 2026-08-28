@@ -86,7 +86,9 @@ export function NewCommentsView({ gameId }: NewCommentsViewProps) {
     return (
       <Alert variant="danger">
         <p>Failed to load recent comments</p>
-        <p className="text-sm text-text-muted mt-1">
+        {/* Inherits the Alert's text-content-primary: a muted tone here
+            fails contrast against the danger background (2.55:1 in dark). */}
+        <p className="text-sm mt-1">
           {error instanceof Error ? error.message : 'Unknown error'}
         </p>
       </Alert>
@@ -160,14 +162,14 @@ export function NewCommentsView({ gameId }: NewCommentsViewProps) {
           {showUnreadOnly ? (
             <>
               <p className="text-content-secondary">No unread comments</p>
-              <p className="text-sm text-text-secondary mt-2">
+              <p className="text-sm text-content-secondary mt-2">
                 You've read everything here. Turn off "Unread only" to see all comments.
               </p>
             </>
           ) : (
             <>
               <p className="text-content-secondary">No comments yet</p>
-              <p className="text-sm text-text-secondary mt-2">
+              <p className="text-sm text-content-secondary mt-2">
                 Be the first to start a conversation in the Common Room!
               </p>
             </>

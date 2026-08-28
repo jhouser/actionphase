@@ -55,7 +55,7 @@ func setupResultsTestState(t *testing.T, testDB *core.TestDatabase, app *core.Ap
 func TestPhaseAPI_CreateActionResult(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -127,7 +127,7 @@ func TestPhaseAPI_CreateActionResult(t *testing.T) {
 func TestPhaseAPI_GetUserActionResults(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -185,7 +185,7 @@ func TestPhaseAPI_GetUserActionResults(t *testing.T) {
 func TestPhaseAPI_GetGameActionResults(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -232,13 +232,38 @@ func TestPhaseAPI_GetGameActionResults(t *testing.T) {
 
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
+
+	t.Run("player CAN view all results once the game reaches epilogue", func(t *testing.T) {
+		// Regression: this check was written as `state != "completed"` and so
+		// kept the archive shut in epilogue. A player writing an epilogue needs
+		// to see what happened to everyone else — that is the entire reason the
+		// state exists, and History showed them nothing.
+		// Set the state directly: the fixture game is in 'setup', and walking it
+		// through the real state machine is not what this test is about.
+		_, err := testDB.Pool.Exec(context.Background(),
+			"UPDATE games SET state = $1 WHERE id = $2", core.GameStateEpilogue, game.ID)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/results", game.ID), nil)
+		req.Header.Set("Authorization", "Bearer "+playerToken)
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusOK, rec.Code,
+			"player should read all results in an epilogue game (body: %s)", rec.Body.String())
+
+		var response []map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		assert.Len(t, response, 1, "the archive should expose the GM's result")
+	})
 }
 
 // TestPhaseAPI_UpdateActionResult tests PUT /api/v1/games/{gameId}/results/{resultId}
 func TestPhaseAPI_UpdateActionResult(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -301,7 +326,7 @@ func TestPhaseAPI_UpdateActionResult(t *testing.T) {
 func TestPhaseAPI_UpdatePublishedResultBlocked(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -359,7 +384,7 @@ func TestPhaseAPI_UpdatePublishedResultBlocked(t *testing.T) {
 func TestPhaseAPI_CreateActionResult_NoActivePhase(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "phases", "game_participants", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "game_phases", "game_participants", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -398,7 +423,7 @@ func TestPhaseAPI_CreateActionResult_NoActivePhase(t *testing.T) {
 func TestPhaseAPI_PublishActionResult(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -468,7 +493,7 @@ func TestPhaseAPI_PublishActionResult(t *testing.T) {
 func TestPhaseAPI_AudienceSeesUnpublishedResults(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)
@@ -587,7 +612,7 @@ func TestPhaseAPI_AudienceSeesUnpublishedResults(t *testing.T) {
 func TestPhaseAPI_UserResultsIncludeCharacterID(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "action_results", "action_submissions", "phases", "characters", "games", "users")
+	defer testDB.CleanupTables(t, "action_results", "action_submissions", "game_phases", "characters", "games", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupFullPhaseAPITestRouter(app, testDB)

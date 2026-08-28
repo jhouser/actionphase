@@ -37,10 +37,16 @@ interface HistoryViewProps {
   currentPhaseId?: number;
   isGM?: boolean;
   isAudience?: boolean;
-  isGameCompleted?: boolean;
+  /**
+   * Whether the game is a public archive (completed OR epilogue) — i.e. its
+   * whole history is readable by any authenticated viewer. Deliberately not
+   * named for `completed`: epilogue opens the archive too, and the old name
+   * invited callers to pass a bare state equality that silently excluded it.
+   */
+  isPublicArchive?: boolean;
 }
 
-export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience = false, isGameCompleted = false }: HistoryViewProps) {
+export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience = false, isPublicArchive = false }: HistoryViewProps) {
   const gameContext = useOptionalGameContext();
   const portraitAvatars = gameContext?.game?.portrait_avatars ?? false;
   const allGameCharacters = gameContext?.allGameCharacters;
@@ -105,12 +111,13 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
 
   // A COMPLETED game is a public archive: the backend serves the whole cast's
   // submissions and results to any authenticated user, not just to spectators
-  // (CanUserViewGame, and the "completed" arm of GetGameActionResults). A player
-  // looking back at a finished game therefore gets the same reach here as an
-  // audience member — reading their own rows only would hide the story they just
-  // finished playing through. Cancelled games are NOT public and keep the
-  // play-time rule, which is why this keys on completion rather than "not active".
-  const hasArchiveAccess = isAudience || isGameCompleted;
+  // (CanUserViewGame, keyed on core.IsPublicArchive). A player looking back at a
+  // finished game therefore gets the same reach here as an audience member —
+  // reading their own rows only would hide the story they just finished playing
+  // through. Epilogue counts too: opening the archive is the entire point of
+  // that state. Cancelled games are NOT public and keep the play-time rule,
+  // which is why this keys on the archive rather than "not active".
+  const hasArchiveAccess = isAudience || isPublicArchive;
 
   const { data: userActionResults, isLoading: isLoadingUserResults, error: userResultsError } = useQuery({
     queryKey: ['actionResults', 'user', gameId],
@@ -332,7 +339,6 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
             isCurrentPhase={false} // Always read-only in history view
             isGM={isGM}
             isAudience={isAudience}
-            isGameCompleted={isGameCompleted}
           />
         ) : (
           <div className="surface-base rounded-lg shadow-md p-6">
@@ -341,7 +347,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
             </h3>
 
             {/* Tab Navigation */}
-            <div className="flex border-b border-border-primary mb-6">
+            <div className="flex border-b border-theme-default mb-6">
               <button
                 onClick={() => setActiveTab('submissions')}
                 className={`px-4 py-2 font-medium transition-colors ${
@@ -367,7 +373,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
 
             {/* Character filter — applies to both Submissions and Results */}
             {activeTab !== 'polls' && characterFilterOptions.length > 0 && (
-              <div className="border border-border-primary rounded-lg p-4 bg-bg-secondary mb-6">
+              <div className="border border-theme-default rounded-lg p-4 surface-raised mb-6">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-semibold text-content-primary">Filter by Character</h4>
                   {selectedCharacterIds.size > 0 && (
@@ -393,7 +399,7 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                           px-3 py-1.5 rounded-full text-sm font-medium transition-colors
                           ${isSelected
                             ? 'bg-interactive-primary text-white'
-                            : 'bg-bg-primary border border-border-primary text-content-primary hover:bg-bg-tertiary'
+                            : 'surface-base border border-theme-default text-content-primary hover:surface-sunken'
                           }
                         `}
                       >
@@ -582,12 +588,12 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                 key={phase.id}
                 variant="ghost"
                 onClick={() => setSelectedPhaseId(phase.id)}
-                className={`w-full justify-start text-left border rounded-lg p-4 hover:border-theme-subtle ${
+                className={`w-full justify-start text-left whitespace-normal border rounded-lg p-4 hover:border-theme-subtle ${
                   isActive ? 'border-interactive-primary bg-interactive-primary-subtle' : 'border-theme-default'
                 }`}
               >
                 {/* Mobile: Vertical Stack Layout */}
-                <div className="md:hidden flex flex-col items-start gap-3">
+                <div className="md:hidden flex w-full min-w-0 flex-col items-start gap-3">
                   {/* Badge + Active indicator */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`px-2.5 py-1 text-xs rounded-full font-medium border whitespace-nowrap ${phaseColorClass}`}>
@@ -601,28 +607,28 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                   </div>
 
                   {/* Title + Description */}
-                  <div className="w-full">
-                    <h4 className="font-semibold text-base text-content-primary mb-1 text-left">
+                  <div className="w-full min-w-0">
+                    <h4 className="font-semibold text-base text-content-primary mb-1 text-left break-words">
                       {phase.title || phaseLabel}
                     </h4>
                     {phase.description && (
-                      <p className="text-sm text-content-secondary leading-relaxed text-left">{phase.description}</p>
+                      <p className="text-sm text-content-secondary leading-relaxed text-left break-words">{phase.description}</p>
                     )}
                   </div>
                 </div>
 
                 {/* Desktop: Grid Layout for consistent alignment */}
-                <div className="hidden md:grid md:grid-cols-[auto_1fr_auto] md:gap-4 md:items-start">
+                <div className="hidden w-full min-w-0 md:grid md:grid-cols-[auto_1fr_auto] md:gap-4 md:items-start">
                   {/* Badge - fixed width column */}
                   <span className={`px-2 py-1 text-xs rounded-full font-medium border whitespace-nowrap ${phaseColorClass}`}>
                     Phase {phase.phase_number}
                   </span>
 
                   {/* Title + Description - flexible column */}
-                  <div>
-                    <h4 className="font-medium text-content-primary">{phase.title || phaseLabel}</h4>
+                  <div className="min-w-0">
+                    <h4 className="font-medium text-content-primary break-words">{phase.title || phaseLabel}</h4>
                     {phase.description && (
-                      <p className="text-sm text-content-secondary mt-1">{phase.description}</p>
+                      <p className="text-sm text-content-secondary mt-1 break-words">{phase.description}</p>
                     )}
                   </div>
 

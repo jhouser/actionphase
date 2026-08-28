@@ -27,7 +27,7 @@ Comprehensive guide to the game lifecycle, state management, phase transitions, 
 ### Complete Game Flow
 
 ```
-1. SETUP → 2. RECRUITMENT → 3. CHARACTER_CREATION → 4. IN_PROGRESS → 5. COMPLETED/CANCELLED
+1. SETUP → 2. RECRUITMENT → 3. CHARACTER_CREATION → 4. IN_PROGRESS → 5. EPILOGUE (optional) → 6. COMPLETED/CANCELLED
 ```
 
 **IN_PROGRESS** contains the repeating phase cycle:
@@ -55,7 +55,8 @@ state CHECK (state IN (
     'character_creation', -- Players creating characters
     'in_progress',        -- Active gameplay
     'paused',            -- Temporarily suspended
-    'completed',         -- Finished normally
+    'epilogue',          -- Writable public archive (see below)
+    'completed',         -- Finished normally (read-only archive)
     'cancelled'          -- Terminated early
 ))
 ```
@@ -116,7 +117,10 @@ Games transition through defined states with specific rules for advancement.
 - **RECRUITMENT**: Players apply to join
 - **CHARACTER_CREATION**: Players create characters, GM approves
 - **IN_PROGRESS**: Active gameplay with phase cycles
-- **COMPLETED**: Game ends normally, archive becomes public
+- **EPILOGUE**: Optional. Archive becomes public **while the game stays
+  writable**, so the GM can run epilogue and meta-discussion threads. One-way
+  door — no route back to IN_PROGRESS
+- **COMPLETED**: Game ends normally, archive becomes public and read-only
 - **CANCELLED**: Game terminates early
 
 **Details**: [game-states.md](resources/game-states.md)
@@ -168,8 +172,18 @@ players) and **`action_results`** (GM → player, gated by `is_published`).
 ### 5. Visibility & Public Archive Mode
 
 ⚠️ **The single most misunderstood part of this domain.** Once a game reaches
-`completed`, **`CanUserViewGame` returns true for ANY authenticated user**
-(`backend/pkg/db/services/games.go:1029`). Completed games are a public archive.
+`completed` **or `epilogue`**, **`CanUserViewGame` returns true for ANY
+authenticated user** (keyed on `core.IsPublicArchive`). Both are public archives.
+
+🔑 **Read access and the write gate are separate concerns.** `epilogue` is a
+public archive that is *still writable* — `ValidateGameNotCompleted`
+deliberately omits it. Never assume "public archive" implies "read-only":
+
+| State | Public archive (read) | Writable |
+|---|---|---|
+| `epilogue` | ✅ | ✅ |
+| `completed` | ✅ | ❌ |
+| `cancelled` | ❌ | ❌ |
 
 Audience members and GMs can read **all** private conversations and **all**
 action submissions in a game via dedicated queries that apply no participant
@@ -309,7 +323,9 @@ GET  /api/v1/games/{gameID}/action-submissions/all
 - ✅ Action results are hidden from the player until `is_published`
 - ✅ Drafts (`is_draft`) are visible only to their author
 - ✅ Soft-deleted content (`is_deleted` / `deleted_at`) is hidden from normal reads
-- ✅ Completed games are a PUBLIC ARCHIVE readable by any authenticated user
+- ✅ Completed AND epilogue games are a PUBLIC ARCHIVE readable by any authenticated user
+- ✅ Epilogue games are a public archive that is STILL WRITABLE
+- ❌ NOT TRUE: "public archive implies read-only"
 - ✅ Audience and GM can read ALL private conversations and ALL action submissions
 - ❌ NOT TRUE: "private messages are never visible to the GM"
 - ❌ NOT TRUE: "results remain private forever"
@@ -449,8 +465,9 @@ WHERE a.phase_id = 456;
 - GM sets deadlines and pacing
 
 ### Public Archive
-- Completed games become readable by ANY authenticated user
-  (`CanUserViewGame`, `backend/pkg/db/services/games.go:1029`)
+- Completed AND epilogue games become readable by ANY authenticated user
+  (`CanUserViewGame`, keyed on `core.IsPublicArchive`)
+- Epilogue games remain **writable**; completed games do not
 - Action submissions, private conversations, and published results are all
   part of that archive
 - Cancelled games are NOT public — they follow normal permission rules

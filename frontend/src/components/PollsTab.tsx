@@ -103,8 +103,8 @@ export function PollsTab({ gameId, phaseId, isGM, isCurrentPhase, isAudience = f
       {/* Header Section */}
       <div className="flex justify-between items-start">
         <div>
-          <h3 className="text-lg font-semibold text-text-heading">Polls</h3>
-          <p className="text-sm text-text-secondary mt-1">
+          <h3 className="text-lg font-semibold text-content-primary">Polls</h3>
+          <p className="text-sm text-content-secondary mt-1">
             {isGM
               ? 'Create polls to gather input from players and characters.'
               : 'Vote on active polls to share your input.'}
@@ -140,9 +140,9 @@ export function PollsTab({ gameId, phaseId, isGM, isCurrentPhase, isAudience = f
             id="show-expired"
             checked={includeExpired}
             onChange={(e) => setIncludeExpired(e.target.checked)}
-            className="rounded border-border-primary text-accent-primary focus:ring-accent-primary"
+            className="rounded border-theme-default text-accent-primary focus:ring-accent-primary"
           />
-          <label htmlFor="show-expired" className="text-sm text-text-secondary cursor-pointer">
+          <label htmlFor="show-expired" className="text-sm text-content-secondary cursor-pointer">
             Show expired polls ({expiredPolls.length})
           </label>
         </div>
@@ -150,9 +150,9 @@ export function PollsTab({ gameId, phaseId, isGM, isCurrentPhase, isAudience = f
 
       {/* Active Polls Section */}
       {activePolls.length === 0 && expiredPolls.length === 0 ? (
-        <div className="bg-bg-secondary border border-border-primary rounded-lg p-8 text-center">
+        <div className="surface-raised border border-theme-default rounded-lg p-8 text-center">
           <svg
-            className="mx-auto h-12 w-12 text-text-tertiary mb-3"
+            className="mx-auto h-12 w-12 text-content-tertiary mb-3"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -164,8 +164,8 @@ export function PollsTab({ gameId, phaseId, isGM, isCurrentPhase, isAudience = f
               d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
             />
           </svg>
-          <h3 className="text-lg font-medium text-text-heading mb-1">No polls yet</h3>
-          <p className="text-text-secondary">
+          <h3 className="text-lg font-medium text-content-primary mb-1">No polls yet</h3>
+          <p className="text-content-secondary">
             {isGM ? 'Create a poll to gather input from your players.' : 'Check back later for polls from the GM.'}
           </p>
         </div>
@@ -174,7 +174,7 @@ export function PollsTab({ gameId, phaseId, isGM, isCurrentPhase, isAudience = f
           {/* Active Polls */}
           {activePolls.length > 0 && (
             <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-text-secondary uppercase tracking-wide">
+              <h4 className="text-sm font-semibold text-content-secondary uppercase tracking-wide">
                 Active Polls ({activePolls.length})
               </h4>
               {activePolls.map((poll) => (
@@ -186,7 +186,7 @@ export function PollsTab({ gameId, phaseId, isGM, isCurrentPhase, isAudience = f
           {/* Expired Polls (if showing) */}
           {includeExpired && expiredPolls.length > 0 && (
             <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-text-secondary uppercase tracking-wide">
+              <h4 className="text-sm font-semibold text-content-secondary uppercase tracking-wide">
                 Expired Polls ({expiredPolls.length})
               </h4>
               {expiredPolls.map((poll) => (

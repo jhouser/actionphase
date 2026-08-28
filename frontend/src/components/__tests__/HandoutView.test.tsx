@@ -188,7 +188,7 @@ describe('HandoutView', () => {
       const editButtons = screen.getAllByText('Edit');
       // Filter to only ghost buttons in comment sections (not the top handout edit button)
       const commentEditButtons = editButtons.filter(btn =>
-        btn.closest('.bg-bg-secondary') !== null
+        btn.closest('div.flex.gap-2') !== null
       );
 
       await user.click(commentEditButtons[0]);
@@ -216,7 +216,7 @@ describe('HandoutView', () => {
 
       const editButtons = screen.getAllByText('Edit');
       const commentEditButtons = editButtons.filter(btn =>
-        btn.closest('.bg-bg-secondary') !== null
+        btn.closest('div.flex.gap-2') !== null
       );
       const initialEditButtonCount = commentEditButtons.length;
       await user.click(commentEditButtons[0]);
@@ -238,7 +238,7 @@ describe('HandoutView', () => {
 
       // Edit buttons should be back
       const editButtonsAfter = screen.getAllByText('Edit').filter(btn =>
-        btn.closest('.bg-bg-secondary') !== null
+        btn.closest('div.flex.gap-2') !== null
       );
       expect(editButtonsAfter.length).toBe(initialEditButtonCount);
     });
@@ -262,7 +262,7 @@ describe('HandoutView', () => {
       // Click edit on first comment
       const editButtons = screen.getAllByText('Edit');
       const commentEditButtons = editButtons.filter(btn =>
-        btn.closest('.bg-bg-secondary') !== null
+        btn.closest('div.flex.gap-2') !== null
       );
       await user.click(commentEditButtons[0]);
 

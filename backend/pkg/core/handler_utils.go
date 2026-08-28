@@ -39,22 +39,6 @@ func GetUserIDFromJWT(ctx context.Context, userService UserServiceInterface) (in
 	return int32(userID), nil
 }
 
-// ValidateRequired checks if a required field is empty and returns an error if so.
-// Returns nil if the field is valid, or an error response if it's empty.
-//
-// Example Usage:
-//
-//	if errResp := ValidateRequired(data.Title, "title"); errResp != nil {
-//	    render.Render(w, r, errResp)
-//	    return
-//	}
-func ValidateRequired(value string, fieldName string) render.Renderer {
-	if value == "" {
-		return ErrInvalidRequest(fmt.Errorf("%s is required", fieldName))
-	}
-	return nil
-}
-
 // GetClientIP extracts the real client IP address from an HTTP request.
 // It checks headers set by proxies/load balancers in this order:
 // 1. X-Real-IP - Set by nginx and other reverse proxies

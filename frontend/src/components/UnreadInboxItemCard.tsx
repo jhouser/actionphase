@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { MessageSquare, Reply, AtSign } from 'lucide-react';
-import { Button, Spinner, Alert } from './ui';
+import { Button, Spinner, Alert, Badge } from './ui';
 import { MarkdownPreview } from './MarkdownPreview';
 import CharacterAvatar from './CharacterAvatar';
 import { UnreadReplyBox } from './UnreadReplyBox';
@@ -53,6 +53,11 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
           {TYPE_ICON[item.notification.type] ?? <MessageSquare className="w-4 h-4" />}
         </span>
         <span className="flex-1 text-sm text-content-primary">{item.notification.title}</span>
+        {item.kind === 'private_message' && item.unreadCount > 1 && (
+          <Badge variant="primary" data-testid="unread-inbox-item-count">
+            {item.unreadCount} new
+          </Badge>
+        )}
       </Button>
 
       {isExpanded && (
@@ -67,7 +72,7 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
 
           {context && (
             <>
-              <div className="bg-bg-secondary rounded-lg p-3" data-testid="unread-inbox-item-context">
+              <div className="surface-raised rounded-lg p-3" data-testid="unread-inbox-item-context">
                 {context.parentMessage && (
                   <ParentCommentPreview
                     content={context.parentMessage.content}
@@ -89,7 +94,7 @@ export function UnreadInboxItemCard({ item }: UnreadInboxItemCardProps) {
                   />
                   <div className="flex flex-col flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-text-heading">
+                      <span className="font-medium text-content-primary">
                         {context.previewMessage.characterName || 'Unknown'}
                       </span>
                       {context.previewMessage.authorUsername && (

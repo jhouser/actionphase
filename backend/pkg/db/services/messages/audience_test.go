@@ -64,10 +64,10 @@ func TestListAllPrivateConversations(t *testing.T) {
 
 	t.Run("list_all_private_conversations_success", func(t *testing.T) {
 		conversations, err := msgService.ListAllPrivateConversations(context.Background(), core.ListAllPrivateConversationsParams{
-			GameID:           gameID,
-			ParticipantNames: []string{},
-			Limit:            20,
-			Offset:           0,
+			GameID:                  gameID,
+			ParticipantCharacterIDs: nil,
+			Limit:                   20,
+			Offset:                  0,
 		})
 		core.AssertNoError(t, err, "Should list conversations successfully")
 
@@ -77,10 +77,10 @@ func TestListAllPrivateConversations(t *testing.T) {
 
 	t.Run("list_all_private_conversations_nonexistent_game", func(t *testing.T) {
 		conversations, err := msgService.ListAllPrivateConversations(context.Background(), core.ListAllPrivateConversationsParams{
-			GameID:           99999,
-			ParticipantNames: []string{},
-			Limit:            20,
-			Offset:           0,
+			GameID:                  99999,
+			ParticipantCharacterIDs: nil,
+			Limit:                   20,
+			Offset:                  0,
 		})
 
 		// Should succeed but return empty list for nonexistent game
@@ -90,7 +90,7 @@ func TestListAllPrivateConversations(t *testing.T) {
 }
 
 // TestListAllPrivateConversations_ParticipantFilter tests that filtering by multiple
-// participant names uses AND semantics (all must be present), not OR (any present).
+// participant character IDs uses AND semantics (all must be present), not OR (any present).
 func TestListAllPrivateConversations_ParticipantFilter(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
@@ -134,7 +134,7 @@ func TestListAllPrivateConversations_ParticipantFilter(t *testing.T) {
 	t.Run("single_participant_filter_returns_both", func(t *testing.T) {
 		// Filtering by Alpha alone should return both conversations
 		convs, err := msgService.ListAllPrivateConversations(context.Background(), core.ListAllPrivateConversationsParams{
-			GameID: gameID, ParticipantNames: []string{"Alpha"}, Limit: 20, Offset: 0,
+			GameID: gameID, ParticipantCharacterIDs: []int32{c1.ID}, Limit: 20, Offset: 0,
 		})
 		core.AssertNoError(t, err, "should list successfully")
 		core.AssertTrue(t, len(convs) >= 2, "Alpha is in both conversations")
@@ -144,7 +144,7 @@ func TestListAllPrivateConversations_ParticipantFilter(t *testing.T) {
 		// Filtering by Alpha + Beta should return ONLY the Alpha-Beta conversation,
 		// not Alpha-Gamma (which has Alpha but not Beta).
 		convs, err := msgService.ListAllPrivateConversations(context.Background(), core.ListAllPrivateConversationsParams{
-			GameID: gameID, ParticipantNames: []string{"Alpha", "Beta"}, Limit: 20, Offset: 0,
+			GameID: gameID, ParticipantCharacterIDs: []int32{c1.ID, c2.ID}, Limit: 20, Offset: 0,
 		})
 		core.AssertNoError(t, err, "should list successfully")
 		core.AssertEqual(t, 1, len(convs), "should return only the Alpha-Beta conversation")
@@ -154,8 +154,8 @@ func TestListAllPrivateConversations_ParticipantFilter(t *testing.T) {
 	})
 }
 
-// TestGetConversationParticipantNames tests the participant filter list endpoint.
-func TestGetConversationParticipantNames(t *testing.T) {
+// TestGetConversationParticipantCharacters tests the participant filter list endpoint.
+func TestGetConversationParticipantCharacters(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
 
@@ -197,40 +197,59 @@ func TestGetConversationParticipantNames(t *testing.T) {
 	// No Beta <-> Gamma conversation exists.
 
 	t.Run("no_filter_returns_all_participants", func(t *testing.T) {
-		names, err := msgService.GetConversationParticipantNames(context.Background(), gameID, []string{})
+		chars, err := msgService.GetConversationParticipantCharacters(context.Background(), gameID, nil)
 		core.AssertNoError(t, err, "should succeed")
-		core.AssertTrue(t, contains(names, "Alpha"), "Alpha should be present")
-		core.AssertTrue(t, contains(names, "Beta"), "Beta should be present")
-		core.AssertTrue(t, contains(names, "Gamma"), "Gamma should be present")
+		core.AssertTrue(t, containsID(chars, cAlpha.ID), "Alpha should be present")
+		core.AssertTrue(t, containsID(chars, cBeta.ID), "Beta should be present")
+		core.AssertTrue(t, containsID(chars, cGamma.ID), "Gamma should be present")
 	})
 
 	t.Run("selecting_alpha_returns_beta_and_gamma", func(t *testing.T) {
-		names, err := msgService.GetConversationParticipantNames(context.Background(), gameID, []string{"Alpha"})
+		chars, err := msgService.GetConversationParticipantCharacters(context.Background(), gameID, []int32{cAlpha.ID})
 		core.AssertNoError(t, err, "should succeed")
-		core.AssertTrue(t, contains(names, "Beta"), "Beta co-appears with Alpha")
-		core.AssertTrue(t, contains(names, "Gamma"), "Gamma co-appears with Alpha")
+		core.AssertTrue(t, containsID(chars, cBeta.ID), "Beta co-appears with Alpha")
+		core.AssertTrue(t, containsID(chars, cGamma.ID), "Gamma co-appears with Alpha")
 	})
 
 	t.Run("selecting_beta_excludes_gamma", func(t *testing.T) {
 		// Beta and Gamma share no conversation, so Gamma must not appear
-		names, err := msgService.GetConversationParticipantNames(context.Background(), gameID, []string{"Beta"})
+		chars, err := msgService.GetConversationParticipantCharacters(context.Background(), gameID, []int32{cBeta.ID})
 		core.AssertNoError(t, err, "should succeed")
-		core.AssertTrue(t, contains(names, "Alpha"), "Alpha co-appears with Beta")
-		core.AssertTrue(t, !contains(names, "Gamma"), "Gamma does NOT co-appear with Beta")
+		core.AssertTrue(t, containsID(chars, cAlpha.ID), "Alpha co-appears with Beta")
+		core.AssertTrue(t, !containsID(chars, cGamma.ID), "Gamma does NOT co-appear with Beta")
 	})
 
 	t.Run("selecting_alpha_and_beta_excludes_gamma", func(t *testing.T) {
-		names, err := msgService.GetConversationParticipantNames(context.Background(), gameID, []string{"Alpha", "Beta"})
+		chars, err := msgService.GetConversationParticipantCharacters(context.Background(), gameID, []int32{cAlpha.ID, cBeta.ID})
 		core.AssertNoError(t, err, "should succeed")
-		core.AssertTrue(t, contains(names, "Alpha"), "Alpha should be present")
-		core.AssertTrue(t, contains(names, "Beta"), "Beta should be present")
-		core.AssertTrue(t, !contains(names, "Gamma"), "Gamma does NOT share a conv with both Alpha and Beta")
+		core.AssertTrue(t, containsID(chars, cAlpha.ID), "Alpha should be present")
+		core.AssertTrue(t, containsID(chars, cBeta.ID), "Beta should be present")
+		core.AssertTrue(t, !containsID(chars, cGamma.ID), "Gamma does NOT share a conv with both Alpha and Beta")
+	})
+
+	t.Run("renaming_a_character_does_not_change_filter_results", func(t *testing.T) {
+		// The regression this fix targets: filtering used to match on display name, so
+		// renaming a character silently changed which conversations matched. Filtering
+		// by ID must be unaffected by the rename.
+		_, err := testDB.Pool.Exec(context.Background(),
+			`UPDATE characters SET name = 'Alpha Renamed' WHERE id = $1`, cAlpha.ID)
+		core.AssertNoError(t, err, "rename Alpha")
+
+		convs, err := msgService.ListAllPrivateConversations(context.Background(), core.ListAllPrivateConversationsParams{
+			GameID: gameID, ParticipantCharacterIDs: []int32{cAlpha.ID, cBeta.ID}, Limit: 20, Offset: 0,
+		})
+		core.AssertNoError(t, err, "should list successfully after rename")
+		core.AssertEqual(t, 1, len(convs), "Alpha-Beta conversation still matches after rename")
+
+		count, err := msgService.CountAllPrivateConversations(context.Background(), gameID, []int32{cAlpha.ID, cBeta.ID})
+		core.AssertNoError(t, err, "should count successfully after rename")
+		core.AssertEqual(t, int64(1), count, "count agrees with list after rename")
 	})
 }
 
-func contains(slice []string, val string) bool {
-	for _, s := range slice {
-		if s == val {
+func containsID(chars []core.ConversationParticipantCharacter, id int32) bool {
+	for _, c := range chars {
+		if c.ID == id {
 			return true
 		}
 	}

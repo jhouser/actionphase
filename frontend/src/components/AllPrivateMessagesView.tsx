@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { useUrlParam } from '../hooks/useUrlParam';
 import { useAllPrivateConversations, useAudienceConversationMessages, useConversationParticipants } from '../hooks/useAudience';
 import { Badge } from './ui/Badge';
@@ -17,6 +17,26 @@ interface AllPrivateMessagesViewProps {
   gameId: number;
 }
 
+// Stable identity: useUrlParam returns this exact object when the param is
+// absent, so a fresh Set() here would change on every render and retrigger the
+// memos and queries that depend on the selection.
+const EMPTY_PARTICIPANTS: Set<number> = new Set();
+
+// The participant filter is an AND filter over character ids, stored in the URL
+// as a comma-separated list so a filtered view survives a refresh and can be
+// linked. NaN entries are dropped rather than trusted — the param is
+// user-editable. Mirrors HistoryView's `characters` filter.
+const participantFilterParamOptions = {
+  deserialize: (raw: string) =>
+    new Set(
+      raw
+        .split(',')
+        .map(part => parseInt(part, 10))
+        .filter(id => !Number.isNaN(id))
+    ),
+  serialize: (value: Set<number>) => [...value].join(','),
+} as const;
+
 
 interface MessageType {
   id: number;
@@ -32,12 +52,26 @@ interface MessageType {
  * Features infinite scroll, participant filtering, and conversation browsing
  */
 export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) {
+  // Opening a conversation pushes a history entry so the browser Back button
+  // returns to the list. It must not replace: AudienceConversationCard is a
+  // <Link>, which has already pushed the entry by the time its onClick runs, so
+  // replacing here overwrote that entry and left Back with nothing to undo.
   const [selectedConversationId, setSelectedConversationId] = useUrlParam<string | null>('audienceConversation', null, {
     deserialize: (s) => s || null,
     serialize: (v) => v ?? '',
-    replace: true,
+    replace: false,
   });
-  const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(new Set());
+  // Selection is tracked by character ID, not name: names are mutable and not unique
+  // within a game, so a rename silently changed which conversations matched.
+  // Kept in the URL so the filter survives a refresh and is restored when Back
+  // returns here from a conversation. Replaces rather than pushes: toggling chips
+  // is a refinement, not a navigation, and each toggle would otherwise cost a
+  // separate Back press to escape.
+  const [selectedParticipants, setSelectedParticipants] = useUrlParam<Set<number>>(
+    'audienceParticipants',
+    EMPTY_PARTICIPANTS,
+    { ...participantFilterParamOptions, replace: true }
+  );
 
   // Fetch messages for selected conversation
   const {
@@ -47,7 +81,7 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
   } = useAudienceConversationMessages(gameId, selectedConversationId);
 
   // Fetch conversations with server-side filtering
-  const selectedNamesForConvs = useMemo(() => Array.from(selectedParticipants), [selectedParticipants]);
+  const selectedIdsForConvs = useMemo(() => Array.from(selectedParticipants), [selectedParticipants]);
   const {
     data,
     fetchNextPage,
@@ -56,7 +90,7 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
     isLoading,
     error,
   } = useAllPrivateConversations(gameId, {
-    participantNames: selectedNamesForConvs.length > 0 ? selectedNamesForConvs : undefined
+    participantCharacterIds: selectedIdsForConvs.length > 0 ? selectedIdsForConvs : undefined
   });
 
   // Infinite scroll handler
@@ -86,24 +120,22 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
 
   // Fetch valid filter options from the backend.
   // Returns all participants when nothing is selected; narrows to co-participants
-  // of all selected names when a filter is active. Backed by a dedicated SQL query
+  // of all selected characters when a filter is active. Backed by a dedicated SQL query
   // that scans ALL conversations — not just the paginated subset loaded so far.
-  const { data: filterOptions = [] } = useConversationParticipants(gameId, selectedNamesForConvs);
+  const { data: filterOptions = [] } = useConversationParticipants(gameId, selectedIdsForConvs);
 
-  const toggleParticipant = (participant: string) => {
-    setSelectedParticipants(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(participant)) {
-        newSet.delete(participant);
-      } else {
-        newSet.add(participant);
-      }
-      return newSet;
-    });
+  const toggleParticipant = (characterId: number) => {
+    const next = new Set(selectedParticipants);
+    if (next.has(characterId)) {
+      next.delete(characterId);
+    } else {
+      next.add(characterId);
+    }
+    setSelectedParticipants(next);
   };
 
   const clearFilters = () => {
-    setSelectedParticipants(new Set());
+    setSelectedParticipants(EMPTY_PARTICIPANTS);
   };
 
   if (isLoading) {
@@ -183,7 +215,7 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
 
       {/* Participant Filter */}
       {filterOptions.length > 0 && (
-        <div className="border border-border-primary rounded-lg p-4 bg-bg-secondary">
+        <div className="border border-theme-default rounded-lg p-4 surface-raised">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-content-primary">Filter by Participants</h3>
             {selectedParticipants.size > 0 && (
@@ -199,20 +231,20 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
           </div>
           <div className="flex flex-wrap gap-2">
             {filterOptions.map((participant) => {
-              const isSelected = selectedParticipants.has(participant);
+              const isSelected = selectedParticipants.has(participant.id);
               return (
                 <button
-                  key={participant}
-                  onClick={() => toggleParticipant(participant)}
+                  key={participant.id}
+                  onClick={() => toggleParticipant(participant.id)}
                   className={`
                     px-3 py-1.5 rounded-full text-sm font-medium transition-colors
                     ${isSelected
                       ? 'bg-interactive-primary text-white'
-                      : 'bg-bg-primary border border-border-primary text-content-primary hover:bg-bg-tertiary'
+                      : 'surface-base border border-theme-default text-content-primary hover:surface-sunken'
                     }
                   `}
                 >
-                  {participant}
+                  {participant.name}
                 </button>
               );
             })}
@@ -242,7 +274,6 @@ export function AllPrivateMessagesView({ gameId }: AllPrivateMessagesViewProps) 
               key={conversation.conversation_id}
               conversation={conversation}
               isSelected={selectedConversationId === String(conversation.conversation_id)}
-              onClick={() => setSelectedConversationId(String(conversation.conversation_id))}
             />
           ))}
 

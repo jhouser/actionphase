@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	models "actionphase/pkg/db/models"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -65,6 +66,20 @@ func TestCanSeeUsernamesInAnonymousGame(t *testing.T) {
 	}
 	completedAnonGame.State = pgtype.Text{String: GameStateCompleted, Valid: true}
 
+	// Anonymous game in EPILOGUE: a public archive, so anonymity lifts here too
+	// even though the game is still writable.
+	epilogueAnonGame, err := queries.CreateGame(ctx, models.CreateGameParams{
+		Title:       "Epilogue Anonymous Game",
+		Description: pgtype.Text{String: "Test", Valid: true},
+		GmUserID:    int32(gmUser.ID),
+		IsAnonymous: true,
+		IsPublic:    pgtype.Bool{Bool: true, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("Failed to create epilogue anonymous test game: %v", err)
+	}
+	epilogueAnonGame.State = pgtype.Text{String: GameStateEpilogue, Valid: true}
+
 	// Anonymous game that was CANCELLED: not public, so anonymity still applies.
 	cancelledAnonGame, err := queries.CreateGame(ctx, models.CreateGameParams{
 		Title:       "Cancelled Anonymous Game",
@@ -88,7 +103,7 @@ func TestCanSeeUsernamesInAnonymousGame(t *testing.T) {
 		{int32(playerUser.ID), "player"},
 	}
 	for _, p := range participants {
-		for _, gameRef := range []*models.Game{&anonGame, &normalGame, &completedAnonGame, &cancelledAnonGame} {
+		for _, gameRef := range []*models.Game{&anonGame, &normalGame, &completedAnonGame, &epilogueAnonGame, &cancelledAnonGame} {
 			_, err := queries.AddGameParticipant(ctx, models.AddGameParticipantParams{
 				GameID: gameRef.ID,
 				UserID: p.userID,
@@ -125,6 +140,15 @@ func TestCanSeeUsernamesInAnonymousGame(t *testing.T) {
 		{"completed anon: non-participant sees username", completedAnonGame, 99999, true},
 		{"completed anon: GM sees username", completedAnonGame, int32(gmUser.ID), true},
 		{"completed anon: audience sees username", completedAnonGame, int32(audienceUser.ID), true},
+
+		// Epilogue anonymous game: the archive is open, so identities are
+		// disclosed exactly as they are on completion. A GM who moves to epilogue
+		// to run meta-discussion has unmasked everyone; that is intended and
+		// irreversible, and the confirmation dialog says so.
+		{"epilogue anon: player sees username", epilogueAnonGame, int32(playerUser.ID), true},
+		{"epilogue anon: non-participant sees username", epilogueAnonGame, 99999, true},
+		{"epilogue anon: GM sees username", epilogueAnonGame, int32(gmUser.ID), true},
+		{"epilogue anon: audience sees username", epilogueAnonGame, int32(audienceUser.ID), true},
 
 		// Cancelled games are NOT public, so the play-time rule still applies.
 		{"cancelled anon: player cannot see username", cancelledAnonGame, int32(playerUser.ID), false},
@@ -742,6 +766,35 @@ func TestCanUserControlNPC(t *testing.T) {
 			got := CanUserControlNPC(ctx, testDB.Pool, tt.characterID, tt.userID)
 			if got != tt.want {
 				t.Errorf("CanUserControlNPC() = %v, want %v - %s", got, tt.want, tt.description)
+			}
+		})
+	}
+}
+
+// TestIsPublicArchive pins the read gate. It is deliberately a separate concern
+// from the write gate (ValidateGameNotCompleted) — epilogue is readable by
+// everyone AND still writable, which is why the two cannot share a predicate.
+func TestIsPublicArchive(t *testing.T) {
+	tests := []struct {
+		state   string
+		want    bool
+		because string
+	}{
+		{GameStateCompleted, true, "terminal read-only archive"},
+		{GameStateEpilogue, true, "writable archive — the whole game is disclosed"},
+		{GameStateCancelled, false, "cancelled games are explicitly NOT public"},
+		{GameStateInProgress, false, "play-time secrecy still applies"},
+		{GameStatePaused, false, "a paused game is still mid-play"},
+		{GameStateSetup, false, ""},
+		{GameStateRecruitment, false, ""},
+		{GameStateCharacterCreation, false, ""},
+		{"", false, "an unset state must not open the archive"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.state, func(t *testing.T) {
+			if got := IsPublicArchive(tt.state); got != tt.want {
+				t.Errorf("IsPublicArchive(%q) = %v, want %v (%s)", tt.state, got, tt.want, tt.because)
 			}
 		})
 	}

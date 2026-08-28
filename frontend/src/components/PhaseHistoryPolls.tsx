@@ -34,9 +34,9 @@ export function PhaseHistoryPolls({ gameId, phaseId, isGM, isAudience = false }:
 
   if (polls.length === 0) {
     return (
-      <div className="p-6 bg-bg-secondary border border-border-primary rounded-lg text-center">
+      <div className="p-6 surface-raised border border-theme-default rounded-lg text-center">
         <svg
-          className="mx-auto h-12 w-12 text-text-tertiary mb-3"
+          className="mx-auto h-12 w-12 text-content-tertiary mb-3"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -48,8 +48,8 @@ export function PhaseHistoryPolls({ gameId, phaseId, isGM, isAudience = false }:
             d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
           />
         </svg>
-        <h3 className="text-lg font-medium text-text-heading mb-1">No polls for this phase</h3>
-        <p className="text-text-secondary">
+        <h3 className="text-lg font-medium text-content-primary mb-1">No polls for this phase</h3>
+        <p className="text-content-secondary">
           There were no polls created during this phase.
         </p>
       </div>
@@ -58,7 +58,7 @@ export function PhaseHistoryPolls({ gameId, phaseId, isGM, isAudience = false }:
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-text-secondary mb-4">
+      <p className="text-sm text-content-secondary mb-4">
         Showing {polls.length} {polls.length === 1 ? 'poll' : 'polls'} from this phase
       </p>
       {polls.map((poll) => (

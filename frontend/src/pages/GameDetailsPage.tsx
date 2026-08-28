@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
+import { isGameWritable, isPublicArchive } from '@/lib/gamePermissions';
 import { useAuth } from '../contexts/AuthContext';
 import { useGameContext } from '../contexts/GameContext';
 import { useGameApplication } from '../hooks/useGameApplication';
@@ -21,6 +22,7 @@ import { GameTabContent } from '../components/GameTabContent';
 import { ApplyToGameModal } from '../components/ApplyToGameModal';
 import { EditGameModal } from '../components/EditGameModal';
 import { CompleteGameConfirmationDialog } from '../components/CompleteGameConfirmationDialog';
+import { EpilogueGameConfirmationDialog } from '../components/EpilogueGameConfirmationDialog';
 import { PauseGameConfirmationDialog } from '../components/PauseGameConfirmationDialog';
 import { CancelGameConfirmationDialog } from '../components/CancelGameConfirmationDialog';
 import { LeaveGameConfirmationDialog } from '../components/LeaveGameConfirmationDialog';
@@ -29,6 +31,7 @@ import { WithdrawApplicationConfirmationDialog } from '../components/WithdrawApp
 import { DeadlineStrip } from '../components/DeadlineStrip';
 import type { CreateDeadlineRequest, UnifiedDeadline } from '../types/deadlines';
 import { getDeadlineTarget } from '../utils/deadlineTarget';
+import { clearForeignTabParams } from '../utils/tabParams';
 import { logger } from '@/services/LoggingService';
 
 interface GameDetailsPageProps {
@@ -68,7 +71,10 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
   const { data: currentPhaseData, isLoading: isLoadingPhase } = useQuery({
     queryKey: ['currentPhase', gameId],
     queryFn: () => apiClient.phases.getCurrentPhase(gameId).then(res => res.data),
-    enabled: !!gameId && game?.state === 'in_progress',
+    // Epilogue has a live phase too — the GM runs epilogue threads in a
+    // common_room phase. Leaving this disabled left currentPhaseType undefined
+    // forever, so the Common Room tab never appeared for players.
+    enabled: !!gameId && (game?.state === 'in_progress' || game?.state === 'epilogue'),
     refetchInterval: 180000,
   });
 
@@ -113,6 +119,9 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
     showCompleteDialog,
     setShowCompleteDialog,
     handleConfirmComplete,
+    showEpilogueDialog,
+    setShowEpilogueDialog,
+    handleConfirmEpilogue,
     showPauseDialog,
     setShowPauseDialog,
     handleConfirmPause,
@@ -172,7 +181,7 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
       currentPhase: currentPhaseData?.phase ?? null,
       isGM,
       isAudience,
-      isGameCompleted: game?.state === 'completed',
+      isGameWritable: isGameWritable(game?.state),
       userRole,
       gameState: game?.state ?? '',
       isAnonymous: game?.is_anonymous ?? false,
@@ -202,13 +211,9 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
   const getTabHref = useCallback((tabId: string) => {
     const params = new URLSearchParams(searchParams);
     params.set('tab', tabId);
-    // Clear tab-specific sub-params when leaving their tab
-    if (tabId !== 'messages') params.delete('conversation');
-    if (tabId !== 'audience') params.delete('audienceConversation');
-    if (tabId !== 'people') {
-      params.delete('character');
-      params.delete('peopleTab');
-    }
+    // Clear tab-specific sub-params when leaving their tab, so returning to a
+    // tab later opens it fresh instead of resuming a stale drill-down.
+    clearForeignTabParams(params, tabId);
     return `?${params.toString()}`;
   }, [searchParams]);
 
@@ -343,18 +348,18 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
           <div className="surface-base shadow-md py-4 px-3 md:p-6 mb-6 md:rounded-lg animate-pulse">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <div className="h-7 bg-bg-secondary rounded w-2/3 mb-3"></div>
+                <div className="h-7 surface-raised rounded w-2/3 mb-3"></div>
                 <div className="flex gap-2">
-                  <div className="h-5 bg-bg-secondary rounded-full w-20"></div>
-                  <div className="h-5 bg-bg-secondary rounded-full w-16"></div>
-                  <div className="h-5 bg-bg-secondary rounded-full w-24"></div>
+                  <div className="h-5 surface-raised rounded-full w-20"></div>
+                  <div className="h-5 surface-raised rounded-full w-16"></div>
+                  <div className="h-5 surface-raised rounded-full w-24"></div>
                 </div>
               </div>
-              <div className="h-8 bg-bg-secondary rounded w-24 ml-4"></div>
+              <div className="h-8 surface-raised rounded w-24 ml-4"></div>
             </div>
             <div className="mt-4 space-y-2">
-              <div className="h-4 bg-bg-secondary rounded w-full"></div>
-              <div className="h-4 bg-bg-secondary rounded w-5/6"></div>
+              <div className="h-4 surface-raised rounded w-full"></div>
+              <div className="h-4 surface-raised rounded w-5/6"></div>
             </div>
           </div>
 
@@ -362,14 +367,14 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
           <div className="surface-base shadow-sm md:rounded-lg mb-6 animate-pulse">
             <div className="flex gap-1 p-2 border-b border-theme-default overflow-x-auto">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-8 bg-bg-secondary rounded w-20 flex-shrink-0"></div>
+                <div key={i} className="h-8 surface-raised rounded w-20 flex-shrink-0"></div>
               ))}
             </div>
             <div className="p-4 md:p-6 space-y-4">
-              <div className="h-4 bg-bg-secondary rounded w-full"></div>
-              <div className="h-4 bg-bg-secondary rounded w-4/5"></div>
-              <div className="h-4 bg-bg-secondary rounded w-3/5"></div>
-              <div className="h-32 bg-bg-secondary rounded w-full mt-4"></div>
+              <div className="h-4 surface-raised rounded w-full"></div>
+              <div className="h-4 surface-raised rounded w-4/5"></div>
+              <div className="h-4 surface-raised rounded w-3/5"></div>
+              <div className="h-32 surface-raised rounded w-full mt-4"></div>
             </div>
           </div>
         </div>
@@ -396,8 +401,10 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
 
   const stateActions = isGM ? getStateActions(game.state) : [];
 
-  // Check if user is viewing as public (completed game, not a participant)
-  const isPublicViewer = game?.state === 'completed' && userRole === 'none';
+  // Check if user is viewing as public (public-archive game, not a participant).
+  // Epilogue counts: a non-participant can read an epilogue game in full, so
+  // they are a public viewer there for exactly the same reason.
+  const isPublicViewer = isPublicArchive(game?.state) && userRole === 'none';
 
   return (
     <div className="min-h-screen surface-page">
@@ -625,6 +632,16 @@ export const GameDetailsPage = ({ gameId }: GameDetailsPageProps) => {
           isOpen={showCompleteDialog}
           onClose={() => setShowCompleteDialog(false)}
           onConfirm={handleConfirmComplete}
+          gameTitle={game.title}
+        />
+      )}
+
+      {/* Epilogue Confirmation Dialog */}
+      {game && (
+        <EpilogueGameConfirmationDialog
+          isOpen={showEpilogueDialog}
+          onClose={() => setShowEpilogueDialog(false)}
+          onConfirm={handleConfirmEpilogue}
           gameTitle={game.title}
         />
       )}

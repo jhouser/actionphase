@@ -2,6 +2,14 @@
 
 This guide explains how to run the different types of tests in the ActionPhase backend.
 
+**Last Verified**: August 2026
+
+> Tests run **inside the backend container**. There is no host PostgreSQL to
+> install and no separate test-database setup step: `just test`,
+> `just test-integration`, `just test-coverage`, and `just test-race` each
+> prepare the migrated test template automatically. Each test **package** then
+> clones its own database from that template, so packages run in parallel.
+
 ## Quick Start
 
 ### Fast Unit Tests (No Database Required)
@@ -12,11 +20,8 @@ just test-mocks
 
 ### Full Test Suite (Requires Database)
 ```bash
-# Set up test database (one-time setup)
-just test-db-setup
-
-# Run all tests
-just test
+just up      # stack must be running
+just test    # prepares the test template, then runs everything
 ```
 
 ## Test Types
@@ -41,10 +46,6 @@ These tests use in-memory mocks and don't require any external dependencies. Per
 - **Purpose**: Testing full request/response flows
 
 ```bash
-# Setup (one time)
-just test-db-setup
-
-# Run integration tests
 just test-integration
 ```
 
@@ -67,26 +68,20 @@ just test              # All tests (sequential)
 
 ### Option 1: Local PostgreSQL
 ```bash
-# Install PostgreSQL (if not installed)
-brew install postgresql  # macOS
-sudo apt install postgresql  # Ubuntu
-
-# Create test database
-just test-db-setup
+just up     # starts db + backend + frontend
 ```
 
-### Option 2: Docker PostgreSQL
-```bash
-# Start database container
-just db_up
+The test database and its migrated template are created for you by the test
+recipes. To rebuild them after a bad migration or dirty state:
 
-# Create test database
-createdb actionphase_test
+```bash
+just reset-test-db
 ```
 
-### Option 3: Skip Database Tests
+### Skipping Database Tests
 ```bash
-# Set environment variable to skip all database tests
+just test-mocks     # preferred: mock-only suite, no DB
+# or set the env var directly when invoking go test in-container:
 export SKIP_DB_TESTS=true
 just test
 ```
@@ -121,8 +116,7 @@ just test-mocks  # Run in ~1 second
 
 ### Full CI (pre-merge)
 ```bash
-just test-db-setup
-just test
+just ci-test   # lint + test + race
 ```
 
 ## Troubleshooting
@@ -133,8 +127,8 @@ ERROR: database "actionphase_test" does not exist
 ```
 
 **Solutions:**
-1. Create the database: `just test-db-setup`
-2. Skip database tests: `export SKIP_DB_TESTS=true`
+1. Rebuild the test DB + template: `just reset-test-db`
+2. Confirm the stack is up: `just ps`
 3. Use mock tests only: `just test-mocks`
 
 ### Tests Hanging or Running Slowly
@@ -148,12 +142,9 @@ just test-run TestNamePattern
 
 ### Connection Refused Errors
 ```bash
-# Check if PostgreSQL is running
-brew services start postgresql  # macOS
-sudo systemctl start postgresql  # Linux
-
-# Or use Docker
-just db_up
+just ps           # is the db container up?
+just db up        # start just the database
+just dev-logs db  # inspect its logs
 ```
 
 ## Writing Tests

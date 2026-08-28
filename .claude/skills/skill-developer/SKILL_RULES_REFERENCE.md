@@ -7,7 +7,6 @@ Complete schema and configuration reference for `.claude/skills/skill-rules.json
 - [File Location](#file-location)
 - [Complete TypeScript Schema](#complete-typescript-schema)
 - [Field Guide](#field-guide)
-- [Example: Guardrail Skill](#example-guardrail-skill)
 - [Example: Domain Skill](#example-domain-skill)
 - [Validation](#validation)
 
@@ -46,13 +45,7 @@ interface SkillRule {
         createOnly?: boolean;       // Only trigger on file creation
     };
 
-    blockMessage?: string;  // For guardrails, {file_path} placeholder
-
-    skipConditions?: {
-        sessionSkillUsed?: boolean;      // Skip if used in session
-        fileMarkers?: string[];          // e.g., ["@skip-validation"]
-        envOverride?: string;            // e.g., "SKIP_DB_VERIFICATION"
-    };
+    blockMessage?: string;  // Unused — nothing blocks in this project
 }
 ```
 
@@ -71,13 +64,12 @@ interface SkillRule {
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `type` | string | Yes | "guardrail" (enforced) or "domain" (advisory) |
-| `enforcement` | string | Yes | "block" (PreToolUse), "suggest" (UserPromptSubmit), or "warn" |
+| `type` | string | Yes | "domain" (advisory). All 7 skills here use "domain"; "guardrail" exists in the schema but nothing enforces it, since there is no PreToolUse hook. |
+| `enforcement` | string | Yes | "suggest", "warn", or "block". **Advisory only** — the activation hook prints suggestions and never blocks, so all three behave identically today. |
 | `priority` | string | Yes | "critical", "high", "medium", or "low" |
 | `promptTriggers` | object | Optional | Triggers for UserPromptSubmit hook |
-| `fileTriggers` | object | Optional | Triggers for PreToolUse hook |
+| `fileTriggers` | object | Optional | **Inert** — no hook reads this. There is no PreToolUse hook; only `promptTriggers` affects activation. |
 | `blockMessage` | string | Optional* | Required if enforcement="block". Use `{file_path}` placeholder |
-| `skipConditions` | object | Optional | Escape hatches and session tracking |
 
 *Required for guardrails
 
@@ -98,101 +90,6 @@ interface SkillRule {
 | `createOnly` | boolean | Optional | Only trigger when creating new files |
 
 *Required if fileTriggers is present
-
-### skipConditions Fields
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `sessionSkillUsed` | boolean | Optional | Skip if skill already used this session |
-| `fileMarkers` | string[] | Optional | Skip if file contains comment marker |
-| `envOverride` | string | Optional | Environment variable name to disable skill |
-
----
-
-## Example: Guardrail Skill
-
-Complete example of a blocking guardrail skill with all features:
-
-```json
-{
-  "database-verification": {
-    "type": "guardrail",
-    "enforcement": "block",
-    "priority": "critical",
-
-    "promptTriggers": {
-      "keywords": [
-        "prisma",
-        "database",
-        "table",
-        "column",
-        "schema",
-        "query",
-        "migration"
-      ],
-      "intentPatterns": [
-        "(add|create|implement).*?(user|login|auth|tracking|feature)",
-        "(modify|update|change).*?(table|column|schema|field)",
-        "database.*?(change|update|modify|migration)"
-      ]
-    },
-
-    "fileTriggers": {
-      "pathPatterns": [
-        "**/schema.prisma",
-        "**/migrations/**/*.sql",
-        "database/src/**/*.ts",
-        "form/src/**/*.ts",
-        "email/src/**/*.ts",
-        "users/src/**/*.ts",
-        "projects/src/**/*.ts",
-        "utilities/src/**/*.ts"
-      ],
-      "pathExclusions": [
-        "**/*.test.ts",
-        "**/*.spec.ts"
-      ],
-      "contentPatterns": [
-        "import.*[Pp]risma",
-        "PrismaService",
-        "prisma\\.",
-        "\\.findMany\\(",
-        "\\.findUnique\\(",
-        "\\.findFirst\\(",
-        "\\.create\\(",
-        "\\.createMany\\(",
-        "\\.update\\(",
-        "\\.updateMany\\(",
-        "\\.upsert\\(",
-        "\\.delete\\(",
-        "\\.deleteMany\\("
-      ]
-    },
-
-    "blockMessage": "⚠️ BLOCKED - Database Operation Detected\n\n📋 REQUIRED ACTION:\n1. Use Skill tool: 'database-verification'\n2. Verify ALL table and column names against schema\n3. Check database structure with DESCRIBE commands\n4. Then retry this edit\n\nReason: Prevent column name errors in Prisma queries\nFile: {file_path}\n\n💡 TIP: Add '// @skip-validation' comment to skip future checks",
-
-    "skipConditions": {
-      "sessionSkillUsed": true,
-      "fileMarkers": [
-        "@skip-validation"
-      ],
-      "envOverride": "SKIP_DB_VERIFICATION"
-    }
-  }
-}
-```
-
-### Key Points for Guardrails
-
-1. **type**: Must be "guardrail"
-2. **enforcement**: Must be "block"
-3. **priority**: Usually "critical" or "high"
-4. **blockMessage**: Required, clear actionable steps
-5. **skipConditions**: Session tracking prevents repeated nagging
-6. **fileTriggers**: Usually has both path and content patterns
-7. **contentPatterns**: Catch actual usage of technology
-
----
 
 ## Example: Domain Skill
 
@@ -255,10 +152,9 @@ Complete example of a suggestion-based domain skill:
 1. **type**: Must be "domain"
 2. **enforcement**: Usually "suggest"
 3. **priority**: "high" or "medium"
-4. **blockMessage**: Not needed (doesn't block)
-5. **skipConditions**: Optional (less critical)
-6. **promptTriggers**: Usually has extensive keywords
-7. **fileTriggers**: May have only path patterns (content less important)
+4. **blockMessage**: Not needed — nothing blocks
+5. **promptTriggers**: The only triggers that work; invest your effort here
+6. **fileTriggers**: Inert (no hook reads it), so it cannot activate a skill
 
 ---
 

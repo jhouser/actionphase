@@ -1,7 +1,4 @@
-import { useState } from 'react';
-import { Modal } from './Modal';
-import { Button } from './ui';
-import { logger } from '@/services/LoggingService';
+import { ConfirmActionDialog } from './ConfirmActionDialog';
 
 interface PauseGameConfirmationDialogProps {
   isOpen: boolean;
@@ -24,71 +21,29 @@ export function PauseGameConfirmationDialog({
   onConfirm,
   gameTitle,
 }: PauseGameConfirmationDialogProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleConfirm = async () => {
-    try {
-      setIsSubmitting(true);
-      await onConfirm();
-      onClose();
-    } catch (error) {
-      // Error handling is done by the parent component
-      logger.error('Failed to pause game', { error, gameTitle });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Pause Game">
-      <div className="space-y-4">
-        {/* Info message */}
-        <div className="bg-semantic-warning/10 border border-semantic-warning rounded-lg p-4">
-          <h3 className="font-semibold text-content-primary mb-2">
-            ⏸️ Pause Gameplay
-          </h3>
-          <p className="text-content-secondary text-sm">
-            Pausing this game will:
-          </p>
-          <ul className="list-disc list-inside text-content-secondary text-sm mt-2 space-y-1">
-            <li>Temporarily stop active gameplay</li>
-            <li>Prevent phase transitions and new actions</li>
-            <li>Allow you to resume at any time</li>
-          </ul>
-        </div>
-
-        {/* Game info */}
-        <div>
-          <p className="text-content-secondary text-sm mb-2">
-            You are about to pause:
-          </p>
-          <p className="font-semibold text-content-primary">
-            {gameTitle}
-          </p>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex gap-3 justify-end pt-4">
-          <Button
-            variant="secondary"
-            onClick={onClose}
-            disabled={isSubmitting}
-            data-testid="pause-game-cancel-button"
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleConfirm}
-            disabled={isSubmitting}
-            loading={isSubmitting}
-            className="bg-semantic-warning hover:bg-semantic-warning-hover text-white"
-            data-testid="pause-game-confirm-button"
-          >
-            {isSubmitting ? 'Pausing...' : 'Pause Game'}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+    <ConfirmActionDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      title="Pause Game"
+      headline="⏸️ Pause Gameplay"
+      intro="Pausing this game will:"
+      consequences={[
+        'Temporarily stop active gameplay',
+        'Prevent phase transitions and new actions',
+        'Allow you to resume at any time',
+      ]}
+      subjectLabel="You are about to pause:"
+      subject={gameTitle}
+      tone="warning"
+      confirmLabel="Pause Game"
+      confirmPendingLabel="Pausing..."
+      confirmVariant="primary"
+      confirmClassName="bg-semantic-warning hover:bg-semantic-warning-hover text-white"
+      confirmTestId="pause-game-confirm-button"
+      cancelLabel="Cancel"
+      cancelTestId="pause-game-cancel-button"
+    />
   );
 }

@@ -145,7 +145,7 @@ function PreviewDraftModal({
         <p className="text-xs text-content-tertiary italic">
           This is how the post will appear when the phase activates.
         </p>
-        <div className="border border-dashed border-border-default rounded-lg p-4 bg-bg-secondary">
+        <div className="border border-dashed border-theme-default rounded-lg p-4 surface-raised">
           <MarkdownPreview content={content} />
         </div>
         <div className="flex justify-end">
@@ -172,7 +172,7 @@ export function DraftPostSection({ phaseId, onCreateDraft }: DraftPostSectionPro
 
   if (isLoading) {
     return (
-      <div className="mt-3 pt-3 border-t border-border-default animate-pulse">
+      <div className="mt-3 pt-3 border-t border-theme-default animate-pulse">
         <div className="h-4 surface-sunken rounded w-1/3"></div>
       </div>
     );
@@ -180,7 +180,7 @@ export function DraftPostSection({ phaseId, onCreateDraft }: DraftPostSectionPro
 
   return (
     <div
-      className="mt-3 pt-3 border-t border-border-default"
+      className="mt-3 pt-3 border-t border-theme-default"
       onClick={(e) => e.stopPropagation()}
     >
       {draft === null || draft === undefined ? (

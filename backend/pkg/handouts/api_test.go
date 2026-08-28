@@ -17,6 +17,7 @@ import (
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -56,17 +57,7 @@ func setupHandoutTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 			HandoutService:      dbsvc.NewHandoutService(testDB.Pool),
 			NotificationService: dbsvc.NewNotificationService(testDB.Pool, app.ObsLogger),
 		}
-		r.Post("/handouts", handler.CreateHandout)
-		r.Get("/handouts", handler.ListHandouts)
-		r.Get("/handouts/{handoutId}", handler.GetHandout)
-		r.Put("/handouts/{handoutId}", handler.UpdateHandout)
-		r.Delete("/handouts/{handoutId}", handler.DeleteHandout)
-		r.Post("/handouts/{handoutId}/publish", handler.PublishHandout)
-		r.Post("/handouts/{handoutId}/unpublish", handler.UnpublishHandout)
-		r.Post("/handouts/{handoutId}/comments", handler.CreateHandoutComment)
-		r.Get("/handouts/{handoutId}/comments", handler.ListHandoutComments)
-		r.Patch("/handouts/{handoutId}/comments/{commentId}", handler.UpdateHandoutComment)
-		r.Delete("/handouts/{handoutId}/comments/{commentId}", handler.DeleteHandoutComment)
+		RegisterHumaGameHandouts(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 	})
 
 	return r

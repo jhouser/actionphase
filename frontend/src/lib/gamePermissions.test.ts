@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeGamePermissions,
+  isGameWritable,
   isPublicArchive,
   resolveUserRole,
   type UserGameRole,
@@ -41,12 +42,38 @@ describe('resolveUserRole', () => {
 });
 
 describe('isPublicArchive', () => {
-  it('is true only for completed games', () => {
+  it('is true for completed and epilogue games', () => {
     expect(isPublicArchive('completed')).toBe(true);
+    // Epilogue opens the archive while the game is still being written.
+    expect(isPublicArchive('epilogue')).toBe(true);
     // Cancelled games are explicitly NOT public — they keep play-time rules.
     expect(isPublicArchive('cancelled')).toBe(false);
     expect(isPublicArchive('in_progress')).toBe(false);
     expect(isPublicArchive(undefined)).toBe(false);
+  });
+});
+
+describe('isGameWritable', () => {
+  it('is false only for completed and cancelled games', () => {
+    expect(isGameWritable('completed')).toBe(false);
+    expect(isGameWritable('cancelled')).toBe(false);
+    expect(isGameWritable('in_progress')).toBe(true);
+    expect(isGameWritable('setup')).toBe(true);
+  });
+
+  it('keeps epilogue writable', () => {
+    // The whole reason the state exists: the archive is open AND the GM can
+    // still post epilogue threads. If this ever returns false, epilogue has
+    // collapsed into completed and the feature is gone. Mirrors
+    // core.ValidateGameNotCompleted, which deliberately omits epilogue.
+    expect(isGameWritable('epilogue')).toBe(true);
+  });
+
+  it('is the inverse question from isPublicArchive, not the same one', () => {
+    // Epilogue is the case that proves the two gates are independent: readable
+    // by everyone and still writable at the same time.
+    expect(isPublicArchive('epilogue') && isGameWritable('epilogue')).toBe(true);
+    expect(isPublicArchive('completed') && isGameWritable('completed')).toBe(false);
   });
 });
 
@@ -132,6 +159,15 @@ describe('computeGamePermissions', () => {
         isAdminActingAsGM: true,
       });
       expect(p.hasAudienceAccess).toBe(false);
+    });
+
+    it('grants it in an epilogue game too', () => {
+      // Epilogue is a public archive, so a player gets audience-level reach...
+      expect(forRole('player', 'epilogue').hasAudienceAccess).toBe(true);
+      expect(forRole('none', 'epilogue').hasAudienceAccess).toBe(true);
+      // ...but a GM is not demoted to a spectator by it.
+      expect(forRole('gm', 'epilogue').hasAudienceAccess).toBe(false);
+      expect(forRole('co_gm', 'epilogue').hasAudienceAccess).toBe(false);
     });
 
     it('withholds it while the game is live or once cancelled', () => {

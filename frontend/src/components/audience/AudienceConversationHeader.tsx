@@ -42,7 +42,7 @@ export const AudienceConversationHeader: React.FC<AudienceConversationHeaderProp
     : 'No participants';
 
   return (
-    <div className="border-b border-border-primary bg-bg-secondary sticky top-0 z-10">
+    <div className="border-b border-theme-default surface-raised sticky top-0 z-10">
       {/* Mobile Layout */}
       <div className="md:hidden p-4 space-y-3">
         {/* Back button + Read-Only badge */}
@@ -76,7 +76,7 @@ export const AudienceConversationHeader: React.FC<AudienceConversationHeaderProp
             ))}
             {additionalParticipants > 0 && (
               <div
-                className="h-8 w-8 rounded-full bg-content-tertiary text-white flex items-center justify-center text-xs font-medium border-2 border-bg-secondary shadow-sm"
+                className="h-8 w-8 rounded-full surface-sunken text-content-secondary flex items-center justify-center text-xs font-medium border-2 border-theme-default shadow-sm"
                 style={{ zIndex: 0 }}
                 title={`+${additionalParticipants} more`}
               >
@@ -119,7 +119,7 @@ export const AudienceConversationHeader: React.FC<AudienceConversationHeaderProp
             ))}
             {additionalParticipants > 0 && (
               <div
-                className="h-10 w-10 rounded-full bg-content-tertiary text-white flex items-center justify-center text-xs font-medium border-2 border-bg-secondary shadow-sm"
+                className="h-10 w-10 rounded-full surface-sunken text-content-secondary flex items-center justify-center text-xs font-medium border-2 border-theme-default shadow-sm"
                 style={{ zIndex: 0 }}
                 title={`+${additionalParticipants} more`}
               >

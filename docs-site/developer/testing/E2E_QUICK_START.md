@@ -30,26 +30,27 @@ await loginAs(page, 'PLAYER_1');  // Uses TestPlayer1 username
 
 ## 🚀 Getting Started (5 Minutes)
 
-### Install Playwright
+### Prerequisites
+
+Nothing to install. E2E runs in a one-shot `playwright` compose container that
+ships its own browsers — you need only `just`, `docker`, and `docker-compose`.
 
 ```bash
-cd frontend
-npm install -D @playwright/test
-npx playwright install
+just up      # start db + backend + frontend
+just ps      # confirm healthy
 ```
 
 ### Run Your First E2E Test
 
 ```bash
-# After implementing first test
-npm run test:e2e
-
-# Interactive UI mode
-npm run test:e2e:ui
-
-# Debug mode (step through)
-npm run test:e2e:debug
+just e2e-desktop                                  # chromium
+just e2e-mobile                                   # Pixel 5
+just e2e                                          # both, sequentially
+just e2e-test file e2e/smoke/health-check.spec.ts # one spec
 ```
+
+> `--headed` / `--ui` / `--debug` need a display and cannot run in the
+> container. See `just dev-help`.
 
 ---
 
@@ -136,22 +137,23 @@ test.describe('Feature Name', () => {
 
 ### Automatic Fixture Reset
 
-Fixtures are automatically reset before each test run via global setup:
+The `just e2e-*` recipes call **`just load-e2e`** before starting Playwright, so
+fixtures are always reset for you:
 
 ```bash
-# Just run tests - fixtures reset automatically!
-npm run test:e2e
+just e2e-desktop   # loads E2E fixtures, then runs
 ```
 
-The global setup script (`e2e/global-setup.ts`) runs `apply_all.sh` before tests start.
+`e2e/global-setup.ts` can also load fixtures in-process, but the containerized
+path sets `E2E_SKIP_FIXTURE_SETUP=true` and it returns immediately — the
+Playwright container has neither `psql` nor the fixture scripts. In-process
+setup applies **per-worker** fixtures (`apply_common.sh`, `apply_e2e_users.sh`,
+and `apply_e2e_worker.sh` for workers 0–5), not `apply_all.sh`.
 
 ### Manual Fixture Reset
 
-If you need to reset fixtures manually:
-
 ```bash
-# From project root
-./backend/pkg/db/test_fixtures/apply_all.sh
+just load-e2e
 ```
 
 ### Shared vs Dedicated Fixtures
@@ -253,37 +255,44 @@ cp .claude/planning/FEATURE_TEMPLATE.md .claude/planning/feature-[name].md
 - [ ] **Error Scenarios**: Invalid input, permissions, network errors
 - [ ] **Multi-User** (if needed): GM-Player interactions
 - [ ] **Test Duration**: < 3 minutes
-- [ ] **Update Catalog**: Add to `docs/E2E_TEST_CATALOG.md`
 
 ---
 
 ## ⚡ Quick Commands
 
 ```bash
-# Run all E2E tests
-npm run test:e2e
+# All E2E tests (desktop + mobile)
+just e2e
 
-# Run specific test file
-npm run test:e2e -- e2e/auth/login.spec.ts
+# One project
+just e2e-desktop
+just e2e-mobile
 
-# Run specific test by name
-npm run test:e2e -- -g "should login successfully"
+# A specific spec file
+just e2e-test file e2e/auth/login.spec.ts
 
-# Debug mode (step through with browser visible)
-npm run test:e2e:debug
+# HTML report from the last run
+just e2e-test report
 
-# UI mode (interactive)
-npm run test:e2e:ui
-
-# Run with specific browser
-npm run test:e2e -- --project=chromium
-
-# View HTML report
-npm run test:e2e:report
-
-# Run headed (see browser)
-npm run test:e2e:headed
+# Reload E2E fixtures by hand
+just load-e2e
 ```
+
+Filtering by name or tag goes straight to Playwright in the container:
+
+```bash
+PW="docker compose -f docker-compose.dev.yml --profile e2e run --rm playwright"
+just load-e2e
+$PW npx playwright test -g "should login successfully"
+$PW npx playwright test e2e/auth/
+```
+
+> **Tags are barely used.** `frontend/e2e/fixtures/test-tags.ts` defines a tag
+> vocabulary, but only **2 of 49** spec files apply it (`smoke/health-check` and
+> `auth/registration`), via the `tagTest()` helper rather than literal strings.
+> `--grep "@smoke"` therefore matches 6 tests, and `@game` / `@character` /
+> `@message` match nothing. Filter by path for everything else.
+
 
 ---
 

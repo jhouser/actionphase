@@ -8,6 +8,10 @@ export interface Notification {
   related_type?: string;
   related_id?: number;
   link_url?: string;
+  /** The container this notification belongs to (e.g. 'conversation').
+   * Marking the notification read clears every sibling sharing this context. */
+  context_type?: string;
+  context_id?: number;
   is_read: boolean;
   read_at?: string;
   created_at: string;

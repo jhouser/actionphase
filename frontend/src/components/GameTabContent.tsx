@@ -1,3 +1,4 @@
+import { isPublicArchive, isGameWritable } from '@/lib/gamePermissions';
 import { lazy, Suspense } from 'react';
 import { formatScheduleDay } from '../lib/scheduleFormat';
 import type { Character } from '../types/characters';
@@ -142,7 +143,7 @@ export function GameTabContent({
 
         {hasSchedule && (
           <>
-            <div className="border-t border-border-primary my-6" />
+            <div className="border-t border-theme-default my-6" />
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-content-secondary mb-3">Common Room Schedule</p>
               <div className="grid grid-cols-2 gap-x-8 gap-y-3 max-w-sm">
@@ -162,7 +163,7 @@ export function GameTabContent({
 
         {/* Show public applicants list during recruitment */}
         {game.state === 'recruitment' && (
-          <div className="mt-6 pt-6 border-t border-border-primary">
+          <div className="mt-6 pt-6 border-t border-theme-default">
             <PublicApplicantsList gameId={gameId} />
           </div>
         )}
@@ -171,7 +172,7 @@ export function GameTabContent({
             can read the game (including public archive mode). Lives here rather
             than above the game because it is an occasional, secondary action. */}
         {game.state === 'completed' && (
-          <div className="mt-6 pt-6 border-t border-border-primary">
+          <div className="mt-6 pt-6 border-t border-theme-default">
             <GameExportPanel gameId={gameId} isCompleted />
           </div>
         )}
@@ -180,7 +181,7 @@ export function GameTabContent({
   }
 
   // Common Room Tab (In Progress & Completed - common_room phases)
-  if (activeTab === 'common-room' && (game.state === 'in_progress' || game.state === 'completed')) {
+  if (activeTab === 'common-room' && (game.state === 'in_progress' || game.state === 'epilogue' || game.state === 'completed')) {
     // Show loading only on initial load (when we have no data yet)
     if (isLoadingPhase && !currentPhaseData) {
       return (
@@ -200,7 +201,10 @@ export function GameTabContent({
           phaseTitle={currentPhaseData.phase.title || `Phase ${currentPhaseData.phase.phase_number}`}
           phaseDescription={currentPhaseData.phase.description}
           currentPhase={currentPhaseData.phase}
-          isCurrentPhase={game.state === 'in_progress'}
+          // Epilogue is a live phase, not a historical one: the whole point is
+          // that the GM and players can still post. Gating this on 'in_progress'
+          // alone would render the epilogue thread read-only.
+          isCurrentPhase={isGameWritable(game.state)}
           isGM={isGM}
           isAudience={isAudience}
         />
@@ -221,7 +225,7 @@ export function GameTabContent({
   }
 
   // Polls Tab (In Progress - common_room phases)
-  if (activeTab === 'polls' && game.state === 'in_progress') {
+  if (activeTab === 'polls' && (game.state === 'in_progress' || game.state === 'epilogue')) {
     // Show loading only on initial load (when we have no data yet)
     if (isLoadingPhase && !currentPhaseData) {
       return (
@@ -260,7 +264,7 @@ export function GameTabContent({
   }
 
   // Phases Tab (In Progress - GM only)
-  if (activeTab === 'phases' && game.state === 'in_progress' && isGM) {
+  if (activeTab === 'phases' && (game.state === 'in_progress' || game.state === 'epilogue') && isGM) {
     return <PhaseManagement gameId={gameId} />;
   }
 
@@ -298,12 +302,14 @@ export function GameTabContent({
   }
 
   // History Tab (In Progress & Completed)
-  if (activeTab === 'history' && (game.state === 'in_progress' || game.state === 'completed')) {
-    return <HistoryView gameId={gameId} currentPhaseId={currentPhaseData?.phase?.id} isGM={isGM} isAudience={isAudience} isGameCompleted={game.state === 'completed'} />;
+  if (activeTab === 'history' && (game.state === 'in_progress' || game.state === 'epilogue' || game.state === 'completed')) {
+    // The prop is "the archive is open" — it drives archive read
+    // access in HistoryView, so epilogue qualifies.
+    return <HistoryView gameId={gameId} currentPhaseId={currentPhaseData?.phase?.id} isGM={isGM} isAudience={isAudience} isPublicArchive={isPublicArchive(game.state)} />;
   }
 
   // Private Messages Tab (In Progress & Completed)
-  if (activeTab === 'messages' && (game.state === 'in_progress' || game.state === 'completed')) {
+  if (activeTab === 'messages' && (game.state === 'in_progress' || game.state === 'epilogue' || game.state === 'completed')) {
     return (
       <div className="h-[600px] md:h-[85vh] md:min-h-[900px]">
         <PrivateMessages
@@ -323,7 +329,7 @@ export function GameTabContent({
   }
 
   // Audience Tab (In Progress & Completed)
-  if (activeTab === 'audience' && (game.state === 'in_progress' || game.state === 'completed')) {
+  if (activeTab === 'audience' && (game.state === 'in_progress' || game.state === 'epilogue' || game.state === 'completed')) {
     return <AudienceView gameId={gameId} />;
   }
 

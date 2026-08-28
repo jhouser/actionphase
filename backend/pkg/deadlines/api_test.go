@@ -6,6 +6,7 @@ import (
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -53,9 +54,8 @@ func setupDeadlineTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux 
 				r.Use(core.RequireAuthenticationMiddleware(userService))
 				r.Use(gameHandler.GameMiddleware())
 
-				// Deadline endpoints
-				r.Post("/deadlines", deadlineHandler.CreateDeadline)
-				r.Get("/deadlines", deadlineHandler.GetGameDeadlines)
+				// Deadline endpoints (huma; paths relative to /{gameID})
+				RegisterHumaGameDeadlines(humaconfig.New(r, "ActionPhase API", "1.0.0"), &deadlineHandler)
 			})
 		})
 
@@ -73,9 +73,7 @@ func setupDeadlineTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux 
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
 
-				r.Get("/upcoming", deadlineHandler.GetUpcomingDeadlines)
-				r.Patch("/{deadlineId}", deadlineHandler.UpdateDeadline)
-				r.Delete("/{deadlineId}", deadlineHandler.DeleteDeadline)
+				RegisterHumaDeadlines(humaconfig.New(r, "ActionPhase API", "1.0.0"), &deadlineHandler)
 			})
 		})
 	})

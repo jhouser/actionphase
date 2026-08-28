@@ -14,6 +14,7 @@ import (
 	dbmodels "actionphase/pkg/db/models"
 	dbservices "actionphase/pkg/db/services"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -57,11 +58,11 @@ func setupVisibilityRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 			}
 			r.Route("/games/{gameID}", func(r chi.Router) {
 				r.Use(gameHandler.GameMiddleware())
-				r.Post("/polls", handler.CreatePoll)
+				RegisterHumaGamePolls(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 			})
-			r.Post("/polls/{pollId}/vote", handler.SubmitVote)
-			r.Get("/polls/{pollId}/results", handler.GetPollResults)
-			r.Put("/polls/{pollId}", handler.UpdatePoll)
+			r.Route("/polls", func(r chi.Router) {
+				RegisterHumaPolls(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
+			})
 		})
 	})
 

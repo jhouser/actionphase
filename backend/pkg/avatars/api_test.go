@@ -16,6 +16,7 @@ import (
 	"actionphase/pkg/core"
 	dbmodels "actionphase/pkg/db/models"
 	dbsvc "actionphase/pkg/db/services"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -55,7 +56,9 @@ func setupAvatarTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 	userService := &dbsvc.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
 	r := chi.NewRouter()
-	r.Route("/api/v1/characters/{id}", func(r chi.Router) {
+	// Mirrors production: the avatar routes live on the /characters router and
+	// are registered relative to it, so the huma paths are /{id}/avatar.
+	r.Route("/api/v1/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(jwtauth.Authenticator(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
@@ -64,8 +67,7 @@ func setupAvatarTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 			App:              app,
 			CharacterService: &dbsvc.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger},
 		}
-		r.Post("/avatar", handler.UploadCharacterAvatar)
-		r.Delete("/avatar", handler.DeleteCharacterAvatar)
+		RegisterHumaAvatars(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 	})
 
 	return r

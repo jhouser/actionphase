@@ -19,39 +19,39 @@
 
 ### Prerequisites
 
+Local dev is fully containerized. You need **`just`, `docker`, and
+`docker-compose`** — no host Node, npm, or Playwright browser install.
+
 ```bash
-# Install dependencies
-npm install
-
-# Install Playwright browsers
-npx playwright install chromium
-
-# Apply test fixtures (backend must be running)
-cd backend/pkg/db/test_fixtures
-./apply_all.sh
+just up          # Start db + backend + frontend
+just ps          # Confirm the stack is healthy
 ```
+
+E2E fixtures are applied automatically by the `just e2e-*` recipes (they call
+`just load-e2e` first), so there is no separate fixture step.
 
 ### Run Tests
 
 ```bash
-# Run all E2E tests
-npm run test:e2e
+# Both projects, sequentially (desktop then mobile)
+just e2e
 
-# Run smoke tests only (quick validation)
-npm run test:e2e:smoke
+# One project at a time
+just e2e-desktop     # chromium
+just e2e-mobile      # Pixel 5 / mobile-chrome
 
-# Run critical tests only (deployment blockers)
-npm run test:e2e:critical
+# A single spec file
+just e2e-test file e2e/smoke/health-check.spec.ts
 
-# Run specific tag
-npm run test:e2e:auth
-
-# Run with UI (debugging)
-npm run test:e2e:ui
-
-# Run in headed mode (see browser)
-npm run test:e2e:headed
+# Open the HTML report from the last run
+just e2e-test report
 ```
+
+Tests run in a one-shot `playwright` compose container (`--profile e2e`), which
+carries its own browsers. Run them **synchronously — never background with `&`**.
+
+> **`--headed`, `--ui`, and `--debug` need a display**, so they cannot run in the
+> container. See `just dev-help` for the host-only escape hatch.
 
 ---
 
@@ -337,43 +337,44 @@ export class MyFeaturePage {
 ### Local Development
 
 ```bash
-# Run all tests
-npm run test:e2e
+# Everything (desktop + mobile)
+just e2e
 
-# Run specific file
-npx playwright test e2e/smoke/health-check.spec.ts
+# One project
+just e2e-desktop
+just e2e-mobile
 
-# Run with UI for debugging
-npm run test:e2e:ui
-
-# Run in headed mode (see browser)
-npm run test:e2e:headed
-
-# Run in debug mode with pause
-npm run test:e2e:debug
+# A single spec file
+just e2e-test file e2e/smoke/health-check.spec.ts
 ```
+
+`--headed`, `--ui`, and `--debug` require a display and so are unavailable in the
+container. `just dev-help` documents the host-only path if you need them.
 
 ### Filtering Tests
 
+Tag filtering goes through Playwright's `--grep`, passed to the container:
+
 ```bash
-# By tag
-npm run test:e2e:smoke
-npm run test:e2e:critical
-npm run test:e2e:auth
-npm run test:e2e:game
+PW="docker compose -f docker-compose.dev.yml --profile e2e run --rm playwright"
 
-# By name pattern
-npx playwright test --grep "user registration"
-
-# Exclude tests
-npx playwright test --grep-invert "@slow"
+just load-e2e                                        # fixtures first
+$PW npx playwright test --grep "user registration"
+$PW npx playwright test e2e/messaging/
 ```
+
+> **Tags are barely used.** `frontend/e2e/fixtures/test-tags.ts` defines a tag
+> vocabulary, but only **2 of 49** spec files apply it (`smoke/health-check` and
+> `auth/registration`), via the `tagTest()` helper rather than literal strings.
+> `--grep "@smoke"` therefore matches 6 tests, and `@game` / `@character` /
+> `@message` match nothing. Filter by path for everything else.
+
 
 ### Viewing Results
 
 ```bash
 # Show test report
-npm run test:e2e:report
+just e2e-test report
 
 # Test output includes:
 # - Console logs from tests
@@ -529,131 +530,54 @@ await page.route('**/api/v1/me/change-username', route =>
 - **Solution**: Check for race conditions with `waitFor()`
 
 **Problem**: Element not found
-- **Solution**: Verify selector with `npx playwright codegen http://localhost:5173`
+- **Solution**: Verify the selector against the running app with Playwright
+  codegen (host-only — needs a display; see `just dev-help`)
 - **Solution**: Check if element is in correct tab/modal
 - **Solution**: Use `.isVisible()` to check existence first
 
 **Problem**: Authentication not working
-- **Solution**: Verify test fixtures are loaded: `./backend/pkg/db/test_fixtures/apply_all.sh`
+- **Solution**: Reload E2E fixtures: `just load-e2e`
 - **Solution**: Check test user credentials in `TEST_USERS`
-- **Solution**: Ensure backend is running on correct port
+- **Solution**: Ensure the stack is up: `just ps`
 
 ### Debugging
 
 ```bash
-# Run with Playwright Inspector
-npm run test:e2e:debug
+# Tail the app logs while a spec runs
+just dev-logs backend
+just dev-logs frontend
 
-# Generate test code from recording
-npx playwright codegen http://localhost:5173
+# Open the HTML report (includes traces + screenshots on failure)
+just e2e-test report
 
-# View trace after test failure
-npx playwright show-trace trace.zip
-
-# Run single test with headed mode
-npx playwright test e2e/smoke/health-check.spec.ts --headed
+# Inspect the database
+docker compose -f docker-compose.dev.yml exec -T db \
+  psql -U postgres -d actionphase -c 'SELECT id, title, state FROM games LIMIT 5;'
 ```
+
+Playwright Inspector, codegen, and `--headed` all need a display, so they cannot
+run in the E2E container. `just dev-help` covers the host-only workflow.
 
 ### Common Issues
 
 **"Page not found" errors**:
-- Verify backend is running: `just dev`
-- Verify frontend is running: `npm run dev`
+- Verify the stack is up: `just ps` (start it with `just up`)
 - Check correct ports (backend: 3000, frontend: 5173)
 
 **"User not found" errors**:
-- Apply test fixtures: `./backend/pkg/db/test_fixtures/apply_all.sh`
-- Verify database: `psql -U postgres -d actionphase`
+- Reload E2E fixtures: `just load-e2e`
+- Inspect the database with the `docker compose ... psql` command above
 
 **Slow tests**:
 - Use `@slow` tag for tests >30s
-- Run slow tests separately: `npx playwright test --grep "@slow"`
+- Run slow tests separately via `--grep "@slow"` (see Filtering Tests)
 - Consider splitting into smaller tests
-
----
-
-## Visual Regression Testing
-
-### Overview
-
-Visual regression tests capture screenshots of pages and components to detect unintended visual changes. We use Playwright's built-in screenshot functionality.
-
-### Running Visual Tests
-
-```bash
-# Run all visual regression tests
-npm run test:e2e -- visual/
-
-# Run critical pages only
-npm run test:e2e -- visual/critical-pages.spec.ts
-
-# Run in light mode only
-npm run test:e2e -- visual/ --grep "Light Mode"
-
-# Run in dark mode only
-npm run test:e2e -- visual/ --grep "Dark Mode"
-```
-
-### Updating Baselines
-
-After intentional UI changes, update the baseline screenshots:
-
-```bash
-# Update all baselines
-npm run test:e2e -- visual/ --update-snapshots
-
-# Update specific test
-npm run test:e2e -- visual/critical-pages.spec.ts --update-snapshots
-```
-
-### Writing Visual Tests
-
-```typescript
-test('Page visual snapshot', async ({ page }) => {
-  // Set color scheme
-  await page.emulateMedia({ colorScheme: 'light' });
-
-  await page.goto('/my-page');
-  await page.waitForLoadState('networkidle');
-
-  // Take screenshot
-  await expect(page).toHaveScreenshot('my-page-light.png', {
-    fullPage: true,
-    maxDiffPixels: 100,
-    mask: [
-      // Mask dynamic content
-      page.locator('text=/\\d+[mhd] ago/'),
-    ],
-  });
-});
-```
-
-### Best Practices
-
-1. **Test both light and dark mode** for all critical pages
-2. **Mask dynamic content** (timestamps, random IDs, animations)
-3. **Set appropriate diff thresholds** (100-150px for dynamic pages)
-4. **Wait for network idle** before capturing screenshots
-5. **Use full-page screenshots** for complete coverage
-6. **Group by color scheme** for better organization
-
-### Current Coverage
-
-- ✅ Home page (light + dark)
-- ✅ Login page (light + dark)
-- ✅ Registration page (light + dark)
-- ✅ Dashboard (light + dark)
-- ✅ Game details page (light + dark)
-- ✅ Settings page (light + dark)
-
-See `e2e/visual/` for all visual regression tests.
 
 ---
 
 ## Additional Resources
 
 - **Playwright Docs**: https://playwright.dev/
-- **Playwright Screenshots**: https://playwright.dev/docs/test-snapshots
 - **Test Data Reference**: `.claude/context/TEST_DATA.md`
-- **E2E Implementation Plan**: `.claude/planning/E2E_TESTING_PLAN.md`
+- **Page Objects**: `frontend/e2e/pages/README.md`
 - **Testing Philosophy**: `.claude/context/TESTING.md`

@@ -3,6 +3,7 @@ package users
 import (
 	"actionphase/pkg/core"
 	db "actionphase/pkg/db/services"
+	"actionphase/pkg/humaconfig"
 	"actionphase/pkg/storage"
 	"bytes"
 	"encoding/json"
@@ -39,11 +40,7 @@ func setupUserAPITestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
 
-				r.Get("/{id}/profile", userHandler.GetUserProfile)
-				r.Get("/username/{username}/profile", userHandler.GetUserProfileByUsername)
-				r.Patch("/me/profile", userHandler.UpdateUserProfile)
-				r.Post("/me/avatar", userHandler.UploadUserAvatar)
-				r.Delete("/me/avatar", userHandler.DeleteUserAvatar)
+				RegisterHumaUsers(humaconfig.New(r, "ActionPhase API", "1.0.0"), &userHandler)
 			})
 		})
 	})
@@ -471,8 +468,9 @@ func setupUserAPITestRouterWithStorage(app *core.App, testDB *core.TestDatabase)
 				r.Use(jwtauth.Authenticator(tokenAuth))
 				r.Use(core.RequireAuthenticationMiddleware(userService))
 
-				r.Post("/me/avatar", userHandler.UploadUserAvatar)
-				r.Delete("/me/avatar", userHandler.DeleteUserAvatar)
+				// Registers all user operations; these tests exercise only the
+				// avatar ones.
+				RegisterHumaUsers(humaconfig.New(r, "ActionPhase API", "1.0.0"), &userHandler)
 			})
 		})
 	})

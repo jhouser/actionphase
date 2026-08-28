@@ -13,7 +13,7 @@ import (
 	"time"
 
 	db "actionphase/pkg/db/models"
-	"github.com/go-chi/chi/v5"
+
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -131,11 +131,11 @@ func TestV1VerifyEmail(t *testing.T) {
 			bodyBytes, err := json.Marshal(requestBody)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPost, "/auth/verify-email", bytes.NewReader(bodyBytes))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify-email", bytes.NewReader(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 
 			w := httptest.NewRecorder()
-			handler.V1VerifyEmail(w, req)
+			serveAuthHuma(w, req, &handler)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
@@ -215,14 +215,14 @@ func TestV1ChangeUsername(t *testing.T) {
 			bodyBytes, err := json.Marshal(requestBody)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPost, "/auth/change-username", bytes.NewReader(bodyBytes))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/change-username", bytes.NewReader(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 
 			// Add authenticated user to context (simulates RequireAuthenticationMiddleware)
 			req = addAuthContextToRequest(t, req, pool, userID)
 
 			w := httptest.NewRecorder()
-			handler.V1ChangeUsername(w, req)
+			serveAuthHuma(w, req, &handler)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
@@ -310,14 +310,14 @@ func TestV1RequestEmailChange(t *testing.T) {
 			bodyBytes, err := json.Marshal(requestBody)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPost, "/auth/request-email-change", bytes.NewReader(bodyBytes))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/request-email-change", bytes.NewReader(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 
 			// Add authenticated user to context (simulates RequireAuthenticationMiddleware)
 			req = addAuthContextToRequest(t, req, pool, userID)
 
 			w := httptest.NewRecorder()
-			handler.V1RequestEmailChange(w, req)
+			serveAuthHuma(w, req, &handler)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
@@ -432,14 +432,14 @@ func TestV1DeleteAccount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			userID := tt.setupUser()
 
-			req := httptest.NewRequest(http.MethodDelete, "/auth/account", nil)
+			req := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/account", nil)
 			req.Header.Set("Content-Type", "application/json")
 
 			// Add authenticated user to context (simulates RequireAuthenticationMiddleware)
 			req = addAuthContextToRequest(t, req, pool, userID)
 
 			w := httptest.NewRecorder()
-			handler.V1DeleteAccount(w, req)
+			serveAuthHuma(w, req, &handler)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
@@ -484,13 +484,13 @@ func TestV1ListSessions(t *testing.T) {
 	require.NoError(t, err)
 	defer queries.DeleteSession(ctx, session.ID)
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/sessions", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/sessions", nil)
 
 	// Add authenticated user to context (simulates RequireAuthenticationMiddleware)
 	req = addAuthContextToRequest(t, req, pool, userID)
 
 	w := httptest.NewRecorder()
-	handler.V1ListSessions(w, req)
+	serveAuthHuma(w, req, &handler)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
@@ -534,11 +534,11 @@ func TestV1ListSessions_ExcludesExpired(t *testing.T) {
 	require.NoError(t, err)
 	defer queries.DeleteSession(ctx, expiredSession.ID)
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/sessions", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/sessions", nil)
 	req = addAuthContextToRequest(t, req, pool, userID)
 
 	w := httptest.NewRecorder()
-	handler.V1ListSessions(w, req)
+	serveAuthHuma(w, req, &handler)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
@@ -615,18 +615,13 @@ func TestV1RevokeSession(t *testing.T) {
 			targetSessionID := tt.sessionID(userID, sessionID)
 
 			// Create DELETE request with session ID in URL
-			req := httptest.NewRequest(http.MethodDelete, "/auth/sessions/"+strconv.Itoa(int(targetSessionID)), nil)
+			req := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/sessions/"+strconv.Itoa(int(targetSessionID)), nil)
 
 			// Add authenticated user to context (simulates RequireAuthenticationMiddleware)
 			req = addAuthContextToRequest(t, req, pool, userID)
 
-			// Add chi URL param for session ID (simulates chi router)
-			rctx := chi.NewRouteContext()
-			rctx.URLParams.Add("sessionID", strconv.Itoa(int(targetSessionID)))
-			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
 			w := httptest.NewRecorder()
-			handler.V1RevokeSession(w, req)
+			serveAuthHuma(w, req, &handler)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
@@ -678,15 +673,11 @@ func TestV1RevokeSession_CrossUserAttack(t *testing.T) {
 	defer func() { _ = queries.DeleteSession(ctx, victimSession.ID) }()
 
 	// Attacker attempts to delete the victim's session
-	req := httptest.NewRequest(http.MethodDelete, "/auth/sessions/"+strconv.Itoa(int(victimSession.ID)), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/sessions/"+strconv.Itoa(int(victimSession.ID)), nil)
 	req = addAuthContextToRequest(t, req, pool, attackerUserID)
 
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("sessionID", strconv.Itoa(int(victimSession.ID)))
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
 	w := httptest.NewRecorder()
-	handler.V1RevokeSession(w, req)
+	serveAuthHuma(w, req, &handler)
 
 	// Must be 404 — victim's session is not in the attacker's session list
 	assert.Equal(t, http.StatusNotFound, w.Code, "should not allow revoking another user's session")

@@ -1,7 +1,13 @@
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
 import type { EnrichedGameListItem } from '../types/games';
-import { GAME_STATE_LABELS, GAME_STATE_COLORS, USER_RELATIONSHIP_LABELS } from '../types/games';
+import {
+  GAME_STATE_LABELS,
+  GAME_STATE_COLORS,
+  GAME_STATE_CARD_STYLES,
+  USER_RELATIONSHIP_LABELS,
+  USER_RELATIONSHIP_BADGE_STYLES,
+} from '../types/games';
 import { Button } from './ui';
 
 interface EnhancedGameCardProps {
@@ -35,13 +41,7 @@ export function EnhancedGameCard({
   return (
     <Link
       to={`/games/${game.id}`}
-      className={`surface-base rounded-lg shadow-md border-2 transition-all hover:shadow-lg block ${
-        isUserGame
-          ? 'border-interactive-primary bg-interactive-primary-subtle'
-          : hasApplied
-          ? 'border-semantic-warning bg-semantic-warning-subtle'
-          : 'border-theme-default hover:border-theme-strong'
-      }`}
+      className={`surface-base rounded-lg shadow-md border-2 transition-all hover:shadow-lg block ${GAME_STATE_CARD_STYLES[game.state]}`}
       onClick={onClick}
       data-testid={dataTestId}
     >
@@ -52,16 +52,16 @@ export function EnhancedGameCard({
             {game.title}
           </h3>
 
-          {/* User Relationship Badge */}
+          {/* User Relationship Badge — the card border now encodes game state,
+              so "you are in this game" is carried entirely by this badge. It is
+              given a solid border so it stays distinguishable from the state
+              tint behind it. */}
           {game.user_relationship && game.user_relationship !== 'none' && (
             <span
-              className={`ml-2 px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
-                game.user_relationship === 'gm'
-                  ? 'bg-semantic-info-subtle text-content-primary'
-                  : game.user_relationship === 'participant'
-                  ? 'bg-interactive-primary-subtle text-content-primary'
-                  : 'bg-semantic-warning-subtle text-content-primary'
+              className={`ml-2 px-2 py-1 rounded-full border text-xs font-semibold whitespace-nowrap surface-base ${
+                USER_RELATIONSHIP_BADGE_STYLES[game.user_relationship]
               }`}
+              data-testid={`game-relationship-${game.user_relationship}`}
             >
               {USER_RELATIONSHIP_LABELS[game.user_relationship]}
             </span>
@@ -77,7 +77,7 @@ export function EnhancedGameCard({
 
           {/* Archive Badge for completed games */}
           {game.state === 'completed' && (
-            <span className="px-2 py-1 rounded-full text-xs font-semibold bg-interactive-primary-subtle text-interactive-primary">
+            <span className="px-2 py-1 rounded-full text-xs font-semibold surface-raised text-content-secondary">
               📚 Public Archive
             </span>
           )}

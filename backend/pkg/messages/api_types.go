@@ -1,8 +1,6 @@
 package messages
 
 import (
-	"fmt"
-	"net/http"
 	"time"
 
 	"actionphase/pkg/core"
@@ -14,68 +12,9 @@ type Handler struct {
 	MessageService core.MessageServiceInterface
 }
 
-// Request Types
-
-type CreatePostRequest struct {
-	PhaseID     *int32 `json:"phase_id,omitempty"`
-	CharacterID int32  `json:"character_id" validate:"required"`
-	Content     string `json:"content" validate:"required,min=1"`
-}
-
-func (r *CreatePostRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
-}
-
-type CreateCommentRequest struct {
-	PhaseID     *int32 `json:"phase_id,omitempty"`
-	CharacterID int32  `json:"character_id" validate:"required"`
-	Content     string `json:"content" validate:"required,min=1"`
-	RootPostID  *int32 `json:"root_post_id,omitempty"`
-}
-
-func (r *CreateCommentRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
-}
-
-type UpdateCommentRequest struct {
-	Content     string `json:"content" validate:"required,min=1"`
-	CharacterID *int32 `json:"character_id,omitempty"`
-}
-
-func (r *UpdateCommentRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
-}
-
-type UpdatePostRequest struct {
-	Content string `json:"content" validate:"required,min=1"`
-}
-
-func (r *UpdatePostRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
-}
-
-type CreateDraftPostRequest struct {
-	CharacterID int32  `json:"character_id" validate:"required"`
-	Content     string `json:"content" validate:"required,min=1"`
-}
-
-func (r *CreateDraftPostRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
-}
-
-type UpdateDraftPostRequest struct {
-	Content string `json:"content" validate:"required,min=1"`
-}
-
-func (r *UpdateDraftPostRequest) Bind(req *http.Request) error {
-	return core.ValidateStruct(r)
-}
-
-// ManualReadCommentIDsResponse represents the manual read comment IDs for a post
-type ManualReadCommentIDsResponse struct {
-	PostID         int32   `json:"post_id"`
-	ReadCommentIDs []int32 `json:"read_comment_ids"`
-}
+// Request bodies live in requests.go; the other response bodies in
+// responses.go. This file holds the message detail shape and the converters
+// that build it.
 
 // Response Types
 
@@ -106,10 +45,6 @@ type MessageResponse struct {
 	EditCount             int32      `json:"edit_count"`
 }
 
-func (rd *MessageResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
-
 // MessageThreadContextResponse is the payload for deep-linking to a nested comment:
 // the target plus a bounded slice of its ancestors, and the true root post ID.
 type MessageThreadContextResponse struct {
@@ -121,15 +56,6 @@ type MessageThreadContextResponse struct {
 	RootPostID int32 `json:"root_post_id"`
 	// HasFullThread is true when Chain reaches the root post (nothing trimmed above).
 	HasFullThread bool `json:"has_full_thread"`
-}
-
-// getUserIDFromToken extracts the authenticated user ID from the request JWT.
-func (h *Handler) getUserIDFromToken(r *http.Request) (int32, error) {
-	userID, errResp := core.GetUserIDFromJWT(r.Context(), h.UserService)
-	if errResp != nil {
-		return 0, fmt.Errorf("authentication failed")
-	}
-	return userID, nil
 }
 
 // messageWithDetailsToResponse converts a MessageWithDetails to a MessageResponse.
@@ -199,60 +125,55 @@ func countTopLevelInResponse(comments []core.CommentWithDepth) int {
 	return count
 }
 
-// commentsWithParentsToResponse converts a CommentWithParent slice to response format.
-func commentsWithParentsToResponse(comments []core.CommentWithParent, showUsernames bool) []map[string]interface{} {
-	result := make([]map[string]interface{}, len(comments))
-	for i, comment := range comments {
-		authorUsername := comment.AuthorUsername
-		if !showUsernames {
-			authorUsername = ""
-		}
-		commentData := map[string]interface{}{
-			"id":                   comment.ID,
-			"game_id":              comment.GameID,
-			"parent_id":            comment.ParentID,
-			"post_id":              comment.PostID,
-			"author_id":            comment.AuthorID,
-			"character_id":         comment.CharacterID,
-			"content":              comment.Content,
-			"created_at":           comment.CreatedAt.Format(time.RFC3339),
-			"edited_at":            formatTimePtr(comment.EditedAt),
-			"edit_count":           comment.EditCount,
-			"deleted_at":           formatTimePtr(comment.DeletedAt),
-			"is_deleted":           comment.IsDeleted,
-			"author_username":      authorUsername,
-			"character_name":       comment.CharacterName,
-			"character_avatar_url": comment.CharacterAvatarUrl,
+// commentsWithParentsToResponse converts comment rows into the "New Comments"
+// response shape.
+//
+// showUsernames false blanks the author to "" rather than dropping the key,
+// which is what the chi handler did and what the frontend's non-optional
+// author_username field expects. Note the parent's username is blanked to an
+// empty string here, where the character-feed endpoint nils it instead -- two
+// spellings of the same rule, both preserved as they were.
+func commentsWithParentsToResponse(comments []core.CommentWithParent, showUsernames bool) []*CommentWithParentResponse {
+	result := make([]*CommentWithParentResponse, len(comments))
+	for i := range comments {
+		c := &comments[i]
+		item := &CommentWithParentResponse{
+			ID:                 c.ID,
+			GameID:             c.GameID,
+			ParentID:           c.ParentID,
+			PostID:             c.PostID,
+			AuthorID:           c.AuthorID,
+			CharacterID:        c.CharacterID,
+			Content:            c.Content,
+			CreatedAt:          c.CreatedAt.Format(time.RFC3339),
+			EditedAt:           formatTimePtr(c.EditedAt),
+			EditCount:          c.EditCount,
+			DeletedAt:          formatTimePtr(c.DeletedAt),
+			IsDeleted:          c.IsDeleted,
+			AuthorUsername:     blankIfHidden(c.AuthorUsername, showUsernames),
+			CharacterName:      c.CharacterName,
+			CharacterAvatarURL: c.CharacterAvatarUrl,
 		}
 
-		// Add parent data if exists
-		if comment.ParentContent != nil {
-			parentAuthorUsername := comment.ParentAuthorUsername
+		if c.ParentContent != nil {
+			parentAuthor := c.ParentAuthorUsername
 			if !showUsernames {
-				emptyStr := ""
-				parentAuthorUsername = &emptyStr
+				empty := ""
+				parentAuthor = &empty
 			}
-			commentData["parent"] = map[string]interface{}{
-				"content":              comment.ParentContent,
-				"created_at":           formatTimePtr(comment.ParentCreatedAt),
-				"deleted_at":           formatTimePtr(comment.ParentDeletedAt),
-				"is_deleted":           comment.ParentIsDeleted,
-				"message_type":         comment.ParentMessageType,
-				"author_username":      parentAuthorUsername,
-				"character_name":       comment.ParentCharacterName,
-				"character_avatar_url": comment.ParentCharacterAvatarUrl,
+			item.Parent = &ParentContextResponse{
+				Content:            c.ParentContent,
+				CreatedAt:          formatTimePtr(c.ParentCreatedAt),
+				DeletedAt:          formatTimePtr(c.ParentDeletedAt),
+				IsDeleted:          c.ParentIsDeleted,
+				MessageType:        c.ParentMessageType,
+				AuthorUsername:     parentAuthor,
+				CharacterName:      c.ParentCharacterName,
+				CharacterAvatarURL: c.ParentCharacterAvatarUrl,
 			}
 		}
 
-		result[i] = commentData
+		result[i] = item
 	}
 	return result
-}
-
-// formatTimePtr formats a *time.Time as RFC3339 string or nil.
-func formatTimePtr(t *time.Time) interface{} {
-	if t == nil {
-		return nil
-	}
-	return t.Format(time.RFC3339)
 }

@@ -33,6 +33,7 @@ func TestGameAPI_AutoAcceptAudience(t *testing.T) {
 		Email:    "autoaccept_audience@example.com",
 	})
 	core.AssertNoError(t, err, "Audience user creation should succeed")
+	testDB.MarkUserVerified(t, audienceUser.ID)
 
 	audienceToken, err := core.CreateTestJWTTokenForUser(app, audienceUser)
 	core.AssertNoError(t, err, "Audience token creation should succeed")
@@ -106,6 +107,7 @@ func TestGameAPI_AutoAcceptAudience(t *testing.T) {
 			Email:    "autoaccept_audience2@example.com",
 		})
 		core.AssertNoError(t, err, "Audience user 2 creation should succeed")
+		testDB.MarkUserVerified(t, audienceUser2.ID)
 
 		audienceToken2, err := core.CreateTestJWTTokenForUser(app, audienceUser2)
 		core.AssertNoError(t, err, "Audience token 2 creation should succeed")
@@ -161,6 +163,7 @@ func TestGameAPI_AutoAcceptAudience(t *testing.T) {
 			Email:    "manual_audience@example.com",
 		})
 		core.AssertNoError(t, err, "Audience user 3 creation should succeed")
+		testDB.MarkUserVerified(t, audienceUser3.ID)
 
 		audienceToken3, err := core.CreateTestJWTTokenForUser(app, audienceUser3)
 		core.AssertNoError(t, err, "Audience token 3 creation should succeed")
@@ -215,6 +218,7 @@ func TestGameAPI_AutoAcceptAudience(t *testing.T) {
 			Email:    "autoaccept_player@example.com",
 		})
 		core.AssertNoError(t, err, "Player user creation should succeed")
+		testDB.MarkUserVerified(t, playerUser.ID)
 
 		playerToken, err := core.CreateTestJWTTokenForUser(app, playerUser)
 		core.AssertNoError(t, err, "Player token creation should succeed")

@@ -10,6 +10,7 @@ import (
 
 	"actionphase/pkg/core"
 	dbsvc "actionphase/pkg/db/services"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -32,12 +33,7 @@ func setupNotificationTestRouter(app *core.App, testDB *core.TestDatabase) *chi.
 			App:                 app,
 			NotificationService: dbsvc.NewNotificationService(testDB.Pool, app.ObsLogger),
 		}
-		r.Get("/", handler.GetNotifications)
-		r.Get("/unread-count", handler.GetUnreadCount)
-		r.Put("/mark-all-read", handler.MarkAllAsRead)
-		r.Get("/{id}", handler.GetNotification)
-		r.Put("/{id}/mark-read", handler.MarkNotificationAsRead)
-		r.Delete("/{id}", handler.DeleteNotification)
+		RegisterHumaNotifications(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
 	})
 
 	return r

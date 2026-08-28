@@ -26,16 +26,16 @@ export function PollResults({ results, poll, isGM = false, isAudience = false, i
   return (
     <div className="space-y-4">
       {/* Results Header */}
-      <div className="flex justify-between items-center pb-2 border-b border-border-primary">
-        <h5 className="font-semibold text-text-heading">Results</h5>
-        <span className="text-sm text-text-secondary">
+      <div className="flex justify-between items-center pb-2 border-b border-theme-default">
+        <h5 className="font-semibold text-content-primary">Results</h5>
+        <span className="text-sm text-content-secondary">
           {totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}
         </span>
       </div>
 
       {/* No votes yet */}
       {totalVotes === 0 ? (
-        <div className="text-center py-6 text-text-secondary">
+        <div className="text-center py-6 text-content-secondary">
           No votes yet
         </div>
       ) : (
@@ -48,7 +48,7 @@ export function PollResults({ results, poll, isGM = false, isAudience = false, i
               <div key={option.poll_option_id || 'other'} className="space-y-2">
                 {/* Option Header */}
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-text-primary">
+                  <span className="text-sm font-medium text-content-secondary">
                     {option.option_text || 'Other responses'}
                     {isWinning && sortedOptions[0].vote_count > 0 && (
                       isExpired ? (
@@ -66,16 +66,16 @@ export function PollResults({ results, poll, isGM = false, isAudience = false, i
                       )
                     )}
                   </span>
-                  <span className="text-sm text-text-secondary">
+                  <span className="text-sm text-content-secondary">
                     {option.vote_count} ({percentage.toFixed(1)}%)
                   </span>
                 </div>
 
                 {/* Progress Bar */}
-                <div className="w-full bg-bg-tertiary rounded-full h-2 overflow-hidden">
+                <div className="w-full surface-sunken rounded-full h-2 overflow-hidden">
                   <div
                     className={`h-full transition-all duration-300 ${
-                      isWinning ? 'bg-accent-primary' : 'bg-bg-accent-secondary'
+                      isWinning ? 'bg-interactive-primary' : 'bg-interactive-secondary'
                     }`}
                     style={{ width: `${percentage}%` }}
                   />
@@ -83,7 +83,7 @@ export function PollResults({ results, poll, isGM = false, isAudience = false, i
 
                 {/* Individual Voters (if enabled or GM/Audience) */}
                 {canSeeDetails && option.voters && option.voters.length > 0 && (
-                  <div className="ml-4 text-xs text-text-secondary">
+                  <div className="ml-4 text-xs text-content-secondary">
                     {option.voters.map((voter, idx) => (
                       <span key={idx}>
                         {voter.is_anonymous ? (
@@ -107,16 +107,16 @@ export function PollResults({ results, poll, isGM = false, isAudience = false, i
 
       {/* Other Responses - Show full list to GM/Audience, count only to players */}
       {results.other_responses.length > 0 && (
-        <div className="pt-4 border-t border-border-primary">
+        <div className="pt-4 border-t border-theme-default">
           {canSeeDetails ? (
             <div>
-              <h6 className="text-sm font-semibold text-text-heading mb-2">
+              <h6 className="text-sm font-semibold text-content-primary mb-2">
                 Other Responses ({results.other_responses.length})
               </h6>
               <div className="space-y-2">
                 {results.other_responses.map((response) => (
-                  <div key={response.vote_id} className="text-sm text-text-secondary">
-                    <span className={`font-medium text-text-primary${response.is_anonymous ? ' italic' : ''}`}>
+                  <div key={response.vote_id} className="text-sm text-content-secondary">
+                    <span className={`font-medium text-content-secondary${response.is_anonymous ? ' italic' : ''}`}>
                       {response.is_anonymous ? 'Anonymous' : response.character_name}:
                     </span>{' '}
                     <span className="italic">"{response.other_text}"</span>
@@ -125,7 +125,7 @@ export function PollResults({ results, poll, isGM = false, isAudience = false, i
               </div>
             </div>
           ) : (
-            <div className="text-xs text-text-secondary italic">
+            <div className="text-xs text-content-secondary italic">
               {results.other_responses.length} custom {results.other_responses.length === 1 ? 'response' : 'responses'}
             </div>
           )}

@@ -29,7 +29,7 @@ Based on what changed, load the appropriate documentation:
 
 **Backend Changes**:
 - Use the `backend-dev-guidelines` skill for Go/Chi/PostgreSQL patterns
-- Check **`/docs/adrs/`** for relevant architectural decisions (auth, database, API design)
+- Check **`/docs-site/developer/architecture/adrs/`** for relevant architectural decisions (auth, database, API design)
 - Reference **`.claude/reference/ERROR_HANDLING.md`** for error patterns
 - Reference **`.claude/reference/LOGGING_STANDARDS.md`** for observability
 
@@ -37,30 +37,26 @@ Based on what changed, load the appropriate documentation:
 - Use the `frontend-dev-guidelines` skill for React/TypeScript patterns
 - Read **`/frontend/src/components/ui/README.md`** for UI component usage (CRITICAL for styling)
 - Check **`.claude/context/STATE_MANAGEMENT.md`** for data fetching patterns
-- Reference **`/docs/adrs/005-frontend-state-management.md`** for state architecture
+- Reference **`/docs-site/developer/architecture/adrs/005-frontend-state-management.md`** for state architecture
 
 **Game Domain Changes**:
 - Use the `game-domain` skill for game state, phases, characters, and messaging patterns
 
 **Test Changes**:
 - Use the `testing-patterns` skill for test structure and patterns
-- Check **`/docs/testing/COVERAGE_STATUS.md`** for current coverage expectations
+- Check **`/docs-site/developer/testing/COVERAGE_STATUS.md`** for current coverage expectations
 
 ### 3. Load Plan (if specified)
 
 If the user provided a plan name:
 
-**3a. Flexible Plan Loading** - Search for plan in multiple locations:
-1. **Directory-based plans** (primary):
-   - Try `.claude/planning/active/[plan-name]/plan.md`
-   - Try `.claude/planning/active/[plan-name]/index.md`
-   - Try `.claude/planning/active/[plan-name]/*.md` (any markdown file in directory)
-2. **Single-file plans** (fallback):
-   - Try `.claude/planning/active/[plan-name].md`
-   - Try `.claude/planning/FEATURE_[plan-name].md`
-3. **Glob search** (if above fail):
-   - Use Glob pattern: `.claude/planning/**/*[plan-name]*.md`
-   - If multiple matches, use the most recently modified file
+**3a. Plan Loading** - Plans are **flat markdown files** in `.claude/planning/`
+(one per topic, kebab-case; no `active/` subdirectory, no per-plan directories):
+1. Try `.claude/planning/[plan-name].md`
+2. If that misses, glob `.claude/planning/*[plan-name]*.md`; on multiple matches
+   use the most recently modified file
+3. If still nothing, say so and review against general standards rather than
+   inventing a plan
 
 **3b. Compare changes against plan**:
    - Plan phases and implementation order
@@ -95,7 +91,7 @@ Systematically check each category:
   - ❌ No `<button>`, use `<Button>`
   - ❌ No `<input>`, use `<Input>`
   - ❌ No manual divs with styling, use `<Card>`, `<Modal>`, etc.
-- [ ] **Semantic CSS tokens** used for layout (`bg-surface-*`, `text-content-*`, `border-border-*`)
+- [ ] **Semantic tokens** used for layout (`surface-*`, `text-content-*`, `border-theme-*`) — never the retired `bg-bg-*` / `border-border-*` / `text-text-*` families
 - [ ] **Dark mode support** via CSS variables (no hardcoded colors)
 - [ ] **React Query** used for data fetching (not useEffect with fetch)
 - [ ] **AuthContext** used for auth state (not local state)
@@ -119,7 +115,7 @@ Systematically check each category:
 - [ ] **README updated** if needed for new features
 
 #### 🗃️ Database Changes
-- [ ] **Migrations created** for schema changes (`just make_migration`)
+- [ ] **Migrations created** for schema changes (`just migration create <name>`)
 - [ ] **Both up and down migrations** written
 - [ ] **SQL queries added** to `backend/pkg/db/queries/`
 - [ ] **Code regenerated** with `just sqlgen`
@@ -211,14 +207,14 @@ If a plan was provided, add this section:
 
 ### Good Usage
 ```
-/review-changes user-profiles
+/review-changes epilogue-game-state
 ```
-Reviews uncommitted changes and compares against `.claude/planning/active/user-profiles/` plan (directory-based).
+Reviews uncommitted changes against `.claude/planning/epilogue-game-state.md`.
 
 ```
-/review-changes feature-polls
+/review-changes cors-origin-hardening
 ```
-Reviews uncommitted changes and compares against `.claude/planning/FEATURE_polls.md` plan (single-file).
+Reviews uncommitted changes against `.claude/planning/cors-origin-hardening.md`.
 
 ```
 /review-changes
@@ -251,5 +247,5 @@ Reference: frontend/src/components/ui/README.md - UI Component Library usage
 Plan: Phase 1 requires backend API first, then frontend
 Current: Frontend component added but backend API not yet implemented
 Recommendation: Implement backend/pkg/polls/api.go before proceeding
-Reference: .claude/planning/active/user-profiles/plan.md - Phase 1 requirements
+Reference: .claude/planning/epilogue-game-state.md - Phase 1 requirements
 ```

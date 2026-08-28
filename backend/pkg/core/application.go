@@ -3,8 +3,9 @@ package core
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"actionphase/pkg/observability"
 )

@@ -13,6 +13,6 @@ type Handler struct {
 	NotificationService core.NotificationServiceInterface
 }
 
-// All handler methods are organized into separate files:
-// - api_handouts.go: Handout CRUD operations (Create, Get, Update, Delete, Publish, Unpublish)
-// - api_comments.go: Comment management (Create, List, Update, Delete)
+// The operations live in huma_api.go (type-first handlers plus their
+// registration); authz.go holds the GM check they share, and requests.go the
+// request and response bodies.

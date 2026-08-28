@@ -1,13 +1,23 @@
 package phases
 
+// Request payload shapes, retained for the package's tests.
+//
+// The handlers no longer read these -- huma binds its own body types (see
+// huma_api.go), which carry the tags that are actually enforced. These remain
+// because the tests marshal them to build request bodies, and they are
+// serialization-identical to what the huma types accept.
+//
+// The `validate:` tags are deliberately gone: nothing runs them any more, and a
+// tag that enforces nothing reads like a guarantee. The real constraints live
+// on the huma body structs.
+
 import (
 	"actionphase/pkg/core"
-	"net/http"
 )
 
 // CreatePhaseRequest represents the request to create a new phase
 type CreatePhaseRequest struct {
-	PhaseType   string              `json:"phase_type" validate:"required"`
+	PhaseType   string              `json:"phase_type"`
 	Title       string              `json:"title,omitempty"`
 	Description string              `json:"description,omitempty"`
 	StartTime   *core.LocalDateTime `json:"start_time,omitempty"`
@@ -15,17 +25,9 @@ type CreatePhaseRequest struct {
 	Deadline    *core.LocalDateTime `json:"deadline,omitempty"`
 }
 
-func (r *CreatePhaseRequest) Bind(req *http.Request) error {
-	return nil
-}
-
 // UpdateDeadlineRequest represents the request to update a phase deadline
 type UpdateDeadlineRequest struct {
-	Deadline core.LocalDateTime `json:"deadline" validate:"required"`
-}
-
-func (r *UpdateDeadlineRequest) Bind(req *http.Request) error {
-	return nil
+	Deadline core.LocalDateTime `json:"deadline"`
 }
 
 // UpdatePhaseRequest represents the request to update phase details
@@ -37,31 +39,19 @@ type UpdatePhaseRequest struct {
 	// EndTime is intentionally excluded — it is system-managed and set by DeactivatePhase
 }
 
-func (r *UpdatePhaseRequest) Bind(req *http.Request) error {
-	return nil
-}
-
 // SubmitActionRequest represents the request to submit an action
 type SubmitActionRequest struct {
 	CharacterID *int32 `json:"character_id,omitempty"`
-	Content     string `json:"content" validate:"required"`
-}
-
-func (r *SubmitActionRequest) Bind(req *http.Request) error {
-	return nil
+	Content     string `json:"content"`
 }
 
 // CreateActionResultRequest represents the request to create an action result
 type CreateActionResultRequest struct {
-	UserID             int32  `json:"user_id" validate:"required"`
+	UserID             int32  `json:"user_id"`
 	CharacterID        *int32 `json:"character_id,omitempty"`
 	ActionSubmissionID *int32 `json:"action_submission_id,omitempty"`
-	Content            string `json:"content" validate:"required"`
+	Content            string `json:"content"`
 	IsPublished        bool   `json:"is_published,omitempty"`
-}
-
-func (r *CreateActionResultRequest) Bind(req *http.Request) error {
-	return nil
 }
 
 // StagedResultPartRequest is one part of a staged result chain.
@@ -69,7 +59,7 @@ func (r *CreateActionResultRequest) Bind(req *http.Request) error {
 // DelayMinutes is how long to wait after the *previous* part becomes visible,
 // which is why the first part must carry 0: nothing precedes it.
 type StagedResultPartRequest struct {
-	Content      string `json:"content" validate:"required"`
+	Content      string `json:"content"`
 	DelayMinutes int32  `json:"delay_minutes"`
 }
 
@@ -80,52 +70,19 @@ type StagedResultPartRequest struct {
 // cannot change recipient midway. That invariant holds by construction and
 // needs no validation; see the service layer.
 type CreateStagedResultChainRequest struct {
-	UserID             int32                     `json:"user_id" validate:"required"`
+	UserID             int32                     `json:"user_id"`
 	CharacterID        *int32                    `json:"character_id,omitempty"`
 	ActionSubmissionID *int32                    `json:"action_submission_id,omitempty"`
-	Parts              []StagedResultPartRequest `json:"parts" validate:"required"`
+	Parts              []StagedResultPartRequest `json:"parts"`
 	IsPublished        bool                      `json:"is_published,omitempty"`
-}
-
-func (r *CreateStagedResultChainRequest) Bind(req *http.Request) error {
-	return nil
-}
-
-// AppendStagedPartRequest represents the request to add one part to the end of
-// a draft chain.
-//
-// Recipient fields are absent by design: the appended part inherits them from
-// the chain it joins, which is what keeps a chain from changing recipient
-// midway. The URL's result ID identifies the chain, and it may be any member.
-type AppendStagedPartRequest struct {
-	Content      string `json:"content" validate:"required"`
-	DelayMinutes int32  `json:"delay_minutes" validate:"required"`
-}
-
-func (r *AppendStagedPartRequest) Bind(req *http.Request) error {
-	return nil
-}
-
-// UpdateStagedPartDelayRequest represents the request to retime an unreleased
-// staged part.
-type UpdateStagedPartDelayRequest struct {
-	DelayMinutes int32 `json:"delay_minutes" validate:"required"`
-}
-
-func (r *UpdateStagedPartDelayRequest) Bind(req *http.Request) error {
-	return nil
 }
 
 // CreateDraftCharacterUpdateRequest represents the request to create a draft character update
 type CreateDraftCharacterUpdateRequest struct {
-	CharacterID int32  `json:"character_id" validate:"required"`
-	ModuleType  string `json:"module_type" validate:"required"`
-	FieldName   string `json:"field_name" validate:"required"`
-	FieldValue  string `json:"field_value" validate:"required"`
-	FieldType   string `json:"field_type" validate:"required"`
-	Operation   string `json:"operation" validate:"required"`
-}
-
-func (r *CreateDraftCharacterUpdateRequest) Bind(req *http.Request) error {
-	return nil
+	CharacterID int32  `json:"character_id"`
+	ModuleType  string `json:"module_type"`
+	FieldName   string `json:"field_name"`
+	FieldValue  string `json:"field_value"`
+	FieldType   string `json:"field_type"`
+	Operation   string `json:"operation"`
 }

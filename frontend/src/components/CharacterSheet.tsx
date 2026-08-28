@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
+import { isPublicArchive } from '@/lib/gamePermissions';
 import type { CharacterData, CharacterDataRequest, CharacterSkill, InventoryItem, NumberEntry, CharacterSheetConfig } from '../types/characters';
 import { buildCharacterModules } from '../types/characters';
 import { SkillsManager } from './SkillsManager';
@@ -29,7 +30,7 @@ interface CharacterSheetProps {
   onClose?: () => void;
   isAnonymous?: boolean; // Whether the game is in anonymous mode
   userRole?: string; // User's role in the game ('gm', 'player', 'audience')
-  gameState?: string; // Current game state (e.g. 'completed')
+  gameState?: string; // Current game state (e.g. 'completed', 'epilogue')
   /**
    * Reports whether an editor inside the sheet holds edits its Save has not committed.
    *
@@ -129,8 +130,12 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
   const queryClient = useQueryClient();
   const renameMutation = useRenameCharacter();
 
-  // Participants can view all private data if the game is completed or they are audience
-  const canViewPrivate = canEdit || userRole === 'audience' || gameState === 'completed';
+  // Participants can view all private data once the game is a public archive
+  // (completed OR epilogue), or if they are audience. Epilogue must be included:
+  // it opens the archive precisely so players can read each other's sheets while
+  // writing epilogues. Mirrors the backend, which keys the same disclosure on
+  // core.IsPublicArchive (characters/api_data.go, characters/api_stats.go).
+  const canViewPrivate = canEdit || userRole === 'audience' || isPublicArchive(gameState);
 
   // If user cannot view private data and is viewing a restricted module, switch to bio
   useEffect(() => {
@@ -296,8 +301,16 @@ export function CharacterSheet({ characterId, canEdit = false, canEditStats = fa
   }
 
   return (
-    <div className="surface-base rounded-lg shadow-lg min-h-[600px] flex flex-col max-w-full overflow-hidden">
-      <div className="border-b border-theme-default">
+    <div className="surface-base rounded-lg shadow-lg min-h-[600px] flex flex-col max-w-full">
+      {/* Pinned to the top of the modal's scroll container so the close button
+          and module tabs stay reachable on a long sheet — on mobile a bio full
+          of text otherwise scrolls the only way out of the sheet off screen.
+          Sticky resolves against the nearest scrolling ancestor, which is the
+          Modal panel (max-h-[90vh] overflow-y-auto), not this component: the
+          sheet root is sized by its content and never scrolls itself. That is
+          also why the root can carry no `overflow-hidden` — it would become
+          that ancestor and pin the header to a box that never moves. */}
+      <div className="sticky top-0 z-10 surface-base rounded-t-lg border-b border-theme-default">
         <div className="flex justify-between items-start p-2 sm:p-4 md:p-8 gap-2 sm:gap-3">
           <div className="flex items-start gap-3 md:gap-6 min-w-0 flex-1">
             {/* Character Avatar */}

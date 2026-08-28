@@ -15,6 +15,7 @@ import (
 	dbactions "actionphase/pkg/db/services/actions"
 	dbmessages "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -75,21 +76,16 @@ func TestCharacterAPI_CompleteCharacterLifecycle(t *testing.T) {
 	}
 
 	// Character routes
-	r.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
 		r.Use(gameHandler.GameMiddleware())
-		r.Post("/", handler.CreateCharacter)
-		r.Get("/", handler.GetGameCharacters)
+		RegisterHumaGameCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
-	r.Route("/api/v1/characters/{id}", func(r chi.Router) {
+	r.Route("/api/v1/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
-		r.Get("/", handler.GetCharacter)
-		r.Post("/approve", handler.ApproveCharacter)
-		r.Post("/assign", handler.AssignNPC)
-		r.Post("/data", handler.SetCharacterData)
-		r.Get("/data", handler.GetCharacterData)
+		RegisterHumaCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
 
 	var createdCharacterID int32
@@ -309,10 +305,10 @@ func TestCharacterAPI_CompletedGamePlayersCanViewPrivateData(t *testing.T) {
 		NotificationService: services.NewNotificationService(testDB.Pool, app.ObsLogger),
 	}
 
-	r.Route("/api/v1/characters/{id}", func(r chi.Router) {
+	r.Route("/api/v1/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
-		r.Get("/data", handler.GetCharacterData)
+		RegisterHumaCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
 
 	t.Run("fellow player in completed game can view private data on another player's character", func(t *testing.T) {
@@ -410,18 +406,16 @@ func TestCharacterAPI_NPCManagement(t *testing.T) {
 		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
 	}
 
-	r.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
 		r.Use(gameHandler.GameMiddleware())
-		r.Post("/", handler.CreateCharacter)
-		r.Get("/", handler.GetGameCharacters)
+		RegisterHumaGameCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
-	r.Route("/api/v1/characters/{id}", func(r chi.Router) {
+	r.Route("/api/v1/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
-		r.Get("/", handler.GetCharacter)
-		r.Post("/assign", handler.AssignNPC)
+		RegisterHumaCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
 
 	var npcCharacterID int32
@@ -557,17 +551,16 @@ func TestCharacterAPI_Authorization(t *testing.T) {
 		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
 	}
 
-	r.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
 		r.Use(gameHandler.GameMiddleware())
-		r.Post("/", handler.CreateCharacter)
+		RegisterHumaGameCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
-	r.Route("/api/v1/characters/{id}", func(r chi.Router) {
+	r.Route("/api/v1/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
-		r.Post("/approve", handler.ApproveCharacter)
-		r.Post("/data", handler.SetCharacterData)
+		RegisterHumaCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
 
 	testCases := []struct {
@@ -790,17 +783,16 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
 	}
 
-	r.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
 		r.Use(gameHandler.GameMiddleware())
-		r.Post("/", handler.CreateCharacter)
+		RegisterHumaGameCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
-	r.Route("/api/v1/characters/{id}", func(r chi.Router) {
+	r.Route("/api/v1/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
-		r.Get("/", handler.GetCharacter)
-		r.Post("/approve", handler.ApproveCharacter)
+		RegisterHumaCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
 
 	testCases := []struct {
@@ -915,11 +907,10 @@ func TestCharacterAPI_UnauthenticatedAccess(t *testing.T) {
 		GameService:         &services.GameService{DB: testDB.Pool, Logger: app.ObsLogger},
 		NotificationService: services.NewNotificationService(testDB.Pool, app.ObsLogger),
 	}
-	r.Route("/api/v1/characters/{id}", func(r chi.Router) {
+	r.Route("/api/v1/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
-		r.Get("/", handler.GetCharacter)
-		r.Post("/data", handler.SetCharacterData)
+		RegisterHumaCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
 
 	testCases := []struct {
@@ -1012,20 +1003,16 @@ func TestCharacterAPI_ControllableAndInactive(t *testing.T) {
 		ActionSubmissionService: &dbactions.ActionSubmissionService{DB: app.Pool, Logger: app.ObsLogger, NotificationService: db.NewNotificationService(app.Pool, app.ObsLogger)},
 	}
 
-	r.Route("/api/v1/games/{gameID}/characters", func(r chi.Router) {
+	r.Route("/api/v1/games/{gameID}", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
 		r.Use(gameHandler.GameMiddleware())
-		r.Post("/", handler.CreateCharacter)
-		r.Get("/controllable", handler.GetUserControllableCharacters)
-		r.Get("/inactive", handler.ListInactiveCharacters)
+		RegisterHumaGameCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
-	r.Route("/api/v1/characters/{id}", func(r chi.Router) {
+	r.Route("/api/v1/characters", func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(core.RequireAuthenticationMiddleware(userService))
-		r.Post("/approve", handler.ApproveCharacter)
-		r.Post("/assign", handler.AssignNPC)
-		r.Put("/reassign", handler.ReassignCharacter)
+		RegisterHumaCharacters(humaconfig.New(r, "ActionPhase API", "1.0.0"), &handler)
 	})
 
 	// Create characters for testing

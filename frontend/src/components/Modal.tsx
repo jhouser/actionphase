@@ -70,7 +70,7 @@ export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50', 
         />
 
         {/* Modal */}
-        <div className={`relative z-10 surface-raised rounded-lg shadow-2xl ${sizeClasses[size]} w-full max-h-[90vh] overflow-y-auto border border-border-primary`}>
+        <div className={`relative z-10 surface-raised rounded-lg shadow-2xl ${sizeClasses[size]} w-full max-h-[90vh] overflow-y-auto border border-theme-default`}>
           {title && (
             <div className="px-3 py-2 sm:px-6 sm:py-4 border-b border-theme-default">
               <div className="flex items-center justify-between">

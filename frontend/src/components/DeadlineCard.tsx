@@ -88,7 +88,7 @@ export function DeadlineCard({ deadline, isGM, onEdit, onDelete, onExtend, onCli
     critical: 'border-semantic-danger bg-semantic-danger-subtle',
     warning: 'border-semantic-warning bg-semantic-warning-subtle',
     normal: 'border-interactive-primary bg-interactive-primary-subtle',
-    expired: 'border-border-secondary surface-sunken opacity-60',
+    expired: 'border-theme-strong surface-sunken opacity-60',
   };
 
   const urgencyTextClasses = {
@@ -233,7 +233,7 @@ export function DeadlineCard({ deadline, isGM, onEdit, onDelete, onExtend, onCli
               invisible group-hover:visible
               absolute bottom-full right-0 mb-2
               w-64 p-3 rounded-lg
-              bg-surface-raised border border-border-primary shadow-lg
+              bg-surface-raised border border-theme-default shadow-lg
               text-xs text-content-primary
               z-50
               pointer-events-none

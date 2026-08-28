@@ -75,7 +75,11 @@ marked.use({
       const rendered = hasBlockContent
         ? this.parser.parse(token.tokens)
         : this.parser.parseInline(token.tokens);
-      return `<li class="ml-4 !text-content-primary">${rendered}</li>\n`;
+      // No left margin here: the indent for a list item is the parent
+      // <ul>/<ol>'s padding-left (see .prose in index.css). An ml-4 on top of
+      // that stacked a second, independent indent onto every level, which is
+      // what made deep nesting run out of horizontal room on phones.
+      return `<li class="!text-content-primary">${rendered}</li>\n`;
     },
 
     blockquote({ tokens }) {
@@ -151,7 +155,7 @@ marked.use({
       // overflows. Padding sits on the <code> so the scrolled content keeps its
       // inset; the right inset clears the button.
       return (
-        `<pre class="relative group my-2 rounded bg-bg-secondary text-sm">` +
+        `<pre class="relative group my-2 rounded surface-raised text-sm">` +
         copyBtn +
         `<code class="block p-3 pr-14 sm:pr-10 overflow-x-auto">${escapeHtml(text)}</code>` +
         `</pre>\n`
@@ -453,7 +457,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       const img = document.createElement('img');
       img.src = href;
       img.alt = '';
-      img.className = 'max-h-96 rounded border border-border-primary';
+      img.className = 'max-h-96 rounded border border-theme-default';
       img.style.maxWidth = '100%';
       img.addEventListener('error', () => {
         const errMsg = Object.assign(document.createElement('span'), {
@@ -540,7 +544,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
       {hoveredCharacter && tooltipPosition && (
         <div
-          className="fixed z-50 px-3 py-2 text-sm bg-gray-900 dark:bg-gray-800 border border-border-primary rounded-lg shadow-lg pointer-events-none"
+          className="fixed z-50 px-3 py-2 text-sm bg-gray-900 dark:bg-gray-800 border border-theme-default rounded-lg shadow-lg pointer-events-none"
           style={{ top: `${tooltipPosition.top}px`, left: `${tooltipPosition.left}px` }}
         >
           <div className="flex items-center gap-2">

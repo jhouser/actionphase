@@ -20,13 +20,6 @@
   --color-bg-input*: initial;
   --color-bg-input-disabled*: initial;
 
-  /* Semantic Text Colors */
-  --color-text-heading*: initial;
-  --color-text-primary*: initial;
-  --color-text-secondary*: initial;
-  --color-text-muted*: initial;
-  --color-text-disabled*: initial;
-
   /* Semantic Content Colors */
   --color-content-primary*: initial;
   --color-content-secondary*: initial;
@@ -195,26 +188,11 @@
     color: rgb(var(--color-content-inverse));
   }
 
-  /* Text tokens - semantic text colors */
-  .text-text-heading {
-    color: rgb(var(--color-text-heading));
-  }
-
-  .text-text-primary {
-    color: rgb(var(--color-content-secondary));
-  }
-
-  .text-text-secondary {
-    color: rgb(var(--color-content-secondary));
-  }
-
-  .text-text-muted {
-    color: rgb(var(--color-text-muted));
-  }
-
-  .text-text-disabled {
-    color: rgb(var(--color-text-disabled));
-  }
+  /* NOTE: the .text-text-* family was removed on 2026-08-26.
+     Those class names were actively misleading: .text-text-primary resolved to
+     --color-content-secondary (not -primary), and .text-text-muted/-disabled
+     referenced variables that no theme assigns, so they produced an invalid
+     color and silently inherited. Use the .text-content-* family above. */
 
   /* Accent tokens - for links and interactive text (maps to primary colors) */
   .text-accent-primary {
@@ -734,6 +712,21 @@
     font-size: calc(1.0625rem * var(--font-scale)); /* 17px - optimal for mobile reading */
   }
 
+  /* Tighter list indentation on phones.
+     Desktop keeps 2em, which reads well at 65ch. On a 375px screen that same
+     2em is worth *more* pixels, because the rule above raises .prose to 17px,
+     and it is charged once per nesting level -- so deeply nested lists ran out
+     of horizontal room and wrapped the text a word or two at a time.
+     rem rather than em on purpose: em would compound with the mobile font
+     bump, which is half of what made this expensive in the first place. */
+  .prose :where(ul, ol):not(:where([class~="not-prose"] *)) {
+    padding-left: 1.25rem;
+  }
+
+  .prose :where(li):not(:where([class~="not-prose"] *)) {
+    padding-left: 0.125rem;
+  }
+
   /* Ensure adequate touch targets (minimum 44x44px for accessibility) */
   /* `a` is intentionally excluded — inline text links (e.g. character names) should not
      get a 44px min-height. Interactive links that need large tap targets should use
@@ -745,9 +738,12 @@
     min-height: 44px;
   }
 
-  /* Minimal padding for maximum content width on mobile */
-  .card,
-  [class*="surface-"] {
+  /* Minimal padding for maximum content width on mobile.
+     Scroll containers are excluded: a `sticky` header pins to its scrollport's
+     *padding* edge, so padding here leaves a strip above the header that
+     scrolling content shows through (e.g. ThreadViewModal's "Thread View" bar). */
+  .card:not(.overflow-y-auto):not(.overflow-auto),
+  [class*="surface-"]:not(.overflow-y-auto):not(.overflow-auto) {
     padding: 5px; /* Minimal padding for mobile */
   }
 }

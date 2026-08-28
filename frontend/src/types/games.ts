@@ -60,6 +60,7 @@ export type GameState =
   | 'character_creation'
   | 'in_progress'
   | 'paused'
+  | 'epilogue'
   | 'completed'
   | 'cancelled';
 
@@ -184,6 +185,7 @@ export const GAME_STATE_LABELS: Record<GameState, string> = {
   character_creation: 'Character Creation',
   in_progress: 'In Progress',
   paused: 'Paused',
+  epilogue: 'Epilogue',
   completed: 'Completed',
   cancelled: 'Cancelled'
 };
@@ -191,11 +193,52 @@ export const GAME_STATE_LABELS: Record<GameState, string> = {
 export const GAME_STATE_COLORS: Record<GameState, string> = {
   setup: 'surface-raised text-content-secondary',
   recruitment: 'bg-semantic-success-subtle text-content-primary',
-  character_creation: 'bg-interactive-primary-subtle text-content-primary',
+  character_creation: 'bg-semantic-info-subtle text-content-primary',
   in_progress: 'bg-semantic-warning-subtle text-content-primary',
-  paused: 'bg-semantic-warning-subtle text-content-primary',
-  completed: 'bg-semantic-info-subtle text-content-primary',
+  // Paused is distinct from in_progress: same "live game" family, but muted,
+  // because a paused game needs nothing from you.
+  paused: 'surface-raised text-content-secondary',
+  // Epilogue is still a live game people can post in, so it keeps an active
+  // colour rather than the muted archive treatment. Warning family to match
+  // in_progress (it is live play); the label text carries the distinction.
+  epilogue: 'bg-semantic-warning-subtle text-content-primary',
+  // Completed stays quiet so an archive never reads as a call to action.
+  completed: 'surface-raised text-content-secondary',
+  // Cancelled keeps danger styling: this badge is also the headline status on
+  // GameHeader, where "this game was cancelled" is information the reader needs.
   cancelled: 'bg-semantic-danger-subtle text-content-primary'
+};
+
+/**
+ * Card border/tint per game state, used by the games list to make a game's
+ * state legible at a glance.
+ *
+ * The scale is deliberately one of *urgency*, not just identity: states that
+ * warrant a click get a saturated border plus a tint, and terminal states
+ * (completed/cancelled) are deliberately muted so an archive never competes
+ * for attention with a live game. "You are in this game" is conveyed by the
+ * relationship badge instead — see USER_RELATIONSHIP_LABELS.
+ */
+export const GAME_STATE_CARD_STYLES: Record<GameState, string> = {
+  // Actionable: you can apply right now.
+  recruitment: 'border-semantic-success bg-semantic-success-subtle',
+  // Live play — likely wants your attention.
+  in_progress: 'border-semantic-warning bg-semantic-warning-subtle',
+  // Active, but still spinning up.
+  character_creation: 'border-semantic-info bg-semantic-info-subtle',
+  // On hold: visible, but no tint since there is nothing to do.
+  paused: 'border-theme-strong',
+  // Not yet open to anyone but the GM.
+  setup: 'border-theme-subtle',
+  // Winding down but still writable. Shares the warning family with in_progress
+  // because it IS live play, but drops the tint to sit one step down the urgency
+  // scale: more than paused, less than an active game. Deliberately not the info
+  // family — that belongs to character_creation, and at a glance across a list
+  // two blue cards read as the same state.
+  epilogue: 'border-semantic-warning',
+  // Terminal states are muted on purpose: readable, never a CTA.
+  completed: 'border-theme-subtle',
+  cancelled: 'border-theme-subtle'
 };
 
 export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
@@ -214,7 +257,12 @@ export const APPLICATION_STATUS_COLORS: Record<ApplicationStatus, string> = {
 
 // Enhanced game listing types
 
-export type UserRelationship = 'gm' | 'participant' | 'applied' | 'none';
+/**
+ * The viewer's relationship to a game, as computed by the games-listing query.
+ * `participant` means specifically a *player*: co-GMs and audience members get
+ * their own values so the games-list badge can name the role accurately.
+ */
+export type UserRelationship = 'gm' | 'co_gm' | 'participant' | 'audience' | 'applied' | 'none';
 type DeadlineUrgency = 'critical' | 'warning' | 'normal';
 type PhaseType = 'action' | 'common_room';
 
@@ -261,9 +309,28 @@ export interface GameListingFilters {
 
 
 export const USER_RELATIONSHIP_LABELS: Record<UserRelationship, string> = {
-  gm: 'You are GM',
-  participant: 'You are playing',
-  applied: 'Application pending',
+  gm: 'GM',
+  co_gm: 'Co-GM',
+  participant: 'Player',
+  audience: 'Audience',
+  applied: 'Applied',
+  none: ''
+};
+
+/**
+ * Badge styling per relationship. Outlined on a solid background so the badge
+ * stays legible over the state tint the card carries (GAME_STATE_CARD_STYLES).
+ *
+ * Roles that confer authority (GM, Co-GM) read as primary; roles that are
+ * simply "you are in this game" read as info; a pending application reads as
+ * warning because it is the only one awaiting someone else's decision.
+ */
+export const USER_RELATIONSHIP_BADGE_STYLES: Record<UserRelationship, string> = {
+  gm: 'border-interactive-primary text-interactive-primary',
+  co_gm: 'border-interactive-primary text-interactive-primary',
+  participant: 'border-semantic-info text-semantic-info',
+  audience: 'border-semantic-info text-semantic-info',
+  applied: 'border-semantic-warning text-semantic-warning',
   none: ''
 };
 

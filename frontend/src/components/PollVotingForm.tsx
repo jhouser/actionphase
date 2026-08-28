@@ -48,10 +48,10 @@ export function PollVotingForm({ poll, onSuccess, onCancel }: PollVotingFormProp
   const isOtherSelected = selectedOptionId === -1;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 border-t border-border-primary pt-4">
+    <form onSubmit={handleSubmit} className="space-y-4 border-t border-theme-default pt-4">
       {/* Options */}
       <div>
-        <label className="block text-sm font-medium text-text-primary mb-2">
+        <label className="block text-sm font-medium text-content-secondary mb-2">
           Select your response
         </label>
         <div className="space-y-2">
@@ -60,8 +60,8 @@ export function PollVotingForm({ poll, onSuccess, onCancel }: PollVotingFormProp
               key={option.id}
               className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                 selectedOptionId === option.id
-                  ? 'border-accent-primary bg-accent-primary/10'
-                  : 'border-border-primary hover:border-border-secondary bg-bg-secondary'
+                  ? 'border-interactive-primary bg-interactive-primary-subtle'
+                  : 'border-theme-default hover:border-theme-strong surface-raised'
               }`}
             >
               <input
@@ -75,7 +75,7 @@ export function PollVotingForm({ poll, onSuccess, onCancel }: PollVotingFormProp
                 }}
                 className="mt-1 text-accent-primary focus:ring-accent-primary"
               />
-              <span className="flex-1 text-sm text-text-primary">{option.option_text}</span>
+              <span className="flex-1 text-sm text-content-secondary">{option.option_text}</span>
             </label>
           ))}
 
@@ -84,8 +84,8 @@ export function PollVotingForm({ poll, onSuccess, onCancel }: PollVotingFormProp
             <label
               className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                 isOtherSelected
-                  ? 'border-accent-primary bg-accent-primary/10'
-                  : 'border-border-primary hover:border-border-secondary bg-bg-secondary'
+                  ? 'border-interactive-primary bg-interactive-primary-subtle'
+                  : 'border-theme-default hover:border-theme-strong surface-raised'
               }`}
             >
               <input
@@ -99,7 +99,7 @@ export function PollVotingForm({ poll, onSuccess, onCancel }: PollVotingFormProp
                 className="mt-1 text-accent-primary focus:ring-accent-primary"
               />
               <div className="flex-1 space-y-2">
-                <span className="text-sm text-text-primary">Other (specify below)</span>
+                <span className="text-sm text-content-secondary">Other (specify below)</span>
                 {isOtherSelected && (
                   <Input
                     value={otherText}

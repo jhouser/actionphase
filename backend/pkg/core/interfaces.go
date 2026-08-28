@@ -800,11 +800,12 @@ type MessageServiceInterface interface {
 
 	// CountAllPrivateConversations returns the total count of private conversations in a game,
 	// applying the same participant filter as ListAllPrivateConversations
-	CountAllPrivateConversations(ctx context.Context, gameID int32, participantNames []string) (int64, error)
+	CountAllPrivateConversations(ctx context.Context, gameID int32, participantCharacterIDs []int32) (int64, error)
 
-	// GetConversationParticipantNames returns all participant names in the game's conversations,
-	// narrowed to co-participants of all selected names when selectedNames is non-empty.
-	GetConversationParticipantNames(ctx context.Context, gameID int32, selectedNames []string) ([]string, error)
+	// GetConversationParticipantCharacters returns the characters appearing in the game's
+	// conversations, narrowed to co-participants of all selected character IDs when
+	// selectedCharacterIDs is non-empty.
+	GetConversationParticipantCharacters(ctx context.Context, gameID int32, selectedCharacterIDs []int32) ([]ConversationParticipantCharacter, error)
 
 	// GetAudienceConversationMessages retrieves all messages in a conversation (for audience/GM)
 	GetAudienceConversationMessages(ctx context.Context, conversationID int32) ([]models.GetAudienceConversationMessagesRow, error)
@@ -1164,10 +1165,20 @@ type CommentWithParent struct {
 
 // ListAllPrivateConversationsParams represents parameters for listing private conversations
 type ListAllPrivateConversationsParams struct {
-	GameID           int32
-	ParticipantNames []string // Filter by participant names (character names or usernames)
-	Limit            int32    // Number of results to return
-	Offset           int32    // Number of results to skip
+	GameID int32
+	// Filter to conversations containing ALL of these characters. Filtering is by ID
+	// rather than name because character names are mutable and not unique within a game.
+	ParticipantCharacterIDs []int32
+	Limit                   int32 // Number of results to return
+	Offset                  int32 // Number of results to skip
+}
+
+// ConversationParticipantCharacter is a character that appears in at least one
+// conversation, used to build the audience filter controls. The UI displays Name
+// but filters by ID.
+type ConversationParticipantCharacter struct {
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
 }
 
 // ReadMarker tracks which comments a user has read in a common room post
@@ -1243,6 +1254,11 @@ type NotificationServiceInterface interface {
 
 	// MarkAsRead marks a notification as read
 	MarkAsRead(ctx context.Context, notificationID, userID int32) error
+
+	// MarkContextAsRead marks every unread notification for one container
+	// (e.g. a conversation) as read, returning the number of rows changed.
+	// Notifications with no context are never matched.
+	MarkContextAsRead(ctx context.Context, userID int32, contextType string, contextID int32) (int64, error)
 
 	// MarkAsUnread marks a notification as unread (allows users to revisit it later)
 	MarkAsUnread(ctx context.Context, notificationID, userID int32) error

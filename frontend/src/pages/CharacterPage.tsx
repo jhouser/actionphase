@@ -116,10 +116,10 @@ export function CharacterPage() {
         <div className="mb-8">
           {isLoadingCharacter ? (
             <div className="flex items-center gap-4">
-              <div className="w-20 h-20 rounded-full bg-bg-secondary animate-pulse" />
+              <div className="w-20 h-20 rounded-full surface-raised animate-pulse" />
               <div className="space-y-2">
-                <div className="h-7 w-48 bg-bg-secondary rounded animate-pulse" />
-                <div className="h-5 w-32 bg-bg-secondary rounded animate-pulse" />
+                <div className="h-7 w-48 surface-raised rounded animate-pulse" />
+                <div className="h-5 w-32 surface-raised rounded animate-pulse" />
               </div>
             </div>
           ) : isCharacterError ? (
@@ -134,7 +134,7 @@ export function CharacterPage() {
               />
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="min-w-0 text-2xl font-bold text-text-heading break-words">
+                  <h1 className="min-w-0 text-2xl font-bold text-content-primary break-words">
                     {characterData.name}
                   </h1>
                   <MessageCharacterButton character={characterData} />
@@ -173,7 +173,7 @@ export function CharacterPage() {
         {/* Public Bio */}
         {publicBio && (
           <div className="mb-8">
-            <h2 className="text-lg font-semibold text-text-heading mb-4">About</h2>
+            <h2 className="text-lg font-semibold text-content-primary mb-4">About</h2>
             <Card variant="default" padding="md">
               <CardBody>
                 {/* Card's default variant paints surface-base, so the fade
@@ -193,7 +193,7 @@ export function CharacterPage() {
 
         {/* Activity Feed */}
         <div>
-          <h2 className="text-lg font-semibold text-text-heading mb-4">Activity</h2>
+          <h2 className="text-lg font-semibold text-content-primary mb-4">Activity</h2>
 
           {isLoadingMessages && (
             <div className="flex justify-center py-12">
@@ -285,7 +285,7 @@ function CharacterMessageCard({ message, onNavigate, portraitAvatars }: Characte
             shape={portraitAvatars ? 'portrait' : 'circle'}
           />
           <div className="flex flex-col min-w-0">
-            <span className="font-medium text-text-heading leading-tight">{message.character_name || message.author_username}</span>
+            <span className="font-medium text-content-primary leading-tight">{message.character_name || message.author_username}</span>
             <div className="flex items-center gap-2">
               {message.author_username && (
                 <>
@@ -310,7 +310,7 @@ function CharacterMessageCard({ message, onNavigate, portraitAvatars }: Characte
 
         {/* Link to view in context */}
         {!message.is_deleted && (
-          <div className="mt-3 pt-3 border-t border-border-primary">
+          <div className="mt-3 pt-3 border-t border-theme-default">
             <a
               href={`/games/${message.game_id}?tab=common-room&comment=${message.id}`}
               onClick={(e) => {

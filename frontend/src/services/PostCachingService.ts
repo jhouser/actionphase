@@ -4,6 +4,7 @@ export type postType = 'cr-main-post' | 'post-reply' | 'action' | 'action-result
 
 type savedPost = { lastEdit: Date, content: string };
 
+type Conditional<T> = T extends (null | undefined) ? undefined : string
 
 export class PostCachingService {
 
@@ -65,11 +66,11 @@ export class PostCachingService {
         }
     }
 
-    createAutosaveId(type: postType, id: string | number | null | undefined) : string | undefined {
+    createAutosaveId<T extends (string | number | undefined | null)>(type: postType, id: T) : Conditional<T> {
         if (id === undefined || id === null){
-            return undefined;
+            return undefined as Conditional<T>;
         }
-        return `${type}-${id}`;
+        return `${type}-${id}` as Conditional<T>;
     }
 
     /**

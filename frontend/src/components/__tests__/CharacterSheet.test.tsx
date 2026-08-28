@@ -116,6 +116,61 @@ describe('CharacterSheet', () => {
     expect(updateDepthError).toBeNull();
   });
 
+  // Private modules are gated on canViewPrivate, which turns on for editors,
+  // audience, and — the part epilogue changed — any participant once the game is
+  // a public archive. This is the surface a player actually notices: without it
+  // they see only "Public Profile" and the sheet looks half-empty.
+  describe('private module visibility by game state', () => {
+    const renderAsPlayer = (gameState: string) => {
+      setupSheet();
+      return renderWithProviders(
+        <CharacterSheet characterId={CHARACTER_ID} userRole="player" gameState={gameState} />,
+        { gameId: 1 }
+      );
+    };
+
+    // The module label appears in several places at once (the mobile <select>,
+    // the tab strip, and the panel heading), so count matches rather than
+    // expecting a single node.
+    const privateTabCount = () => screen.queryAllByText('Private Notes').length;
+    const sheetReady = async () => {
+      await waitFor(() => {
+        expect(screen.queryAllByText('Public Profile').length).toBeGreaterThan(0);
+      });
+    };
+
+    it('hides private modules from a player while the game is in progress', async () => {
+      renderAsPlayer('in_progress');
+      await sheetReady();
+      expect(privateTabCount()).toBe(0);
+    });
+
+    it('shows private modules to a player in an epilogue game', async () => {
+      // Regression: this was gated on gameState === 'completed', so epilogue —
+      // whose entire purpose is opening the archive — still hid the private
+      // tabs. The backend already returns the data (characters/api_data.go).
+      renderAsPlayer('epilogue');
+      await sheetReady();
+      await waitFor(() => {
+        expect(privateTabCount()).toBeGreaterThan(0);
+      });
+    });
+
+    it('still shows private modules in a completed game', async () => {
+      renderAsPlayer('completed');
+      await sheetReady();
+      await waitFor(() => {
+        expect(privateTabCount()).toBeGreaterThan(0);
+      });
+    });
+
+    it('keeps them hidden in a cancelled game, which is not a public archive', async () => {
+      renderAsPlayer('cancelled');
+      await sheetReady();
+      expect(privateTabCount()).toBe(0);
+    });
+  });
+
   // The sheet used to print a module header above every tab, including the three
   // that render their own heading — so a stat tab read its name twice, separated
   // by a description that only restated it ("Skills" / "Character skills").

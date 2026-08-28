@@ -61,7 +61,7 @@ function isSameGameContext(
     a.currentPhase?.id === b.currentPhase?.id &&
     a.isGM === b.isGM &&
     a.isAudience === b.isAudience &&
-    a.isGameCompleted === b.isGameCompleted &&
+    a.isGameWritable === b.isGameWritable &&
     a.userRole === b.userRole &&
     a.gameState === b.gameState &&
     a.isAnonymous === b.isAnonymous &&

@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, createElement, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { Tab } from '../components/TabNavigation';
 import type { GameState } from '../types/games';
+import { clearForeignTabParams } from '../utils/tabParams';
+import { isPublicArchive } from '@/lib/gamePermissions';
 
 interface UseGameTabsOptions {
   gameState: GameState | undefined;
@@ -87,7 +89,12 @@ export function useGameTabs({
       // Note: Applications tab removed - recruitment is closed, no new applications accepted
       // Handouts - players can reference materials while creating characters
       tabList.push({ id: 'handouts', label: 'Handouts', icon: icons.handouts });
-    } else if (gameState === 'in_progress') {
+    } else if (gameState === 'in_progress' || gameState === 'epilogue') {
+      // Epilogue shares the in-progress tab set rather than the archive one: the
+      // game is still writable, so the GM needs Phases to open an epilogue
+      // thread and players need Common Room and Messages to reply. The archive
+      // additions (unconditional Audience, Game Logs) are layered on below via
+      // isPublicArchive rather than by branching again.
       // Common Room tab - only during common_room phases
       // Badge shows unvoted polls count (polls are integrated as sub-tab within Common Room)
       if (currentPhaseType === 'common_room') {
@@ -109,7 +116,14 @@ export function useGameTabs({
       // 2. Regular participants (can submit actions)
       // Note: Audience members view action submissions and results on the
       // History tab, which serves every role (see HistoryView).
-      if (currentPhaseType === 'action' && (isGM || isParticipant)) {
+      //
+      // Excluded in epilogue. A game can enter epilogue while its last phase is
+      // still an action phase, but play is over: nobody should be submitting,
+      // and no results are coming. Offering the tab rendered an empty pane that
+      // looked broken — and labelled it "Submit Action" / "Action Submitted ✓",
+      // implying the phase was still live. The archived submissions remain
+      // readable on History, which is where they belong now.
+      if (currentPhaseType === 'action' && gameState === 'in_progress' && (isGM || isParticipant)) {
         const label = isGM ? 'Actions' : hasSubmittedAction ? 'Action Submitted ✓' : 'Submit Action';
         tabList.push({ id: 'actions', label, icon: icons.actions });
       }
@@ -129,8 +143,10 @@ export function useGameTabs({
       // Handouts - available to all participants
       tabList.push({ id: 'handouts', label: 'Handouts', icon: icons.handouts });
 
-      // Audience tab (GM and audience members only)
-      if (isGM || isAudience) {
+      // Audience tab. Normally GM and audience only, but a public archive
+      // (epilogue) grants every viewer audience-level read access, matching the
+      // completed-game rule below and the backend's core.IsPublicArchive.
+      if (isGM || isAudience || isPublicArchive(gameState)) {
         tabList.push({ id: 'audience', label: 'Audience', icon: icons.audience });
       }
 
@@ -179,6 +195,10 @@ export function useGameTabs({
       tabList.push({ id: 'loot_tables', label: 'Loot Tables', icon: icons.info });
     }
 
+    // Game Logs. Epilogue is deliberately excluded from the non-GM arm even
+    // though it is a public archive: the log is the GM's audit trail, and while
+    // they are still running epilogue content it stays theirs. It opens to
+    // everyone at completed, matching the backend (games/api_logs.go).
     if (isGM || (gameState === 'completed' || gameState === 'cancelled')) {
       // Game Logs for the game
       tabList.push({ id: 'logs', 'label': 'Game Logs', icon: icons.info });
@@ -191,8 +211,12 @@ export function useGameTabs({
   const defaultTab = useMemo(() => {
     if (tabs.length === 0) return 'default';
 
-    // Priority 1: In-progress game - phase-aware defaults
-    if (gameState === 'in_progress') {
+    // Priority 1: In-progress game - phase-aware defaults.
+    // Epilogue uses the same phase-aware logic: it is still being played, so
+    // the right landing spot is wherever the writing is happening — normally
+    // common-room, where epilogue and meta-discussion threads live — not the
+    // 'history' archive default used for completed games.
+    if (gameState === 'in_progress' || gameState === 'epilogue') {
       if (currentPhaseType === 'common_room') {
         // Common room phase - everyone goes to common room
         if (tabs.some(t => t.id === 'common-room')) return 'common-room';
@@ -253,9 +277,16 @@ export function useGameTabs({
       return;
     }
 
-    // For in_progress games, wait for phase data to load before setting default tab
-    // This prevents setting wrong default (People) when currentPhaseType is still loading
-    if (gameState === 'in_progress' && isPhaseLoading && !hasSetInitialTab.current) {
+    // For games with a live phase, wait for phase data before setting the default
+    // tab. This prevents setting the wrong default (People) while currentPhaseType
+    // is still loading. Epilogue must be included: its tab list is phase-dependent
+    // in exactly the same way, and falling through here judged the not-yet-existent
+    // Common Room tab invalid and redirected the player away from it.
+    if (
+      (gameState === 'in_progress' || gameState === 'epilogue') &&
+      isPhaseLoading &&
+      !hasSetInitialTab.current
+    ) {
       return;
     }
 
@@ -316,13 +347,9 @@ export function useGameTabs({
     // Update URL with new tab parameter (creates history entry)
     const newParams = new URLSearchParams(searchParams);
     newParams.set('tab', tabId);
-    // Clear tab-specific sub-params when leaving their tab
-    if (tabId !== 'messages') newParams.delete('conversation');
-    if (tabId !== 'audience') newParams.delete('audienceConversation');
-    if (tabId !== 'people') {
-      newParams.delete('character');
-      newParams.delete('peopleTab');
-    }
+    // Clear tab-specific sub-params when leaving their tab, so returning to a
+    // tab later opens it fresh instead of resuming a stale drill-down.
+    clearForeignTabParams(newParams, tabId);
     setSearchParams(newParams, { replace: false });
   };
 

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
 import { useToast } from '../../contexts/ToastContext';
 import { ConfirmModal } from '../../components/ConfirmModal';
+import { Badge } from '../../components/ui';
 import type { BannedUser } from '../../lib/api/admin';
 
 export function BannedUsersTab() {
@@ -54,7 +55,7 @@ export function BannedUsersTab() {
                 <div className="flex-1">
                   <div className="flex items-center space-x-3">
                     <h3 className="text-lg font-medium text-content-primary">{user.username}</h3>
-                    <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded">BANNED</span>
+                    <Badge variant="danger" size="sm">BANNED</Badge>
                   </div>
                   <p className="text-sm text-content-secondary mt-1">{user.email}</p>
                   <div className="text-xs text-content-tertiary mt-2">

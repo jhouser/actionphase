@@ -55,6 +55,46 @@ describe('MarkdownPreview', () => {
       expect(container.textContent).toContain('Third');
     });
 
+    // Regression: nested list indentation was the sum of three separate
+    // sources -- the <ul>/<ol> padding-left from .prose, a hardcoded ml-4 on
+    // every <li>, and the <li>'s own padding-left -- for ~56px per level at
+    // the default font size. Four levels deep consumed ~226px, which on a
+    // 375px phone left a couple of dozen pixels for the actual text and
+    // wrapped it one character at a time.
+    //
+    // The ml-4 was pure duplication: list indentation is already the parent
+    // list's padding-left, so the margin bought nothing that the padding was
+    // not already providing, at the cost of doubling the per-level bill.
+    //
+    // This asserts on the emitted class rather than a measured width on
+    // purpose: jsdom applies no stylesheet, so every getBoundingClientRect
+    // here is 0 and a width-based assertion would pass no matter what the
+    // markup said. The responsive padding half of the fix lives in index.css
+    // and is verified in the browser, not here.
+    it('does not add a per-item left margin on top of the list indent', () => {
+      const { container } = render(
+        <MarkdownPreview content={'- One\n  - Two\n    - Three\n      - Four'} />
+      );
+
+      const items = container.querySelectorAll('li');
+      expect(items).toHaveLength(4);
+      items.forEach((li) => {
+        expect(li.className).not.toMatch(/\bml-\d/);
+      });
+    });
+
+    it('nests lists to the depth the markdown declares', () => {
+      const { container } = render(
+        <MarkdownPreview content={'- One\n  - Two\n    - Three\n      - Four'} />
+      );
+
+      // Indentation is structural: the fix must not flatten the tree to buy
+      // horizontal room, or "Four" stops reading as a child of "Three".
+      const deepest = container.querySelector('li li li li');
+      expect(deepest).toBeInTheDocument();
+      expect(deepest?.textContent).toContain('Four');
+    });
+
     it('renders inline code correctly', () => {
       render(<MarkdownPreview content="Use `console.log()` for debugging" />);
       const codeElement = screen.getByText('console.log()');

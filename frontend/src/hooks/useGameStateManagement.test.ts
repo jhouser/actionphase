@@ -54,11 +54,15 @@ describe('useGameStateManagement', () => {
   // -----------------------------------------------------------------
 
   describe('getStateActions', () => {
-    it('setup state offers only Start Recruitment', () => {
+    it('setup state offers Start Recruitment and Cancel Game', () => {
+      // A GM most often abandons a game before recruiting anyone, so cancel
+      // must be reachable from setup without first opening recruitment.
       const { result } = renderHookWithOptions();
       const actions = result.current.getStateActions('setup');
-      expect(actions).toHaveLength(1);
-      expect(actions[0].state).toBe('recruitment');
+      const states = actions.map(a => a.state);
+      expect(states).toContain('recruitment');
+      expect(states).toContain('cancelled');
+      expect(actions).toHaveLength(2);
     });
 
     it('recruitment state offers Start Character Creation and Cancel Game', () => {
@@ -77,13 +81,36 @@ describe('useGameStateManagement', () => {
       expect(actions[0].state).toBe('in_progress');
     });
 
-    it('in_progress state offers Pause Game and Complete Game', () => {
+    it('in_progress state offers Pause Game, Move to Epilogue and Complete Game', () => {
       const { result } = renderHookWithOptions();
       const actions = result.current.getStateActions('in_progress');
       const states = actions.map(a => a.state);
       expect(states).toContain('paused');
+      expect(states).toContain('epilogue');
       expect(states).toContain('completed');
-      expect(actions).toHaveLength(2);
+      expect(actions).toHaveLength(3);
+    });
+
+    it('in_progress styles epilogue and completed differently', () => {
+      // The two endgame options sit side by side and do very different things
+      // (one keeps the game writable, one freezes it). Identical styling would
+      // invite the wrong click on an irreversible action.
+      const { result } = renderHookWithOptions();
+      const actions = result.current.getStateActions('in_progress');
+      const epilogue = actions.find(a => a.state === 'epilogue');
+      const completed = actions.find(a => a.state === 'completed');
+      expect(epilogue?.color).not.toBe(completed?.color);
+    });
+
+    it('epilogue state offers only Complete Game', () => {
+      // No route back to in_progress: entering epilogue disclosed the entire
+      // game and players cannot un-see it. Mirrors allowedTransitions on the
+      // backend, which rejects epilogue → in_progress.
+      const { result } = renderHookWithOptions();
+      const actions = result.current.getStateActions('epilogue');
+      expect(actions).toHaveLength(1);
+      expect(actions[0].state).toBe('completed');
+      expect(actions.map(a => a.state)).not.toContain('in_progress');
     });
 
     it('paused state offers only Resume Game', () => {
@@ -116,6 +143,21 @@ describe('useGameStateManagement', () => {
       });
 
       expect(result.current.showCompleteDialog).toBe(true);
+      expect(apiClient.games.updateGameState).not.toHaveBeenCalled();
+    });
+
+    it('epilogue shows confirmation dialog instead of calling API', async () => {
+      // The most important guard in this file: moving to epilogue discloses
+      // every private message and action submission and cannot be undone. It
+      // must never fire from a single click.
+      const { result } = renderHookWithOptions();
+      expect(result.current.showEpilogueDialog).toBe(false);
+
+      await act(async () => {
+        await result.current.handleStateChange('epilogue');
+      });
+
+      expect(result.current.showEpilogueDialog).toBe(true);
       expect(apiClient.games.updateGameState).not.toHaveBeenCalled();
     });
 

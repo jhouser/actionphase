@@ -7,6 +7,7 @@ import (
 	dbmessages "actionphase/pkg/db/services/messages"
 	messagesvc "actionphase/pkg/db/services/messages"
 	"actionphase/pkg/games"
+	"actionphase/pkg/humaconfig"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -22,7 +23,7 @@ import (
 func TestMessageAPI_PostCreationFlow(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "messages", "character_mentions", "characters", "game_participants", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "messages", "characters", "game_participants", "games", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupMessageTestRouter(app, testDB)
@@ -127,7 +128,7 @@ func TestMessageAPI_PostCreationFlow(t *testing.T) {
 func TestMessageAPI_CommentCreationFlow(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "messages", "character_mentions", "characters", "game_participants", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "messages", "characters", "game_participants", "games", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupMessageTestRouter(app, testDB)
@@ -259,7 +260,7 @@ func TestMessageAPI_CommentCreationFlow(t *testing.T) {
 func TestMessageAPI_GetGamePosts(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "messages", "character_mentions", "characters", "game_participants", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "messages", "characters", "game_participants", "games", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupMessageTestRouter(app, testDB)
@@ -329,7 +330,7 @@ func TestMessageAPI_GetGamePosts(t *testing.T) {
 func TestMessageAPI_GetPostComments(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "messages", "character_mentions", "characters", "game_participants", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "messages", "characters", "game_participants", "games", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupMessageTestRouter(app, testDB)
@@ -414,7 +415,7 @@ func TestMessageAPI_GetPostComments(t *testing.T) {
 func TestMessageAPI_AuthorizationChecks(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "messages", "character_mentions", "characters", "game_participants", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "messages", "characters", "game_participants", "games", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupMessageTestRouter(app, testDB)
@@ -492,23 +493,7 @@ func setupMessageTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 				MessageService: &messagesvc.MessageService{DB: testDB.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
 			}
 
-			// Post routes
-			r.Post("/posts", messageHandler.CreatePost)
-			r.Get("/posts", messageHandler.GetGamePosts)
-			r.Post("/posts/{postId}/mark-read", messageHandler.MarkPostRead)
-			r.Get("/posts-unread-info", messageHandler.GetPostsUnreadInfo)
-			r.Get("/unread-comment-ids", messageHandler.GetUnreadCommentIDs)
-
-			// Comment routes
-			r.Post("/posts/{postId}/comments", messageHandler.CreateComment)
-			r.Get("/posts/{postId}/comments", messageHandler.GetPostComments)
-			r.Get("/comments/recent", messageHandler.ListRecentCommentsWithParents)
-			r.Patch("/posts/{postId}/comments/{commentId}", messageHandler.UpdateComment)
-			r.Delete("/posts/{postId}/comments/{commentId}", messageHandler.DeleteComment)
-
-			// Other routes
-			r.Get("/messages/{messageId}", messageHandler.GetMessage)
-			r.Get("/read-markers", messageHandler.GetGameReadMarkers)
+			RegisterHumaGameMessages(humaconfig.New(r, "ActionPhase API", "1.0.0"), messageHandler)
 		})
 	})
 
@@ -601,8 +586,8 @@ func TestMessageAPI_MarkPostRead(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
 
-	testDB.CleanupTables(t, "message_read_markers", "messages", "characters", "game_participants", "games", "sessions", "users")
-	defer testDB.CleanupTables(t, "message_read_markers", "messages", "characters", "game_participants", "games", "sessions", "users")
+	testDB.CleanupTables(t, "user_common_room_reads", "messages", "characters", "game_participants", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "user_common_room_reads", "messages", "characters", "game_participants", "games", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupMessageTestRouter(app, testDB)
@@ -812,7 +797,7 @@ func TestMessageAPI_UpdateDeleteComment(t *testing.T) {
 func TestMessageAPI_ReadTrackingAndRecent(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
-	defer testDB.CleanupTables(t, "comment_read_markers", "comments", "posts", "characters", "game_participants", "games", "sessions", "users")
+	defer testDB.CleanupTables(t, "user_comment_reads", "messages", "characters", "game_participants", "games", "sessions", "users")
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupMessageTestRouter(app, testDB)

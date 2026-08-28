@@ -2,6 +2,10 @@
 
 This document provides comprehensive documentation for the ActionPhase REST API, including usage examples, authentication flows, and integration patterns.
 
+**Last Verified**: August 2026 — endpoint paths spot-checked against
+`backend/pkg/http/root.go`. For the complete, generated endpoint list use the
+Swagger UI at `/api/v1/docs/` rather than this narrative guide.
+
 ## Overview
 
 ActionPhase provides a RESTful API for managing play-by-post RPG games with a cyclical phase-based gameplay system. The API supports:
@@ -25,6 +29,12 @@ ActionPhase provides a RESTful API for managing play-by-post RPG games with a cy
 ## Authentication
 
 ActionPhase uses JWT (JSON Web Tokens) for authentication with automatic token refresh.
+
+> **One token, not two.** There is no separate refresh token. A single bearer
+> token is issued at login, valid **7 days**, and backed by a server-side session
+> row. `GET /auth/refresh` exchanges a still-valid token for a fresh one; it does
+> not consume a distinct refresh credential. Revocation happens by deleting the
+> session. See `.claude/context/ARCHITECTURE.md` for the claim structure.
 
 ### Authentication Flow
 
@@ -89,11 +99,15 @@ curl -X GET http://localhost:3000/api/v1/games \
 
 ### Game Management
 
-#### List All Public Games
+#### List Games (main listing endpoint)
 ```bash
-curl -X GET http://localhost:3000/api/v1/games/public \
+# Authentication is OPTIONAL here — the response is enriched when a token is sent.
+curl -X GET "http://localhost:3000/api/v1/games" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
+
+> There is no `/games/public`. The main listing endpoint is `GET /games`
+> (`GetFilteredGames`), which accepts filter query parameters.
 
 #### Get Games Currently Recruiting
 ```bash
@@ -294,7 +308,7 @@ export const authAPI = {
 ```typescript
 export const gamesAPI = {
   async getAllGames() {
-    const response = await apiClient.get('/games/public');
+    const response = await apiClient.get('/games');
     return response.data;
   },
 
@@ -444,7 +458,7 @@ const controller = new AbortController();
 
 const fetchGames = async () => {
   try {
-    const response = await apiClient.get('/games/public', {
+    const response = await apiClient.get('/games', {
       signal: controller.signal
     });
     return response.data;
@@ -501,7 +515,7 @@ TOKEN=$(curl -s -X POST http://localhost:3000/api/v1/auth/register \
   | jq -r '.token')
 
 # Use token to access protected endpoint
-curl -X GET http://localhost:3000/api/v1/games/public \
+curl -X GET http://localhost:3000/api/v1/games \
   -H "Authorization: Bearer $TOKEN"
 ```
 

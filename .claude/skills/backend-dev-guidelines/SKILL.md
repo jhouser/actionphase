@@ -84,7 +84,8 @@ backend/
 ├── pkg/
 │   ├── core/            # Domain models, interfaces, errors
 │   │   ├── interfaces.go  # ALL service interfaces
-│   │   ├── models.go      # Business entities
+│   │   ├── games.go       # Business entities, split per bounded context
+│   │   ├── characters.go  #   (games, characters, phases, notifications, ...)
 │   │   └── errors.go      # Typed errors
 │   ├── db/
 │   │   ├── queries/       # SQL files (*.sql)
@@ -260,8 +261,7 @@ func (r *UpdateLootTableRequest) Bind(req *http.Request) error {
 
 Before enabling tags on an endpoint that already ships, check what the frontend
 actually sends: a `min=` stricter than the UI enforces will reject payloads that
-work today. See `.claude/planning/request-validation.md` for the rollout status
-and the per-package procedure.
+work today.
 
 ### 7. Use Typed Errors with Context
 
@@ -359,12 +359,14 @@ import (
 ### justfile Commands
 
 ```bash
-just dev              # Start server with .env
-just sqlgen           # Generate Go from SQL
-just test             # Run all tests
-just test-mocks       # Fast unit tests (~300ms)
-just migrate          # Apply migrations
-just make_migration   # Create new migration
+just up                    # Start the dev stack (db + backend + frontend)
+just dev-logs backend      # Tail backend logs
+just sh backend            # Shell into the backend container
+just sqlgen                # Generate Go from SQL
+just test                  # Run all tests
+just test-mocks            # Fast unit tests (~300ms)
+just migrate               # Apply migrations
+just migration create <name>   # Create new migration
 ```
 
 ### Database Name
@@ -372,7 +374,8 @@ just make_migration   # Create new migration
 **CRITICAL**: Database name is **`actionphase`**, NOT `database`
 
 ```
-postgres://postgres:example@localhost:5432/actionphase
+postgres://postgres:example@localhost:5432/actionphase   # from the host
+postgres://postgres:example@db:5432/actionphase          # inside the compose network
 ```
 
 ---
@@ -426,8 +429,6 @@ services/phases/
 4. Update imports across codebase
 5. Run tests to verify
 
-**See**: `.claude/planning/REFACTOR_00_MASTER_PLAN.md`
-
 ---
 
 ## Navigation Guide
@@ -448,7 +449,7 @@ services/phases/
 
 **Must Read Before Coding:**
 - `backend/pkg/core/interfaces.go` - ALL service contracts
-- `backend/pkg/core/models.go` - Business entities
+- `backend/pkg/core/*.go` - Business entities, split per bounded context (`games.go`, `characters.go`, `phases.go`, ...)
 - `backend/pkg/core/errors.go` - Error types
 - `backend/pkg/http/root.go` - Routing + middleware
 
@@ -506,7 +507,7 @@ services/phases/
 
 **Security**: JWT only contains `sub` (username), `exp`, `iat`, `jti`
 
-**See**: `/docs/adrs/003-authentication-strategy.md`
+**See**: `/docs-site/developer/architecture/adrs/003-authentication-strategy.md`
 
 ---
 
@@ -531,7 +532,7 @@ services/phases/
 - **ADR-006**: Observability Approach (Structured logging, correlation IDs)
 - **ADR-007**: Testing Strategy (Test pyramid, TDD)
 
-**Location**: `/docs/adrs/`
+**Location**: `/docs-site/developer/architecture/adrs/`
 
 ---
 
