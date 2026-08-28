@@ -1,27 +1,13 @@
 package auth
 
+// The request and response types the chi handlers bound and rendered are gone:
+// huma owns request binding and response marshalling now, with its own input
+// and output structs in huma_api.go. What remains is the Handler itself and the
+// payload shapes those huma types still reference.
+
 import (
 	"actionphase/pkg/core"
-	"fmt"
-	"net/http"
 )
-
-type Request struct {
-	*core.User
-	HCaptchaToken string `json:"hcaptcha_token"`
-	HoneypotValue string `json:"honeypot_value"`
-	Fingerprint   string `json:"fingerprint"`
-}
-
-func (r *Request) Bind(req *http.Request) error {
-	if r.User == nil {
-		return fmt.Errorf("missing required User fields")
-	}
-	if len(r.Fingerprint) > 512 {
-		return fmt.Errorf("fingerprint exceeds maximum length")
-	}
-	return nil
-}
 
 type Handler struct {
 	App                    *core.App
@@ -31,36 +17,6 @@ type Handler struct {
 	IPBanService           core.IPBanServiceInterface
 	FingerprintBanService  core.FingerprintBanServiceInterface
 	DiscordService         core.DiscordAccountServiceInterface
-}
-
-type Response struct {
-	*core.User
-	Token string
-}
-
-func (rd *Response) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
-}
-
-// PreferencesRequest represents a request to update user preferences
-type PreferencesRequest struct {
-	Preferences *core.PreferencesData `json:"preferences"`
-}
-
-func (r *PreferencesRequest) Bind(req *http.Request) error {
-	if r.Preferences == nil {
-		return fmt.Errorf("missing required preferences field")
-	}
-	return nil
-}
-
-// PreferencesResponse represents the preferences response
-type PreferencesResponse struct {
-	Preferences *core.PreferencesData `json:"preferences"`
-}
-
-func (rd *PreferencesResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
 }
 
 // UserSearchResult represents a single user in search results
@@ -73,8 +29,4 @@ type UserSearchResult struct {
 // SearchUsersResponse represents the search results
 type SearchUsersResponse struct {
 	Users []UserSearchResult `json:"users"`
-}
-
-func (rd *SearchUsersResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	return nil
 }

@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"actionphase/pkg/core"
-
-	"github.com/go-chi/jwtauth/v5"
 )
 
 // DiscordConnectResponse is returned by GET /api/v1/auth/discord/connect
@@ -76,27 +74,6 @@ func (h *Handler) verifyDiscordState(state string) (int32, error) {
 	uid, err := strconv.ParseInt(payload, 10, 32)
 	if err != nil {
 		return 0, fmt.Errorf("invalid user ID in state")
-	}
-
-	return int32(uid), nil
-}
-
-// getUserIDFromJWT extracts the user ID from the JWT in the request context.
-// Returns an error if the token is missing or the sub claim is invalid.
-func getUserIDFromJWT(r *http.Request) (int32, error) {
-	token, _, err := jwtauth.FromContext(r.Context())
-	if err != nil || token == nil {
-		return 0, fmt.Errorf("missing or invalid token")
-	}
-
-	userIDStr, ok := token.Get("sub")
-	if !ok {
-		return 0, fmt.Errorf("sub claim missing")
-	}
-
-	var uid int
-	if _, err := fmt.Sscanf(userIDStr.(string), "%d", &uid); err != nil || uid == 0 {
-		return 0, fmt.Errorf("invalid sub claim")
 	}
 
 	return int32(uid), nil
