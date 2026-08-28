@@ -588,12 +588,12 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                 key={phase.id}
                 variant="ghost"
                 onClick={() => setSelectedPhaseId(phase.id)}
-                className={`w-full justify-start text-left border rounded-lg p-4 hover:border-theme-subtle ${
+                className={`w-full justify-start text-left whitespace-normal border rounded-lg p-4 hover:border-theme-subtle ${
                   isActive ? 'border-interactive-primary bg-interactive-primary-subtle' : 'border-theme-default'
                 }`}
               >
                 {/* Mobile: Vertical Stack Layout */}
-                <div className="md:hidden flex flex-col items-start gap-3">
+                <div className="md:hidden flex w-full min-w-0 flex-col items-start gap-3">
                   {/* Badge + Active indicator */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`px-2.5 py-1 text-xs rounded-full font-medium border whitespace-nowrap ${phaseColorClass}`}>
@@ -607,28 +607,28 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                   </div>
 
                   {/* Title + Description */}
-                  <div className="w-full">
-                    <h4 className="font-semibold text-base text-content-primary mb-1 text-left">
+                  <div className="w-full min-w-0">
+                    <h4 className="font-semibold text-base text-content-primary mb-1 text-left break-words">
                       {phase.title || phaseLabel}
                     </h4>
                     {phase.description && (
-                      <p className="text-sm text-content-secondary leading-relaxed text-left">{phase.description}</p>
+                      <p className="text-sm text-content-secondary leading-relaxed text-left break-words">{phase.description}</p>
                     )}
                   </div>
                 </div>
 
                 {/* Desktop: Grid Layout for consistent alignment */}
-                <div className="hidden md:grid md:grid-cols-[auto_1fr_auto] md:gap-4 md:items-start">
+                <div className="hidden w-full min-w-0 md:grid md:grid-cols-[auto_1fr_auto] md:gap-4 md:items-start">
                   {/* Badge - fixed width column */}
                   <span className={`px-2 py-1 text-xs rounded-full font-medium border whitespace-nowrap ${phaseColorClass}`}>
                     Phase {phase.phase_number}
                   </span>
 
                   {/* Title + Description - flexible column */}
-                  <div>
-                    <h4 className="font-medium text-content-primary">{phase.title || phaseLabel}</h4>
+                  <div className="min-w-0">
+                    <h4 className="font-medium text-content-primary break-words">{phase.title || phaseLabel}</h4>
                     {phase.description && (
-                      <p className="text-sm text-content-secondary mt-1">{phase.description}</p>
+                      <p className="text-sm text-content-secondary mt-1 break-words">{phase.description}</p>
                     )}
                   </div>
 
