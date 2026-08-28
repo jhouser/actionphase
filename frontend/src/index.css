@@ -712,6 +712,21 @@
     font-size: calc(1.0625rem * var(--font-scale)); /* 17px - optimal for mobile reading */
   }
 
+  /* Tighter list indentation on phones.
+     Desktop keeps 2em, which reads well at 65ch. On a 375px screen that same
+     2em is worth *more* pixels, because the rule above raises .prose to 17px,
+     and it is charged once per nesting level -- so deeply nested lists ran out
+     of horizontal room and wrapped the text a word or two at a time.
+     rem rather than em on purpose: em would compound with the mobile font
+     bump, which is half of what made this expensive in the first place. */
+  .prose :where(ul, ol):not(:where([class~="not-prose"] *)) {
+    padding-left: 1.25rem;
+  }
+
+  .prose :where(li):not(:where([class~="not-prose"] *)) {
+    padding-left: 0.125rem;
+  }
+
   /* Ensure adequate touch targets (minimum 44x44px for accessibility) */
   /* `a` is intentionally excluded — inline text links (e.g. character names) should not
      get a 44px min-height. Interactive links that need large tap targets should use
