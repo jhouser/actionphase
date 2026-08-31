@@ -560,3 +560,136 @@ func TestGameAPI_ListAudienceNPCs(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 }
+
+// TestGameAPI_ConversationFilter_RepeatedQueryParams covers the HTTP query-parsing
+// layer of the audience participant filter, which the service-level AND-semantics
+// test in pkg/db/services/messages could not: it calls the service directly and so
+// never sees how repeated query params are decoded.
+//
+// The frontend sends the filter as repeated params (?participant_ids=1&participant_ids=2).
+// Huma disables `explode` on query params by default, which silently keeps only the
+// FIRST occurrence and drops the rest — so selecting a second character had no effect
+// and the list stayed filtered on the first character alone.
+func TestGameAPI_ConversationFilter_RepeatedQueryParams(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "private_messages", "conversation_participants", "conversations", "characters", "game_participants", "games", "users")
+
+	app := core.NewTestApp(testDB.Pool)
+	router := setupGameTestRouter(app, testDB)
+
+	gm := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	p1 := testDB.CreateTestUser(t, "player1", "player1@example.com")
+	p2 := testDB.CreateTestUser(t, "player2", "player2@example.com")
+	p3 := testDB.CreateTestUser(t, "player3", "player3@example.com")
+
+	gmToken, err := core.CreateTestJWTTokenForUser(app, gm)
+	require.NoError(t, err)
+
+	game := testDB.CreateTestGame(t, int32(gm.ID), "Test Game")
+	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	for _, u := range []int32{int32(p1.ID), int32(p2.ID), int32(p3.ID)} {
+		_, err = gameService.AddGameParticipant(context.Background(), game.ID, u, "player")
+		require.NoError(t, err)
+	}
+
+	characterService := &db.CharacterService{DB: testDB.Pool, Logger: app.ObsLogger}
+	mkChar := func(u int32, name string) int32 {
+		c, err := characterService.CreateCharacter(context.Background(), db.CreateCharacterRequest{
+			GameID: game.ID, UserID: &u, Name: name, CharacterType: "player_character",
+		})
+		require.NoError(t, err)
+		return c.ID
+	}
+	alpha := mkChar(int32(p1.ID), "Alpha")
+	beta := mkChar(int32(p2.ID), "Beta")
+	gamma := mkChar(int32(p3.ID), "Gamma")
+
+	// Three conversations so that filtering on {Alpha,Beta} has something to exclude
+	// in both directions: Alpha-Gamma has Alpha but not Beta, Beta-Gamma the reverse.
+	conversationService := db.NewConversationService(testDB.Pool, nil)
+	mkConv := func(title string, participants ...int32) {
+		_, err := conversationService.CreateConversation(context.Background(), db.CreateConversationRequest{
+			GameID: game.ID, Title: title, CreatedByUserID: int32(p1.ID), ParticipantIDs: participants,
+		})
+		require.NoError(t, err)
+	}
+	mkConv("Alpha-Beta", alpha, beta)
+	mkConv("Alpha-Gamma", alpha, gamma)
+	mkConv("Beta-Gamma", beta, gamma)
+
+	getConvs := func(t *testing.T, query string) ([]string, float64) {
+		t.Helper()
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/games/%d/private-messages/all%s", game.ID, query), nil)
+		req.Header.Set("Authorization", "Bearer "+gmToken)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var response struct {
+			Conversations []struct {
+				Subject *string `json:"subject"`
+			} `json:"conversations"`
+			Total float64 `json:"total"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		titles := make([]string, 0, len(response.Conversations))
+		for _, c := range response.Conversations {
+			if c.Subject != nil {
+				titles = append(titles, *c.Subject)
+			}
+		}
+		return titles, response.Total
+	}
+
+	t.Run("single participant filter returns every conversation with that character", func(t *testing.T) {
+		titles, total := getConvs(t, fmt.Sprintf("?participant_ids=%d", alpha))
+		assert.ElementsMatch(t, []string{"Alpha-Beta", "Alpha-Gamma"}, titles)
+		assert.Equal(t, float64(2), total, "total must reflect the filter, not the unfiltered count")
+	})
+
+	t.Run("two participants as repeated params AND together", func(t *testing.T) {
+		titles, total := getConvs(t, fmt.Sprintf("?participant_ids=%d&participant_ids=%d", alpha, beta))
+		assert.Equal(t, []string{"Alpha-Beta"}, titles,
+			"selecting a second character must narrow the list to conversations involving BOTH")
+		assert.Equal(t, float64(1), total)
+	})
+
+	t.Run("repeated params AND regardless of order", func(t *testing.T) {
+		// Guards specifically against reading only the first occurrence: with that bug
+		// this ordering matched on Beta alone and wrongly included Beta-Gamma.
+		titles, _ := getConvs(t, fmt.Sprintf("?participant_ids=%d&participant_ids=%d", beta, alpha))
+		assert.Equal(t, []string{"Alpha-Beta"}, titles)
+	})
+
+	t.Run("three participants with no shared conversation return nothing", func(t *testing.T) {
+		titles, total := getConvs(t, fmt.Sprintf("?participant_ids=%d&participant_ids=%d&participant_ids=%d", alpha, beta, gamma))
+		assert.Empty(t, titles, "no conversation has all three characters")
+		assert.Equal(t, float64(0), total)
+	})
+
+	t.Run("participants filter narrows options to co-participants via repeated selected[]", func(t *testing.T) {
+		// The chip list must narrow as the selection grows, otherwise the UI offers
+		// characters that would produce an empty result.
+		req := httptest.NewRequest("GET", fmt.Sprintf(
+			"/api/v1/games/%d/private-messages/participants?selected%%5B%%5D=%d&selected%%5B%%5D=%d",
+			game.ID, alpha, beta), nil)
+		req.Header.Set("Authorization", "Bearer "+gmToken)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var response struct {
+			Participants []struct {
+				Name string `json:"name"`
+			} `json:"participants"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		names := make([]string, 0, len(response.Participants))
+		for _, p := range response.Participants {
+			names = append(names, p.Name)
+		}
+		assert.ElementsMatch(t, []string{"Alpha", "Beta"}, names,
+			"only Alpha-Beta matches both, so Gamma must not be offered")
+	})
+}

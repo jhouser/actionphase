@@ -9728,7 +9728,7 @@ paths:
                     description: Defaults to 0; unparseable or negative values are ignored
                     type: string
                 - description: Filter to conversations involving all these character IDs
-                  explode: false
+                  explode: true
                   in: query
                   name: participant_ids
                   schema:
@@ -9808,7 +9808,7 @@ paths:
                     format: int32
                     type: integer
                 - description: Character IDs to intersect on
-                  explode: false
+                  explode: true
                   in: query
                   name: selected[]
                   schema:

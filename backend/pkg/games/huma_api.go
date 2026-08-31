@@ -1856,11 +1856,17 @@ func (h *Handler) humaListAudienceNPCs(ctx context.Context, in *gameScopedInput)
 // values rather than rejecting them (gotcha 18).
 //
 // participant_ids is different — it 400s on a non-integer, so it is typed.
+//
+// It must carry `explode`: Huma defaults query arrays to comma-separated in a
+// single value and then keeps only the FIRST occurrence of a repeated param.
+// The client sends the filter as repeated params, so without `explode` every
+// character after the first was silently dropped and selecting a second
+// character did nothing.
 type listConversationsInput struct {
 	GameID         int32   `path:"gameID" doc:"Game ID"`
 	Limit          string  `query:"limit" required:"false" doc:"Defaults to 20; unparseable or non-positive values are ignored"`
 	Offset         string  `query:"offset" required:"false" doc:"Defaults to 0; unparseable or negative values are ignored"`
-	ParticipantIDs []int32 `query:"participant_ids" required:"false" doc:"Filter to conversations involving all these character IDs"`
+	ParticipantIDs []int32 `query:"participant_ids,explode" required:"false" doc:"Filter to conversations involving all these character IDs"`
 }
 
 func (h *Handler) humaListAllPrivateConversations(ctx context.Context, in *listConversationsInput) (*privateConversationsOutput, error) {
@@ -2003,8 +2009,10 @@ func (h *Handler) humaGetAudienceConversationMessages(ctx context.Context, in *c
 // conversationParticipantsInput's filter param is literally named "selected[]",
 // brackets included, which is what the frontend sends.
 type conversationParticipantsInput struct {
-	GameID   int32   `path:"gameID" doc:"Game ID"`
-	Selected []int32 `query:"selected[]" required:"false" doc:"Character IDs to intersect on"`
+	GameID int32 `path:"gameID" doc:"Game ID"`
+	// `explode` for the same reason as listConversationsInput.ParticipantIDs:
+	// repeated params are otherwise truncated to the first value.
+	Selected []int32 `query:"selected[],explode" required:"false" doc:"Character IDs to intersect on"`
 }
 
 func (h *Handler) humaGetConversationParticipants(ctx context.Context, in *conversationParticipantsInput) (*conversationParticipantsOutput, error) {
