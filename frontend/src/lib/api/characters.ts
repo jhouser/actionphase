@@ -68,6 +68,19 @@ export class CharactersApi extends BaseApiClient {
     return this.client.get<CharacterData[]>(`/api/v1/characters/${id}/data`);
   }
 
+  /**
+   * Sheet rows for every character in a game, keyed by character id as a string.
+   *
+   * One request in place of one per character. The backend filters each
+   * character's rows to what the caller may see, so the response can be used
+   * as-is: there is no client-side visibility rule to apply on top.
+   */
+  async getGameCharacterData(gameId: number) {
+    return this.client.get<Record<string, CharacterData[]>>(
+      `/api/v1/games/${gameId}/characters/data`
+    );
+  }
+
   // Avatar endpoints
   async uploadCharacterAvatar(characterId: number, file: File) {
     logger.debug('Avatar upload starting', {

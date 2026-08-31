@@ -103,6 +103,17 @@ SELECT * FROM character_data
 WHERE character_id = $1 AND is_public = true
 ORDER BY module_type, field_name;
 
+-- Every sheet row for a game, tagged with the owning user so the caller can
+-- apply per-character visibility without a query per character. Rows come back
+-- for the whole cast; filtering is the handler's job via core.SheetAccess,
+-- which is the single definition of that rule.
+-- name: GetCharacterDataByGame :many
+SELECT cd.*, c.user_id AS owner_id
+FROM character_data cd
+JOIN characters c ON c.id = cd.character_id
+WHERE c.game_id = $1
+ORDER BY cd.character_id, cd.module_type, cd.field_name;
+
 -- name: DeleteCharacterData :exec
 DELETE FROM character_data
 WHERE character_id = $1 AND module_type = $2 AND field_name = $3;

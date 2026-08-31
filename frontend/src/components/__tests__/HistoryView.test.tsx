@@ -998,4 +998,202 @@ describe('HistoryView', () => {
       expect(screen.queryByText(/filter by character/i)).not.toBeInTheDocument();
     });
   });
+
+  // A [[Name|type:uuid]] reference in a submission or result renders as a mark
+  // regardless, but the hover tooltip needs the character's sheet items to
+  // resolve the uuid. HistoryView rendered CollapsibleMarkdown without
+  // sheetItemRefs, so every reference in the History tab was an inert
+  // highlight — the same submission showed a working tooltip on the Actions
+  // tab, which passes them via useCharacterSheetItems.
+  //
+  // The fetch is deliberately keyed to the expanded card: it is one request per
+  // character whose content is actually being read, and the backend decides
+  // what comes back (full sheet for GM/audience/archive, public fields
+  // otherwise), so the client never has to reason about visibility itself.
+
+  // A [[Name|type:uuid]] reference renders as a mark regardless, but the hover
+  // tooltip needs the character's sheet items to resolve the uuid. HistoryView
+  // rendered CollapsibleMarkdown without sheetItemRefs, so every reference in
+  // the History tab was an inert highlight — the same submission showed a
+  // working tooltip on the Actions tab, which passes them.
+  describe('sheet item tooltips', () => {
+    const SHADE = 42;
+    const SKILL_ID = 'a1e8c0d2-3b47-4f19-9c6a-5d2e7f081b34';
+    const REF = `[[Compel|skill:${SKILL_ID}]]`;
+    const DESCRIPTION = 'Force a ghost or spirit to obey.';
+
+    const shadeSheetData = [
+      {
+        module_type: 'skills',
+        field_name: 'skills',
+        field_value: JSON.stringify([
+          {
+            id: SKILL_ID,
+            name: 'Compel',
+            rank: '2',
+            description: DESCRIPTION,
+            category: 'Arcane',
+          },
+        ]),
+        // Skills are always stored private (CharacterSheet.saveJsonField
+        // hardcodes is_public=false); the endpoint decides per viewer whether
+        // to return the row at all. A viewer who gets this row is one the
+        // backend already cleared, so the flag is false here to match what a
+        // real payload looks like.
+        is_public: false,
+      },
+    ];
+
+    const setupSheetHandlers = (opts: { onSheetFetch?: (gameId: string) => void } = {}) => {
+      server.use(
+        http.get('/api/v1/games/:gameId/characters/data', ({ params }) => {
+          opts.onSheetFetch?.(String(params.gameId));
+          return HttpResponse.json({ [String(SHADE)]: shadeSheetData });
+        }),
+        http.get('/api/v1/games/:gameId/actions/mine', () =>
+          HttpResponse.json([
+            {
+              id: 601,
+              game_id: mockGameId,
+              phase_id: 2,
+              user_id: 1,
+              character_id: SHADE,
+              character_name: 'Shade',
+              content: `I use ${REF} to distract them.`,
+              submitted_at: '2025-01-03T18:00:00Z',
+              created_at: '2025-01-03T18:00:00Z',
+              updated_at: '2025-01-03T18:00:00Z',
+            },
+          ])
+        ),
+      );
+    };
+
+    const renderAsPlayer = (subTab: 'submissions' | 'results' = 'submissions') =>
+      renderWithProviders(
+        <HistoryView gameId={mockGameId} currentPhaseId={mockCurrentPhaseId} isGM={false} />,
+        { initialRoute: `/games/1?tab=history&phase=2&subTab=${subTab}`, gameId: mockGameId }
+      );
+
+    it('shows the item detail when a submission reference is hovered', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      setupSheetHandlers();
+      renderAsPlayer();
+
+      await user.hover(await screen.findByText('[[Compel]]'));
+
+      // The resolved item, not just the raw reference text.
+      expect(await screen.findByText(DESCRIPTION)).toBeInTheDocument();
+      expect(screen.getByText('Compel')).toBeInTheDocument();
+      expect(screen.getByText('Arcane · Rank 2')).toBeInTheDocument();
+    });
+
+    it('shows the item detail for an action result reference', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      server.use(
+        http.get('/api/v1/games/:gameId/characters/data', () =>
+          HttpResponse.json({ [String(SHADE)]: shadeSheetData })
+        ),
+        http.get('/api/v1/games/:gameId/results/mine', () =>
+          HttpResponse.json([
+            {
+              id: 701,
+              game_id: mockGameId,
+              phase_id: 2,
+              character_id: SHADE,
+              character_name: 'Shade',
+              content: `Your ${REF} takes hold.`,
+              is_published: true,
+              sent_at: '2025-01-04T10:00:00Z',
+              created_at: '2025-01-04T10:00:00Z',
+            },
+          ])
+        ),
+      );
+
+      renderAsPlayer('results');
+
+      await user.hover(await screen.findByText('[[Compel]]'));
+
+      expect(await screen.findByText(DESCRIPTION)).toBeInTheDocument();
+    });
+
+    // The regression this guards against is subtler than "no tooltips at all":
+    // gating the sheet fetch on the card being expanded looks correct on long
+    // content, but a reference sitting inside the collapsed height is visible
+    // and hoverable immediately, and would silently have no tooltip.
+    it('resolves a reference that is visible while the card is still collapsed', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      // jsdom does no layout, so nothing ever exceeds the collapsed height and
+      // no card would collapse. Report a height taller than the 160px default.
+      const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+        configurable: true,
+        get: () => 500,
+      });
+      try {
+      setupSheetHandlers();
+      renderAsPlayer();
+
+      // Precondition: the card really is collapsed, and the mark is on screen.
+      const collapsed = await screen.findByText('[[Compel]]');
+      expect(collapsed.closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'true');
+
+      await user.hover(collapsed);
+
+      expect(await screen.findByText(DESCRIPTION)).toBeInTheDocument();
+      } finally {
+        if (original) {
+          Object.defineProperty(HTMLElement.prototype, 'scrollHeight', original);
+        } else {
+          delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight;
+        }
+      }
+    });
+
+    // The per-character fetch this replaced fired one request per rendered
+    // card, so opening a phase with the whole cast in it produced a burst of
+    // simultaneous requests. One game-scoped request covers every character.
+    it('loads the whole cast in a single request', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      const fetched: string[] = [];
+      setupSheetHandlers({ onSheetFetch: (gameId) => fetched.push(gameId) });
+      renderAsPlayer();
+
+      await user.hover(await screen.findByText('[[Compel]]'));
+      expect(await screen.findByText(DESCRIPTION)).toBeInTheDocument();
+
+      expect(fetched).toEqual([String(mockGameId)]);
+    });
+
+    // A character the caller may not see the sheet of comes back with no rows.
+    // The reference still renders; it simply has no tooltip behind it.
+    it('renders a reference with no tooltip when the sheet is not visible', async () => {
+      const user = (await import('@testing-library/user-event')).default.setup();
+      server.use(
+        http.get('/api/v1/games/:gameId/characters/data', () => HttpResponse.json({})),
+        http.get('/api/v1/games/:gameId/actions/mine', () =>
+          HttpResponse.json([
+            {
+              id: 601,
+              game_id: mockGameId,
+              phase_id: 2,
+              user_id: 1,
+              character_id: SHADE,
+              character_name: 'Shade',
+              content: `I use ${REF} to distract them.`,
+              submitted_at: '2025-01-03T18:00:00Z',
+              created_at: '2025-01-03T18:00:00Z',
+              updated_at: '2025-01-03T18:00:00Z',
+            },
+          ])
+        ),
+      );
+      renderAsPlayer();
+
+      await user.hover(await screen.findByText('[[Compel]]'));
+
+      expect(screen.queryByText(DESCRIPTION)).not.toBeInTheDocument();
+    });
+  });
 });

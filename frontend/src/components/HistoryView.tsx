@@ -12,6 +12,12 @@ import CharacterAvatar from './CharacterAvatar';
 import { useOptionalGameContext } from '../contexts/GameContext';
 import type { ActionWithDetails } from '../types/phases';
 import { useUrlParam } from '../hooks/useUrlParam';
+import { useGameCharacterSheetItems } from '../hooks/useCharacterSheetItems';
+import type { SheetItem } from '../hooks/useCharacterSheetItems';
+
+// Shared empty array: a fresh [] per render would change identity every time and
+// defeat the memoisation in MarkdownPreview.
+const EMPTY_SHEET_ITEMS: SheetItem[] = [];
 
 const phaseParamOptions = {
   deserialize: (s: string) => parseInt(s, 10) || null,
@@ -31,6 +37,40 @@ const characterFilterParamOptions = {
     ),
   serialize: (v: Set<number>) => [...v].join(','),
 } as const;
+
+/**
+ * Collapsible action content whose `[[Name|type:uuid]]` references resolve to
+ * real hover tooltips.
+ *
+ * Purely presentational: the sheet items are handed down rather than fetched
+ * here. HistoryView loads the whole cast's sheets in a single request (see
+ * useGameCharacterSheetItems), so these cards -- which are produced inside a
+ * `.map()`, where a hook cannot be called per row anyway -- need no fetch of
+ * their own.
+ *
+ * `sheetItems` is empty for a character whose sheet this caller may not see. The
+ * reference still renders as a highlight, it just has no tooltip behind it,
+ * which is the same thing the Actions tab has always done.
+ */
+interface SheetAwareMarkdownProps {
+  content: string;
+  sheetItems: SheetItem[];
+  expanded: boolean;
+  onExpandedChange: () => void;
+}
+
+function SheetAwareMarkdown({ content, sheetItems, expanded, onExpandedChange }: SheetAwareMarkdownProps) {
+  return (
+    <CollapsibleMarkdown
+      content={content}
+      fullWidth
+      fadeSurface="surface-raised"
+      sheetItemRefs={sheetItems}
+      expanded={expanded}
+      onExpandedChange={onExpandedChange}
+    />
+  );
+}
 
 interface HistoryViewProps {
   gameId: number;
@@ -57,6 +97,12 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
     characterId
       ? (allGameCharacters?.find(c => c.id === characterId)?.avatar_url ?? null)
       : null;
+
+  // The whole cast's sheet items in one request, so a phase drill-down showing
+  // many characters' content resolves every [[ref]] without a fetch per card.
+  const sheetItemsByCharacter = useGameCharacterSheetItems(gameId);
+  const getSheetItems = (characterId?: number | null): SheetItem[] =>
+    (characterId ? sheetItemsByCharacter.get(characterId) : undefined) ?? EMPTY_SHEET_ITEMS;
   const [selectedPhaseId, setSelectedPhaseId] = useUrlParam<number | null>(
     'phase',
     null,
@@ -461,10 +507,9 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                                 </div>
                               </div>
                             </div>
-                            <CollapsibleMarkdown
+                            <SheetAwareMarkdown
                               content={submission.content}
-                              fullWidth
-                              fadeSurface="surface-raised"
+                              sheetItems={getSheetItems(submission.character_id)}
                               expanded={isExpanded}
                               onExpandedChange={() => expandedSubmissions.toggle(submission.id)}
                             />
@@ -534,10 +579,9 @@ export function HistoryView({ gameId, currentPhaseId, isGM = false, isAudience =
                                 )}
                               </div>
                             </div>
-                            <CollapsibleMarkdown
+                            <SheetAwareMarkdown
                               content={result.content}
-                              fullWidth
-                              fadeSurface="surface-raised"
+                              sheetItems={getSheetItems(result.character_id)}
                               expanded={isExpanded}
                               onExpandedChange={() => expandedResults.toggle(result.id)}
                             />
