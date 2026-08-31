@@ -234,6 +234,13 @@ func (td *TestDatabase) CleanupTables(t TestingInterface, tables ...string) {
 			"characters",
 			// Top-level tables (least dependent)
 			"games",
+			// Communities sit between games and users: games reference a
+			// community (ON DELETE RESTRICT) and a community references its
+			// owner (also RESTRICT), so both must be cleared after games and
+			// before users or the users DELETE is refused and every later test
+			// collides on the unique email.
+			"community_moderators",
+			"communities",
 			"registration_attempts",
 			"sessions",
 			"users",

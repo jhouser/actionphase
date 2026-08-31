@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { Button, Input } from './ui';
+import { useState } from 'react';
+import { Button } from './ui';
 import { Modal } from './Modal';
 import { useAddParticipant } from '../hooks/usePlayerManagement';
-import { apiClient } from '../lib/api';
+import { UserSearchSelect, type SelectedUser } from './UserSearchSelect';
 import { logger } from '@/services/LoggingService';
 
 interface AddParticipantModalProps {
@@ -13,12 +12,6 @@ interface AddParticipantModalProps {
   onClose: () => void;
   onSuccess?: () => void;
   excludeUserIds?: number[];
-}
-
-interface SearchResult {
-  id: number;
-  username: string;
-  created_at: string;
 }
 
 const CONFIG = {
@@ -36,90 +29,12 @@ const CONFIG = {
   },
 } as const;
 
-interface DropdownPosition {
-  top: number;
-  left: number;
-  width: number;
-}
-
 const EMPTY_ARRAY: number[] = [];
 
 export function AddParticipantModal({ gameId, role, isOpen, onClose, onSuccess, excludeUserIds = EMPTY_ARRAY }: AddParticipantModalProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [selectedUser, setSelectedUser] = useState<SearchResult | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [dropdownPos, setDropdownPos] = useState<DropdownPosition | null>(null);
-  const inputWrapperRef = useRef<HTMLDivElement>(null);
+  const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
   const addParticipant = useAddParticipant(gameId, role);
   const config = CONFIG[role];
-
-  const updateDropdownPos = () => {
-    if (!inputWrapperRef.current) return;
-    const rect = inputWrapperRef.current.getBoundingClientRect();
-    setDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-  };
-
-  useEffect(() => {
-    if (!searchQuery.trim() || selectedUser) {
-      setSearchResults([]);
-      setShowDropdown(false);
-      return;
-    }
-
-    const timeoutId = setTimeout(async () => {
-      setIsSearching(true);
-      updateDropdownPos();
-      try {
-        const response = await apiClient.auth.searchUsers(searchQuery);
-        const filtered = excludeUserIds.length > 0
-          ? response.data.users.filter((u: SearchResult) => !excludeUserIds.includes(u.id))
-          : response.data.users;
-        setSearchResults(filtered);
-        setShowDropdown(true);
-      } catch (error) {
-        logger.error('Failed to search users', { error, searchQuery });
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery, selectedUser, excludeUserIds]);
-
-  // Keep dropdown position in sync if the window is resized while open
-  useEffect(() => {
-    if (!showDropdown) return;
-    const handler = () => updateDropdownPos();
-    window.addEventListener('resize', handler);
-    window.addEventListener('scroll', handler, true);
-    return () => {
-      window.removeEventListener('resize', handler);
-      window.removeEventListener('scroll', handler, true);
-    };
-  }, [showDropdown]);
-
-  useEffect(() => {
-    if (!showDropdown) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const insideInput = inputWrapperRef.current?.contains(target);
-      const insideDropdown = document.getElementById('participant-search-dropdown')?.contains(target);
-      if (!insideInput && !insideDropdown) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showDropdown]);
-
-  const handleSelectUser = (user: SearchResult) => {
-    setSelectedUser(user);
-    setSearchQuery(user.username);
-    setShowDropdown(false);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,7 +42,6 @@ export function AddParticipantModal({ gameId, role, isOpen, onClose, onSuccess, 
 
     try {
       await addParticipant.mutateAsync(selectedUser.id);
-      setSearchQuery('');
       setSelectedUser(null);
       onClose();
       onSuccess?.();
@@ -138,52 +52,11 @@ export function AddParticipantModal({ gameId, role, isOpen, onClose, onSuccess, 
 
   const handleClose = () => {
     if (!addParticipant.isPending) {
-      setSearchQuery('');
       setSelectedUser(null);
-      setSearchResults([]);
-      setShowDropdown(false);
       addParticipant.reset();
       onClose();
     }
   };
-
-  const dropdown = showDropdown && dropdownPos && (
-    <div
-      id="participant-search-dropdown"
-      style={{
-        position: 'fixed',
-        top: dropdownPos.top,
-        left: dropdownPos.left,
-        width: dropdownPos.width,
-        zIndex: 9999,
-      }}
-      className="bg-surface-overlay border border-theme-default rounded-lg shadow-xl max-h-56 overflow-y-auto"
-    >
-      {isSearching && (
-        <p className="px-4 py-3 text-sm text-content-secondary">Searching...</p>
-      )}
-      {!isSearching && searchResults.length === 0 && searchQuery.trim() && (
-        <p className="px-4 py-3 text-sm text-content-secondary">No users found matching "{searchQuery}"</p>
-      )}
-      {!isSearching && searchResults.map((user) => (
-        <button
-          key={user.id}
-          type="button"
-          onMouseDown={(e) => {
-            // Use onMouseDown + preventDefault so the input doesn't lose focus before we register the click
-            e.preventDefault();
-            handleSelectUser(user);
-          }}
-          className="w-full px-4 py-3 text-left bg-surface-overlay hover:surface-raised transition-colors border-b border-theme-default last:border-b-0"
-        >
-          <div className="font-medium text-content-primary">{user.username}</div>
-          <div className="text-sm text-content-secondary">
-            Joined {new Date(user.created_at).toLocaleDateString()}
-          </div>
-        </button>
-      ))}
-    </div>
-  );
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={config.title}>
@@ -192,29 +65,14 @@ export function AddParticipantModal({ gameId, role, isOpen, onClose, onSuccess, 
           <p className="text-sm text-content-primary">{config.description}</p>
         </div>
 
-        <div ref={inputWrapperRef}>
-          <Input
-            label="Search Users"
-            type="text"
-            placeholder="Type username to search..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setSelectedUser(null);
-            }}
-            onFocus={() => {
-              if (searchResults.length > 0) {
-                updateDropdownPos();
-                setShowDropdown(true);
-              }
-            }}
-            helperText={selectedUser ? `Selected: ${selectedUser.username}` : 'Start typing to search for users'}
-            required
-            disabled={addParticipant.isPending}
-          />
-        </div>
-
-        {createPortal(dropdown, document.body)}
+        <UserSearchSelect
+          value={selectedUser}
+          onChange={setSelectedUser}
+          excludeUserIds={excludeUserIds}
+          dropdownId="participant-search-dropdown"
+          required
+          disabled={addParticipant.isPending}
+        />
 
         {addParticipant.isError && (
           <div className="p-3 rounded-lg bg-semantic-danger-subtle border border-semantic-danger">

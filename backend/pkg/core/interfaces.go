@@ -146,6 +146,31 @@ type IPBanServiceInterface interface {
 	CleanupExpiredIPBans(ctx context.Context) error
 }
 
+// CommunityServiceInterface defines the contract for community management.
+//
+// Creating a community and assigning its owner are site-admin operations; the
+// service does not itself enforce that, the admin route group does. Moderator
+// roster changes are owner-only, which callers gate with
+// CanAdministerCommunity -- see permissions.go.
+type CommunityServiceInterface interface {
+	CreateCommunity(ctx context.Context, req *CreateCommunityRequest) (*Community, error)
+	GetCommunityByID(ctx context.Context, id int32) (*Community, error)
+	GetCommunityBySlug(ctx context.Context, slug string) (*Community, error)
+	ListCommunities(ctx context.Context) ([]*Community, error)
+	ListActiveCommunities(ctx context.Context) ([]*Community, error)
+	UpdateCommunity(ctx context.Context, id int32, req *UpdateCommunityRequest) (*Community, error)
+
+	// Moderator roster. AddModerator/RemoveModerator are owner-only at the
+	// handler layer; the service enforces only data integrity.
+	AddModerator(ctx context.Context, communityID, userID, grantedBy int32) (*CommunityModerator, error)
+	RemoveModerator(ctx context.Context, communityID, userID int32) error
+	ListModerators(ctx context.Context, communityID int32) ([]*CommunityModerator, error)
+
+	// GetRole resolves a user's standing in one round-trip. Owner outranks
+	// moderator; CommunityRoleNone means neither.
+	GetRole(ctx context.Context, communityID, userID int32) (CommunityRole, error)
+}
+
 // FingerprintBanServiceInterface defines the contract for device fingerprint banning.
 type FingerprintBanServiceInterface interface {
 	CreateFingerprintBan(ctx context.Context, fingerprint, reason string, createdBy int32, bannedUserID *int32) (*FingerprintBan, error)

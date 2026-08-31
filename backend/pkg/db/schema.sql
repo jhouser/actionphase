@@ -97,6 +97,35 @@ CREATE TABLE fingerprint_bans (
     banned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
+-- Communities: tenant-like groupings that own games, a moderator roster, a
+-- banlist, and their own documentation. Membership is OPEN -- there is no
+-- roster and no allowlist; the banlist is the whole access-control mechanism.
+CREATE TABLE communities (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    banner_url TEXT,
+    -- RESTRICT: deleting a user must never orphan a community.
+    owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Community moderators. The OWNER IS NOT A ROW HERE: ownership lives in
+-- communities.owner_user_id and permission helpers treat owner as a superset
+-- of moderator, which is what makes "moderators can do everything except add
+-- moderators" a clean two-tier check.
+CREATE TABLE community_moderators (
+    id SERIAL PRIMARY KEY,
+    community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    granted_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(community_id, user_id)
+);
+
 -- Games table
 CREATE TABLE games (
     id SERIAL PRIMARY KEY,
@@ -124,6 +153,10 @@ CREATE TABLE games (
     -- composition later). Sparse: '{}' means all defaults, which live in the
     -- frontend. See core.CharacterSheetConfig.
     character_sheet JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- Owning community. NULLABLE ON PURPOSE: games created before Communities
+    -- existed are grandfathered in without one. New games require a community,
+    -- but that is enforced in the application create path, never by NOT NULL.
+    community_id INTEGER REFERENCES communities(id) ON DELETE RESTRICT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

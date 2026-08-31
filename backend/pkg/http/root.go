@@ -10,6 +10,7 @@ import (
 	"actionphase/pkg/dashboard"
 	db "actionphase/pkg/db/services"
 	dbactions "actionphase/pkg/db/services/actions"
+	dbcommunities "actionphase/pkg/db/services/communities"
 	dbmessages "actionphase/pkg/db/services/messages"
 	dbphases "actionphase/pkg/db/services/phases"
 	"actionphase/pkg/deadlines"
@@ -675,6 +676,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			IPBanService:          &db.IPBanService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 			FingerprintBanService: &db.FingerprintBanService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 			MessageService:        &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
+			CommunityService:      &dbcommunities.CommunityService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 		}
 
 		// All admin routes require authentication and admin privileges

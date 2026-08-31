@@ -41,3 +41,27 @@ var ErrCannotEditChain = errors.New("cannot edit staged chain")
 // should surface it with ErrCodeInvalidGameState so a client can distinguish it
 // from a genuine server fault.
 var ErrInvalidStateTransition = errors.New("invalid game state transition")
+
+// ErrCommunityNotFound is returned when a community lookup by ID or slug finds
+// no row. Handlers translate it to 404; without it a missing community reads as
+// a 500.
+var ErrCommunityNotFound = errors.New("community not found")
+
+// ErrCommunitySlugTaken is returned when a create would collide with an
+// existing slug. Handlers translate it to 400 rather than surfacing the raw
+// unique-violation.
+var ErrCommunitySlugTaken = errors.New("community slug already taken")
+
+// ErrOwnerCannotBeModerator is returned when adding the community owner to the
+// moderator roster.
+//
+// The owner is intentionally NOT a row in community_moderators -- ownership
+// lives in communities.owner_user_id, and the permission helpers treat owner as
+// a superset of moderator. Allowing a duplicate owner row would create a
+// community whose owner could be "demoted" by removing a moderator row while
+// still owning it.
+var ErrOwnerCannotBeModerator = errors.New("the community owner already has full moderation powers")
+
+// ErrAlreadyModerator is returned when adding a user who already moderates the
+// community.
+var ErrAlreadyModerator = errors.New("user is already a moderator of this community")

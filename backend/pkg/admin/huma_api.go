@@ -426,4 +426,9 @@ func RegisterHumaAdmin(api huma.API, h *Handler) {
 
 	huma.Register(api, op("adminDeleteMessage", http.MethodDelete, "/messages/{messageId}",
 		"Delete a message (moderation)", http.StatusNoContent), h.HumaDeleteMessage)
+
+	// Community routes live in communities.go to keep this file from growing
+	// unbounded. Registration order matters there: the literal
+	// /communities/slug-available must precede /communities/{id}.
+	RegisterHumaAdminCommunities(api, h, op)
 }

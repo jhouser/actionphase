@@ -984,6 +984,51 @@ components:
                 - created_at
                 - updated_at
             type: object
+        Community:
+            additionalProperties: false
+            properties:
+                banner_url:
+                    type:
+                        - string
+                        - "null"
+                created_at:
+                    format: date-time
+                    type: string
+                description:
+                    type:
+                        - string
+                        - "null"
+                game_count:
+                    format: int64
+                    type: integer
+                id:
+                    format: int32
+                    type: integer
+                is_active:
+                    type: boolean
+                name:
+                    type: string
+                owner_user_id:
+                    format: int32
+                    type: integer
+                owner_username:
+                    type: string
+                slug:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - name
+                - slug
+                - description
+                - banner_url
+                - owner_user_id
+                - is_active
+                - created_at
+                - updated_at
+            type: object
         ControllableCharacterResponse:
             additionalProperties: false
             properties:
@@ -1267,6 +1312,32 @@ components:
             required:
                 - character_id
                 - content
+            type: object
+        CreateCommunityInputBody:
+            additionalProperties: false
+            properties:
+                description:
+                    description: Markdown blurb shown on the community page
+                    type: string
+                name:
+                    description: Display name
+                    maxLength: 255
+                    minLength: 2
+                    type: string
+                owner_user_id:
+                    description: User who will own this community
+                    format: int32
+                    minimum: 1
+                    type: integer
+                slug:
+                    description: URL identifier; lowercase letters, digits, and single interior hyphens. Immutable after creation.
+                    maxLength: 100
+                    minLength: 2
+                    type: string
+            required:
+                - name
+                - slug
+                - owner_user_id
             type: object
         CreateConversationRequest:
             additionalProperties: false
@@ -4248,6 +4319,26 @@ components:
             required:
                 - content
             type: object
+        UpdateCommunityInputBody:
+            additionalProperties: false
+            properties:
+                description:
+                    description: Markdown blurb
+                    type: string
+                is_active:
+                    description: Deactivate to stop the community accepting new games
+                    type: boolean
+                name:
+                    description: Display name
+                    maxLength: 255
+                    minLength: 2
+                    type: string
+                owner_user_id:
+                    description: Reassign ownership to this user
+                    format: int32
+                    minimum: 1
+                    type: integer
+            type: object
         UpdateDeadlineBody:
             additionalProperties: false
             properties:
@@ -4820,6 +4911,87 @@ paths:
             security:
                 - BearerAuth: []
             summary: List all admin users
+            tags:
+                - Admin
+    /admin/communities:
+        get:
+            operationId: adminListCommunities
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/Community'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not an admin
+            security:
+                - BearerAuth: []
+            summary: List all communities
+            tags:
+                - Admin
+        post:
+            operationId: adminCreateCommunity
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateCommunityInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Community'
+                    description: Created
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not an admin
+            security:
+                - BearerAuth: []
+            summary: Create a community and assign its owner
+            tags:
+                - Admin
+    /admin/communities/{id}:
+        patch:
+            operationId: adminUpdateCommunity
+            parameters:
+                - description: Community ID
+                  in: path
+                  name: id
+                  required: true
+                  schema:
+                    description: Community ID
+                    format: int32
+                    type: integer
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateCommunityInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Community'
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not an admin
+            security:
+                - BearerAuth: []
+            summary: Update a community, reassign its owner, or deactivate it
             tags:
                 - Admin
     /admin/fingerprint-bans:

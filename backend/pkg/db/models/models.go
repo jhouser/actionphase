@@ -181,6 +181,26 @@ type CommonRoomPoll struct {
 	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Community struct {
+	ID          int32              `json:"id"`
+	Name        string             `json:"name"`
+	Slug        string             `json:"slug"`
+	Description pgtype.Text        `json:"description"`
+	BannerUrl   pgtype.Text        `json:"banner_url"`
+	OwnerUserID int32              `json:"owner_user_id"`
+	IsActive    bool               `json:"is_active"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CommunityModerator struct {
+	ID              int32              `json:"id"`
+	CommunityID     int32              `json:"community_id"`
+	UserID          int32              `json:"user_id"`
+	GrantedByUserID pgtype.Int4        `json:"granted_by_user_id"`
+	GrantedAt       pgtype.Timestamptz `json:"granted_at"`
+}
+
 type Conversation struct {
 	ID               int32              `json:"id"`
 	GameID           int32              `json:"game_id"`
@@ -252,6 +272,7 @@ type Game struct {
 	CommonRoomCloseTime     pgtype.Time        `json:"common_room_close_time"`
 	ScheduleTimezone        pgtype.Text        `json:"schedule_timezone"`
 	CharacterSheet          []byte             `json:"character_sheet"`
+	CommunityID             pgtype.Int4        `json:"community_id"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }

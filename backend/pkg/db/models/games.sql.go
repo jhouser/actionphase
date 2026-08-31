@@ -218,7 +218,7 @@ INSERT INTO games (
     -- column in the INSERT disables the column DEFAULT, so the default has to be
     -- restated here.
     COALESCE($20::jsonb, '{}'::jsonb)
-) RETURNING id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, created_at, updated_at
+) RETURNING id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, community_id, created_at, updated_at
 `
 
 type CreateGameParams struct {
@@ -291,6 +291,7 @@ func (q *Queries) CreateGame(ctx context.Context, arg CreateGameParams) (Game, e
 		&i.CommonRoomCloseTime,
 		&i.ScheduleTimezone,
 		&i.CharacterSheet,
+		&i.CommunityID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -374,7 +375,7 @@ func (q *Queries) GetActiveParticipants(ctx context.Context, gameID int32) ([]Ge
 }
 
 const getGame = `-- name: GetGame :one
-SELECT id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, created_at, updated_at FROM games WHERE id = $1
+SELECT id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, community_id, created_at, updated_at FROM games WHERE id = $1
 `
 
 func (q *Queries) GetGame(ctx context.Context, id int32) (Game, error) {
@@ -403,6 +404,7 @@ func (q *Queries) GetGame(ctx context.Context, id int32) (Game, error) {
 		&i.CommonRoomCloseTime,
 		&i.ScheduleTimezone,
 		&i.CharacterSheet,
+		&i.CommunityID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -515,7 +517,7 @@ func (q *Queries) GetGameParticipants(ctx context.Context, gameID int32) ([]GetG
 
 const getGameWithDetails = `-- name: GetGameWithDetails :one
 SELECT
-    g.id, g.title, g.description, g.gm_user_id, g.state, g.genre, g.start_date, g.end_date, g.recruitment_deadline, g.max_players, g.is_public, g.is_anonymous, g.auto_accept_audience, g.allow_group_conversations, g.portrait_avatars, g.banner_url, g.common_room_open_day, g.common_room_open_time, g.common_room_close_day, g.common_room_close_time, g.schedule_timezone, g.character_sheet, g.created_at, g.updated_at,
+    g.id, g.title, g.description, g.gm_user_id, g.state, g.genre, g.start_date, g.end_date, g.recruitment_deadline, g.max_players, g.is_public, g.is_anonymous, g.auto_accept_audience, g.allow_group_conversations, g.portrait_avatars, g.banner_url, g.common_room_open_day, g.common_room_open_time, g.common_room_close_day, g.common_room_close_time, g.schedule_timezone, g.character_sheet, g.community_id, g.created_at, g.updated_at,
     u.username as gm_username,
     COALESCE(pc.player_count, 0) as current_players
 FROM games g
@@ -552,6 +554,7 @@ type GetGameWithDetailsRow struct {
 	CommonRoomCloseTime     pgtype.Time        `json:"common_room_close_time"`
 	ScheduleTimezone        pgtype.Text        `json:"schedule_timezone"`
 	CharacterSheet          []byte             `json:"character_sheet"`
+	CommunityID             pgtype.Int4        `json:"community_id"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	GmUsername              pgtype.Text        `json:"gm_username"`
@@ -584,6 +587,7 @@ func (q *Queries) GetGameWithDetails(ctx context.Context, id int32) (GetGameWith
 		&i.CommonRoomCloseTime,
 		&i.ScheduleTimezone,
 		&i.CharacterSheet,
+		&i.CommunityID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.GmUsername,
@@ -593,7 +597,7 @@ func (q *Queries) GetGameWithDetails(ctx context.Context, id int32) (GetGameWith
 }
 
 const getGamesByGM = `-- name: GetGamesByGM :many
-SELECT id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, created_at, updated_at FROM games WHERE gm_user_id = $1 ORDER BY created_at DESC
+SELECT id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, community_id, created_at, updated_at FROM games WHERE gm_user_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) GetGamesByGM(ctx context.Context, gmUserID int32) ([]Game, error) {
@@ -628,6 +632,7 @@ func (q *Queries) GetGamesByGM(ctx context.Context, gmUserID int32) ([]Game, err
 			&i.CommonRoomCloseTime,
 			&i.ScheduleTimezone,
 			&i.CharacterSheet,
+			&i.CommunityID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -642,7 +647,7 @@ func (q *Queries) GetGamesByGM(ctx context.Context, gmUserID int32) ([]Game, err
 }
 
 const getGamesByUser = `-- name: GetGamesByUser :many
-SELECT g.id, g.title, g.description, g.gm_user_id, g.state, g.genre, g.start_date, g.end_date, g.recruitment_deadline, g.max_players, g.is_public, g.is_anonymous, g.auto_accept_audience, g.allow_group_conversations, g.portrait_avatars, g.banner_url, g.common_room_open_day, g.common_room_open_time, g.common_room_close_day, g.common_room_close_time, g.schedule_timezone, g.character_sheet, g.created_at, g.updated_at, gp.role as user_role, u.username as gm_username
+SELECT g.id, g.title, g.description, g.gm_user_id, g.state, g.genre, g.start_date, g.end_date, g.recruitment_deadline, g.max_players, g.is_public, g.is_anonymous, g.auto_accept_audience, g.allow_group_conversations, g.portrait_avatars, g.banner_url, g.common_room_open_day, g.common_room_open_time, g.common_room_close_day, g.common_room_close_time, g.schedule_timezone, g.character_sheet, g.community_id, g.created_at, g.updated_at, gp.role as user_role, u.username as gm_username
 FROM games g
 JOIN game_participants gp ON g.id = gp.game_id
 JOIN users u ON g.gm_user_id = u.id
@@ -673,6 +678,7 @@ type GetGamesByUserRow struct {
 	CommonRoomCloseTime     pgtype.Time        `json:"common_room_close_time"`
 	ScheduleTimezone        pgtype.Text        `json:"schedule_timezone"`
 	CharacterSheet          []byte             `json:"character_sheet"`
+	CommunityID             pgtype.Int4        `json:"community_id"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	UserRole                string             `json:"user_role"`
@@ -711,6 +717,7 @@ func (q *Queries) GetGamesByUser(ctx context.Context, userID int32) ([]GetGamesB
 			&i.CommonRoomCloseTime,
 			&i.ScheduleTimezone,
 			&i.CharacterSheet,
+			&i.CommunityID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.UserRole,
@@ -727,7 +734,7 @@ func (q *Queries) GetGamesByUser(ctx context.Context, userID int32) ([]GetGamesB
 }
 
 const getGamesNeedingStateUpdate = `-- name: GetGamesNeedingStateUpdate :many
-SELECT id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, created_at, updated_at FROM games
+SELECT id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, community_id, created_at, updated_at FROM games
 WHERE (state = 'recruitment' AND recruitment_deadline IS NOT NULL AND recruitment_deadline < NOW())
    OR (state = 'in_progress' AND end_date IS NOT NULL AND end_date < NOW())
 `
@@ -764,6 +771,7 @@ func (q *Queries) GetGamesNeedingStateUpdate(ctx context.Context) ([]Game, error
 			&i.CommonRoomCloseTime,
 			&i.ScheduleTimezone,
 			&i.CharacterSheet,
+			&i.CommunityID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -840,7 +848,7 @@ func (q *Queries) GetParticipantRole(ctx context.Context, arg GetParticipantRole
 }
 
 const getRecruitingGames = `-- name: GetRecruitingGames :many
-SELECT games.id, games.title, games.description, games.gm_user_id, games.state, games.genre, games.start_date, games.end_date, games.recruitment_deadline, games.max_players, games.is_public, games.is_anonymous, games.auto_accept_audience, games.allow_group_conversations, games.portrait_avatars, games.banner_url, games.common_room_open_day, games.common_room_open_time, games.common_room_close_day, games.common_room_close_time, games.schedule_timezone, games.character_sheet, games.created_at, games.updated_at, COALESCE(users.username, 'Unknown') as gm_username,
+SELECT games.id, games.title, games.description, games.gm_user_id, games.state, games.genre, games.start_date, games.end_date, games.recruitment_deadline, games.max_players, games.is_public, games.is_anonymous, games.auto_accept_audience, games.allow_group_conversations, games.portrait_avatars, games.banner_url, games.common_room_open_day, games.common_room_open_time, games.common_room_close_day, games.common_room_close_time, games.schedule_timezone, games.character_sheet, games.community_id, games.created_at, games.updated_at, COALESCE(users.username, 'Unknown') as gm_username,
        COALESCE(participant_count.count, 0) as current_players
 FROM games
 LEFT JOIN users ON games.gm_user_id = users.id
@@ -879,6 +887,7 @@ type GetRecruitingGamesRow struct {
 	CommonRoomCloseTime     pgtype.Time        `json:"common_room_close_time"`
 	ScheduleTimezone        pgtype.Text        `json:"schedule_timezone"`
 	CharacterSheet          []byte             `json:"character_sheet"`
+	CommunityID             pgtype.Int4        `json:"community_id"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	GmUsername              string             `json:"gm_username"`
@@ -917,6 +926,7 @@ func (q *Queries) GetRecruitingGames(ctx context.Context) ([]GetRecruitingGamesR
 			&i.CommonRoomCloseTime,
 			&i.ScheduleTimezone,
 			&i.CharacterSheet,
+			&i.CommunityID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.GmUsername,
@@ -1128,7 +1138,7 @@ SET title = $2, description = $3, genre = $4, start_date = $5,
     character_sheet = COALESCE($20::jsonb, games.character_sheet),
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, created_at, updated_at
+RETURNING id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, community_id, created_at, updated_at
 `
 
 type UpdateGameParams struct {
@@ -1201,6 +1211,7 @@ func (q *Queries) UpdateGame(ctx context.Context, arg UpdateGameParams) (Game, e
 		&i.CommonRoomCloseTime,
 		&i.ScheduleTimezone,
 		&i.CharacterSheet,
+		&i.CommunityID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1227,7 +1238,7 @@ const updateGameBannerURL = `-- name: UpdateGameBannerURL :one
 UPDATE games
 SET banner_url = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, created_at, updated_at
+RETURNING id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, community_id, created_at, updated_at
 `
 
 type UpdateGameBannerURLParams struct {
@@ -1261,6 +1272,7 @@ func (q *Queries) UpdateGameBannerURL(ctx context.Context, arg UpdateGameBannerU
 		&i.CommonRoomCloseTime,
 		&i.ScheduleTimezone,
 		&i.CharacterSheet,
+		&i.CommunityID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1271,7 +1283,7 @@ const updateGameState = `-- name: UpdateGameState :one
 UPDATE games
 SET state = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, created_at, updated_at
+RETURNING id, title, description, gm_user_id, state, genre, start_date, end_date, recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url, common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone, character_sheet, community_id, created_at, updated_at
 `
 
 type UpdateGameStateParams struct {
@@ -1305,6 +1317,7 @@ func (q *Queries) UpdateGameState(ctx context.Context, arg UpdateGameStateParams
 		&i.CommonRoomCloseTime,
 		&i.ScheduleTimezone,
 		&i.CharacterSheet,
+		&i.CommunityID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
