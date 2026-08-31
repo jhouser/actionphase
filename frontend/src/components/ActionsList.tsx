@@ -10,7 +10,8 @@ import { Modal } from './Modal';
 import { MarkdownPreview } from './MarkdownPreview';
 import CharacterAvatar from './CharacterAvatar';
 import { useGameContext } from '../contexts/GameContext';
-import { useCharacterSheetItems } from '../hooks/useCharacterSheetItems';
+import { useGameCharacterSheetItems } from '../hooks/useCharacterSheetItems';
+import type { SheetItem } from '../hooks/useCharacterSheetItems';
 import { wasSubmissionEdited } from '../utils/submissionEdits';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -20,12 +21,20 @@ interface ActionsListProps {
   className?: string;
 }
 
+// Shared empty array so a character with no visible sheet keeps a stable
+// identity across renders.
+const EMPTY_SHEET_ITEMS: SheetItem[] = [];
+
 export function ActionsList({ gameId, currentPhase, className = '' }: ActionsListProps) {
   const [selectedPhase, setSelectedPhase] = useState<number | null>(null);
   const [expandedActionId, setExpandedActionId] = useState<number | null>(null);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [showStandaloneComposer, setShowStandaloneComposer] = useState(false);
   const queryClient = useQueryClient();
+
+  // The whole cast's sheet items in one request, for [[ref]] tooltips. Replaces
+  // a per-card fetch that fired once for every action a GM expanded.
+  const sheetItemsByCharacter = useGameCharacterSheetItems(gameId);
 
   // Get all actions for the game
   const { data: actionsData, isLoading } = useQuery({
@@ -261,6 +270,10 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
                 key={action.id}
                 action={action}
                 gameId={gameId}
+                sheetItems={
+                  (action.character_id ? sheetItemsByCharacter.get(action.character_id) : undefined) ??
+                  EMPTY_SHEET_ITEMS
+                }
                 isExpanded={expandedActionId === action.id}
                 onToggleExpand={() => setExpandedActionId(expandedActionId === action.id ? null : action.id)}
               />
@@ -275,16 +288,20 @@ export function ActionsList({ gameId, currentPhase, className = '' }: ActionsLis
 interface ActionCardProps {
   action: ActionWithDetails;
   gameId: number;
+  /**
+   * Sheet items for this action's character, for [[ref]] tooltips. Handed down
+   * rather than fetched here: the list loads the whole cast in one request, so
+   * a long phase no longer fires a request per card. Empty for a character
+   * whose sheet this caller may not see.
+   */
+  sheetItems: SheetItem[];
   isExpanded: boolean;
   onToggleExpand: () => void;
 }
 
-function ActionCard({ action, gameId, isExpanded, onToggleExpand }: ActionCardProps) {
+function ActionCard({ action, gameId, sheetItems, isExpanded, onToggleExpand }: ActionCardProps) {
   const [showResultForm, setShowResultForm] = useState(false);
   const { allGameCharacters, game } = useGameContext();
-
-  // Lazy-fetch character sheet items for [[item]] tooltip resolution when expanded
-  const sheetItems = useCharacterSheetItems(isExpanded && action.character_id ? action.character_id : null);
   const portraitAvatars = game?.portrait_avatars ?? false;
   const avatarUrl = action.character_id
     ? (allGameCharacters.find(c => c.id === action.character_id)?.avatar_url ?? null)

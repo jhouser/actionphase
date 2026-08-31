@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { useCharacterSheetItems } from '../useCharacterSheetItems';
+import { useCharacterSheetItems, useGameCharacterSheetItems } from '../useCharacterSheetItems';
 import type { CharacterData } from '../../types/characters';
 
 vi.mock('../../lib/api', () => ({
   apiClient: {
     characters: {
       getCharacterData: vi.fn(),
+      getGameCharacterData: vi.fn(),
     },
   },
 }));
@@ -157,5 +158,75 @@ describe('useCharacterSheetItems', () => {
     });
 
     expect(result.current[0].name).toBe('Good Skill');
+  });
+});
+
+// The game-scoped variant backs History and Actions, which each render many
+// characters' content at once. It exists to collapse a request per character
+// into one per game.
+describe('useGameCharacterSheetItems', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does not fetch when gameId is null', () => {
+    const { result } = renderHook(() => useGameCharacterSheetItems(null), {
+      wrapper: makeWrapper(),
+    });
+
+    expect(result.current.size).toBe(0);
+    expect(apiClient.characters.getGameCharacterData).not.toHaveBeenCalled();
+  });
+
+  it('keys parsed sheet items by character id', async () => {
+    vi.mocked(apiClient.characters.getGameCharacterData).mockResolvedValue({
+      data: {
+        '7': [
+          makeDataRow({
+            character_id: 7,
+            field_value: JSON.stringify([
+              { id: 'sk-1', name: 'Compel', rank: '2', description: 'Bend a ghost.', category: 'Arcane' },
+            ]),
+          }),
+        ],
+        '9': [
+          makeDataRow({
+            character_id: 9,
+            module_type: 'inventory',
+            field_name: 'items',
+            field_value: JSON.stringify([
+              { id: 'it-1', name: 'Spirit Bottle', description: 'Holds a ghost.', quantity: 1, category: 'Arcane' },
+            ]),
+          }),
+        ],
+      },
+    } as never);
+
+    const { result } = renderHook(() => useGameCharacterSheetItems(3), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.size).toBe(2));
+
+    expect(result.current.get(7)?.[0]).toMatchObject({ name: 'Compel', type: 'skill' });
+    expect(result.current.get(9)?.[0]).toMatchObject({ name: 'Spirit Bottle', type: 'item' });
+  });
+
+  // A character whose sheet the caller may not see is simply absent from the
+  // payload; callers read that as "no tooltips", not as an error.
+  it('yields nothing for a character the response omits', async () => {
+    vi.mocked(apiClient.characters.getGameCharacterData).mockResolvedValue({
+      data: {},
+    } as never);
+
+    const { result } = renderHook(() => useGameCharacterSheetItems(3), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(apiClient.characters.getGameCharacterData).toHaveBeenCalledWith(3)
+    );
+
+    expect(result.current.get(7)).toBeUndefined();
   });
 });

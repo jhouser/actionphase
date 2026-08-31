@@ -64,18 +64,25 @@ BEGIN
   -- Character 1: Skills data (4 skills)
   -- The abilities rows that used to sit here were dropped when abilities were
   -- retired; their content folded into skills, which is what the tab shows now.
+  --
+  -- is_public is false, and must stay false: CharacterSheet.saveJsonField writes
+  -- every skills/inventory/numbers row with is_public=false, because access to
+  -- those tabs is gated per viewer rather than per row. Only free-text bio
+  -- fields carry a real public/private toggle. These rows were seeded `true`,
+  -- which no code path produces -- it made GetPublicCharacterData return skills
+  -- and items to viewers who cannot see them in production.
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char1_id, 'skills', 'skills',
      '[{"id":"skill-1","name":"Archery","rank":"Expert","description":"Master archer","category":"Combat"},{"id":"skill-2","name":"Tracking","rank":"Proficient","description":"Can track creatures","category":"Survival"},{"id":"skill-3","name":"Keen Eye","rank":"Proficient","description":"Can spot hidden details","category":"Perception"},{"id":"skill-4","name":"Quick Draw","rank":"Proficient","description":"Fast weapon draw","category":"Combat"}]',
-     'json', true, NOW(), NOW());
+     'json', false, NOW(), NOW());
 
   -- Character 1: Inventory data (2 items) and numbers
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char1_id, 'inventory', 'items',
      '[{"id":"item-1","name":"Longbow","quantity":1,"description":"Masterwork longbow","category":"Weapon"},{"id":"item-2","name":"Arrows","quantity":20,"description":"Steel-tipped arrows","category":"Ammunition"}]',
-     'json', true, NOW(), NOW()),
+     'json', false, NOW(), NOW()),
     (char1_id, 'numbers', 'numbers',
      '[{"id":"number-1","name":"Gold","amount":50},{"id":"number-2","name":"Stress","amount":4,"max":9,"display":"boxes"}]',
      'json', false, NOW(), NOW());
@@ -100,14 +107,14 @@ BEGIN
   VALUES
     (char2_id, 'skills', 'skills',
      '[{"id":"skill-5","name":"Arcana","rank":"Expert","description":"Knowledge of magical theory","category":"Academic"},{"id":"skill-6","name":"Fireball","rank":"Expert","description":"Launches a ball of fire","category":"Evocation"},{"id":"skill-7","name":"Shield","rank":"Proficient","description":"Creates magical barrier","category":"Abjuration"},{"id":"skill-8","name":"Arcane Knowledge","level":"Expert","description":"Deep understanding of magic","category":"Academic"}]',
-     'json', true, NOW(), NOW());
+     'json', false, NOW(), NOW());
 
   -- Character 2: Inventory data (different items)
   INSERT INTO character_data (character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at)
   VALUES
     (char2_id, 'inventory', 'items',
      '[{"id":"item-3","name":"Spellbook","quantity":1,"description":"Personal grimoire","category":"Arcane"},{"id":"item-4","name":"Spell Components","quantity":10,"description":"Various magical reagents","category":"Consumable"}]',
-     'json', true, NOW(), NOW()),
+     'json', false, NOW(), NOW()),
     (char2_id, 'numbers', 'numbers',
      '[{"id":"number-3","name":"Gold","amount":100},{"id":"number-4","name":"Platinum","amount":5}]',
      'json', false, NOW(), NOW());
