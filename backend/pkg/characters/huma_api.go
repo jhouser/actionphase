@@ -95,6 +95,15 @@ type gameCharacterStatsOutput struct {
 	Body map[string]*CharacterStatsResponse
 }
 
+// gameCharacterDataOutput is the batch sheet body: an object keyed by character
+// ID as a string, matching gameCharacterStatsOutput so the frontend indexes
+// both the same way. Characters the caller may see nothing of are still
+// present, with an empty list, so a consumer can tell "no data" from "not in
+// this game".
+type gameCharacterDataOutput struct {
+	Body map[string][]*CharacterDataResponse
+}
+
 // Helpers
 
 // humaErr converts a core error response into the equivalent huma error,
@@ -977,6 +986,89 @@ func (h *Handler) humaGetGameCharacterStats(ctx context.Context, in *gameIDInput
 	return &gameCharacterStatsOutput{Body: resp}, nil
 }
 
+// humaGetGameCharacterData returns every character's sheet rows for one game in
+// a single response, filtered per character to what the caller may see.
+//
+// This exists to replace a request per character. A phase drill-down in History
+// can show a whole cast's action content, each with [[item]] references that
+// need that character's sheet to resolve; fetching them one at a time meant N
+// requests fired at once the moment a phase was opened.
+//
+// Disclosure is decided by canViewPrivateCharacterData, the same helper the
+// single-character endpoint uses — deliberately not a batch-specific reimplementation
+// of the rule. Two copies of a visibility check are free to drift, and the way that
+// failure shows up is a private sheet leaking through whichever endpoint was
+// forgotten. Callers that may not see a character's private rows get exactly what
+// GET /characters/{id}/data would give them: the is_public rows only.
+func (h *Handler) humaGetGameCharacterData(ctx context.Context, in *gameIDInput) (*gameCharacterDataOutput, error) {
+	defer h.App.ObsLogger.LogOperation(ctx, "api_get_game_character_data")()
+
+	authUser := core.GetAuthenticatedUser(ctx)
+	if authUser == nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+	userID := authUser.ID
+
+	// The game read gate runs first: without it a non-participant could probe a
+	// private game's roster, even if every row came back filtered.
+	canView, err := h.GameService.CanUserViewGame(ctx, in.GameID, userID)
+	if err != nil {
+		h.App.ObsLogger.Error(ctx, "Failed to check game view access", "error", err, "game_id", in.GameID, "user_id", userID)
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+	if !canView {
+		return nil, huma.Error403Forbidden("you do not have permission to view this game's content")
+	}
+
+	characters, err := h.CharacterService.GetCharactersByGame(ctx, in.GameID)
+	if err != nil {
+		h.App.ObsLogger.Error(ctx, "Failed to get game characters", "error", err, "game_id", in.GameID)
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+
+	// One query for the whole cast's rows, then partitioned in memory. The
+	// alternative -- a query per character -- is the N+1 this endpoint exists to
+	// remove.
+	rows, err := models.New(h.App.Pool).GetCharacterDataByGame(ctx, in.GameID)
+	if err != nil {
+		h.App.ObsLogger.Error(ctx, "Failed to get game character data", "error", err, "game_id", in.GameID)
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+
+	rowsByCharacter := make(map[int32][]models.GetCharacterDataByGameRow, len(characters))
+	for _, row := range rows {
+		rowsByCharacter[row.CharacterID] = append(rowsByCharacter[row.CharacterID], row)
+	}
+
+	resp := make(map[string][]*CharacterDataResponse, len(characters))
+	for _, char := range characters {
+		canViewPrivate := h.canViewPrivateCharacterData(ctx, char.ID, &userID)
+
+		// Always a non-nil slice: an empty JSON array reads as "nothing to show
+		// for this character", where null invites a consumer to crash on it.
+		out := make([]*CharacterDataResponse, 0, len(rowsByCharacter[char.ID]))
+		for _, row := range rowsByCharacter[char.ID] {
+			if !canViewPrivate && !(row.IsPublic.Valid && row.IsPublic.Bool) {
+				continue
+			}
+			out = append(out, &CharacterDataResponse{
+				ID:          row.ID,
+				CharacterID: row.CharacterID,
+				ModuleType:  row.ModuleType,
+				FieldName:   row.FieldName,
+				FieldType:   ptrText(row.FieldType),
+				CreatedAt:   row.CreatedAt.Time,
+				UpdatedAt:   row.UpdatedAt.Time,
+				FieldValue:  ptrText(row.FieldValue),
+				IsPublic:    ptrBool(row.IsPublic),
+			})
+		}
+		resp[strconv.Itoa(int(char.ID))] = out
+	}
+
+	return &gameCharacterDataOutput{Body: resp}, nil
+}
+
 // characterFromModel builds the single-character body from a full character
 // row. Used by the operations that always disclose the type, because the caller
 // is a GM or the character's owner.
@@ -1045,6 +1137,22 @@ func RegisterHumaGameCharacters(api huma.API, h *Handler) {
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaGetGameCharacterStats)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "getGameCharacterData",
+		Method:      http.MethodGet,
+		Path:        "/characters/data",
+		Summary:     "Sheet fields for every character in a game",
+		Description: "Returns character sheet rows for the whole roster in one response, keyed by " +
+			"character ID. Private fields are included only for the characters the caller may see " +
+			"them for; everyone else's are reduced to their public fields.",
+		Tags:     []string{"Characters"},
+		Security: bearer,
+		Responses: map[string]*huma.Response{
+			"401": {Description: "Not authenticated"},
+			"403": {Description: "The caller cannot view this game's content"},
+		},
+	}, h.humaGetGameCharacterData)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "listControllableCharacters",
