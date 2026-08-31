@@ -6,7 +6,6 @@ import { server } from '../../mocks/server';
 import { renderWithProviders, createTestQueryClient } from '../../test-utils';
 import { ActionsList } from '../ActionsList';
 import type { GamePhase, ActionWithDetails } from '../../types/phases';
-import { useCharacterSheetItems } from '../../hooks/useCharacterSheetItems';
 import { useGameActionResults } from '../../hooks/useActionResults';
 
 /**
@@ -17,10 +16,6 @@ function ResultsQueryProbe({ gameId }: { gameId: number }) {
   useGameActionResults(gameId);
   return null;
 }
-
-vi.mock('../../hooks/useCharacterSheetItems', () => ({
-  useCharacterSheetItems: vi.fn(() => []),
-}));
 
 // Mock CreateActionResultForm component. It owns its own Cancel control (so it
 // can discard cached drafts before dismissing), so the mock renders one too.
@@ -1272,49 +1267,85 @@ describe('ActionsList', () => {
     });
   });
 
-  describe('ActionCard sheet item lazy-fetch', () => {
-    it('calls useCharacterSheetItems with null when card is collapsed', async () => {
-      setupDefaultHandlers([mockActions[0]]);
+  // Sheet items are no longer fetched per card. The list loads the whole cast
+  // in one game-scoped request, so expanding several actions in a phase does
+  // not fire a request each. What matters to a reader is that a [[ref]] in the
+  // expanded body resolves to a tooltip.
+  describe('ActionCard sheet item tooltips', () => {
+    const SKILL_ID = 'skill-abc';
+    const DESCRIPTION = 'Force a ghost or spirit to obey.';
 
-      renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
+    const sheetPayload = {
+      '1': [
+        {
+          module_type: 'skills',
+          field_name: 'skills',
+          field_value: JSON.stringify([
+            { id: SKILL_ID, name: 'Compel', rank: '2', description: DESCRIPTION, category: 'Arcane' },
+          ]),
+          is_public: false,
+        },
+      ],
+    };
 
-      await waitFor(() => {
-        expect(screen.getAllByText('Hero Character')[0]).toBeInTheDocument();
-      });
+    const actionWithRef: ActionWithDetails = {
+      ...mockActions[0],
+      content: `I use [[Compel|skill:${SKILL_ID}]] on the guard.`,
+    };
 
-      expect(vi.mocked(useCharacterSheetItems)).toHaveBeenCalledWith(null);
-    });
-
-    it('calls useCharacterSheetItems with character_id when card is expanded', async () => {
+    it('resolves a reference in the expanded body to a tooltip', async () => {
       const user = userEvent.setup();
-      setupDefaultHandlers([mockActions[0]]);
+      setupDefaultHandlers([actionWithRef]);
+      server.use(
+        http.get('/api/v1/games/:gameId/characters/data', () => HttpResponse.json(sheetPayload))
+      );
 
       renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
 
       const cards = await screen.findAllByText('Hero Character');
       await user.click(cards[0]);
 
-      await waitFor(() => {
-        expect(screen.getByText('I investigate the mysterious door.')).toBeInTheDocument();
-      });
+      await user.hover(await screen.findByText('[[Compel]]'));
 
-      expect(vi.mocked(useCharacterSheetItems)).toHaveBeenCalledWith(1);
+      expect(await screen.findByText(DESCRIPTION)).toBeInTheDocument();
     });
 
-    it('calls useCharacterSheetItems with null for action without character_id', async () => {
-      const actionWithoutCharacter: ActionWithDetails = {
-        ...mockActions[0],
-        character_id: undefined,
-      };
-      setupDefaultHandlers([actionWithoutCharacter]);
+    it('loads the cast in one request rather than one per card', async () => {
+      const user = userEvent.setup();
+      const fetched: string[] = [];
+      setupDefaultHandlers([actionWithRef]);
+      server.use(
+        http.get('/api/v1/games/:gameId/characters/data', ({ params }) => {
+          fetched.push(String(params.gameId));
+          return HttpResponse.json(sheetPayload);
+        })
+      );
 
       renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
 
-      await waitFor(() => {
-        expect(screen.getAllByText('Hero Character')[0]).toBeInTheDocument();
-      });
+      const cards = await screen.findAllByText('Hero Character');
+      await user.click(cards[0]);
+      await user.hover(await screen.findByText('[[Compel]]'));
+      expect(await screen.findByText(DESCRIPTION)).toBeInTheDocument();
 
-      expect(vi.mocked(useCharacterSheetItems)).toHaveBeenCalledWith(null);
+      expect(fetched).toEqual(['1']);
+    });
+
+    it('leaves the reference untooltipped when the sheet is not visible', async () => {
+      const user = userEvent.setup();
+      setupDefaultHandlers([actionWithRef]);
+      server.use(
+        http.get('/api/v1/games/:gameId/characters/data', () => HttpResponse.json({}))
+      );
+
+      renderWithProviders(<ActionsList gameId={1} />, { gameId: 1 });
+
+      const cards = await screen.findAllByText('Hero Character');
+      await user.click(cards[0]);
+
+      await user.hover(await screen.findByText('[[Compel]]'));
+
+      expect(screen.queryByText(DESCRIPTION)).not.toBeInTheDocument();
     });
   });
 

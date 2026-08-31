@@ -372,6 +372,62 @@ func (q *Queries) GetCharacterData(ctx context.Context, characterID int32) ([]Ch
 	return items, nil
 }
 
+const getCharacterDataByGame = `-- name: GetCharacterDataByGame :many
+SELECT cd.id, cd.character_id, cd.module_type, cd.field_name, cd.field_value, cd.field_type, cd.is_public, cd.created_at, cd.updated_at, c.user_id AS owner_id
+FROM character_data cd
+JOIN characters c ON c.id = cd.character_id
+WHERE c.game_id = $1
+ORDER BY cd.character_id, cd.module_type, cd.field_name
+`
+
+type GetCharacterDataByGameRow struct {
+	ID          int32              `json:"id"`
+	CharacterID int32              `json:"character_id"`
+	ModuleType  string             `json:"module_type"`
+	FieldName   string             `json:"field_name"`
+	FieldValue  pgtype.Text        `json:"field_value"`
+	FieldType   pgtype.Text        `json:"field_type"`
+	IsPublic    pgtype.Bool        `json:"is_public"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	OwnerID     pgtype.Int4        `json:"owner_id"`
+}
+
+// Every sheet row for a game, tagged with the owning user so the caller can
+// apply per-character visibility without a query per character. Rows come back
+// for the whole cast; filtering is the handler's job via core.SheetAccess,
+// which is the single definition of that rule.
+func (q *Queries) GetCharacterDataByGame(ctx context.Context, gameID int32) ([]GetCharacterDataByGameRow, error) {
+	rows, err := q.db.Query(ctx, getCharacterDataByGame, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetCharacterDataByGameRow
+	for rows.Next() {
+		var i GetCharacterDataByGameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CharacterID,
+			&i.ModuleType,
+			&i.FieldName,
+			&i.FieldValue,
+			&i.FieldType,
+			&i.IsPublic,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.OwnerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCharacterDataByModule = `-- name: GetCharacterDataByModule :many
 SELECT id, character_id, module_type, field_name, field_value, field_type, is_public, created_at, updated_at FROM character_data
 WHERE character_id = $1 AND module_type = $2
