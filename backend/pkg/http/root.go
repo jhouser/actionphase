@@ -5,6 +5,7 @@ import (
 	"actionphase/pkg/auth"
 	"actionphase/pkg/avatars"
 	"actionphase/pkg/characters"
+	"actionphase/pkg/communities"
 	"actionphase/pkg/conversations"
 	"actionphase/pkg/core"
 	"actionphase/pkg/dashboard"
@@ -612,6 +613,38 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 	})
 	apiV1Router.Mount("/notifications", notificationsRouter)
 
+	// Communities API — member- and moderator-facing routes (huma / type-first).
+	//
+	// Site-admin community routes (create, list-all, edit) live under
+	// /api/v1/admin/communities instead: creating a community is a site-admin
+	// act, while everything here is gated per-community on the caller's
+	// standing. AdminModeMiddleware is required because CanModerateCommunity /
+	// CanAdministerCommunity only grant an admin moderation powers when admin
+	// mode is on.
+	var communitiesAPI huma.API
+	communitiesRouter := chi.NewRouter()
+	communitiesRouter.Route("/", func(r chi.Router) {
+		communityHandler := &communities.Handler{
+			App:              h.App,
+			UserService:      &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+			CommunityService: &dbcommunities.CommunityService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+		}
+
+		r.Group(func(r chi.Router) {
+			tokenAuth := h.getTokenAuth()
+			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+			r.Use(jwtauth.Verifier(tokenAuth))
+			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(h.sessionValidateMW())
+			r.Use(core.RequireAuthenticationMiddleware(userService))
+			r.Use(core.AdminModeMiddleware)
+
+			communitiesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			communities.RegisterHumaCommunities(communitiesAPI, communityHandler)
+		})
+	})
+	apiV1Router.Mount("/communities", communitiesRouter)
+
 	// Dashboard API (huma / type-first — see .claude/planning/huma-migration.md)
 	var dashboardAPI huma.API
 	dashboardRouter := chi.NewRouter()
@@ -711,10 +744,11 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 	docsHandler := &docs.Handler{
 		GeneratedSpec: func() ([]byte, error) {
 			return generatedSpecFor(map[string][]huma.API{
-				"/admin":      {adminAPI},
-				"/dashboard":  {dashboardAPI},
-				"/characters": {charactersAPI},
-				"/exports":    {exportDownloadsAPI},
+				"/admin":       {adminAPI},
+				"/dashboard":   {dashboardAPI},
+				"/communities": {communitiesAPI},
+				"/characters":  {charactersAPI},
+				"/exports":     {exportDownloadsAPI},
 				// Registered on the /{gameID} subrouter, so the documented URL
 				// needs that segment added back.
 				"/deadlines":      {deadlinesAPI},

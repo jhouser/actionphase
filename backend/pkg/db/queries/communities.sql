@@ -7,12 +7,23 @@ INSERT INTO communities (
 RETURNING *;
 
 -- name: GetCommunityByID :one
-SELECT * FROM communities
-WHERE id = $1;
+-- Joins the owner's username: every surface that shows one community names its
+-- owner, so fetching the id alone would force a follow-up query per request.
+SELECT
+    c.*,
+    u.username AS owner_username
+FROM communities c
+JOIN users u ON u.id = c.owner_user_id
+WHERE c.id = $1;
 
 -- name: GetCommunityBySlug :one
-SELECT * FROM communities
-WHERE slug = $1;
+-- Joins the owner's username -- see GetCommunityByID.
+SELECT
+    c.*,
+    u.username AS owner_username
+FROM communities c
+JOIN users u ON u.id = c.owner_user_id
+WHERE c.slug = $1;
 
 -- name: ListCommunities :many
 -- Admin listing: every community, active or not, with the owner's username so

@@ -92,13 +92,18 @@ func TestGetCommunity_ByIDAndSlug(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Both single-community fetches join the owner's username. Without the
+	// join they return an id with no name, and every surface that shows one
+	// community has nothing to render for its owner.
 	byID, err := svc.GetCommunityByID(ctx, created.ID)
 	require.NoError(t, err)
 	assert.Equal(t, created.ID, byID.ID)
+	assert.Equal(t, owner.Username, byID.OwnerUsername)
 
 	bySlug, err := svc.GetCommunityBySlug(ctx, slug)
 	require.NoError(t, err)
 	assert.Equal(t, created.ID, bySlug.ID)
+	assert.Equal(t, owner.Username, bySlug.OwnerUsername)
 }
 
 // A missing community must be distinguishable from a server fault, or the

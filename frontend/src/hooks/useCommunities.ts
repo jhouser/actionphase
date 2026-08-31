@@ -47,3 +47,82 @@ export function useCommunities() {
     updateCommunity,
   };
 }
+
+/**
+ * Cache key for the PUBLIC listing.
+ *
+ * Deliberately distinct from COMMUNITIES_QUERY_KEY: the admin list carries
+ * every community including inactive ones, while this one carries only active
+ * ones. Sharing a key would let one surface serve the other's data.
+ */
+export const ACTIVE_COMMUNITIES_QUERY_KEY = ['communities', 'active'] as const;
+
+/** Cache key for one community's profile. */
+export const communityQueryKey = (slug: string) => ['communities', slug] as const;
+
+/** Cache key for one community's moderator roster. */
+export const moderatorsQueryKey = (slug: string) =>
+  ['communities', slug, 'moderators'] as const;
+
+/** The active communities, for browsing surfaces. */
+export function useActiveCommunities() {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ACTIVE_COMMUNITIES_QUERY_KEY,
+    queryFn: () => apiClient.communities.listActiveCommunities().then((res) => res.data),
+  });
+
+  return { communities: data ?? [], isLoading, isError, error };
+}
+
+/** One community's profile, by slug. */
+export function useCommunity(slug: string | undefined) {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: communityQueryKey(slug ?? ''),
+    queryFn: () => apiClient.communities.getCommunity(slug!).then((res) => res.data),
+    enabled: Boolean(slug),
+  });
+
+  return { community: data, isLoading, isError, error };
+}
+
+/**
+ * A community's moderator roster plus the owner-only mutations.
+ *
+ * `enabled` lets a caller hold the request back until it knows the viewer may
+ * moderate -- the endpoint 403s otherwise, and firing it regardless would put a
+ * guaranteed error in the cache for every ordinary visitor.
+ */
+export function useCommunityModerators(slug: string | undefined, enabled = true) {
+  const queryClient = useQueryClient();
+  const key = moderatorsQueryKey(slug ?? '');
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: key,
+    queryFn: () => apiClient.communities.listModerators(slug!).then((res) => res.data),
+    enabled: Boolean(slug) && enabled,
+  });
+
+  const addModerator = useMutation({
+    mutationFn: (userId: number) =>
+      apiClient.communities.addModerator(slug!, { user_id: userId }).then((res) => res.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
+
+  const removeModerator = useMutation({
+    mutationFn: (userId: number) => apiClient.communities.removeModerator(slug!, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
+
+  return {
+    moderators: data ?? [],
+    isLoading,
+    isError,
+    error,
+    addModerator,
+    removeModerator,
+  };
+}

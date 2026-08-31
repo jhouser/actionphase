@@ -82,13 +82,32 @@ func (q *Queries) CreateCommunity(ctx context.Context, arg CreateCommunityParams
 }
 
 const getCommunityByID = `-- name: GetCommunityByID :one
-SELECT id, name, slug, description, banner_url, owner_user_id, is_active, created_at, updated_at FROM communities
-WHERE id = $1
+SELECT
+    c.id, c.name, c.slug, c.description, c.banner_url, c.owner_user_id, c.is_active, c.created_at, c.updated_at,
+    u.username AS owner_username
+FROM communities c
+JOIN users u ON u.id = c.owner_user_id
+WHERE c.id = $1
 `
 
-func (q *Queries) GetCommunityByID(ctx context.Context, id int32) (Community, error) {
+type GetCommunityByIDRow struct {
+	ID            int32              `json:"id"`
+	Name          string             `json:"name"`
+	Slug          string             `json:"slug"`
+	Description   pgtype.Text        `json:"description"`
+	BannerUrl     pgtype.Text        `json:"banner_url"`
+	OwnerUserID   int32              `json:"owner_user_id"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	OwnerUsername string             `json:"owner_username"`
+}
+
+// Joins the owner's username: every surface that shows one community names its
+// owner, so fetching the id alone would force a follow-up query per request.
+func (q *Queries) GetCommunityByID(ctx context.Context, id int32) (GetCommunityByIDRow, error) {
 	row := q.db.QueryRow(ctx, getCommunityByID, id)
-	var i Community
+	var i GetCommunityByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -99,18 +118,37 @@ func (q *Queries) GetCommunityByID(ctx context.Context, id int32) (Community, er
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OwnerUsername,
 	)
 	return i, err
 }
 
 const getCommunityBySlug = `-- name: GetCommunityBySlug :one
-SELECT id, name, slug, description, banner_url, owner_user_id, is_active, created_at, updated_at FROM communities
-WHERE slug = $1
+SELECT
+    c.id, c.name, c.slug, c.description, c.banner_url, c.owner_user_id, c.is_active, c.created_at, c.updated_at,
+    u.username AS owner_username
+FROM communities c
+JOIN users u ON u.id = c.owner_user_id
+WHERE c.slug = $1
 `
 
-func (q *Queries) GetCommunityBySlug(ctx context.Context, slug string) (Community, error) {
+type GetCommunityBySlugRow struct {
+	ID            int32              `json:"id"`
+	Name          string             `json:"name"`
+	Slug          string             `json:"slug"`
+	Description   pgtype.Text        `json:"description"`
+	BannerUrl     pgtype.Text        `json:"banner_url"`
+	OwnerUserID   int32              `json:"owner_user_id"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	OwnerUsername string             `json:"owner_username"`
+}
+
+// Joins the owner's username -- see GetCommunityByID.
+func (q *Queries) GetCommunityBySlug(ctx context.Context, slug string) (GetCommunityBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getCommunityBySlug, slug)
-	var i Community
+	var i GetCommunityBySlugRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -121,6 +159,7 @@ func (q *Queries) GetCommunityBySlug(ctx context.Context, slug string) (Communit
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OwnerUsername,
 	)
 	return i, err
 }

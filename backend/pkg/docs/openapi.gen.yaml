@@ -257,6 +257,17 @@ components:
                 - updated_at
                 - username
             type: object
+        AddModeratorInputBody:
+            additionalProperties: false
+            properties:
+                user_id:
+                    description: User to grant moderation powers
+                    format: int32
+                    minimum: 1
+                    type: integer
+            required:
+                - user_id
+            type: object
         AddParticipantBody:
             additionalProperties: false
             properties:
@@ -1028,6 +1039,39 @@ components:
                 - is_active
                 - created_at
                 - updated_at
+            type: object
+        CommunityModerator:
+            additionalProperties: false
+            properties:
+                avatar_url:
+                    type: string
+                community_id:
+                    format: int32
+                    type: integer
+                display_name:
+                    type: string
+                granted_at:
+                    format: date-time
+                    type: string
+                granted_by_user_id:
+                    format: int32
+                    type: integer
+                granted_by_username:
+                    type: string
+                id:
+                    format: int32
+                    type: integer
+                user_id:
+                    format: int32
+                    type: integer
+                username:
+                    type: string
+            required:
+                - id
+                - community_id
+                - user_id
+                - username
+                - granted_at
             type: object
         ControllableCharacterResponse:
             additionalProperties: false
@@ -6395,6 +6439,160 @@ paths:
             summary: List controllable characters across all the caller's games
             tags:
                 - Characters
+    /communities:
+        get:
+            description: Returns every active community. Inactive communities are omitted -- they accept no new games. Site admins see the full list via the admin endpoint.
+            operationId: listCommunities
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/Community'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+            security:
+                - BearerAuth: []
+            summary: List active communities
+            tags:
+                - Communities
+    /communities/{slug}:
+        get:
+            operationId: getCommunity
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Community'
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Get a community profile
+            tags:
+                - Communities
+    /communities/{slug}/moderators:
+        get:
+            description: Requires moderation rights. The owner is not included -- ownership is not a moderator row; render it from the community's owner_user_id.
+            operationId: listCommunityModerators
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityModerator'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: List a community's moderators
+            tags:
+                - Communities
+        post:
+            description: Owner-only. Managing the roster is the single power a moderator does not have; site admins qualify only with admin mode enabled.
+            operationId: addCommunityModerator
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddModeratorInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityModerator'
+                    description: Created
+                "400":
+                    description: Unknown user, the owner, or already a moderator
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller is not the community owner
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Grant a user moderation powers
+            tags:
+                - Communities
+    /communities/{slug}/moderators/{userID}:
+        delete:
+            description: Owner-only. Removing a user who does not moderate succeeds -- the caller's intended end state already holds.
+            operationId: removeCommunityModerator
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: User whose moderation powers are revoked
+                  in: path
+                  name: userID
+                  required: true
+                  schema:
+                    description: User whose moderation powers are revoked
+                    format: int32
+                    type: integer
+            responses:
+                "204":
+                    description: No Content
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller is not the community owner
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Revoke a user's moderation powers
+            tags:
+                - Communities
     /dashboard:
         get:
             description: |-
@@ -11650,6 +11848,8 @@ tags:
       name: Users
     - description: Aggregated dashboard data for user overview
       name: Dashboard
+    - description: Community profiles and moderator rosters
+      name: Communities
     - description: User notification system for game events and updates
       name: Notifications
     - description: Game creation, management, and participation

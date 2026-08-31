@@ -78,7 +78,11 @@ func (s *CommunityService) GetCommunityByID(ctx context.Context, id int32) (*cor
 		return nil, fmt.Errorf("get community by id: %w", err)
 	}
 
-	return communityFromDB(row), nil
+	return communityFromListRow(
+		row.ID, row.Name, row.Slug, row.Description, row.BannerUrl,
+		row.OwnerUserID, row.IsActive, row.CreatedAt, row.UpdatedAt,
+		row.OwnerUsername,
+	), nil
 }
 
 // GetCommunityBySlug retrieves a community by its URL slug.
@@ -94,7 +98,11 @@ func (s *CommunityService) GetCommunityBySlug(ctx context.Context, slug string) 
 		return nil, fmt.Errorf("get community by slug: %w", err)
 	}
 
-	return communityFromDB(row), nil
+	return communityFromListRow(
+		row.ID, row.Name, row.Slug, row.Description, row.BannerUrl,
+		row.OwnerUserID, row.IsActive, row.CreatedAt, row.UpdatedAt,
+		row.OwnerUsername,
+	), nil
 }
 
 // ListCommunities returns every community, active or not, for the admin table.

@@ -121,6 +121,7 @@ func specTags() []any {
 		{"Admin", "Administrative user, ban and session management"},
 		{"Users", "User profiles, avatars and preferences"},
 		{"Dashboard", "Aggregated dashboard data for user overview"},
+		{"Communities", "Community profiles and moderator rosters"},
 		{"Notifications", "User notification system for game events and updates"},
 		{"Games", "Game creation, management, and participation"},
 		{"Game Applications", "Application system for joining games"},

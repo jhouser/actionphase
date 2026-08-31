@@ -67,3 +67,8 @@ export interface UpdateCommunityRequest {
   is_active?: boolean;
 }
 
+
+/** Owner-only: granting a user moderation powers. */
+export interface AddModeratorRequest {
+  user_id: number;
+}

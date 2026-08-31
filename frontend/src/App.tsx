@@ -33,6 +33,9 @@ const UserProfilePage = lazy(() => import('./pages/UserProfilePage').then(m => (
 const CharacterPage = lazy(() => import('./pages/CharacterPage').then(m => ({ default: m.CharacterPage })));
 const ThemeTestPage = lazy(() => import('./pages/ThemeTestPage'));
 const CommunityGuidelinesPage = lazy(() => import('./pages/CommunityGuidelinesPage').then(m => ({ default: m.CommunityGuidelinesPage })));
+const CommunitiesPage = lazy(() => import('./pages/CommunitiesPage').then(m => ({ default: m.CommunitiesPage })));
+const CommunityPage = lazy(() => import('./pages/CommunityPage').then(m => ({ default: m.CommunityPage })));
+const CommunityManagePage = lazy(() => import('./pages/CommunityManagePage').then(m => ({ default: m.CommunityManagePage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -214,6 +217,21 @@ const router = createBrowserRouter([
       {
         path: '/admin/:tab',
         element: <ProtectedRoute requireAdmin><AdminPage /></ProtectedRoute>,
+      },
+      {
+        path: '/communities',
+        element: <ProtectedRoute><CommunitiesPage /></ProtectedRoute>,
+      },
+      {
+        path: '/communities/:slug',
+        element: <ProtectedRoute><CommunityPage /></ProtectedRoute>,
+      },
+      // The manage shell is reachable by moderators too, not just the owner, so
+      // it carries no requireAdmin gate. Which controls render is decided
+      // inside, and every write is re-checked server-side.
+      {
+        path: '/communities/:slug/manage/:tab',
+        element: <ProtectedRoute><CommunityManagePage /></ProtectedRoute>,
       },
       {
         path: '/theme-test',
