@@ -1,24 +1,18 @@
 import { Link, useParams } from 'react-router-dom';
 import { Card, CardBody, CardHeader, Button, Spinner, Alert, Badge } from '../components/ui';
 import { MarkdownPreview } from '../components/MarkdownPreview';
-import { useAuth } from '../contexts/AuthContext';
-import { useAdminMode } from '../contexts/AdminModeContext';
 import { useCommunity } from '../hooks/useCommunities';
 
 /**
  * A community's public profile.
  *
- * The Manage link appears only for the owner and for a site admin with admin
- * mode on. Moderators reach management from elsewhere -- this page cannot tell
- * a moderator from an ordinary visitor without calling a moderator-only
- * endpoint, and firing one for every visitor would guarantee a 403 per view.
- * The server is the authority either way; hiding the link is a courtesy, not a
- * control.
+ * The Manage link appears for anyone with standing here -- owner, moderator, or
+ * a site admin with admin mode on -- which the server reports as your_role on
+ * the community itself. The server is the authority either way; hiding the link
+ * is a courtesy, not a control.
  */
 export function CommunityPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { currentUser } = useAuth();
-  const { adminModeEnabled } = useAdminMode();
   const { community, isLoading, isError } = useCommunity(slug);
 
   if (isLoading) {
@@ -31,7 +25,7 @@ export function CommunityPage() {
 
   if (isError || !community) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Alert variant="danger" title="Community not found">
           No community exists at this address, or you cannot view it.
         </Alert>
@@ -39,11 +33,12 @@ export function CommunityPage() {
     );
   }
 
-  const isOwner = currentUser?.id === community.owner_user_id;
-  const canManage = isOwner || Boolean(currentUser?.is_admin && adminModeEnabled);
+  // your_role already folds in moderator rows and admin mode, so no comparison
+  // against owner_user_id is needed -- that one misses moderators entirely.
+  const canManage = community.your_role === 'owner' || community.your_role === 'moderator';
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-content-primary">{community.name}</h1>
@@ -86,7 +81,10 @@ export function CommunityPage() {
         </CardHeader>
         <CardBody>
           {community.description ? (
-            <MarkdownPreview content={community.description} />
+            // fullWidth: the card now spans max-w-7xl, and the default
+            // max-w-prose would cap the text at ~65ch and leave the rest of
+            // the card empty.
+            <MarkdownPreview content={community.description} fullWidth />
           ) : (
             <p className="text-sm text-content-tertiary">
               This community has not written a description yet.

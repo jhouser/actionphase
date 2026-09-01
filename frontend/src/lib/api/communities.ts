@@ -4,6 +4,7 @@ import type {
   Community,
   CommunityModerator,
   CreateCommunityRequest,
+  UpdateCommunityProfileRequest,
   UpdateCommunityRequest,
 } from '../../types/communities';
 
@@ -41,6 +42,18 @@ export class CommunitiesApi extends BaseApiClient {
   /** One community's public profile, by slug. */
   async getCommunity(slug: string) {
     return this.client.get<Community>(`/api/v1/communities/${slug}`);
+  }
+
+  /**
+   * Moderator: edit a community's name and description.
+   *
+   * Distinct from `updateCommunity` above, which is the ADMIN route keyed by
+   * id and able to reassign ownership or deactivate. This one is keyed by slug
+   * and accepts only the two profile fields -- the server rejects anything
+   * else outright.
+   */
+  async updateCommunityProfile(slug: string, data: UpdateCommunityProfileRequest) {
+    return this.client.patch<Community>(`/api/v1/communities/${slug}`, data);
   }
 
   /**

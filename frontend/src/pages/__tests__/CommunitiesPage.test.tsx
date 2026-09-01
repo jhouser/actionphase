@@ -43,6 +43,73 @@ describe('CommunitiesPage', () => {
     )
   })
 
+  // Descriptions are markdown. A plain <p> printed the raw syntax, so a blurb
+  // written as "**dusk**" showed the asterisks to every browsing user.
+  it('renders the description as markdown rather than raw syntax', async () => {
+    listActiveCommunities.mockResolvedValue({
+      data: [{ ...community, description: 'We fly at **dusk**' }],
+    })
+    renderWithProviders(<CommunitiesPage />)
+
+    const strong = await screen.findByText('dusk')
+    expect(strong.tagName).toBe('STRONG')
+    expect(screen.queryByText(/\*\*dusk\*\*/)).not.toBeInTheDocument()
+  })
+
+  // The card link is an overlay SIBLING, not a wrapper. Nesting the card's <a>
+  // around the description put markdown links inside an anchor -- invalid HTML
+  // that browsers unnest, so a link in the blurb hijacked the card click.
+  it('does not nest a description link inside the card link', async () => {
+    listActiveCommunities.mockResolvedValue({
+      data: [{ ...community, description: 'See [our charter](https://example.com)' }],
+    })
+    renderWithProviders(<CommunitiesPage />)
+
+    const card = await screen.findByTestId('community-card-midnight-ravens')
+    const charter = screen.getByRole('link', { name: 'our charter' })
+
+    expect(charter).toHaveAttribute('href', 'https://example.com')
+    expect(card.contains(charter)).toBe(false)
+  })
+
+  // prose styles `a strong` as link-coloured. When the card wrapped the
+  // description, every bold word inherited that and looked clickable.
+  it('does not render bold text inside the card link', async () => {
+    listActiveCommunities.mockResolvedValue({
+      data: [{ ...community, description: 'We fly at **dusk**' }],
+    })
+    renderWithProviders(<CommunitiesPage />)
+
+    const card = await screen.findByTestId('community-card-midnight-ravens')
+    const strong = screen.getByText('dusk')
+
+    expect(strong.tagName).toBe('STRONG')
+    expect(card.contains(strong)).toBe(false)
+  })
+
+  // The overlay anchor has no text of its own, so it needs a label or it
+  // reaches screen readers as an unnamed link.
+  it('gives the overlay card link an accessible name', async () => {
+    renderWithProviders(<CommunitiesPage />)
+
+    expect(await screen.findByRole('link', { name: 'Midnight Ravens' })).toHaveAttribute(
+      'href',
+      '/communities/midnight-ravens'
+    )
+  })
+
+  // The card is a link, so the expand toggle is suppressed -- a button inside
+  // an anchor would swallow the click and nest interactive elements.
+  it('does not put an expand toggle inside the card link', async () => {
+    listActiveCommunities.mockResolvedValue({
+      data: [{ ...community, description: 'line\n\n'.repeat(40) + 'end' }],
+    })
+    renderWithProviders(<CommunitiesPage />)
+
+    await screen.findByTestId('community-card-midnight-ravens')
+    expect(screen.queryByRole('button', { name: /show full content/i })).not.toBeInTheDocument()
+  })
+
   it('shows an empty state when there are no communities', async () => {
     listActiveCommunities.mockResolvedValue({ data: [] })
     renderWithProviders(<CommunitiesPage />)

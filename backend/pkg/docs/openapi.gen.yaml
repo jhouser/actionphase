@@ -1029,6 +1029,8 @@ components:
                 updated_at:
                     format: date-time
                     type: string
+                your_role:
+                    type: string
             required:
                 - id
                 - name
@@ -1039,6 +1041,7 @@ components:
                 - is_active
                 - created_at
                 - updated_at
+                - your_role
             type: object
         CommunityModerator:
             additionalProperties: false
@@ -4394,6 +4397,18 @@ components:
                     minimum: 1
                     type: integer
             type: object
+        UpdateCommunityProfileInputBody:
+            additionalProperties: false
+            properties:
+                description:
+                    description: Profile blurb (markdown); empty string clears it
+                    type: string
+                name:
+                    description: Display name
+                    maxLength: 255
+                    minLength: 2
+                    type: string
+            type: object
         UpdateDeadlineBody:
             additionalProperties: false
             properties:
@@ -6501,6 +6516,43 @@ paths:
             security:
                 - BearerAuth: []
             summary: Get a community profile
+            tags:
+                - Communities
+        patch:
+            description: 'Requires moderation rights -- keeping the profile current is ordinary upkeep. Narrower than the admin PATCH: ownership and active status are not editable here, and the slug is immutable. An empty description clears it.'
+            operationId: updateCommunity
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateCommunityProfileInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Community'
+                    description: OK
+                "400":
+                    description: Name is blank or out of range
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Edit a community's name and description
             tags:
                 - Communities
     /communities/{slug}/moderators:

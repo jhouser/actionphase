@@ -1,27 +1,26 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { TabNavigation } from '../components/TabNavigation';
 import { Alert, Spinner } from '../components/ui';
-import { useAuth } from '../contexts/AuthContext';
-import { useAdminMode } from '../contexts/AdminModeContext';
 import { useCommunity } from '../hooks/useCommunities';
 import { ModeratorsTab } from './community/ModeratorsTab';
+import { SettingsTab } from './community/SettingsTab';
 
 /**
  * Management shell for one community.
  *
- * Only the Moderators tab exists so far. Bans, documents, webhooks, and
- * settings arrive in later phases; the tab list grows here rather than the
- * routing changing shape.
+ * Moderators and Settings exist so far. Bans, documents, and webhooks arrive in
+ * later phases; the tab list grows here rather than the routing changing shape.
  */
-type TabId = 'moderators';
-const VALID_TABS: TabId[] = ['moderators'];
-const TABS: { id: TabId; label: string }[] = [{ id: 'moderators', label: 'Moderators' }];
+type TabId = 'moderators' | 'settings';
+const VALID_TABS: TabId[] = ['moderators', 'settings'];
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'moderators', label: 'Moderators' },
+  { id: 'settings', label: 'Settings' },
+];
 
 export function CommunityManagePage() {
   const { slug, tab } = useParams<{ slug: string; tab?: string }>();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
-  const { adminModeEnabled } = useAdminMode();
   const { community, isLoading, isError } = useCommunity(slug);
 
   const activeTab: TabId =
@@ -45,13 +44,15 @@ export function CommunityManagePage() {
     );
   }
 
-  // Roster management is owner-only (or a site admin with admin mode on). A
-  // moderator still reaches this page for the tabs they can act on, so the
-  // permission is passed down rather than gating the whole page. Every write is
-  // re-checked server-side; this only decides what to render.
-  const canAdminister =
-    currentUser?.id === community.owner_user_id ||
-    Boolean(currentUser?.is_admin && adminModeEnabled);
+  // Both tiers come from the server's your_role, which already accounts for
+  // moderator rows and for admin mode. Every write is re-checked server-side;
+  // this only decides what to render.
+  //
+  // Roster management is owner-only; profile editing is the wider moderator
+  // tier. A moderator still reaches this page for the tabs they can act on, so
+  // the permissions are passed down rather than gating the whole page.
+  const canAdminister = community.your_role === 'owner';
+  const canModerate = canAdminister || community.your_role === 'moderator';
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -78,6 +79,10 @@ export function CommunityManagePage() {
 
       {activeTab === 'moderators' && (
         <ModeratorsTab community={community} canAdminister={canAdminister} />
+      )}
+
+      {activeTab === 'settings' && (
+        <SettingsTab community={community} canEdit={canModerate} />
       )}
     </div>
   );

@@ -24,6 +24,25 @@ type Community struct {
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 	GameCount     *int64    `json:"game_count,omitempty"` // Populated only where the caller asked for it
+
+	// YourRole is the REQUESTING user's standing in this community: "",
+	// "moderator", or "owner". It is a property of the request, not of the
+	// community, so it is computed per response and never stored.
+	//
+	// It exists because the community record names only the owner. Without it a
+	// client cannot distinguish a moderator from an ordinary visitor, and the
+	// only alternative signal -- whether the moderator-gated roster endpoint
+	// 403s -- means firing a request expected to fail for most viewers.
+	//
+	// NOT omitempty: "" is the meaningful "no standing" value, and omitting it
+	// would make an absent field ambiguous between "no role" and "this endpoint
+	// does not populate it".
+	//
+	// This reflects ADMIN MODE, which is per-request: a site admin browsing
+	// normally sees "" here and gets "owner" only with admin mode enabled. That
+	// is precisely why the role rides on the response rather than on a cached
+	// login payload.
+	YourRole CommunityRole `json:"your_role"`
 }
 
 // CommunityModerator is a user granted moderation powers over a community.

@@ -383,3 +383,249 @@ func TestCommunitiesAPI_ListModerators_AdminWithoutModeForbidden(t *testing.T) {
 		"/api/v1/communities/midnight-ravens/moderators", nil, false)
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 }
+
+// ------------------------------------------------------- profile editing
+
+// Editing name and description is MODERATOR-level, unlike the roster. These
+// tests pin that boundary from both sides: a moderator succeeds here but is
+// still refused on the roster (TestCommunitiesAPI_AddModerator_ModeratorForbidden).
+
+func TestCommunitiesAPI_UpdateCommunity_AsOwner(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(`{"name":"Midnight Ravens Reborn","description":"# We fly at dusk"}`)
+	rec := h.request(t, h.owner, http.MethodPatch, "/api/v1/communities/midnight-ravens", body, false)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, "Midnight Ravens Reborn", got.Name)
+	require.NotNil(t, got.Description)
+	assert.Equal(t, "# We fly at dusk", *got.Description)
+	// The slug is immutable, so external links keep working.
+	assert.Equal(t, "midnight-ravens", got.Slug)
+}
+
+func TestCommunitiesAPI_UpdateCommunity_AsModerator(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(`{"description":"Updated by a moderator"}`)
+	rec := h.request(t, h.moderator, http.MethodPatch, "/api/v1/communities/midnight-ravens", body, false)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.NotNil(t, got.Description)
+	assert.Equal(t, "Updated by a moderator", *got.Description)
+	// Omitted fields are left alone.
+	assert.Equal(t, "Midnight Ravens", got.Name)
+}
+
+func TestCommunitiesAPI_UpdateCommunity_OutsiderForbidden(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(`{"name":"Hijacked"}`)
+	rec := h.request(t, h.outsider, http.MethodPatch, "/api/v1/communities/midnight-ravens", body, false)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestCommunitiesAPI_UpdateCommunity_AdminWithoutModeForbidden(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(`{"name":"Hijacked"}`)
+	rec := h.request(t, h.admin, http.MethodPatch, "/api/v1/communities/midnight-ravens", body, false)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestCommunitiesAPI_UpdateCommunity_AdminWithModeAllowed(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(`{"name":"Admin Renamed"}`)
+	rec := h.request(t, h.admin, http.MethodPatch, "/api/v1/communities/midnight-ravens", body, true)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+}
+
+// A blank name would leave the community unnameable in every listing, so it is
+// rejected rather than stored. Whitespace-only counts as blank -- it passes a
+// minLength check but is not a name.
+func TestCommunitiesAPI_UpdateCommunity_BlankNameRejected(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(`{"name":"   "}`)
+	rec := h.request(t, h.owner, http.MethodPatch, "/api/v1/communities/midnight-ravens", body, false)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// An empty description CLEARS the blurb. Without this case a description would
+// be write-once-then-permanent, since omission means "unchanged".
+func TestCommunitiesAPI_UpdateCommunity_EmptyDescriptionClears(t *testing.T) {
+	h := newHarness(t)
+
+	set := []byte(`{"description":"temporary"}`)
+	rec := h.request(t, h.owner, http.MethodPatch, "/api/v1/communities/midnight-ravens", set, false)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	clear := []byte(`{"description":""}`)
+	rec = h.request(t, h.owner, http.MethodPatch, "/api/v1/communities/midnight-ravens", clear, false)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	if got.Description != nil && *got.Description != "" {
+		t.Fatalf("description = %q, want it cleared", *got.Description)
+	}
+}
+
+// A moderator must not be able to seize the community or retire it.
+//
+// The schema has no owner_user_id or is_active, and huma REJECTS unknown
+// properties rather than dropping them -- so the attempt fails loudly with a
+// 400 instead of appearing to succeed. That is the stronger outcome: a client
+// cannot believe it changed ownership when it did not.
+func TestCommunitiesAPI_UpdateCommunity_RejectsOwnerAndActiveFields(t *testing.T) {
+	h := newHarness(t)
+
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"owner_user_id", fmt.Sprintf(`{"name":"Still Theirs","owner_user_id":%d}`, h.moderator.ID)},
+		{"is_active", `{"name":"Still Theirs","is_active":false}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := h.request(t, h.moderator, http.MethodPatch,
+				"/api/v1/communities/midnight-ravens", []byte(tc.body), false)
+			assert.Equal(t, http.StatusBadRequest, rec.Code,
+				"a moderator must not be able to set %s", tc.name)
+		})
+	}
+
+	// And the community is untouched by the refused attempts.
+	rec := h.request(t, h.moderator, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, int32(h.owner.ID), got.OwnerUserID, "ownership must be unchanged")
+	assert.True(t, got.IsActive, "the community must still be active")
+	assert.Equal(t, "Midnight Ravens", got.Name, "a rejected request must not apply its other fields")
+}
+
+func TestCommunitiesAPI_UpdateCommunity_NotFound(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(`{"name":"Nowhere"}`)
+	rec := h.request(t, h.owner, http.MethodPatch, "/api/v1/communities/no-such-community", body, false)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// --------------------------------------------------------------- your_role
+
+// your_role tells the client the caller's standing, which the community record
+// alone cannot: it names the owner but not the moderators. Without it the only
+// signal is whether the moderator-gated roster endpoint 403s -- a request most
+// viewers are expected to fail.
+
+func TestCommunitiesAPI_YourRole_Owner(t *testing.T) {
+	h := newHarness(t)
+
+	rec := h.request(t, h.owner, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, core.CommunityRoleOwner, got.YourRole)
+}
+
+func TestCommunitiesAPI_YourRole_Moderator(t *testing.T) {
+	h := newHarness(t)
+
+	rec := h.request(t, h.moderator, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, core.CommunityRoleModerator, got.YourRole)
+}
+
+func TestCommunitiesAPI_YourRole_Outsider(t *testing.T) {
+	h := newHarness(t)
+
+	rec := h.request(t, h.outsider, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, core.CommunityRoleNone, got.YourRole)
+
+	// An outsider still reads the profile -- it is public. The role is the only
+	// thing that changes, so a client can gate edit controls on it.
+	assert.Equal(t, "Midnight Ravens", got.Name)
+}
+
+// A site admin browsing NORMALLY has no standing here. This is the case a
+// cached login payload could never get right, since admin mode is a per-request
+// header the user toggles at will.
+func TestCommunitiesAPI_YourRole_AdminWithoutMode(t *testing.T) {
+	h := newHarness(t)
+
+	rec := h.request(t, h.admin, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, core.CommunityRoleNone, got.YourRole,
+		"an admin browsing normally must not be shown moderation controls")
+}
+
+func TestCommunitiesAPI_YourRole_AdminWithMode(t *testing.T) {
+	h := newHarness(t)
+
+	rec := h.request(t, h.admin, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, true)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, core.CommunityRoleOwner, got.YourRole,
+		"admin mode grants the full power set, which is the owner tier")
+}
+
+// The listing carries the role too, so a browsing surface can mark the
+// communities a user helps run without a request per row.
+func TestCommunitiesAPI_YourRole_OnListing(t *testing.T) {
+	h := newHarness(t)
+
+	rec := h.request(t, h.moderator, http.MethodGet, "/api/v1/communities", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got []core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.NotEmpty(t, got)
+
+	var found bool
+	for _, c := range got {
+		if c.Slug == "midnight-ravens" {
+			found = true
+			assert.Equal(t, core.CommunityRoleModerator, c.YourRole)
+		}
+	}
+	assert.True(t, found, "the seeded community should appear in the active listing")
+}
+
+// The role must reflect the CALLER, not the last caller. A cached-by-slug
+// response that leaked one user's role to another would hand out moderation
+// controls to visitors.
+func TestCommunitiesAPI_YourRole_IsPerCaller(t *testing.T) {
+	h := newHarness(t)
+
+	first := h.request(t, h.owner, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, false)
+	require.Equal(t, http.StatusOK, first.Code)
+
+	second := h.request(t, h.outsider, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, false)
+	require.Equal(t, http.StatusOK, second.Code)
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(second.Body.Bytes(), &got))
+	assert.Equal(t, core.CommunityRoleNone, got.YourRole,
+		"the outsider must not inherit the owner's role from a prior request")
+}

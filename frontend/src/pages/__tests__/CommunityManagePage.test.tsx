@@ -24,17 +24,9 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useParams: () => routeParams }
 })
 
-let currentUser: { id: number; username: string; is_admin?: boolean } | null = null
-vi.mock('../../contexts/AuthContext', async () => {
-  const actual = await vi.importActual('../../contexts/AuthContext')
-  return { ...actual, useAuth: () => ({ currentUser, isCheckingAuth: false }) }
-})
-
-let adminModeEnabled = false
-vi.mock('../../contexts/AdminModeContext', async () => {
-  const actual = await vi.importActual('../../contexts/AdminModeContext')
-  return { ...actual, useAdminMode: () => ({ adminModeEnabled, setAdminModeEnabled: vi.fn() }) }
-})
+// Standing comes from the server as your_role -- which already accounts for
+// moderator rows and for admin mode -- so these tests vary the payload rather
+// than the auth context.
 
 const community = {
   id: 1,
@@ -45,9 +37,15 @@ const community = {
   owner_user_id: 7,
   owner_username: 'corvid',
   is_active: true,
+  your_role: '' as const,
   created_at: '2026-08-01T00:00:00Z',
   updated_at: '2026-08-01T00:00:00Z',
 }
+
+/** The same community as seen by a viewer with the given standing. */
+const asRole = (your_role: '' | 'moderator' | 'owner') => ({
+  data: { ...community, your_role },
+})
 
 const moderator = {
   id: 11,
@@ -60,15 +58,12 @@ const moderator = {
 beforeEach(() => {
   vi.clearAllMocks()
   routeParams = { slug: 'midnight-ravens', tab: 'moderators' }
-  currentUser = null
-  adminModeEnabled = false
-  getCommunity.mockResolvedValue({ data: community })
+  getCommunity.mockResolvedValue(asRole('owner'))
   listModerators.mockResolvedValue({ data: [moderator] })
 })
 
 describe('CommunityManagePage', () => {
   it('renders the moderators tab for the owner', async () => {
-    currentUser = { id: 7, username: 'corvid' }
     renderWithProviders(<CommunityManagePage />)
 
     expect(await screen.findByText('Manage Midnight Ravens')).toBeInTheDocument()
@@ -78,7 +73,7 @@ describe('CommunityManagePage', () => {
   // A moderator legitimately reaches this page -- later phases give them bans
   // and documents here. What they must not get is roster control.
   it('lets a moderator in but withholds the roster controls', async () => {
-    currentUser = { id: 22, username: 'rook' }
+    getCommunity.mockResolvedValue(asRole('moderator'))
     renderWithProviders(<CommunityManagePage />)
 
     expect(await screen.findByText('Manage Midnight Ravens')).toBeInTheDocument()
@@ -88,17 +83,17 @@ describe('CommunityManagePage', () => {
     expect(screen.queryByTestId(`remove-moderator-${moderator.user_id}`)).not.toBeInTheDocument()
   })
 
-  it('grants roster control to an admin only with admin mode enabled', async () => {
-    currentUser = { id: 99, username: 'root', is_admin: true }
-    adminModeEnabled = true
+  // An admin WITH admin mode is reported as 'owner' by the server, so they get
+  // roster control; without it the server reports '' and they do not. Both are
+  // server-side decisions now, which is why they read as ordinary role cases.
+  it('grants roster control when the server reports owner standing', async () => {
     renderWithProviders(<CommunityManagePage />)
 
     expect(await screen.findByTestId('moderator-user-search')).toBeInTheDocument()
   })
 
-  it('withholds roster control from an admin browsing normally', async () => {
-    currentUser = { id: 99, username: 'root', is_admin: true }
-    adminModeEnabled = false
+  it('withholds roster control when the server reports no standing', async () => {
+    getCommunity.mockResolvedValue(asRole(''))
     renderWithProviders(<CommunityManagePage />)
 
     expect(await screen.findByText('rook')).toBeInTheDocument()
@@ -108,15 +103,32 @@ describe('CommunityManagePage', () => {
   // An unrecognised tab falls back rather than rendering nothing, so a stale or
   // hand-edited URL still lands somewhere useful.
   it('falls back to the moderators tab for an unknown tab', async () => {
-    currentUser = { id: 7, username: 'corvid' }
     routeParams = { slug: 'midnight-ravens', tab: 'not-a-tab' }
     renderWithProviders(<CommunityManagePage />)
 
     expect(await screen.findByTestId('moderator-user-search')).toBeInTheDocument()
   })
 
+  // Profile editing is moderator-level, unlike the roster: a moderator gets the
+  // real form, not the read-only notice.
+  it('lets a moderator edit the profile on the settings tab', async () => {
+    routeParams = { slug: 'midnight-ravens', tab: 'settings' }
+    getCommunity.mockResolvedValue(asRole('moderator'))
+    renderWithProviders(<CommunityManagePage />)
+
+    expect(await screen.findByTestId('community-settings-form')).toBeInTheDocument()
+  })
+
+  it('shows the settings tab read-only to a viewer with no standing', async () => {
+    routeParams = { slug: 'midnight-ravens', tab: 'settings' }
+    getCommunity.mockResolvedValue(asRole(''))
+    renderWithProviders(<CommunityManagePage />)
+
+    expect(await screen.findByText(/only this community's moderators/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('community-settings-form')).not.toBeInTheDocument()
+  })
+
   it('reports a missing community', async () => {
-    currentUser = { id: 7, username: 'corvid' }
     getCommunity.mockRejectedValue(new Error('404'))
     renderWithProviders(<CommunityManagePage />)
 

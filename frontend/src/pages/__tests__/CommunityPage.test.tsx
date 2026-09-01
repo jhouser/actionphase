@@ -18,18 +18,9 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useParams: () => ({ slug: 'midnight-ravens' }) }
 })
 
-let currentUser: { id: number; username: string; is_admin?: boolean } | null = null
-vi.mock('../../contexts/AuthContext', async () => {
-  const actual = await vi.importActual('../../contexts/AuthContext')
-  return { ...actual, useAuth: () => ({ currentUser, isCheckingAuth: false }) }
-})
-
-let adminModeEnabled = false
-vi.mock('../../contexts/AdminModeContext', async () => {
-  const actual = await vi.importActual('../../contexts/AdminModeContext')
-  return { ...actual, useAdminMode: () => ({ adminModeEnabled, setAdminModeEnabled: vi.fn() }) }
-})
-
+// The page no longer derives the viewer's standing -- the server reports it as
+// your_role, which already folds in moderator rows AND admin mode. So these
+// tests vary the payload rather than the auth context.
 const community = {
   id: 1,
   name: 'Midnight Ravens',
@@ -39,20 +30,23 @@ const community = {
   owner_user_id: 7,
   owner_username: 'corvid',
   is_active: true,
+  your_role: '' as const,
   created_at: '2026-08-01T00:00:00Z',
   updated_at: '2026-08-01T00:00:00Z',
 }
 
+/** The same community as seen by a viewer with the given standing. */
+const asRole = (your_role: '' | 'moderator' | 'owner') => ({
+  data: { ...community, your_role },
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
-  currentUser = null
-  adminModeEnabled = false
-  getCommunity.mockResolvedValue({ data: community })
+  getCommunity.mockResolvedValue(asRole(''))
 })
 
 describe('CommunityPage', () => {
   it('renders the profile with its owner', async () => {
-    currentUser = { id: 99, username: 'visitor' }
     renderWithProviders(<CommunityPage />)
 
     expect(await screen.findByText('Midnight Ravens')).toBeInTheDocument()
@@ -60,7 +54,7 @@ describe('CommunityPage', () => {
   })
 
   it('offers Manage to the owner', async () => {
-    currentUser = { id: 7, username: 'corvid' }
+    getCommunity.mockResolvedValue(asRole('owner'))
     renderWithProviders(<CommunityPage />)
 
     const manage = await screen.findByTestId('manage-community')
@@ -70,8 +64,16 @@ describe('CommunityPage', () => {
     )
   })
 
+  // Previously impossible to express: the page compared against owner_user_id,
+  // so a moderator was indistinguishable from a visitor.
+  it('offers Manage to a moderator', async () => {
+    getCommunity.mockResolvedValue(asRole('moderator'))
+    renderWithProviders(<CommunityPage />)
+
+    expect(await screen.findByTestId('manage-community')).toBeInTheDocument()
+  })
+
   it('does not offer Manage to an ordinary visitor', async () => {
-    currentUser = { id: 99, username: 'visitor' }
     renderWithProviders(<CommunityPage />)
 
     expect(await screen.findByText('Midnight Ravens')).toBeInTheDocument()
@@ -80,22 +82,13 @@ describe('CommunityPage', () => {
 
   // Admin mode is the same convention as GM override: an admin browsing
   // normally is an ordinary visitor, so they do not get moderation affordances
-  // by accident.
-  it('does not offer Manage to an admin who has not enabled admin mode', async () => {
-    currentUser = { id: 99, username: 'root', is_admin: true }
-    adminModeEnabled = false
+  // by accident. The SERVER enforces that -- it reports '' for an admin without
+  // admin mode -- which is why this case now looks like any other visitor here.
+  it('does not offer Manage when the server reports no standing', async () => {
     renderWithProviders(<CommunityPage />)
 
     expect(await screen.findByText('Midnight Ravens')).toBeInTheDocument()
     expect(screen.queryByTestId('manage-community')).not.toBeInTheDocument()
-  })
-
-  it('offers Manage to an admin with admin mode enabled', async () => {
-    currentUser = { id: 99, username: 'root', is_admin: true }
-    adminModeEnabled = true
-    renderWithProviders(<CommunityPage />)
-
-    expect(await screen.findByTestId('manage-community')).toBeInTheDocument()
   })
 
   it('reports a missing community rather than rendering a blank profile', async () => {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -35,6 +36,32 @@ type moderatorOutput struct {
 	Body *core.CommunityModerator
 }
 
+// updateCommunityProfileInput carries the moderator-editable slice of a
+// community profile.
+//
+// Named for the PROFILE rather than the community because huma derives schema
+// component names from this Go type: the admin package has its own
+// updateCommunityInput, and two identically-named input types collapse into one
+// OpenAPI component. When they did, the admin endpoint's documented body
+// silently lost owner_user_id and is_active.
+//
+// Deliberately NARROWER than the admin PATCH: no owner_user_id and no
+// is_active. Reassigning ownership and deactivating a community are site-admin
+// acts, and a moderator who could set either could seize or retire a community
+// they merely help run.
+//
+// Slug is absent because it is immutable after creation -- it appears in URLs
+// communities have shared externally.
+type updateCommunityProfileInput struct {
+	Slug string `path:"slug" doc:"Community URL slug"`
+	Body struct {
+		Name *string `json:"name,omitempty" minLength:"2" maxLength:"255" doc:"Display name"`
+		// Tri-state, matching core.UpdateCommunityRequest: omitted leaves the
+		// blurb alone, a value sets it, and an empty string clears it. Markdown.
+		Description *string `json:"description,omitempty" doc:"Profile blurb (markdown); empty string clears it"`
+	}
+}
+
 type addModeratorInput struct {
 	Slug string `path:"slug" doc:"Community URL slug"`
 	Body struct {
@@ -49,26 +76,66 @@ type removeModeratorInput struct {
 
 // ----------------------------------------------------------------- handlers
 
+// withYourRole stamps the CALLER's standing onto each community.
+//
+// Computed per request rather than stored, because the answer depends on who is
+// asking -- and, for a site admin, on whether admin mode is currently on. A
+// value cached at login could not track that toggle.
+//
+// Mutates in place: these are freshly built structs from the service, not
+// shared cache entries.
+func (h *Handler) withYourRole(ctx context.Context, userID int32, list ...*core.Community) {
+	isAdmin := h.isSiteAdmin(ctx, userID)
+
+	for _, c := range list {
+		if c == nil {
+			continue
+		}
+		// Admin mode confers the full power set, which is the owner tier --
+		// the same rule CanAdministerCommunity applies. Checked first so an
+		// admin is not downgraded to their incidental standing.
+		if isAdmin && core.GetAdminMode(ctx) {
+			c.YourRole = core.CommunityRoleOwner
+			continue
+		}
+		c.YourRole = core.GetCommunityRole(ctx, h.App.Pool, c.ID, userID)
+	}
+}
+
 // humaListCommunities returns the active communities.
 //
 // Inactive communities are omitted: they accept no new games, so listing them
 // on a public surface would invite dead ends. Site admins see the full list
 // through the admin endpoint instead.
 func (h *Handler) humaListCommunities(ctx context.Context, _ *struct{}) (*communityListOutput, error) {
+	userID, err := h.authUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	list, err := h.CommunityService.ListActiveCommunities(ctx)
 	if err != nil {
 		h.App.ObsLogger.LogError(ctx, err, "Failed to list active communities")
 		return nil, huma.Error500InternalServerError("Failed to list communities")
 	}
+
+	h.withYourRole(ctx, userID, list...)
 	return &communityListOutput{Body: list}, nil
 }
 
 // humaGetCommunity returns one community's profile by slug.
 func (h *Handler) humaGetCommunity(ctx context.Context, in *communitySlugInput) (*communityOutput, error) {
+	userID, err := h.authUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	community, err := h.loadCommunity(ctx, in.Slug)
 	if err != nil {
 		return nil, err
 	}
+
+	h.withYourRole(ctx, userID, community)
 	return &communityOutput{Body: community}, nil
 }
 
@@ -148,6 +215,47 @@ func (h *Handler) humaRemoveModerator(ctx context.Context, in *removeModeratorIn
 	return nil, nil
 }
 
+// humaUpdateCommunity edits a community's name and description.
+//
+// Moderator-level (req 4), not owner-only: keeping the profile current is
+// ordinary upkeep, the same class of work as moderating bans and documents. The
+// roster stays the owner's alone.
+func (h *Handler) humaUpdateCommunity(ctx context.Context, in *updateCommunityProfileInput) (*communityOutput, error) {
+	community, actorID, err := h.requireModerator(ctx, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+
+	// Trim before the blank check so a name of only spaces is rejected rather
+	// than stored. minLength on the tag counts characters, not content.
+	var name *string
+	if in.Body.Name != nil {
+		trimmed := strings.TrimSpace(*in.Body.Name)
+		if trimmed == "" {
+			return nil, huma.Error400BadRequest("name cannot be blank")
+		}
+		name = &trimmed
+	}
+
+	updated, err := h.CommunityService.UpdateCommunity(ctx, community.ID, &core.UpdateCommunityRequest{
+		Name:        name,
+		Description: in.Body.Description,
+	})
+	if err != nil {
+		if errors.Is(err, core.ErrCommunityNotFound) {
+			return nil, huma.Error404NotFound("community not found")
+		}
+		h.App.ObsLogger.LogError(ctx, err, "Failed to update community",
+			"community_id", community.ID)
+		return nil, huma.Error500InternalServerError("Failed to update community")
+	}
+
+	// The caller just proved they moderate, but say so explicitly rather than
+	// hardcoding a tier -- an owner and a moderator both reach here.
+	h.withYourRole(ctx, actorID, updated)
+	return &communityOutput{Body: updated}, nil
+}
+
 // -------------------------------------------------------------- registration
 
 // RegisterHumaCommunities registers the member- and moderator-facing community
@@ -179,6 +287,24 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 			"404": {Description: "Community not found"},
 		},
 	}, h.humaGetCommunity)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "updateCommunity",
+		Method:      http.MethodPatch,
+		Path:        "/{slug}",
+		Summary:     "Edit a community's name and description",
+		Description: "Requires moderation rights -- keeping the profile current is ordinary " +
+			"upkeep. Narrower than the admin PATCH: ownership and active status are not " +
+			"editable here, and the slug is immutable. An empty description clears it.",
+		Tags:     []string{"Communities"},
+		Security: []map[string][]string{{"BearerAuth": {}}},
+		Responses: map[string]*huma.Response{
+			"400": {Description: "Name is blank or out of range"},
+			"401": {Description: "Not authenticated"},
+			"403": {Description: "Caller does not moderate this community"},
+			"404": {Description: "Community not found"},
+		},
+	}, h.humaUpdateCommunity)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "listCommunityModerators",

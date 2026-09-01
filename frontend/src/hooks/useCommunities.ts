@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
 import type {
   CreateCommunityRequest,
+  UpdateCommunityProfileRequest,
   UpdateCommunityRequest,
 } from '../types/communities';
 
@@ -83,6 +84,34 @@ export function useCommunity(slug: string | undefined) {
   });
 
   return { community: data, isLoading, isError, error };
+}
+
+/**
+ * Moderator-level profile editing for one community.
+ *
+ * Separate from useCommunities()'s admin `updateCommunity`: that one is keyed
+ * by id and can reassign ownership, and lives on the admin surface.
+ *
+ * Invalidates BOTH cache keys on success. The profile page reads
+ * communityQueryKey(slug) while every game form's picker reads
+ * ACTIVE_COMMUNITIES_QUERY_KEY -- refreshing only the first would leave a
+ * renamed community showing its old name in every dropdown until the cache
+ * expired.
+ */
+export function useUpdateCommunityProfile(slug: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: UpdateCommunityProfileRequest) =>
+      apiClient.communities.updateCommunityProfile(slug!, payload).then((res) => res.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: communityQueryKey(slug ?? '') });
+      queryClient.invalidateQueries({ queryKey: ACTIVE_COMMUNITIES_QUERY_KEY });
+      // The admin listing shows the same name; leaving it stale would make the
+      // admin table disagree with the community page.
+      queryClient.invalidateQueries({ queryKey: COMMUNITIES_QUERY_KEY });
+    },
+  });
 }
 
 /**
