@@ -1472,7 +1472,10 @@ func (h *Handler) humaApplyToGame(ctx context.Context, in *applyToGameInput) (*a
 		// corrected to make it succeed. Matched with errors.Is rather than by
 		// message, since the service returns a sentinel.
 		if errors.Is(err, core.ErrUserBannedFromCommunity) {
-			return nil, h.logAndErr(ctx, core.ErrForbidden(err.Error()),
+			// Spelled out here rather than passing err.Error() through: the
+			// sentinel's text is lowercase by Go convention, and this string is
+			// rendered verbatim to the user as a sentence.
+			return nil, h.logAndErr(ctx, core.ErrForbidden("You are banned from this community"),
 				"Banned user attempted to apply to game", "game_id", game.ID, "user_id", authUser.ID)
 		}
 

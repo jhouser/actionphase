@@ -43,6 +43,27 @@ type Community struct {
 	// is precisely why the role rides on the response rather than on a cached
 	// login payload.
 	YourRole CommunityRole `json:"your_role"`
+
+	// IsBanned reports whether the REQUESTING user is currently barred from
+	// this community. Like YourRole it describes the request, not the
+	// community, and is computed per response rather than stored.
+	//
+	// It exists so the game-creation picker can omit communities the create
+	// endpoint would refuse. That is CONVENIENCE only -- the ban check on game
+	// creation is the enforcement, and it stands regardless of this flag.
+	//
+	// "Currently" is load-bearing: an EXPIRED ban leaves a row behind
+	// deliberately, so this is computed from the same expiry rule the
+	// enforcement paths use and is false once a ban lapses. Never infer a ban
+	// from a row's presence.
+	//
+	// Browsing is deliberately NOT filtered on this: a banned user still sees
+	// the community and can read its profile. A ban blocks joining, not
+	// looking.
+	//
+	// NOT omitempty: false is the meaningful "not banned" value, and omitting
+	// it would be ambiguous with "this endpoint does not populate it".
+	IsBanned bool `json:"is_banned"`
 }
 
 // CommunityModerator is a user granted moderation powers over a community.
@@ -164,35 +185,6 @@ var reservedCommunitySlugs = map[string]bool{
 // IsReservedCommunitySlug reports whether s is reserved for site use.
 func IsReservedCommunitySlug(s string) bool {
 	return reservedCommunitySlugs[strings.ToLower(strings.TrimSpace(s))]
-}
-
-// SuggestCommunitySlug derives a candidate slug from a community name. It is a
-// convenience for the create form, not a validator -- the result must still
-// pass ValidateCommunitySlug, since a name of only punctuation yields "".
-func SuggestCommunitySlug(name string) string {
-	lower := strings.ToLower(strings.TrimSpace(name))
-
-	var b strings.Builder
-	lastHyphen := false
-	for _, r := range lower {
-		switch {
-		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
-			b.WriteRune(r)
-			lastHyphen = false
-		default:
-			// Collapse any run of non-alphanumerics into one hyphen.
-			if !lastHyphen && b.Len() > 0 {
-				b.WriteByte('-')
-				lastHyphen = true
-			}
-		}
-	}
-
-	out := strings.Trim(b.String(), "-")
-	if len(out) > CommunitySlugMaxLength {
-		out = strings.Trim(out[:CommunitySlugMaxLength], "-")
-	}
-	return out
 }
 
 // CommunityBan excludes one user from one community's games.

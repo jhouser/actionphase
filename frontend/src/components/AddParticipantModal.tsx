@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Button } from './ui';
+import { Alert, Button } from './ui';
 import { Modal } from './Modal';
+import { createAppError, getErrorMessage } from '../lib/errors';
 import { useAddParticipant } from '../hooks/usePlayerManagement';
 import { UserSearchSelect, type SelectedUser } from './UserSearchSelect';
 import { logger } from '@/services/LoggingService';
@@ -19,13 +20,13 @@ const CONFIG = {
     title: 'Add Player Directly',
     description: 'Adding a player directly bypasses the application process and grants them immediate access to the game.',
     buttonLabel: 'Add Player',
-    errorMessage: 'Failed to add player. They may already be in the game, or the user may be invalid.',
+    fallbackError: 'Failed to add player. They may already be in the game, or the user may be invalid.',
   },
   audience: {
     title: 'Add Audience Member Directly',
     description: 'Adding an audience member directly bypasses the application process and grants them immediate audience access.',
     buttonLabel: 'Add Audience Member',
-    errorMessage: 'Failed to add audience member. They may already be in the game, or the user may be invalid.',
+    fallbackError: 'Failed to add audience member. They may already be in the game, or the user may be invalid.',
   },
 } as const;
 
@@ -49,6 +50,19 @@ export function AddParticipantModal({ gameId, role, isOpen, onClose, onSuccess, 
       logger.error(`Failed to add ${role}`, { error, gameId, userId: selectedUser.id, username: selectedUser.username });
     }
   };
+
+  // Prefer what the server actually said. The generic wording guesses at two
+  // causes -- already a participant, or an invalid user -- and both are wrong
+  // for the case that prompted this: a community-banned user, which the API
+  // reports precisely.
+  //
+  // Gated on statusCode because createAppError substitutes its own generic
+  // string for non-HTTP failures; without the check a dropped connection would
+  // read as "An unexpected error occurred" instead of the role-specific wording
+  // below, which at least tells the GM what they were trying to do.
+  const appError = addParticipant.error ? createAppError(addParticipant.error) : null;
+  const errorText =
+    appError?.statusCode ? getErrorMessage(appError) : config.fallbackError;
 
   const handleClose = () => {
     if (!addParticipant.isPending) {
@@ -75,9 +89,7 @@ export function AddParticipantModal({ gameId, role, isOpen, onClose, onSuccess, 
         />
 
         {addParticipant.isError && (
-          <div className="p-3 rounded-lg bg-semantic-danger-subtle border border-semantic-danger">
-            <p className="text-sm text-semantic-danger">{config.errorMessage}</p>
-          </div>
+          <Alert variant="danger">{errorText}</Alert>
         )}
 
         <div className="flex justify-end gap-3">

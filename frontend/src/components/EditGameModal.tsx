@@ -5,7 +5,7 @@ import { apiClient } from '../lib/api';
 import { Button, Alert } from './ui';
 import { Modal } from './Modal';
 import { GameFormFields } from './GameFormFields';
-import { useActiveCommunities } from '../hooks/useCommunities';
+import { useSelectableCommunities } from '../hooks/useCommunities';
 import type { GameFormTabId } from './gameFormTabs';
 import { useRevealInvalidTab } from '../hooks/useRevealInvalidTab';
 import { HelpTooltip } from './ui/HelpTooltip';
@@ -47,7 +47,7 @@ export function EditGameModal({ game, isOpen, onClose, onGameUpdated }: EditGame
   // the server refuses the change regardless; this keeps the form honest about
   // what it can do.
   const canChangeCommunity = game?.state === 'setup';
-  const { communities } = useActiveCommunities();
+  const { communities } = useSelectableCommunities();
 
   useEffect(() => {
     if (isOpen && game) {

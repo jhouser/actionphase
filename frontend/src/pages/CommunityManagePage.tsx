@@ -2,19 +2,23 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { TabNavigation } from '../components/TabNavigation';
 import { Alert, Spinner } from '../components/ui';
 import { useCommunity } from '../hooks/useCommunities';
+import { BanHistoryTab } from './community/BanHistoryTab';
+import { BansTab } from './community/BansTab';
 import { ModeratorsTab } from './community/ModeratorsTab';
 import { SettingsTab } from './community/SettingsTab';
 
 /**
  * Management shell for one community.
  *
- * Moderators and Settings exist so far. Bans, documents, and webhooks arrive in
- * later phases; the tab list grows here rather than the routing changing shape.
+ * Documents and webhooks arrive in later phases; the tab list grows here rather
+ * than the routing changing shape.
  */
-type TabId = 'moderators' | 'settings';
-const VALID_TABS: TabId[] = ['moderators', 'settings'];
+type TabId = 'moderators' | 'bans' | 'history' | 'settings';
+const VALID_TABS: TabId[] = ['moderators', 'bans', 'history', 'settings'];
 const TABS: { id: TabId; label: string }[] = [
   { id: 'moderators', label: 'Moderators' },
+  { id: 'bans', label: 'Bans' },
+  { id: 'history', label: 'Ban history' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -79,6 +83,14 @@ export function CommunityManagePage() {
 
       {activeTab === 'moderators' && (
         <ModeratorsTab community={community} canAdminister={canAdminister} />
+      )}
+
+      {activeTab === 'bans' && (
+        <BansTab community={community} canModerate={canModerate} />
+      )}
+
+      {activeTab === 'history' && (
+        <BanHistoryTab community={community} canModerate={canModerate} />
       )}
 
       {activeTab === 'settings' && (

@@ -1,13 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
 import type {
+  CreateCommunityBanRequest,
   CreateCommunityRequest,
   UpdateCommunityProfileRequest,
   UpdateCommunityRequest,
 } from '../types/communities';
 
 /** Shared cache key so mutations and reads cannot drift apart. */
-export const COMMUNITIES_QUERY_KEY = ['admin', 'communities'] as const;
+const COMMUNITIES_QUERY_KEY = ['admin', 'communities'] as const;
 
 /**
  * Admin community management: the list plus create and update mutations.
@@ -56,13 +57,13 @@ export function useCommunities() {
  * every community including inactive ones, while this one carries only active
  * ones. Sharing a key would let one surface serve the other's data.
  */
-export const ACTIVE_COMMUNITIES_QUERY_KEY = ['communities', 'active'] as const;
+const ACTIVE_COMMUNITIES_QUERY_KEY = ['communities', 'active'] as const;
 
 /** Cache key for one community's profile. */
-export const communityQueryKey = (slug: string) => ['communities', slug] as const;
+const communityQueryKey = (slug: string) => ['communities', slug] as const;
 
 /** Cache key for one community's moderator roster. */
-export const moderatorsQueryKey = (slug: string) =>
+const moderatorsQueryKey = (slug: string) =>
   ['communities', slug, 'moderators'] as const;
 
 /** The active communities, for browsing surfaces. */
@@ -153,5 +154,108 @@ export function useCommunityModerators(slug: string | undefined, enabled = true)
     error,
     addModerator,
     removeModerator,
+  };
+}
+
+/** Cache key for one community's banlist. */
+const bansQueryKey = (slug: string) => ['communities', slug, 'bans'] as const;
+
+/** Cache key for one community's ban audit log. */
+const banEventsQueryKey = (slug: string) =>
+  ['communities', slug, 'ban-events'] as const;
+
+/**
+ * A community's banlist plus the ban and unban mutations.
+ *
+ * `enabled` holds the request back until the caller knows the viewer may
+ * moderate; the endpoint 403s otherwise, and firing it regardless would seed
+ * the cache with a guaranteed error for every ordinary visitor.
+ *
+ * Both mutations invalidate the AUDIT LOG as well as the list. They are written
+ * in one transaction server-side, so a refreshed banlist beside a stale log
+ * would show the two disagreeing about what just happened.
+ */
+export function useCommunityBans(slug: string | undefined, enabled = true) {
+  const queryClient = useQueryClient();
+  const key = bansQueryKey(slug ?? '');
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: key,
+    queryFn: () => apiClient.communities.listBans(slug!).then((res) => res.data),
+    enabled: Boolean(slug) && enabled,
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: key });
+    queryClient.invalidateQueries({ queryKey: banEventsQueryKey(slug ?? '') });
+    // is_banned rides on the community payloads, so a ban that lands changes
+    // what the affected user's picker should offer. Refreshed here because the
+    // listing is the picker's source.
+    queryClient.invalidateQueries({ queryKey: ACTIVE_COMMUNITIES_QUERY_KEY });
+  };
+
+  const banUser = useMutation({
+    mutationFn: (payload: CreateCommunityBanRequest) =>
+      apiClient.communities.banUser(slug!, payload).then((res) => res.data),
+    onSuccess: invalidate,
+  });
+
+  const unbanUser = useMutation({
+    mutationFn: (userId: number) => apiClient.communities.unbanUser(slug!, userId),
+    onSuccess: invalidate,
+  });
+
+  return { bans: data ?? [], isLoading, isError, error, banUser, unbanUser };
+}
+
+/**
+ * A community's ban audit log, newest first.
+ *
+ * Paged rather than fetched whole: the log is append-only and only grows.
+ */
+export function useCommunityBanEvents(
+  slug: string | undefined,
+  { enabled = true, limit = 50, offset = 0 }: {
+    enabled?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: [...banEventsQueryKey(slug ?? ''), limit, offset] as const,
+    queryFn: () =>
+      apiClient.communities.listBanEvents(slug!, { limit, offset }).then((res) => res.data),
+    enabled: Boolean(slug) && enabled,
+  });
+
+  return { events: data ?? [], isLoading, isError, error };
+}
+
+/**
+ * The ACTIVE communities the current user may actually create a game in.
+ *
+ * Distinct from useActiveCommunities, which is the browse listing and
+ * deliberately still shows communities the user is banned from -- a ban blocks
+ * joining, not looking. This one is for the create/edit game picker, where
+ * offering a community the server will refuse is a dead end.
+ *
+ * Reads `is_banned` off the community records rather than fetching a separate
+ * banlist: the flag is computed per request on the same payload, so the picker
+ * costs no extra round-trip and the two can never disagree about who is banned.
+ *
+ * Filtering here is CONVENIENCE. Enforcement is the ban check on game creation;
+ * if this list were wrong the server would still refuse.
+ */
+export function useSelectableCommunities() {
+  const { communities, isLoading, isError, error } = useActiveCommunities();
+
+  return {
+    // Treats a missing is_banned as "not banned": an older cached payload
+    // predating the field should not empty the picker, and the server refuses
+    // a banned choice regardless.
+    communities: communities.filter((c) => !c.is_banned),
+    isLoading,
+    isError,
+    error,
   };
 }

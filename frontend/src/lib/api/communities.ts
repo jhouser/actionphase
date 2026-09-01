@@ -2,7 +2,10 @@ import { BaseApiClient } from './client';
 import type {
   AddModeratorRequest,
   Community,
+  CommunityBan,
+  CommunityBanEvent,
   CommunityModerator,
+  CreateCommunityBanRequest,
   CreateCommunityRequest,
   UpdateCommunityProfileRequest,
   UpdateCommunityRequest,
@@ -16,7 +19,7 @@ import type {
  * including inactive ones. The /communities routes are gated per-community on
  * the caller's own standing, so they list only ACTIVE communities.
  *
- * Bans, documents, and webhooks arrive in later phases.
+ * Documents and webhooks arrive in later phases.
  */
 export class CommunitiesApi extends BaseApiClient {
   /** Admin: create a community and assign its owner. */
@@ -78,6 +81,51 @@ export class CommunitiesApi extends BaseApiClient {
   async removeModerator(slug: string, userId: number) {
     return this.client.delete<void>(
       `/api/v1/communities/${slug}/moderators/${userId}`
+    );
+  }
+
+  /**
+   * A community's banlist. Requires moderation rights.
+   *
+   * EXPIRED bans are included, each carrying `is_active`. Render from that
+   * field rather than from the row's presence, and show a lapsed ban as lapsed
+   * -- dropping it would make a ban appear to vanish.
+   */
+  async listBans(slug: string) {
+    return this.client.get<CommunityBan[]>(`/api/v1/communities/${slug}/bans`);
+  }
+
+  /**
+   * Moderator: ban a user, or edit an existing ban in place.
+   *
+   * Re-banning an already-banned user is a normal 200, not a conflict: it
+   * updates the reason and expiry while preserving the original `banned_at`.
+   */
+  async banUser(slug: string, data: CreateCommunityBanRequest) {
+    return this.client.post<CommunityBan>(`/api/v1/communities/${slug}/bans`, data);
+  }
+
+  /**
+   * Moderator: lift a ban.
+   *
+   * 404s if the user is not banned -- unlike removing a moderator, which is
+   * idempotent. This is reached from a banlist, so a missing row means the view
+   * is stale and someone else lifted it first.
+   */
+  async unbanUser(slug: string, userId: number) {
+    return this.client.delete<void>(`/api/v1/communities/${slug}/bans/${userId}`);
+  }
+
+  /**
+   * A community's ban audit log, newest first. Requires moderation rights.
+   *
+   * Lifting a ban deletes its row, so for an unbanned user this log is the only
+   * surviving record the ban existed.
+   */
+  async listBanEvents(slug: string, params?: { limit?: number; offset?: number }) {
+    return this.client.get<CommunityBanEvent[]>(
+      `/api/v1/communities/${slug}/ban-events`,
+      { params }
     );
   }
 }

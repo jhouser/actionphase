@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -74,23 +75,90 @@ type removeModeratorInput struct {
 	UserID int32  `path:"userID" doc:"User whose moderation powers are revoked"`
 }
 
+type banListOutput struct {
+	Body []*core.CommunityBan
+}
+
+type banOutput struct {
+	Body *core.CommunityBan
+}
+
+// createBanInput bans a user, or edits an existing ban in place.
+//
+// The body mirrors core.CreateCommunityBanRequest rather than reusing it,
+// because huma derives request validation from the struct tags and the core
+// type is a service-layer contract with no tags on it.
+type createBanInput struct {
+	Slug string `path:"slug" doc:"Community URL slug"`
+	Body struct {
+		UserID int32   `json:"user_id" required:"true" minimum:"1" doc:"User to ban"`
+		Reason *string `json:"reason,omitempty" maxLength:"1000" doc:"Why the user was banned; shown to moderators only"`
+
+		// Omitted means PERMANENT, which is the common case. A client that
+		// wants a temporary ban sends an absolute timestamp rather than a
+		// duration, so the expiry does not drift with request latency.
+		ExpiresAt *time.Time `json:"expires_at,omitempty" doc:"When the ban lapses; omit for a permanent ban"`
+	}
+}
+
+type removeBanInput struct {
+	Slug   string `path:"slug" doc:"Community URL slug"`
+	UserID int32  `path:"userID" doc:"User whose ban is lifted"`
+}
+
+// banEventListInput pages the audit log. It grows without bound, so it is never
+// returned whole.
+type banEventListInput struct {
+	Slug   string `path:"slug" doc:"Community URL slug"`
+	Limit  int32  `query:"limit" doc:"Entries per page" minimum:"1" maximum:"200" default:"50"`
+	Offset int32  `query:"offset" doc:"Entries to skip" minimum:"0" default:"0"`
+}
+
+type banEventListOutput struct {
+	Body []*core.CommunityBanEvent
+}
+
 // ----------------------------------------------------------------- handlers
 
-// withYourRole stamps the CALLER's standing onto each community.
+// withCallerContext stamps the CALLER's standing and ban status onto each
+// community.
 //
-// Computed per request rather than stored, because the answer depends on who is
-// asking -- and, for a site admin, on whether admin mode is currently on. A
-// value cached at login could not track that toggle.
+// Both are computed per request rather than stored, because the answer depends
+// on who is asking -- and, for a site admin, on whether admin mode is currently
+// on. A value cached at login could not track that toggle.
+//
+// The ban lookup is ONE query for the whole slice rather than one per
+// community, so stamping a listing costs the same as stamping a single record.
+//
+// A failed ban lookup leaves IsBanned false rather than failing the request:
+// this flag only filters a picker, and the ban check on game creation is the
+// actual enforcement. Refusing to render the community list because the
+// convenience lookup broke would trade a minor annoyance for an outage.
 //
 // Mutates in place: these are freshly built structs from the service, not
 // shared cache entries.
-func (h *Handler) withYourRole(ctx context.Context, userID int32, list ...*core.Community) {
+func (h *Handler) withCallerContext(ctx context.Context, userID int32, list ...*core.Community) {
 	isAdmin := h.isSiteAdmin(ctx, userID)
+
+	bannedIDs, err := h.CommunityService.ListBannedCommunityIDs(ctx, userID)
+	if err != nil {
+		h.App.ObsLogger.LogError(ctx, err, "Failed to load caller's community bans",
+			"user_id", userID)
+	}
+	banned := make(map[int32]bool, len(bannedIDs))
+	for _, id := range bannedIDs {
+		banned[id] = true
+	}
 
 	for _, c := range list {
 		if c == nil {
 			continue
 		}
+
+		// A ban is a fact about the user regardless of standing. Stamped
+		// before the admin short-circuit below so it is never skipped.
+		c.IsBanned = banned[c.ID]
+
 		// Admin mode confers the full power set, which is the owner tier --
 		// the same rule CanAdministerCommunity applies. Checked first so an
 		// admin is not downgraded to their incidental standing.
@@ -119,7 +187,7 @@ func (h *Handler) humaListCommunities(ctx context.Context, _ *struct{}) (*commun
 		return nil, huma.Error500InternalServerError("Failed to list communities")
 	}
 
-	h.withYourRole(ctx, userID, list...)
+	h.withCallerContext(ctx, userID, list...)
 	return &communityListOutput{Body: list}, nil
 }
 
@@ -135,7 +203,7 @@ func (h *Handler) humaGetCommunity(ctx context.Context, in *communitySlugInput) 
 		return nil, err
 	}
 
-	h.withYourRole(ctx, userID, community)
+	h.withCallerContext(ctx, userID, community)
 	return &communityOutput{Body: community}, nil
 }
 
@@ -252,8 +320,128 @@ func (h *Handler) humaUpdateCommunity(ctx context.Context, in *updateCommunityPr
 
 	// The caller just proved they moderate, but say so explicitly rather than
 	// hardcoding a tier -- an owner and a moderator both reach here.
-	h.withYourRole(ctx, actorID, updated)
+	h.withCallerContext(ctx, actorID, updated)
 	return &communityOutput{Body: updated}, nil
+}
+
+// humaListBans returns a community's banlist.
+//
+// Moderator-level (req 4). The list is not public: it names users and carries
+// the moderator's stated reason, neither of which belongs on a profile page.
+//
+// EXPIRED bans are included, each carrying is_active. A moderator who set a
+// two-week ban needs to see it lapse; dropping expired rows here would make a
+// ban appear to vanish and invite a puzzled re-ban.
+func (h *Handler) humaListBans(ctx context.Context, in *communitySlugInput) (*banListOutput, error) {
+	community, _, err := h.requireModerator(ctx, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+
+	bans, err := h.CommunityService.ListBans(ctx, community.ID)
+	if err != nil {
+		h.App.ObsLogger.LogError(ctx, err, "Failed to list community bans",
+			"community_id", community.ID)
+		return nil, huma.Error500InternalServerError("Failed to list bans")
+	}
+	return &banListOutput{Body: bans}, nil
+}
+
+// humaBanUser bans a user from a community, or edits an existing ban.
+//
+// Deliberately NOT idempotent-by-rejection: re-banning an already-banned user
+// updates the reason and expiry in place and answers 200, because a moderator
+// extending a ban is doing ordinary work and a 400 would push them into
+// unban-then-reban, losing the original banned_at. The audit log distinguishes
+// the two by logging "modified" rather than "banned".
+func (h *Handler) humaBanUser(ctx context.Context, in *createBanInput) (*banOutput, error) {
+	community, actorID, err := h.requireModerator(ctx, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+
+	// The target must exist. Without this the insert trips a foreign key and
+	// surfaces as a 500 rather than telling the moderator what they got wrong.
+	if _, err := h.UserService.GetUserByID(int(in.Body.UserID)); err != nil {
+		return nil, huma.Error400BadRequest("user_id does not match an existing user")
+	}
+
+	// An expiry already in the past would create a ban that is inert the moment
+	// it is written -- it would appear on the list as lapsed and enforce
+	// nothing. That is never what a moderator means, so it is a client error
+	// rather than a silently useless write.
+	if in.Body.ExpiresAt != nil && !in.Body.ExpiresAt.After(time.Now()) {
+		return nil, huma.Error400BadRequest("expires_at must be in the future; omit it for a permanent ban")
+	}
+
+	ban, err := h.CommunityService.BanUser(ctx, community.ID, actorID, &core.CreateCommunityBanRequest{
+		UserID:    in.Body.UserID,
+		Reason:    in.Body.Reason,
+		ExpiresAt: in.Body.ExpiresAt,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, core.ErrCannotBanCommunityStaff):
+			// Owner-only to fix, which is the point: a moderator cannot
+			// neutralise a peer by banning them.
+			return nil, huma.Error400BadRequest(
+				"community staff cannot be banned; remove them from the moderator roster first")
+		case errors.Is(err, core.ErrCommunityNotFound):
+			return nil, huma.Error404NotFound("community not found")
+		}
+		h.App.ObsLogger.LogError(ctx, err, "Failed to ban user from community",
+			"community_id", community.ID, "user_id", in.Body.UserID)
+		return nil, huma.Error500InternalServerError("Failed to ban user")
+	}
+
+	return &banOutput{Body: ban}, nil
+}
+
+// humaUnbanUser lifts a ban.
+//
+// Unlike removing a moderator, an absent ban is a 404 rather than a success.
+// The two differ because this endpoint is reached from a list of bans: a
+// missing row means the moderator is acting on a stale view -- someone else
+// lifted it already -- and silently reporting success would hide that.
+func (h *Handler) humaUnbanUser(ctx context.Context, in *removeBanInput) (*struct{}, error) {
+	community, actorID, err := h.requireModerator(ctx, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := h.CommunityService.UnbanUser(ctx, community.ID, in.UserID, actorID); err != nil {
+		if errors.Is(err, core.ErrBanNotFound) {
+			return nil, huma.Error404NotFound("that user is not banned from this community")
+		}
+		h.App.ObsLogger.LogError(ctx, err, "Failed to lift community ban",
+			"community_id", community.ID, "user_id", in.UserID)
+		return nil, huma.Error500InternalServerError("Failed to lift ban")
+	}
+
+	return nil, nil
+}
+
+// humaListBanEvents returns the ban audit log, newest first.
+//
+// This is the record that survives a ban being lifted -- lifting DELETES the
+// ban row, so for an unbanned user the log is the only evidence the ban ever
+// existed. Moderator-level, and paged: the log only grows.
+func (h *Handler) humaListBanEvents(ctx context.Context, in *banEventListInput) (*banEventListOutput, error) {
+	community, _, err := h.requireModerator(ctx, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+
+	// The service clamps limit/offset to its own bounds, so the zero values a
+	// client can still send (huma applies defaults only to absent params)
+	// resolve to the default page rather than an empty one.
+	events, err := h.CommunityService.ListBanEvents(ctx, community.ID, in.Limit, in.Offset)
+	if err != nil {
+		h.App.ObsLogger.LogError(ctx, err, "Failed to list community ban events",
+			"community_id", community.ID)
+		return nil, huma.Error500InternalServerError("Failed to list ban events")
+	}
+	return &banEventListOutput{Body: events}, nil
 }
 
 // -------------------------------------------------------------- registration
@@ -356,4 +544,76 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 			"404": {Description: "Community not found"},
 		},
 	}, h.humaRemoveModerator)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "listCommunityBans",
+		Method:      http.MethodGet,
+		Path:        "/{slug}/bans",
+		Summary:     "List a community's banned users",
+		Description: "Requires moderation rights -- the list names users and carries the " +
+			"moderator's reason. Expired bans are included, marked is_active=false, so a " +
+			"lapsed ban is visible rather than appearing to vanish.",
+		Tags:     []string{"Communities"},
+		Security: []map[string][]string{{"BearerAuth": {}}},
+		Responses: map[string]*huma.Response{
+			"401": {Description: "Not authenticated"},
+			"403": {Description: "Caller does not moderate this community"},
+			"404": {Description: "Community not found"},
+		},
+	}, h.humaListBans)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "banUserFromCommunity",
+		Method:      http.MethodPost,
+		Path:        "/{slug}/bans",
+		Summary:     "Ban a user from a community, or edit an existing ban",
+		Description: "Requires moderation rights. Re-banning an already-banned user updates " +
+			"the reason and expiry in place rather than failing, preserving the original " +
+			"banned_at; the audit log records that as \"modified\". Omit expires_at for a " +
+			"permanent ban. Community staff cannot be banned -- remove them from the " +
+			"roster first, which is owner-only.",
+		Tags:     []string{"Communities"},
+		Security: []map[string][]string{{"BearerAuth": {}}},
+		Responses: map[string]*huma.Response{
+			"400": {Description: "Unknown user, community staff, or an expiry in the past"},
+			"401": {Description: "Not authenticated"},
+			"403": {Description: "Caller does not moderate this community"},
+			"404": {Description: "Community not found"},
+		},
+	}, h.humaBanUser)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "unbanUserFromCommunity",
+		Method:      http.MethodDelete,
+		Path:        "/{slug}/bans/{userID}",
+		Summary:     "Lift a user's ban",
+		Description: "Requires moderation rights. Answers 404 if the user is not banned, " +
+			"since reaching this from a stale banlist should surface rather than look " +
+			"like success. The ban row is deleted; the audit log retains what it said.",
+		Tags:          []string{"Communities"},
+		Security:      []map[string][]string{{"BearerAuth": {}}},
+		DefaultStatus: http.StatusNoContent,
+		Responses: map[string]*huma.Response{
+			"401": {Description: "Not authenticated"},
+			"403": {Description: "Caller does not moderate this community"},
+			"404": {Description: "Community not found, or the user is not banned"},
+		},
+	}, h.humaUnbanUser)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "listCommunityBanEvents",
+		Method:      http.MethodGet,
+		Path:        "/{slug}/ban-events",
+		Summary:     "Read a community's ban audit log",
+		Description: "Requires moderation rights. Newest first, paged. Lifting a ban deletes " +
+			"its row, so for an unbanned user this log is the only surviving record that " +
+			"the ban existed. Entries snapshot the reason and expiry as they stood.",
+		Tags:     []string{"Communities"},
+		Security: []map[string][]string{{"BearerAuth": {}}},
+		Responses: map[string]*huma.Response{
+			"401": {Description: "Not authenticated"},
+			"403": {Description: "Caller does not moderate this community"},
+			"404": {Description: "Community not found"},
+		},
+	}, h.humaListBanEvents)
 }

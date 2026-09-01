@@ -8,9 +8,14 @@ import type { Community } from '../../types/communities';
 /**
  * Derive a slug candidate from a community name.
  *
- * Mirrors core.SuggestCommunitySlug on the backend. It only pre-fills the
- * field -- the server re-validates and is the authority, so a drift between the
- * two costs a rejected submit, not a bad slug.
+ * This only PRE-FILLS the field. The server re-validates on submit and is the
+ * authority, so a slug this produces that the server dislikes costs a rejected
+ * submit, not a bad slug -- and the admin can always type their own.
+ *
+ * There is deliberately no backend counterpart. One existed and went unused
+ * once the form derived its own suggestion; keeping a second copy in Go meant
+ * two implementations that could drift with nothing calling one of them.
+ * core.ValidateCommunitySlug is the shared rule that actually matters.
  */
 function suggestSlug(name: string): string {
   return name

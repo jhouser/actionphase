@@ -1017,6 +1017,8 @@ components:
                     type: integer
                 is_active:
                     type: boolean
+                is_banned:
+                    type: boolean
                 name:
                     type: string
                 owner_user_id:
@@ -1042,6 +1044,83 @@ components:
                 - created_at
                 - updated_at
                 - your_role
+                - is_banned
+            type: object
+        CommunityBan:
+            additionalProperties: false
+            properties:
+                avatar_url:
+                    type: string
+                banned_at:
+                    format: date-time
+                    type: string
+                banned_by_user_id:
+                    format: int32
+                    type: integer
+                banned_by_username:
+                    type: string
+                community_id:
+                    format: int32
+                    type: integer
+                display_name:
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                id:
+                    format: int32
+                    type: integer
+                is_active:
+                    type: boolean
+                reason:
+                    type: string
+                user_id:
+                    format: int32
+                    type: integer
+                username:
+                    type: string
+            required:
+                - id
+                - community_id
+                - user_id
+                - banned_at
+                - is_active
+            type: object
+        CommunityBanEvent:
+            additionalProperties: false
+            properties:
+                action:
+                    type: string
+                actor_user_id:
+                    format: int32
+                    type: integer
+                actor_username:
+                    type: string
+                community_id:
+                    format: int32
+                    type: integer
+                created_at:
+                    format: date-time
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                id:
+                    format: int32
+                    type: integer
+                reason:
+                    type: string
+                target_user_id:
+                    format: int32
+                    type: integer
+                target_username:
+                    type: string
+            required:
+                - id
+                - community_id
+                - target_user_id
+                - action
+                - created_at
             type: object
         CommunityModerator:
             additionalProperties: false
@@ -1313,6 +1392,25 @@ components:
             required:
                 - user_id
                 - content
+            type: object
+        CreateBanInputBody:
+            additionalProperties: false
+            properties:
+                expires_at:
+                    description: When the ban lapses; omit for a permanent ban
+                    format: date-time
+                    type: string
+                reason:
+                    description: Why the user was banned; shown to moderators only
+                    maxLength: 1000
+                    type: string
+                user_id:
+                    description: User to ban
+                    format: int32
+                    minimum: 1
+                    type: integer
+            required:
+                - user_id
             type: object
         CreateCharacterRequest:
             additionalProperties: false
@@ -6553,6 +6651,166 @@ paths:
             security:
                 - BearerAuth: []
             summary: Edit a community's name and description
+            tags:
+                - Communities
+    /communities/{slug}/ban-events:
+        get:
+            description: Requires moderation rights. Newest first, paged. Lifting a ban deletes its row, so for an unbanned user this log is the only surviving record that the ban existed. Entries snapshot the reason and expiry as they stood.
+            operationId: listCommunityBanEvents
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Entries per page
+                  explode: false
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Entries per page
+                    format: int32
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - description: Entries to skip
+                  explode: false
+                  in: query
+                  name: offset
+                  schema:
+                    default: 0
+                    description: Entries to skip
+                    format: int32
+                    minimum: 0
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityBanEvent'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Read a community's ban audit log
+            tags:
+                - Communities
+    /communities/{slug}/bans:
+        get:
+            description: Requires moderation rights -- the list names users and carries the moderator's reason. Expired bans are included, marked is_active=false, so a lapsed ban is visible rather than appearing to vanish.
+            operationId: listCommunityBans
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityBan'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: List a community's banned users
+            tags:
+                - Communities
+        post:
+            description: Requires moderation rights. Re-banning an already-banned user updates the reason and expiry in place rather than failing, preserving the original banned_at; the audit log records that as "modified". Omit expires_at for a permanent ban. Community staff cannot be banned -- remove them from the roster first, which is owner-only.
+            operationId: banUserFromCommunity
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateBanInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityBan'
+                    description: OK
+                "400":
+                    description: Unknown user, community staff, or an expiry in the past
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Ban a user from a community, or edit an existing ban
+            tags:
+                - Communities
+    /communities/{slug}/bans/{userID}:
+        delete:
+            description: Requires moderation rights. Answers 404 if the user is not banned, since reaching this from a stale banlist should surface rather than look like success. The ban row is deleted; the audit log retains what it said.
+            operationId: unbanUserFromCommunity
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: User whose ban is lifted
+                  in: path
+                  name: userID
+                  required: true
+                  schema:
+                    description: User whose ban is lifted
+                    format: int32
+                    type: integer
+            responses:
+                "204":
+                    description: No Content
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found, or the user is not banned
+            security:
+                - BearerAuth: []
+            summary: Lift a user's ban
             tags:
                 - Communities
     /communities/{slug}/moderators:

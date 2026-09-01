@@ -7,7 +7,7 @@ import type { GameFormTabId } from './gameFormTabs';
 import { useRevealInvalidTab } from '../hooks/useRevealInvalidTab';
 import { HelpTooltip } from './ui/HelpTooltip';
 import { useGameForm } from '../hooks/useGameForm';
-import { useActiveCommunities } from '../hooks/useCommunities';
+import { useSelectableCommunities } from '../hooks/useCommunities';
 import { useGameFormDirty } from '../hooks/useGameFormDirty';
 import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
 
@@ -58,7 +58,7 @@ export const CreateGameForm = ({
     resetFormData,
   } = useGameForm();
 
-  const { communities } = useActiveCommunities();
+  const { communities } = useSelectableCommunities();
 
   // Preselect when there is exactly one choice: the picker would otherwise be
   // a required field with a single option, which is a step, not a decision.

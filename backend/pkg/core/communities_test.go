@@ -65,68 +65,6 @@ func TestValidateCommunitySlug_MaxLengthBoundary(t *testing.T) {
 	assert.True(t, ok, "a slug of exactly the max length must be accepted, got: %s", reason)
 }
 
-func TestSuggestCommunitySlug(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "simple", in: "Ravens", want: "ravens"},
-		{name: "spaces become hyphens", in: "Midnight Ravens", want: "midnight-ravens"},
-		{name: "punctuation collapsed", in: "The Midnight Ravens!", want: "the-midnight-ravens"},
-		{name: "runs collapse to one hyphen", in: "A   B", want: "a-b"},
-		{name: "leading punctuation trimmed", in: "  !!Ravens", want: "ravens"},
-		{name: "trailing punctuation trimmed", in: "Ravens...", want: "ravens"},
-		{name: "digits kept", in: "Club 42", want: "club-42"},
-		{name: "ampersand collapses", in: "Cloak & Dagger", want: "cloak-dagger"},
-
-		// A name of only punctuation yields "", which is why the suggestion is
-		// documented as a convenience and not a validator.
-		{name: "punctuation only yields empty", in: "!!!", want: ""},
-		{name: "empty yields empty", in: "", want: ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, SuggestCommunitySlug(tt.in))
-		})
-	}
-}
-
-// The suggestion is only a convenience, but whatever it produces from an
-// ordinary name must be something ValidateCommunitySlug accepts -- otherwise
-// the create form would pre-fill a value it then rejects.
-func TestSuggestCommunitySlug_OutputPassesValidation(t *testing.T) {
-	names := []string{
-		"Midnight Ravens",
-		"The Midnight Ravens!",
-		"Cloak & Dagger",
-		"Club 42",
-		"A  Very   Long    Community Name With Spaces",
-	}
-
-	for _, name := range names {
-		t.Run(name, func(t *testing.T) {
-			slug := SuggestCommunitySlug(name)
-			ok, reason := ValidateCommunitySlug(slug)
-			assert.True(t, ok, "suggested slug %q from %q was rejected: %s", slug, name, reason)
-		})
-	}
-}
-
-// Truncation must not leave a trailing hyphen, which would fail validation.
-func TestSuggestCommunitySlug_TruncatesWithoutTrailingHyphen(t *testing.T) {
-	// Build a name whose 100th character lands on a separator.
-	name := strings.Repeat("ab ", 60)
-
-	slug := SuggestCommunitySlug(name)
-	assert.LessOrEqual(t, len(slug), CommunitySlugMaxLength)
-	assert.False(t, strings.HasSuffix(slug, "-"), "truncated slug %q must not end in a hyphen", slug)
-
-	ok, reason := ValidateCommunitySlug(slug)
-	assert.True(t, ok, "truncated slug %q was rejected: %s", slug, reason)
-}
-
 func TestIsReservedCommunitySlug(t *testing.T) {
 	assert.True(t, IsReservedCommunitySlug("new"))
 	assert.True(t, IsReservedCommunitySlug("NEW"), "reservation must be case-insensitive")

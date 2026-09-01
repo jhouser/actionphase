@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -74,7 +75,11 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(testDB.Close)
 	// communities.owner_user_id is ON DELETE RESTRICT, so the community rows
 	// must go before the users they point at.
-	t.Cleanup(func() { testDB.CleanupTables(t, "community_moderators", "communities", "users") })
+	t.Cleanup(func() {
+		testDB.CleanupTables(t,
+			"community_ban_events", "community_bans",
+			"community_moderators", "communities", "users")
+	})
 
 	app := core.NewTestApp(testDB.Pool)
 	router := setupCommunityTestRouter(app, testDB)
@@ -628,4 +633,443 @@ func TestCommunitiesAPI_YourRole_IsPerCaller(t *testing.T) {
 	require.NoError(t, json.Unmarshal(second.Body.Bytes(), &got))
 	assert.Equal(t, core.CommunityRoleNone, got.YourRole,
 		"the outsider must not inherit the owner's role from a prior request")
+}
+
+// --------------------------------------------------------------------- bans
+
+// banPath builds the collection path for the harness community.
+func banPath() string { return "/api/v1/communities/midnight-ravens/bans" }
+
+// listBans reads the banlist directly from the service, for asserting that a
+// refused request changed nothing. Going through the API would only re-test the
+// endpoint under scrutiny.
+func (h *harness) listBans(t *testing.T) []*core.CommunityBan {
+	t.Helper()
+	svc := &communitysvc.CommunityService{DB: h.testDB.Pool, Logger: h.app.ObsLogger}
+	bans, err := svc.ListBans(context.Background(), h.community.ID)
+	require.NoError(t, err)
+	return bans
+}
+
+func (h *harness) banEvents(t *testing.T) []*core.CommunityBanEvent {
+	t.Helper()
+	svc := &communitysvc.CommunityService{DB: h.testDB.Pool, Logger: h.app.ObsLogger}
+	events, err := svc.ListBanEvents(context.Background(), h.community.ID, 0, 0)
+	require.NoError(t, err)
+	return events
+}
+
+func TestCommunitiesAPI_BanUser_AsModerator(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d,"reason":"spoilers"}`, h.outsider.ID))
+	rec := h.request(t, h.moderator, http.MethodPost, banPath(), body, false)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	var got core.CommunityBan
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, int32(h.outsider.ID), got.UserID)
+	require.NotNil(t, got.Reason)
+	assert.Equal(t, "spoilers", *got.Reason)
+	assert.True(t, got.IsActive, "a ban with no expiry is permanent and active")
+	assert.Nil(t, got.ExpiresAt, "omitting expires_at must mean permanent")
+	require.NotNil(t, got.BannedByUserID)
+	assert.Equal(t, int32(h.moderator.ID), *got.BannedByUserID,
+		"the ban must record which moderator issued it")
+}
+
+// Banning is moderator-tier, not owner-tier (req 4) -- it is the routine work
+// the feature exists for, and reserving it to owners would defeat the point of
+// having moderators at all.
+func TestCommunitiesAPI_BanUser_AsOwner(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d}`, h.outsider.ID))
+	rec := h.request(t, h.owner, http.MethodPost, banPath(), body, false)
+	assert.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+}
+
+func TestCommunitiesAPI_BanUser_OutsiderForbidden(t *testing.T) {
+	h := newHarness(t)
+
+	// A non-moderator banning someone would be the whole access-control model
+	// inverted, so assert the refusal took effect rather than trusting the code.
+	body := []byte(fmt.Sprintf(`{"user_id":%d}`, h.admin.ID))
+	rec := h.request(t, h.outsider, http.MethodPost, banPath(), body, false)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+
+	assert.Empty(t, h.listBans(t), "a refused ban must not be written")
+}
+
+func TestCommunitiesAPI_BanUser_AdminWithoutModeForbidden(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d}`, h.outsider.ID))
+	rec := h.request(t, h.admin, http.MethodPost, banPath(), body, false)
+	assert.Equal(t, http.StatusForbidden, rec.Code,
+		"a site admin browsing normally must not moderate by accident")
+}
+
+func TestCommunitiesAPI_BanUser_AdminWithModeAllowed(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d}`, h.outsider.ID))
+	rec := h.request(t, h.admin, http.MethodPost, banPath(), body, true)
+	assert.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+}
+
+// Re-banning must edit in place rather than 400 on the unique constraint --
+// otherwise a moderator extending a ban is pushed into unban-then-reban, which
+// resets banned_at and loses when the ban actually started.
+func TestCommunitiesAPI_BanUser_RebanUpdatesInPlace(t *testing.T) {
+	h := newHarness(t)
+
+	first := []byte(fmt.Sprintf(`{"user_id":%d,"reason":"first"}`, h.outsider.ID))
+	rec := h.request(t, h.moderator, http.MethodPost, banPath(), first, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var original core.CommunityBan
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &original))
+
+	second := []byte(fmt.Sprintf(`{"user_id":%d,"reason":"second"}`, h.outsider.ID))
+	rec = h.request(t, h.moderator, http.MethodPost, banPath(), second, false)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	var updated core.CommunityBan
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &updated))
+	require.NotNil(t, updated.Reason)
+	assert.Equal(t, "second", *updated.Reason, "the reason must be updated in place")
+	assert.Equal(t, original.BannedAt.Unix(), updated.BannedAt.Unix(),
+		"banned_at must survive a re-ban -- it is when the ban actually began")
+
+	bans := h.listBans(t)
+	assert.Len(t, bans, 1, "a re-ban must not create a second row")
+
+	// The log must show the edit as an edit. Recording it as a fresh "banned"
+	// would imply the user had been unbanned in between, which never happened.
+	events := h.banEvents(t)
+	require.Len(t, events, 2)
+	assert.Equal(t, core.BanEventModified, events[0].Action,
+		"a re-ban logs 'modified', newest first")
+	assert.Equal(t, core.BanEventBanned, events[1].Action)
+}
+
+// A moderator who is also banned is a state no enforcement path can read, and
+// clearing it is owner-only -- so allowing it would also let a moderator
+// neutralise a peer.
+func TestCommunitiesAPI_BanUser_StaffRejected(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d}`, h.moderator.ID))
+	rec := h.request(t, h.owner, http.MethodPost, banPath(), body, false)
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+
+	body = []byte(fmt.Sprintf(`{"user_id":%d}`, h.owner.ID))
+	rec = h.request(t, h.moderator, http.MethodPost, banPath(), body, false)
+	assert.Equal(t, http.StatusBadRequest, rec.Code,
+		"a moderator must not be able to ban the owner")
+}
+
+func TestCommunitiesAPI_BanUser_UnknownUser(t *testing.T) {
+	h := newHarness(t)
+
+	// Without an existence check this trips a foreign key and renders as a 500,
+	// telling the moderator the server broke rather than what they got wrong.
+	rec := h.request(t, h.moderator, http.MethodPost, banPath(),
+		[]byte(`{"user_id":999999}`), false)
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+}
+
+// An expiry in the past would write a ban that is inert on arrival: it lands on
+// the list already lapsed and enforces nothing. That is never the intent.
+func TestCommunitiesAPI_BanUser_PastExpiryRejected(t *testing.T) {
+	h := newHarness(t)
+
+	past := time.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339)
+	body := []byte(fmt.Sprintf(`{"user_id":%d,"expires_at":%q}`, h.outsider.ID, past))
+	rec := h.request(t, h.moderator, http.MethodPost, banPath(), body, false)
+	require.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+
+	assert.Empty(t, h.listBans(t), "a rejected expiry must not write a ban")
+}
+
+func TestCommunitiesAPI_BanUser_FutureExpiryAccepted(t *testing.T) {
+	h := newHarness(t)
+
+	future := time.Now().Add(14 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	body := []byte(fmt.Sprintf(`{"user_id":%d,"expires_at":%q}`, h.outsider.ID, future))
+	rec := h.request(t, h.moderator, http.MethodPost, banPath(), body, false)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	var got core.CommunityBan
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.NotNil(t, got.ExpiresAt, "a temporary ban must carry its expiry")
+	assert.True(t, got.IsActive, "a ban expiring in the future is being enforced now")
+}
+
+func TestCommunitiesAPI_ListBans_AsModerator(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d,"reason":"griefing"}`, h.outsider.ID))
+	require.Equal(t, http.StatusOK,
+		h.request(t, h.moderator, http.MethodPost, banPath(), body, false).Code)
+
+	rec := h.request(t, h.moderator, http.MethodGet, banPath(), nil, false)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	var got []*core.CommunityBan
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Len(t, got, 1)
+	assert.Equal(t, int32(h.outsider.ID), got[0].UserID)
+	// The list is the management view: an id alone leaves the UI unable to
+	// render who was banned without a second round-trip per row.
+	assert.Equal(t, h.outsider.Username, got[0].Username,
+		"the banlist must carry the banned user's username")
+}
+
+// The banlist names users and carries a moderator's stated reason, so it is
+// moderation-internal rather than public profile information.
+func TestCommunitiesAPI_ListBans_OutsiderForbidden(t *testing.T) {
+	h := newHarness(t)
+
+	rec := h.request(t, h.outsider, http.MethodGet, banPath(), nil, false)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestCommunitiesAPI_ListBans_IncludesExpired(t *testing.T) {
+	h := newHarness(t)
+
+	// Written directly: the endpoint refuses a past expiry, and rightly so, but
+	// a ban that has since lapsed is exactly what this asserts is still listed.
+	_, err := h.testDB.Pool.Exec(context.Background(),
+		`INSERT INTO community_bans (community_id, user_id, reason, banned_by_user_id, expires_at)
+		 VALUES ($1, $2, 'lapsed', $3, NOW() - INTERVAL '1 day')`,
+		h.community.ID, h.outsider.ID, h.moderator.ID)
+	require.NoError(t, err)
+
+	rec := h.request(t, h.moderator, http.MethodGet, banPath(), nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got []*core.CommunityBan
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Len(t, got, 1, "an expired ban must stay on the management list, not vanish")
+	assert.False(t, got[0].IsActive,
+		"a lapsed ban must be marked inactive -- presence of a row never means banned")
+}
+
+func TestCommunitiesAPI_UnbanUser_AsModerator(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d,"reason":"griefing"}`, h.outsider.ID))
+	require.Equal(t, http.StatusOK,
+		h.request(t, h.moderator, http.MethodPost, banPath(), body, false).Code)
+
+	rec := h.request(t, h.moderator, http.MethodDelete,
+		fmt.Sprintf("%s/%d", banPath(), h.outsider.ID), nil, false)
+	require.Equal(t, http.StatusNoContent, rec.Code, "body: %s", rec.Body.String())
+
+	assert.Empty(t, h.listBans(t), "lifting a ban deletes its row")
+
+	// Which is why the log matters: with the row gone, this is the only
+	// evidence the ban ever existed, and it keeps what the ban said.
+	events := h.banEvents(t)
+	require.Len(t, events, 2)
+	assert.Equal(t, core.BanEventUnbanned, events[0].Action)
+	require.NotNil(t, events[0].Reason)
+	assert.Equal(t, "griefing", *events[0].Reason,
+		"the unban event must snapshot what the deleted ban said")
+}
+
+func TestCommunitiesAPI_UnbanUser_OutsiderForbidden(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d}`, h.admin.ID))
+	require.Equal(t, http.StatusOK,
+		h.request(t, h.moderator, http.MethodPost, banPath(), body, false).Code)
+
+	rec := h.request(t, h.outsider, http.MethodDelete,
+		fmt.Sprintf("%s/%d", banPath(), h.admin.ID), nil, false)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+
+	assert.Len(t, h.listBans(t), 1, "a refused unban must leave the ban in place")
+}
+
+// Unlike removing a moderator, this 404s: the moderator reached it from a
+// banlist, so a missing row means their view is stale and someone else already
+// lifted it. Reporting success would hide that.
+func TestCommunitiesAPI_UnbanUser_NotBanned(t *testing.T) {
+	h := newHarness(t)
+
+	rec := h.request(t, h.moderator, http.MethodDelete,
+		fmt.Sprintf("%s/%d", banPath(), h.outsider.ID), nil, false)
+	assert.Equal(t, http.StatusNotFound, rec.Code, "body: %s", rec.Body.String())
+}
+
+func TestCommunitiesAPI_ListBanEvents_AsModerator(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d,"reason":"griefing"}`, h.outsider.ID))
+	require.Equal(t, http.StatusOK,
+		h.request(t, h.moderator, http.MethodPost, banPath(), body, false).Code)
+
+	rec := h.request(t, h.moderator, http.MethodGet,
+		"/api/v1/communities/midnight-ravens/ban-events", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	var got []*core.CommunityBanEvent
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Len(t, got, 1)
+	assert.Equal(t, core.BanEventBanned, got[0].Action)
+	assert.Equal(t, int32(h.outsider.ID), got[0].TargetUserID)
+	// The log exists to settle "who banned whom", so both names must be on it
+	// without the reader having to resolve ids themselves.
+	require.NotNil(t, got[0].ActorUsername)
+	assert.Equal(t, h.moderator.Username, *got[0].ActorUsername)
+	require.NotNil(t, got[0].TargetUsername)
+	assert.Equal(t, h.outsider.Username, *got[0].TargetUsername)
+}
+
+func TestCommunitiesAPI_ListBanEvents_OutsiderForbidden(t *testing.T) {
+	h := newHarness(t)
+
+	rec := h.request(t, h.outsider, http.MethodGet,
+		"/api/v1/communities/midnight-ravens/ban-events", nil, false)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestCommunitiesAPI_ListBanEvents_Paged(t *testing.T) {
+	h := newHarness(t)
+
+	// Three events on one user: banned, modified, unbanned.
+	body := []byte(fmt.Sprintf(`{"user_id":%d,"reason":"one"}`, h.outsider.ID))
+	require.Equal(t, http.StatusOK,
+		h.request(t, h.moderator, http.MethodPost, banPath(), body, false).Code)
+	body = []byte(fmt.Sprintf(`{"user_id":%d,"reason":"two"}`, h.outsider.ID))
+	require.Equal(t, http.StatusOK,
+		h.request(t, h.moderator, http.MethodPost, banPath(), body, false).Code)
+	require.Equal(t, http.StatusNoContent,
+		h.request(t, h.moderator, http.MethodDelete,
+			fmt.Sprintf("%s/%d", banPath(), h.outsider.ID), nil, false).Code)
+
+	rec := h.request(t, h.moderator, http.MethodGet,
+		"/api/v1/communities/midnight-ravens/ban-events?limit=2", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	var page []*core.CommunityBanEvent
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &page))
+	require.Len(t, page, 2, "limit must bound the page")
+	assert.Equal(t, core.BanEventUnbanned, page[0].Action, "newest first")
+
+	rec = h.request(t, h.moderator, http.MethodGet,
+		"/api/v1/communities/midnight-ravens/ban-events?limit=2&offset=2", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var second []*core.CommunityBanEvent
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &second))
+	require.Len(t, second, 1, "offset must skip into the tail of the log")
+	assert.Equal(t, core.BanEventBanned, second[0].Action, "the oldest event is the original ban")
+}
+
+// Bans are per-community -- that separation is the entire reason Communities
+// exists. A moderator of one community must not be able to reach another's
+// banlist by swapping the slug.
+func TestCommunitiesAPI_Bans_ScopedBySlug(t *testing.T) {
+	h := newHarness(t)
+
+	svc := &communitysvc.CommunityService{DB: h.testDB.Pool, Logger: h.app.ObsLogger}
+	other, err := svc.CreateCommunity(context.Background(), &core.CreateCommunityRequest{
+		Name:        "Harbor Lights",
+		Slug:        "harbor-lights",
+		OwnerUserID: int32(h.outsider.ID),
+	})
+	require.NoError(t, err)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d}`, h.admin.ID))
+	rec := h.request(t, h.moderator, http.MethodPost,
+		"/api/v1/communities/harbor-lights/bans", body, false)
+	require.Equal(t, http.StatusForbidden, rec.Code,
+		"moderating one community must not confer power over another")
+
+	bans, err := svc.ListBans(context.Background(), other.ID)
+	require.NoError(t, err)
+	assert.Empty(t, bans, "the other community's banlist must be untouched")
+}
+
+// is_banned reports the CALLER's own standing, so it must be computed per
+// request rather than shared -- the same reason your_role is.
+func TestCommunitiesAPI_IsBanned_IsPerCaller(t *testing.T) {
+	h := newHarness(t)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d}`, h.outsider.ID))
+	require.Equal(t, http.StatusOK,
+		h.request(t, h.moderator, http.MethodPost, banPath(), body, false).Code)
+
+	// The banned user sees the flag set.
+	rec := h.request(t, h.outsider, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+	var mine core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &mine))
+	assert.True(t, mine.IsBanned, "the banned caller must see is_banned true")
+
+	// Nobody else's standing leaks: the admin is not banned and reads the same
+	// community with the flag clear.
+	rec = h.request(t, h.admin, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var theirs core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &theirs))
+	assert.False(t, theirs.IsBanned,
+		"is_banned must describe the CALLER, not the community")
+}
+
+// The listing is what the game-creation picker actually reads, so the flag has
+// to survive the plural path too -- and be stamped on the right row.
+func TestCommunitiesAPI_IsBanned_OnListing(t *testing.T) {
+	h := newHarness(t)
+
+	svc := &communitysvc.CommunityService{DB: h.testDB.Pool, Logger: h.app.ObsLogger}
+	other, err := svc.CreateCommunity(context.Background(), &core.CreateCommunityRequest{
+		Name:        "Harbor Lights",
+		Slug:        "harbor-lights",
+		OwnerUserID: int32(h.owner.ID),
+	})
+	require.NoError(t, err)
+
+	body := []byte(fmt.Sprintf(`{"user_id":%d}`, h.outsider.ID))
+	require.Equal(t, http.StatusOK,
+		h.request(t, h.moderator, http.MethodPost, banPath(), body, false).Code)
+
+	rec := h.request(t, h.outsider, http.MethodGet, "/api/v1/communities", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+
+	var list []core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &list))
+
+	seen := map[int32]bool{}
+	for _, c := range list {
+		seen[c.ID] = c.IsBanned
+	}
+	assert.True(t, seen[h.community.ID], "the banned community must be flagged")
+	assert.False(t, seen[other.ID],
+		"a ban in one community must not flag another -- that separation is the whole feature")
+}
+
+// An EXPIRED ban must not flag a community: the user may create games there
+// again, and the create endpoint would allow it. Never infer "banned" from a
+// row's presence.
+func TestCommunitiesAPI_IsBanned_ExcludesExpired(t *testing.T) {
+	h := newHarness(t)
+
+	_, err := h.testDB.Pool.Exec(context.Background(),
+		`INSERT INTO community_bans (community_id, user_id, reason, banned_by_user_id, expires_at)
+		 VALUES ($1, $2, 'lapsed', $3, NOW() - INTERVAL '1 day')`,
+		h.community.ID, h.outsider.ID, h.moderator.ID)
+	require.NoError(t, err)
+
+	rec := h.request(t, h.outsider, http.MethodGet, "/api/v1/communities/midnight-ravens", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got core.Community
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.False(t, got.IsBanned,
+		"a lapsed ban must not flag the community")
 }
