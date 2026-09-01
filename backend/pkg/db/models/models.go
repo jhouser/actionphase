@@ -193,6 +193,27 @@ type Community struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CommunityBan struct {
+	ID             int32              `json:"id"`
+	CommunityID    int32              `json:"community_id"`
+	UserID         int32              `json:"user_id"`
+	Reason         pgtype.Text        `json:"reason"`
+	BannedByUserID pgtype.Int4        `json:"banned_by_user_id"`
+	BannedAt       pgtype.Timestamptz `json:"banned_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+}
+
+type CommunityBanEvent struct {
+	ID           int32              `json:"id"`
+	CommunityID  int32              `json:"community_id"`
+	TargetUserID int32              `json:"target_user_id"`
+	ActorUserID  pgtype.Int4        `json:"actor_user_id"`
+	Action       string             `json:"action"`
+	Reason       pgtype.Text        `json:"reason"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type CommunityModerator struct {
 	ID              int32              `json:"id"`
 	CommunityID     int32              `json:"community_id"`

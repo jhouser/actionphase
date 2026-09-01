@@ -169,6 +169,32 @@ type CommunityServiceInterface interface {
 	// GetRole resolves a user's standing in one round-trip. Owner outranks
 	// moderator; CommunityRoleNone means neither.
 	GetRole(ctx context.Context, communityID, userID int32) (CommunityRole, error)
+
+	// Bans. BanUser upserts: re-banning an already-banned user updates the
+	// reason and expiry in place rather than failing, and logs "modified"
+	// instead of "banned". Both writes append to the audit log in the SAME
+	// transaction as the ban itself, so the log can never disagree with the
+	// banlist.
+	BanUser(ctx context.Context, communityID, actorID int32, req *CreateCommunityBanRequest) (*CommunityBan, error)
+	UnbanUser(ctx context.Context, communityID, userID, actorID int32) error
+	ListBans(ctx context.Context, communityID int32) ([]*CommunityBan, error)
+	ListBanEvents(ctx context.Context, communityID int32, limit, offset int32) ([]*CommunityBanEvent, error)
+
+	// IsUserBanned is THE ban primitive -- every enforcement path in the
+	// codebase calls this or IsUserBannedFromGame, never its own query.
+	// Respects expires_at: a lapsed ban does not block.
+	IsUserBanned(ctx context.Context, communityID, userID int32) (bool, error)
+
+	// IsUserBannedFromGame resolves game -> community first.
+	//
+	// Returns FALSE for a game with no community. Grandfathering is guaranteed
+	// here rather than at each call site, so a legacy game can never be blocked
+	// by a caller who forgot to check.
+	IsUserBannedFromGame(ctx context.Context, gameID, userID int32) (bool, error)
+
+	// ListBannedCommunityIDs is the bulk form, for filtering the community
+	// picker on game creation without one query per community.
+	ListBannedCommunityIDs(ctx context.Context, userID int32) ([]int32, error)
 }
 
 // FingerprintBanServiceInterface defines the contract for device fingerprint banning.

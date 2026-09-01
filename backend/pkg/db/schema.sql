@@ -126,6 +126,40 @@ CREATE TABLE community_moderators (
     UNIQUE(community_id, user_id)
 );
 
+-- Community bans: the driver for the Communities feature. A ban excludes a user
+-- from ONE community's games without touching the others.
+--
+-- 🔴 Every enforcement read must carry (expires_at IS NULL OR expires_at > NOW()).
+-- Expired rows stay in the table -- they are history, and lifting a ban is a
+-- separate deliberate act -- so a query omitting the test enforces lapsed bans.
+CREATE TABLE community_bans (
+    id SERIAL PRIMARY KEY,
+    community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason TEXT,
+    -- SET NULL: deleting the moderator who issued a ban must not lift the ban.
+    banned_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    banned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,   -- NULL = permanent
+    UNIQUE(community_id, user_id)
+);
+
+-- Ban audit log, deliberately SEPARATE from community_bans: lifting a ban
+-- deletes its row, but the history has to survive that. Append-only.
+CREATE TABLE community_ban_events (
+    id SERIAL PRIMARY KEY,
+    community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    -- 'banned' | 'unbanned' | 'modified'; canonical list in core.ValidBanEventActions.
+    action VARCHAR(20) NOT NULL,
+    -- Snapshots, not references: the ban row is gone when an 'unbanned' event
+    -- is read, and a 'modified' event must show the values as they were then.
+    reason TEXT,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Games table
 CREATE TABLE games (
     id SERIAL PRIMARY KEY,

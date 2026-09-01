@@ -194,3 +194,111 @@ func SuggestCommunitySlug(name string) string {
 	}
 	return out
 }
+
+// CommunityBan excludes one user from one community's games.
+//
+// Bans are per-community by design -- that separation is the entire reason
+// Communities exists. A user banned from one community plays freely in the
+// others, and a game with no community (a legacy game) is never covered by any
+// ban.
+//
+// Bans are NOT retroactive: a ban blocks a user from entering games, but does
+// not eject them from games they already play in. Removing an existing
+// participant stays a GM decision.
+type CommunityBan struct {
+	ID          int32   `json:"id"`
+	CommunityID int32   `json:"community_id"`
+	UserID      int32   `json:"user_id"`
+	Username    string  `json:"username,omitempty"`     // Populated by list queries
+	DisplayName *string `json:"display_name,omitempty"` // Populated by list queries
+	AvatarURL   *string `json:"avatar_url,omitempty"`   // Populated by list queries
+	Reason      *string `json:"reason,omitempty"`
+
+	// BannedByUserID is nullable because the moderator who issued the ban may
+	// since have been deleted (ON DELETE SET NULL). The ban belongs to the
+	// community, not to its author, so it outlives them.
+	BannedByUserID   *int32  `json:"banned_by_user_id,omitempty"`
+	BannedByUsername *string `json:"banned_by_username,omitempty"`
+
+	BannedAt time.Time `json:"banned_at"`
+
+	// ExpiresAt nil means PERMANENT. A ban whose expiry has passed still exists
+	// as a row -- it stays on the management list so a moderator can see it
+	// lapsed rather than watching it vanish -- so never infer "banned" from the
+	// row's presence. Use IsActive, or the service's IsUserBanned.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+
+	// IsActive is whether this ban is being ENFORCED right now: permanent, or
+	// not yet expired. Computed at read time rather than stored, since it
+	// changes with the clock and nothing writes to the row when it lapses.
+	IsActive bool `json:"is_active"`
+}
+
+// CommunityBanEvent is one append-only entry in a community's ban audit log.
+//
+// The log is separate from community_bans because lifting a ban DELETES its
+// row. Three communities sharing this deployment will have disputes about who
+// banned whom, and that history cannot be reconstructed after the fact.
+//
+// Reason and ExpiresAt are SNAPSHOTS of the ban as it stood at event time, not
+// live references: by the time an "unbanned" event is read, its ban row is gone.
+type CommunityBanEvent struct {
+	ID             int32   `json:"id"`
+	CommunityID    int32   `json:"community_id"`
+	TargetUserID   int32   `json:"target_user_id"`
+	TargetUsername *string `json:"target_username,omitempty"`
+
+	// ActorUserID is nullable: a deleted moderator's events survive them
+	// (ON DELETE SET NULL), because deleting the actor must not erase the record
+	// of what they did.
+	ActorUserID   *int32  `json:"actor_user_id,omitempty"`
+	ActorUsername *string `json:"actor_username,omitempty"`
+
+	Action    string     `json:"action"` // See ValidBanEventActions
+	Reason    *string    `json:"reason,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+// Ban audit-log actions. The column is a plain VARCHAR with no CHECK
+// constraint, matching how phase types and character statuses are handled --
+// this list is the authority.
+const (
+	// BanEventBanned is a new ban on a user who was not banned before.
+	BanEventBanned = "banned"
+
+	// BanEventUnbanned is a ban being lifted. Its reason/expiry are copied from
+	// the row being deleted, since that row will not exist afterwards.
+	BanEventUnbanned = "unbanned"
+
+	// BanEventModified is a re-ban of an ALREADY-banned user -- changing the
+	// reason or extending the expiry. Distinguished from "banned" so the log
+	// reads as a history of decisions rather than implying the user was
+	// unbanned and re-banned in between.
+	BanEventModified = "modified"
+)
+
+// ValidBanEventActions is the canonical set of audit-log actions.
+var ValidBanEventActions = []string{BanEventBanned, BanEventUnbanned, BanEventModified}
+
+// CreateCommunityBanRequest bans a user from a community, or updates an
+// existing ban in place.
+//
+// UserID rather than a username: the client already has ids from the member
+// surfaces, and resolving a name here would make the endpoint's behaviour
+// depend on a rename.
+type CreateCommunityBanRequest struct {
+	UserID int32   `json:"user_id"`
+	Reason *string `json:"reason,omitempty"`
+
+	// ExpiresAt nil means a PERMANENT ban. This is the common case, so it is
+	// the default rather than something the client must opt into.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
+// Ban audit-log pagination. The log grows without bound and is read newest-first
+// in a management view, so it is paged rather than returned whole.
+const (
+	DefaultBanEventPageSize = 50
+	MaxBanEventPageSize     = 200
+)

@@ -81,3 +81,22 @@ var ErrOwnerCannotBeModerator = errors.New("the community owner already has full
 // ErrAlreadyModerator is returned when adding a user who already moderates the
 // community.
 var ErrAlreadyModerator = errors.New("user is already a moderator of this community")
+
+// ErrUserBannedFromCommunity is returned when a banned user tries to enter or
+// create a game in the community that banned them.
+//
+// The message names the community rather than the ban's reason: the reason is
+// moderator-facing context in the audit log, and per the scope decisions no
+// notification is sent to the banned user -- telling them is the owner's job.
+var ErrUserBannedFromCommunity = errors.New("you are banned from this community")
+
+// ErrCannotBanCommunityStaff is returned when banning a community's own owner
+// or one of its moderators.
+//
+// A ban is enforced against people ENTERING games; a moderator who is also
+// banned is a contradictory state that no enforcement path knows how to read.
+// Remove them from the roster first, which is a deliberate owner-only act.
+var ErrCannotBanCommunityStaff = errors.New("remove this user from the moderator roster before banning them")
+
+// ErrBanNotFound is returned when lifting a ban that does not exist.
+var ErrBanNotFound = errors.New("no ban found for that user in this community")

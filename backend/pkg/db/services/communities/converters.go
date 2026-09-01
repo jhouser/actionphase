@@ -9,6 +9,7 @@ package communities
 import (
 	"actionphase/pkg/core"
 	models "actionphase/pkg/db/models"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -96,5 +97,89 @@ func moderatorFromDB(row models.CommunityModerator) *core.CommunityModerator {
 		UserID:          row.UserID,
 		GrantedByUserID: int32Ptr(row.GrantedByUserID),
 		GrantedAt:       row.GrantedAt.Time,
+	}
+}
+
+// timePtr maps a nullable timestamp column to *time.Time.
+func timePtr(t pgtype.Timestamptz) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	v := t.Time
+	return &v
+}
+
+// timestampParam maps *time.Time to a nullable timestamp param, sending nil to
+// SQL NULL -- which for a ban's expires_at means PERMANENT.
+func timestampParam(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *t, Valid: true}
+}
+
+// banIsActive reports whether a ban is being enforced right now.
+//
+// Computed at read time, never stored: nothing writes to the row when a ban
+// lapses, so a stored flag would go stale the moment the clock passed it. This
+// must agree with the SQL expiry test in every enforcement query --
+// TestBanIsActiveAgreesWithSQL is the guard.
+func banIsActive(expiresAt pgtype.Timestamptz) bool {
+	if !expiresAt.Valid {
+		return true // Permanent.
+	}
+	return expiresAt.Time.After(time.Now())
+}
+
+// banFromDB converts the bare insert/delete-returning row, which carries no
+// joined user details. Callers needing the username re-list.
+func banFromDB(row models.CommunityBan) *core.CommunityBan {
+	return &core.CommunityBan{
+		ID:             row.ID,
+		CommunityID:    row.CommunityID,
+		UserID:         row.UserID,
+		Reason:         textPtr(row.Reason),
+		BannedByUserID: int32Ptr(row.BannedByUserID),
+		BannedAt:       row.BannedAt.Time,
+		ExpiresAt:      timePtr(row.ExpiresAt),
+		IsActive:       banIsActive(row.ExpiresAt),
+	}
+}
+
+// banFromListRow converts a ban row with its joined user details.
+func banFromListRow(row models.ListCommunityBansRow) *core.CommunityBan {
+	return &core.CommunityBan{
+		ID:               row.ID,
+		CommunityID:      row.CommunityID,
+		UserID:           row.UserID,
+		Username:         row.Username,
+		DisplayName:      textPtr(row.DisplayName),
+		AvatarURL:        textPtr(row.AvatarUrl),
+		Reason:           textPtr(row.Reason),
+		BannedByUserID:   int32Ptr(row.BannedByUserID),
+		BannedByUsername: textPtr(row.BannedByUsername),
+		BannedAt:         row.BannedAt.Time,
+		ExpiresAt:        timePtr(row.ExpiresAt),
+		IsActive:         banIsActive(row.ExpiresAt),
+	}
+}
+
+// banEventFromListRow converts an audit-log row.
+//
+// Both usernames are nullable: the actor may have been deleted (ON DELETE SET
+// NULL, so their events survive them) and so may the target. The event still
+// renders -- that is the whole point of an append-only log.
+func banEventFromListRow(row models.ListCommunityBanEventsRow) *core.CommunityBanEvent {
+	return &core.CommunityBanEvent{
+		ID:             row.ID,
+		CommunityID:    row.CommunityID,
+		TargetUserID:   row.TargetUserID,
+		TargetUsername: textPtr(row.TargetUsername),
+		ActorUserID:    int32Ptr(row.ActorUserID),
+		ActorUsername:  textPtr(row.ActorUsername),
+		Action:         row.Action,
+		Reason:         textPtr(row.Reason),
+		ExpiresAt:      timePtr(row.ExpiresAt),
+		CreatedAt:      row.CreatedAt.Time,
 	}
 }
