@@ -123,6 +123,20 @@ func (gs *GameService) CreateGame(ctx context.Context, req core.CreateGameReques
 		return nil, err
 	}
 
+	// Membership is otherwise open -- anyone may create a game in any active
+	// community -- but not someone that community has banned. Without this a
+	// banned user simply spins up their own game under the community's banner.
+	banned, err := queries.IsUserBannedFromCommunity(ctx, models.IsUserBannedFromCommunityParams{
+		CommunityID: req.CommunityID,
+		UserID:      req.GMUserID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to check community ban: %w", err)
+	}
+	if banned {
+		return nil, core.ErrUserBannedFromCommunity
+	}
+
 	game, err := queries.CreateGame(ctx, models.CreateGameParams{
 		Title:                   req.Title,
 		Description:             pgtype.Text{String: req.Description, Valid: req.Description != ""},
@@ -163,6 +177,33 @@ func (gs *GameService) CreateGame(ctx context.Context, req core.CreateGameReques
 	)
 
 	return &game, nil
+}
+
+// refuseIfBannedFromGameCommunity blocks a user from joining a game whose
+// community has banned them.
+//
+// Every join path funnels through here rather than repeating the query, so a
+// new path added later has one obvious thing to call. The grandfathering rule
+// lives in the SQL: the query inner-joins through games.community_id, so a
+// legacy game with a NULL community yields no row and is never blocked.
+func (gs *GameService) refuseIfBannedFromGameCommunity(ctx context.Context, gameID, userID int32) error {
+	queries := models.New(gs.DB)
+
+	banned, err := queries.IsUserBannedFromGameCommunity(ctx, models.IsUserBannedFromGameCommunityParams{
+		GameID: gameID,
+		UserID: userID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to check community ban: %w", err)
+	}
+	if banned {
+		gs.Logger.Warn(ctx, "Refused join: user is banned from the game's community",
+			"game_id", gameID,
+			"user_id", userID,
+		)
+		return core.ErrUserBannedFromCommunity
+	}
+	return nil
 }
 
 // validateGameCommunity confirms a community may receive a game: it must exist
@@ -659,6 +700,10 @@ func (gs *GameService) AddGameParticipant(ctx context.Context, gameID, userID in
 		return nil, err
 	}
 
+	if err := gs.refuseIfBannedFromGameCommunity(ctx, gameID, userID); err != nil {
+		return nil, err
+	}
+
 	participant, err := queries.AddGameParticipant(ctx, models.AddGameParticipantParams{
 		GameID: gameID,
 		UserID: userID,
@@ -1040,6 +1085,13 @@ func (gs *GameService) RemovePlayer(ctx context.Context, gameID, userID, gmUserI
 func (gs *GameService) AddParticipantWithRole(ctx context.Context, gameID, userID int32, role string) (*models.GameParticipant, error) {
 	queries := models.New(gs.DB)
 
+	// The GM's direct-add bypasses the application process, and with it the
+	// apply-time ban gate -- so the ban has to be re-checked here. A community
+	// ban outranks the GM: the GM runs the game, the community owns the banlist.
+	if err := gs.refuseIfBannedFromGameCommunity(ctx, gameID, userID); err != nil {
+		return nil, err
+	}
+
 	participant, err := queries.AddParticipantWithRole(ctx, models.AddParticipantWithRoleParams{
 		GameID: gameID,
 		UserID: userID,
@@ -1083,6 +1135,13 @@ func (gs *GameService) UpdateGameAutoAcceptAudience(ctx context.Context, gameID 
 // Otherwise, they are added with 'pending' status and require GM approval.
 func (gs *GameService) CreateAudienceApplication(ctx context.Context, gameID, userID int32) (*models.GameParticipant, error) {
 	queries := models.New(gs.DB)
+
+	// Checked before the auto-accept branch, so it covers both outcomes: a
+	// banned user must neither be auto-accepted nor left sitting as a pending
+	// audience request for the GM to approve.
+	if err := gs.refuseIfBannedFromGameCommunity(ctx, gameID, userID); err != nil {
+		return nil, err
+	}
 
 	// Check if auto-accept is enabled for this game
 	autoAccept, err := queries.GetGameAutoAcceptAudience(ctx, gameID)

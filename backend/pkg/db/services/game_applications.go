@@ -45,6 +45,12 @@ func (gas *GameApplicationService) CreateGameApplication(ctx context.Context, re
 			return nil, fmt.Errorf("user already has a pending application for this game")
 		case core.ApplicationRejected:
 			return nil, fmt.Errorf("user's previous application was rejected")
+		case core.CommunityBanned:
+			// Applies to audience applications too. The NotRecruiting case below
+			// deliberately lets audience through at any time; a ban must not
+			// inherit that exemption, or a banned user could still watch the
+			// community's games from the stands.
+			return nil, core.ErrUserBannedFromCommunity
 		case core.NotRecruiting:
 			// Audience can apply at any time, but players can only apply during recruitment
 			if req.Role != core.RoleAudience {
@@ -185,6 +191,21 @@ func (gas *GameApplicationService) ApproveGameApplication(ctx context.Context, a
 	application, err := gas.GetGameApplication(ctx, applicationID)
 	if err != nil {
 		return fmt.Errorf("failed to get game application: %w", err)
+	}
+
+	// A ban may have landed after the application was filed, so this cannot be
+	// left to the apply-time gate. Refusing here rather than silently dropping
+	// the row keeps the application pending and visible: the GM is told why, and
+	// can still reject it explicitly.
+	banned, err := queries.IsUserBannedFromGameCommunity(ctx, models.IsUserBannedFromGameCommunityParams{
+		GameID: application.GameID,
+		UserID: application.UserID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to check community ban: %w", err)
+	}
+	if banned {
+		return core.ErrUserBannedFromCommunity
 	}
 
 	// Update application status
@@ -343,28 +364,6 @@ func (gas *GameApplicationService) CountPendingApplicationsForGame(ctx context.C
 	return count, nil
 }
 
-// BulkApproveApplications approves all pending applications for a game
-func (gas *GameApplicationService) BulkApproveApplications(ctx context.Context, gameID, reviewerID int32) error {
-	queries := models.New(gas.DB)
-
-	count, _ := queries.CountPendingApplicationsForGame(ctx, gameID)
-
-	err := queries.BulkApproveApplications(ctx, models.BulkApproveApplicationsParams{
-		GameID:           gameID,
-		ReviewedByUserID: pgtype.Int4{Int32: reviewerID, Valid: true},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to bulk approve applications: %w", err)
-	}
-
-	gas.Logger.Info(ctx, "Bulk game applications approved",
-		"game_id", gameID,
-		"count", count,
-	)
-
-	return nil
-}
-
 // BulkRejectApplications rejects all pending applications for a game
 func (gas *GameApplicationService) BulkRejectApplications(ctx context.Context, gameID, reviewerID int32) error {
 	queries := models.New(gas.DB)
@@ -454,8 +453,32 @@ func (gas *GameApplicationService) ConvertApprovedApplicationsToParticipants(ctx
 			continue
 		}
 
+		// A ban can land between approval and recruitment closing, so approval
+		// is not proof of eligibility by the time this runs. Without this check
+		// the sequence apply -> approve -> ban -> close recruitment makes a
+		// banned user a participant, which is the one bypass that matters:
+		// it needs no privileges and happens on a path the GM does not review.
+		//
+		// The application is left in place rather than deleted, so the GM can
+		// see it was not converted instead of the applicant vanishing.
+		banned, err := queries.IsUserBannedFromGameCommunity(ctx, models.IsUserBannedFromGameCommunityParams{
+			GameID: app.GameID,
+			UserID: app.UserID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to check community ban for application %d: %w", app.ID, err)
+		}
+		if banned {
+			gas.Logger.Warn(ctx, "Skipped converting application: user is banned from the game's community",
+				"application_id", app.ID,
+				"game_id", app.GameID,
+				"user_id", app.UserID,
+			)
+			continue
+		}
+
 		// Create participant for player applications
-		_, err := queries.AddGameParticipant(ctx, models.AddGameParticipantParams{
+		_, err = queries.AddGameParticipant(ctx, models.AddGameParticipantParams{
 			GameID: app.GameID,
 			UserID: app.UserID,
 			Role:   app.Role,

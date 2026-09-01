@@ -642,6 +642,10 @@ func (h *Handler) humaCreateGame(ctx context.Context, in *createGameInput) (*gam
 			return nil, huma.Error404NotFound("that community does not exist")
 		case errors.Is(err, core.ErrCommunityInactive):
 			return nil, huma.Error400BadRequest("that community is no longer accepting new games")
+		case errors.Is(err, core.ErrUserBannedFromCommunity):
+			// Membership is open, so this is the one thing that stops a game
+			// being created here -- and it must not leak as a 500.
+			return nil, huma.Error403Forbidden("you are banned from that community")
 		}
 
 		return nil, h.logAndErr(ctx, core.ErrInternalError(err), "Failed to create game",
@@ -1353,6 +1357,10 @@ func (h *Handler) humaAddParticipantDirectly(ctx context.Context, in *addPartici
 
 	participant, err := h.GameService.AddParticipantWithRole(ctx, gameID, in.Body.UserID, in.Body.Role)
 	if err != nil {
+		if errors.Is(err, core.ErrUserBannedFromCommunity) {
+			return nil, h.logAndErr(ctx, core.ErrForbidden("that user is banned from this game's community"),
+				"Direct add refused: user is community-banned", "game_id", gameID, "user_id", in.Body.UserID)
+		}
 		return nil, h.logAndErr(ctx, core.ErrInternalError(err), "Failed to add participant directly",
 			"error", err, "game_id", gameID, "user_id", in.Body.UserID, "role", in.Body.Role)
 	}
@@ -1459,6 +1467,14 @@ func (h *Handler) humaApplyToGame(ctx context.Context, in *applyToGameInput) (*a
 	})
 	if err != nil {
 		h.App.ObsLogger.Error(ctx, "Failed to create game application", "error", err, "game_id", game.ID, "user_id", authUser.ID)
+
+		// A ban is a 403, not a 400: nothing about the request could be
+		// corrected to make it succeed. Matched with errors.Is rather than by
+		// message, since the service returns a sentinel.
+		if errors.Is(err, core.ErrUserBannedFromCommunity) {
+			return nil, h.logAndErr(ctx, core.ErrForbidden(err.Error()),
+				"Banned user attempted to apply to game", "game_id", game.ID, "user_id", authUser.ID)
+		}
 
 		// These four are all conditions the applicant can see and act on, so
 		// they are 400s rather than 500s. A rejection in particular is terminal:
@@ -1634,6 +1650,13 @@ func (h *Handler) humaReviewGameApplication(ctx context.Context, in *reviewAppli
 		err = h.GameApplicationService.RejectGameApplication(ctx, in.ApplicationID, authUser.ID)
 	}
 	if err != nil {
+		// The applicant was banned between applying and review. Told plainly, so
+		// the GM understands the refusal is the community's, not a server fault.
+		if errors.Is(err, core.ErrUserBannedFromCommunity) {
+			return nil, h.logAndErr(ctx, core.ErrForbidden("that user is banned from this game's community"),
+				"Approval refused: applicant is community-banned",
+				"application_id", in.ApplicationID, "user_id", application.UserID)
+		}
 		return nil, h.logAndErr(ctx, core.ErrInternalError(err), "Failed to review game application",
 			"error", err, "application_id", in.ApplicationID, "action", in.Body.Action)
 	}

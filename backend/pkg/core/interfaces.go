@@ -430,9 +430,6 @@ type GameApplicationServiceInterface interface {
 	// CountPendingApplicationsForGame returns count of pending applications
 	CountPendingApplicationsForGame(ctx context.Context, gameID int32) (int64, error)
 
-	// BulkApproveApplications approves all pending applications for a game
-	BulkApproveApplications(ctx context.Context, gameID, reviewerID int32) error
-
 	// GetApprovedApplicationsForGame retrieves approved applications for participant creation
 	GetApprovedApplicationsForGame(ctx context.Context, gameID int32) ([]models.GetApprovedApplicationsForGameRow, error)
 
