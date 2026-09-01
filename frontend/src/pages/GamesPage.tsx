@@ -9,6 +9,7 @@ import { FilterBar } from '../components/FilterBar';
 import { Pagination } from '../components/Pagination';
 import { Input } from '../components/ui';
 import { useGameListing } from '../hooks/useGameListing';
+import { useActiveCommunities } from '../hooks/useCommunities';
 import { useToast } from '../contexts/ToastContext';
 import type { EnrichedGameListItem } from '../types/games';
 
@@ -34,6 +35,7 @@ export const GamesPage = () => {
     setStates,
     setParticipation,
     setHasOpenSpots,
+    setCommunity,
     setSortBy,
     setPage,
     setPageSize,
@@ -42,6 +44,8 @@ export const GamesPage = () => {
     isError,
     error,
   } = useGameListing();
+
+  const { communities } = useActiveCommunities();
 
   // Debounced search effect
   useEffect(() => {
@@ -125,11 +129,14 @@ export const GamesPage = () => {
         selectedStates={filters.states || []}
         participation={filters.participation}
         hasOpenSpots={filters.has_open_spots}
+        communityId={filters.community_id}
         sortBy={filters.sort_by || 'recent_activity'}
         availableStates={metadata.available_states}
+        communities={communities}
         onStatesChange={setStates}
         onParticipationChange={setParticipation}
         onHasOpenSpotsChange={setHasOpenSpots}
+        onCommunityChange={setCommunity}
         onSortByChange={setSortBy}
         onClearFilters={clearFilters}
         filteredCount={metadata.filtered_count}

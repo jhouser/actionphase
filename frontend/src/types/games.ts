@@ -23,6 +23,12 @@ export interface Game {
    */
   character_sheet?: CharacterSheetConfig;
   banner_url?: string | null;
+  /**
+   * OPTIONAL because games predating communities genuinely have none (req 5).
+   * Absent means "legacy game", never "community 0" -- surfaces must render
+   * nothing rather than a placeholder, and bans never apply to these.
+   */
+  community_id?: number;
   common_room_open_day?: number | null;
   common_room_open_time?: string | null;
   common_room_close_day?: number | null;
@@ -70,6 +76,14 @@ type ParticipantStatus = 'active' | 'inactive' | 'removed';
 export interface CreateGameRequest {
   title: string;
   description: string;
+  /**
+   * Required on create (req 5): every new game belongs to a community.
+   *
+   * Deliberately absent from UpdateGameRequest below -- reassignment is a
+   * separate, differently-authorized operation (setup-only for the GM), not a
+   * field on an ordinary profile edit.
+   */
+  community_id: number;
   genre?: string;
   start_date?: string;
   end_date?: string;
@@ -93,7 +107,13 @@ export interface CreateGameRequest {
   schedule_timezone?: string | null;
 }
 
-export interface UpdateGameRequest extends CreateGameRequest {
+export interface UpdateGameRequest extends Omit<CreateGameRequest, 'community_id'> {
+  /**
+   * OPTIONAL, and preserve-on-absent: omitting it leaves the game's community
+   * alone rather than clearing it. The server only honours it while the game is
+   * in setup (decision 4).
+   */
+  community_id?: number;
   is_public: boolean;
   is_anonymous?: boolean;
   auto_accept_audience?: boolean;
@@ -301,6 +321,8 @@ export interface GameListingFilters {
   states?: GameState[];
   participation?: ParticipationFilter;
   has_open_spots?: boolean;
+  /** Only games in this community. Omitted means every community. */
+  community_id?: number;
   sort_by?: SortBy;
   admin_mode?: boolean;
   page?: number;

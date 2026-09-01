@@ -411,11 +411,14 @@ func TestGameAPI_GetGameParticipants_AnonymousRedaction(t *testing.T) {
 	audienceToken, err := core.CreateTestJWTTokenForUser(app, audienceMember)
 	require.NoError(t, err)
 
+	community := testDB.CreateTestCommunity(t, int32(gm.ID))
+
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	game, err := gameService.CreateGame(context.Background(), core.CreateGameRequest{
 		Title:       "Anonymous Game",
 		Description: "Test",
 		GMUserID:    int32(gm.ID),
+		CommunityID: community.ID,
 		IsAnonymous: true,
 	})
 	require.NoError(t, err)

@@ -27,7 +27,7 @@ func TestGameRequestTagValidation(t *testing.T) {
 	const goodDescription = "A description long enough to validate."
 
 	t.Run("create rejects a missing title", func(t *testing.T) {
-		_, err := bindCreate(t, `{"description":"`+goodDescription+`"}`)
+		_, err := bindCreate(t, `{"community_id":1,"description":"`+goodDescription+`"}`)
 		if err == nil {
 			t.Fatal("expected a missing title to be rejected")
 		}
@@ -37,7 +37,7 @@ func TestGameRequestTagValidation(t *testing.T) {
 	})
 
 	t.Run("create rejects a whitespace-only title", func(t *testing.T) {
-		_, err := bindCreate(t, `{"title":"   ","description":"`+goodDescription+`"}`)
+		_, err := bindCreate(t, `{"community_id":1,"title":"   ","description":"`+goodDescription+`"}`)
 		if err == nil {
 			t.Fatal("expected a whitespace-only title to be rejected")
 		}
@@ -49,7 +49,7 @@ func TestGameRequestTagValidation(t *testing.T) {
 	})
 
 	t.Run("create rejects a too-short title", func(t *testing.T) {
-		_, err := bindCreate(t, `{"title":"ab","description":"`+goodDescription+`"}`)
+		_, err := bindCreate(t, `{"community_id":1,"title":"ab","description":"`+goodDescription+`"}`)
 		if err == nil {
 			t.Fatal("expected a two-character title to be rejected")
 		}
@@ -59,7 +59,7 @@ func TestGameRequestTagValidation(t *testing.T) {
 	})
 
 	t.Run("create rejects a too-short description", func(t *testing.T) {
-		_, err := bindCreate(t, `{"title":"A Test Game","description":"short"}`)
+		_, err := bindCreate(t, `{"community_id":1,"title":"A Test Game","description":"short"}`)
 		if err == nil {
 			t.Fatal("expected a five-character description to be rejected")
 		}
@@ -69,7 +69,7 @@ func TestGameRequestTagValidation(t *testing.T) {
 	})
 
 	t.Run("create trims a padded title", func(t *testing.T) {
-		data, err := bindCreate(t, `{"title":"  A Test Game  ","description":"`+goodDescription+`"}`)
+		data, err := bindCreate(t, `{"community_id":1,"title":"  A Test Game  ","description":"`+goodDescription+`"}`)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -79,7 +79,7 @@ func TestGameRequestTagValidation(t *testing.T) {
 	})
 
 	t.Run("create accepts a valid body", func(t *testing.T) {
-		if _, err := bindCreate(t, `{"title":"A Test Game","description":"`+goodDescription+`"}`); err != nil {
+		if _, err := bindCreate(t, `{"community_id":1,"title":"A Test Game","description":"`+goodDescription+`"}`); err != nil {
 			t.Fatalf("expected a valid body to pass, got %v", err)
 		}
 	})
@@ -104,7 +104,7 @@ func TestGameRequestTagValidation(t *testing.T) {
 		// A body that is bad in two ways should name the bad title, not the
 		// partial schedule: the field the GM actually needs to fix first. Huma
 		// runs schema validation before Resolve, which preserves that ordering.
-		_, err := bindCreate(t, `{"title":"","description":"`+goodDescription+`","common_room_open_day":1}`)
+		_, err := bindCreate(t, `{"community_id":1,"title":"","description":"`+goodDescription+`","common_room_open_day":1}`)
 		if err == nil {
 			t.Fatal("expected the body to be rejected")
 		}
@@ -117,7 +117,7 @@ func TestGameRequestTagValidation(t *testing.T) {
 	})
 
 	t.Run("an incomplete schedule is still rejected on its own", func(t *testing.T) {
-		_, err := bindCreate(t, `{"title":"A Test Game","description":"`+goodDescription+`","common_room_open_day":1}`)
+		_, err := bindCreate(t, `{"community_id":1,"title":"A Test Game","description":"`+goodDescription+`","common_room_open_day":1}`)
 		if err == nil {
 			t.Fatal("expected a partial schedule to be rejected")
 		}

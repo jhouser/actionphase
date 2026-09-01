@@ -63,13 +63,21 @@ export function CommunityPage() {
           </div>
         </div>
 
-        {canManage && (
-          <Link to={`/communities/${community.slug}/manage/moderators`}>
-            <Button variant="secondary" data-testid="manage-community">
-              Manage
+        <div className="flex items-center gap-2">
+          <Link to={`/communities/${community.slug}/games`}>
+            <Button variant="secondary" data-testid="community-games-link">
+              Games
             </Button>
           </Link>
-        )}
+
+          {canManage && (
+            <Link to={`/communities/${community.slug}/manage/moderators`}>
+              <Button variant="secondary" data-testid="manage-community">
+                Manage
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       <Card variant="default" padding="md">

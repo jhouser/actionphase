@@ -179,6 +179,10 @@ func gameResponseFrom(game *models.Game) *GameResponse {
 	if game.BannerUrl.Valid {
 		resp.BannerURL = &game.BannerUrl.String
 	}
+	if game.CommunityID.Valid {
+		v := game.CommunityID.Int32
+		resp.CommunityID = &v
+	}
 	if game.CommonRoomOpenDay.Valid {
 		v := game.CommonRoomOpenDay.Int16
 		resp.CommonRoomOpenDay = &v
@@ -266,6 +270,9 @@ type createGameBody struct {
 	CommonRoomCloseDay      *int16              `json:"common_room_close_day,omitempty" required:"false" minimum:"0" maximum:"6"`
 	CommonRoomCloseTime     *string             `json:"common_room_close_time,omitempty" required:"false"`
 	ScheduleTimezone        *string             `json:"schedule_timezone,omitempty" required:"false"`
+	// Required: every new game belongs to a community (req 5). minimum:"1"
+	// rejects the zero value, which would otherwise pass as "present".
+	CommunityID int32 `json:"community_id" required:"true" minimum:"1"`
 	// Typed, not json.RawMessage.
 	//
 	// The chi version kept this raw so it could decode with
@@ -290,13 +297,16 @@ func (b *createGameBody) Resolve(huma.Context) []error {
 }
 
 type updateGameBody struct {
-	Title                   string                     `json:"title" minLength:"3" maxLength:"255"`
-	Description             string                     `json:"description" minLength:"10"`
-	Genre                   string                     `json:"genre,omitempty" required:"false"`
-	StartDate               *time.Time                 `json:"start_date,omitempty" required:"false"`
-	EndDate                 *time.Time                 `json:"end_date,omitempty" required:"false"`
-	RecruitmentDeadline     *time.Time                 `json:"recruitment_deadline,omitempty" required:"false"`
-	MaxPlayers              int32                      `json:"max_players,omitempty" required:"false"`
+	Title               string     `json:"title" minLength:"3" maxLength:"255"`
+	Description         string     `json:"description" minLength:"10"`
+	Genre               string     `json:"genre,omitempty" required:"false"`
+	StartDate           *time.Time `json:"start_date,omitempty" required:"false"`
+	EndDate             *time.Time `json:"end_date,omitempty" required:"false"`
+	RecruitmentDeadline *time.Time `json:"recruitment_deadline,omitempty" required:"false"`
+	MaxPlayers          int32      `json:"max_players,omitempty" required:"false"`
+	// A POINTER, unlike most of this body: absent means "leave the community
+	// alone", not "clear it". Only honoured while the game is in setup.
+	CommunityID             *int32                     `json:"community_id,omitempty" required:"false" minimum:"1"`
 	IsPublic                bool                       `json:"is_public,omitempty" required:"false"`
 	IsAnonymous             bool                       `json:"is_anonymous,omitempty" required:"false"`
 	AutoAcceptAudience      bool                       `json:"auto_accept_audience,omitempty" required:"false"`
@@ -618,10 +628,22 @@ func (h *Handler) humaCreateGame(ctx context.Context, in *createGameInput) (*gam
 		CommonRoomCloseDay:      in.Body.CommonRoomCloseDay,
 		CommonRoomCloseTime:     in.Body.CommonRoomCloseTime,
 		ScheduleTimezone:        in.Body.ScheduleTimezone,
+		CommunityID:             in.Body.CommunityID,
 		CharacterSheet:          sheetConfigValue(in.Body.CharacterSheet),
 	})
 	if err != nil {
 		h.App.Observability.OTELMetrics.RecordGameCreateError(ctx)
+
+		// A bad community is the caller's mistake, not a server fault. Without
+		// these branches an unknown or inactive community renders as a 500 and
+		// the GM is told nothing actionable.
+		switch {
+		case errors.Is(err, core.ErrCommunityNotFound):
+			return nil, huma.Error404NotFound("that community does not exist")
+		case errors.Is(err, core.ErrCommunityInactive):
+			return nil, huma.Error400BadRequest("that community is no longer accepting new games")
+		}
+
 		return nil, h.logAndErr(ctx, core.ErrInternalError(err), "Failed to create game",
 			"error", err, "title", in.Body.Title, "user_id", userID)
 	}
@@ -693,6 +715,10 @@ func (h *Handler) humaGetGameWithDetails(ctx context.Context, in *gameScopedInpu
 	if game.BannerUrl.Valid {
 		resp.BannerURL = &game.BannerUrl.String
 	}
+	if game.CommunityID.Valid {
+		v := game.CommunityID.Int32
+		resp.CommunityID = &v
+	}
 	if game.CommonRoomOpenDay.Valid {
 		v := game.CommonRoomOpenDay.Int16
 		resp.CommonRoomOpenDay = &v
@@ -742,6 +768,7 @@ func (h *Handler) humaUpdateGame(ctx context.Context, in *updateGameInput) (*gam
 		EndDate:                 in.Body.EndDate,
 		RecruitmentDeadline:     in.Body.RecruitmentDeadline,
 		MaxPlayers:              in.Body.MaxPlayers,
+		CommunityID:             in.Body.CommunityID,
 		IsPublic:                in.Body.IsPublic,
 		IsAnonymous:             in.Body.IsAnonymous,
 		AutoAcceptAudience:      in.Body.AutoAcceptAudience,
@@ -756,6 +783,16 @@ func (h *Handler) humaUpdateGame(ctx context.Context, in *updateGameInput) (*gam
 		CharacterSheet:          sheetConfigValue(in.Body.CharacterSheet),
 	})
 	if err != nil {
+		// Community problems are the caller's mistake, not a server fault.
+		switch {
+		case errors.Is(err, core.ErrGameCommunityLocked):
+			return nil, huma.Error409Conflict(
+				"a game's community can only be changed while it is still in setup")
+		case errors.Is(err, core.ErrCommunityNotFound):
+			return nil, huma.Error404NotFound("that community does not exist")
+		case errors.Is(err, core.ErrCommunityInactive):
+			return nil, huma.Error400BadRequest("that community is no longer accepting games")
+		}
 		return nil, h.logAndErr(ctx, core.ErrInternalError(err), "Failed to update game", "error", err, "game_id", game.ID)
 	}
 
@@ -958,6 +995,7 @@ type filteredGamesInput struct {
 	States        string `query:"states" required:"false" doc:"Comma-separated game states"`
 	Participation string `query:"participation" required:"false"`
 	HasOpenSpots  string `query:"has_open_spots" required:"false" doc:"\"true\" or \"false\"; anything else is ignored"`
+	CommunityID   string `query:"community_id" required:"false" doc:"Only games in this community; omit for all"`
 	SortBy        string `query:"sort_by" required:"false"`
 	AdminMode     string `query:"admin_mode" required:"false" doc:"\"true\" enables admin mode for an authenticated admin"`
 	Page          string `query:"page" required:"false" doc:"1-based page number; defaults to 1"`
@@ -997,6 +1035,15 @@ func (h *Handler) humaGetFilteredGames(ctx context.Context, in *filteredGamesInp
 	if in.HasOpenSpots == "true" || in.HasOpenSpots == "false" {
 		hasOpenSpots := in.HasOpenSpots == "true"
 		filters.HasOpenSpots = &hasOpenSpots
+	}
+	// Ignored unless it parses to a positive id, matching how page and
+	// page_size treat junk here: a filter nobody can express is better than a
+	// 400 on a stray query string.
+	if in.CommunityID != "" {
+		if c, err := strconv.Atoi(in.CommunityID); err == nil && c > 0 {
+			communityID := int32(c)
+			filters.CommunityID = &communityID
+		}
 	}
 
 	// Optional: this route runs jwtauth.Verifier without Authenticator, so an

@@ -18,6 +18,11 @@ SELECT
   g.allow_group_conversations,
   g.portrait_avatars,
   g.banner_url,
+  g.community_id,
+  -- LEFT JOIN, not INNER: games predating communities have community_id NULL
+  -- (req 5) and must still appear in every listing.
+  c.name as community_name,
+  c.slug as community_slug,
   g.created_at,
   g.updated_at,
 
@@ -67,6 +72,7 @@ SELECT
 
 FROM games g
 INNER JOIN users u ON g.gm_user_id = u.id
+LEFT JOIN communities c ON c.id = g.community_id
 WHERE
   -- Show public games, OR games user is in, OR all games if admin mode enabled and user is admin
   (g.is_public = true OR
@@ -99,6 +105,11 @@ WHERE
     g.title ILIKE '%' || $8 || '%' OR
     g.description::text ILIKE '%' || $8 || '%'
   )
+
+  -- Filter by community (0 or NULL means "every community"). Legacy games with
+  -- community_id NULL are excluded when a community IS named -- they belong to
+  -- none, so they are not in it.
+  AND ($11::int IS NULL OR $11 = 0 OR g.community_id = $11)
 
 ORDER BY
   -- Dynamic sorting based on $5 parameter
@@ -172,7 +183,11 @@ WHERE
     $7::text IS NULL OR $7 = '' OR
     g.title ILIKE '%' || $7 || '%' OR
     g.description::text ILIKE '%' || $7 || '%'
-  );
+  )
+
+  -- Filter by community. Must mirror GetFilteredGames exactly or the count and
+  -- the page disagree and pagination breaks.
+  AND ($8::int IS NULL OR $8 = 0 OR g.community_id = $8);
 
 -- Parameters:
 -- $1: user_id (int, nullable) - for participation enrichment
@@ -182,6 +197,7 @@ WHERE
 -- $5: admin_mode (boolean) - bypass is_public filter if user is admin
 -- $6: admin_user_id (int, nullable) - user ID to validate admin status
 -- $7: search (text, nullable) - case-insensitive search in title and description
+-- $8: community_id (int, nullable) - 0/NULL means every community
 
 -- name: GetAvailableStates :many
 SELECT DISTINCT state

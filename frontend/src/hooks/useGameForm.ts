@@ -8,6 +8,9 @@ import { useUploadGameBanner, useDeleteGameBanner } from './useGameBanner';
 const BLANK_FORM_DATA: GameFormData = {
   title: '',
   description: '',
+  // '' until the GM picks one. Create requires it (req 5); Edit leaves it be,
+  // since reassignment is a separate operation.
+  community_id: '',
   genre: '',
   max_players: 6,
   recruitment_deadline: '',
@@ -30,6 +33,9 @@ export function gameToFormData(game: GameWithDetails): GameFormData {
   return {
     title: game.title || '',
     description: game.description || '',
+    // Legacy games have none; '' keeps the picker unselected rather than
+    // inventing a community the game does not belong to.
+    community_id: game.community_id ?? '',
     genre: game.genre || '',
     max_players: game.max_players || '',
     recruitment_deadline: game.recruitment_deadline ? formatDateTimeLocal(game.recruitment_deadline) : '',
@@ -53,7 +59,13 @@ export function gameToFormData(game: GameWithDetails): GameFormData {
 }
 
 export interface BuildPayloadResult {
-  payload: CreateGameRequest | null;
+  /**
+   * community_id is optional here because this builder serves both create and
+   * edit. Create passes requireCommunity and is guaranteed a value; edit omits
+   * the key entirely, since reassignment is a separate operation and a legacy
+   * game has no community to send.
+   */
+  payload: (Omit<CreateGameRequest, 'community_id'> & { community_id?: number }) | null;
   error: string | null;
 }
 
@@ -160,12 +172,19 @@ export function useGameForm(initialData?: GameWithDetails) {
     [pendingBannerFile, uploadBanner]
   );
 
-  const buildApiPayload = useCallback((): BuildPayloadResult => {
+  // requireCommunity is opt-in because this builder serves BOTH create and
+  // edit. Create requires a community (req 5); edit must not, or a legacy game
+  // with no community could never be saved again -- and reassignment is a
+  // separate operation regardless.
+  const buildApiPayload = useCallback((requireCommunity = false): BuildPayloadResult => {
     if (!formData.title.trim()) {
       return { payload: null, error: 'Game title is required' };
     }
     if (!formData.description.trim()) {
       return { payload: null, error: 'Game description is required' };
+    }
+    if (requireCommunity && (formData.community_id === '' || formData.community_id === undefined)) {
+      return { payload: null, error: 'Please choose a community for this game' };
     }
 
     // Sunday is day 0 — use explicit empty-string check so falsy 0 is not treated as absent
@@ -194,9 +213,13 @@ export function useGameForm(initialData?: GameWithDetails) {
       return { payload: null, error: 'Could not detect your timezone. Please try again.' };
     }
 
-    const payload: CreateGameRequest = {
+    const payload: NonNullable<BuildPayloadResult['payload']> = {
       title: formData.title.trim(),
       description: formData.description.trim(),
+      // Omitted when unset: on create this cannot happen (requireCommunity
+      // refuses first), and on edit an absent key means "leave the community
+      // alone" rather than clearing it -- which is what a legacy game needs.
+      ...(formData.community_id === '' ? {} : { community_id: Number(formData.community_id) }),
       genre: formData.genre.trim() || undefined,
       max_players: formData.max_players === '' ? undefined : Number(formData.max_players),
       start_date: convertToISO8601(formData.start_date) || undefined,

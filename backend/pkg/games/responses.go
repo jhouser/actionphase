@@ -29,6 +29,10 @@ type GameResponse struct {
 	CommonRoomCloseDay      *int16     `json:"common_room_close_day,omitempty"`
 	CommonRoomCloseTime     *string    `json:"common_room_close_time,omitempty"`
 	ScheduleTimezone        *string    `json:"schedule_timezone,omitempty"`
+	// A POINTER because legacy games genuinely have no community (req 5). A
+	// zero int32 would render as community 0, which no client can distinguish
+	// from "unset" -- absent is the honest encoding.
+	CommunityID *int32 `json:"community_id,omitempty"`
 	// As stored: sparse, containing only genuine GM overrides. Defaults are NOT
 	// filled in here — the frontend owns them, so exactly one place knows them.
 	CharacterSheet *core.CharacterSheetConfig `json:"character_sheet,omitempty"`
@@ -58,11 +62,19 @@ type GameWithDetailsResponse struct {
 	AllowGroupConversations bool       `json:"allow_group_conversations"`
 	PortraitAvatars         bool       `json:"portrait_avatars"`
 	BannerURL               *string    `json:"banner_url,omitempty"`
-	CommonRoomOpenDay       *int16     `json:"common_room_open_day,omitempty"`
-	CommonRoomOpenTime      *string    `json:"common_room_open_time,omitempty"`
-	CommonRoomCloseDay      *int16     `json:"common_room_close_day,omitempty"`
-	CommonRoomCloseTime     *string    `json:"common_room_close_time,omitempty"`
-	ScheduleTimezone        *string    `json:"schedule_timezone,omitempty"`
+	// Same pointer semantics as GameResponse.CommunityID: nil means the game
+	// predates communities (req 5), never community 0.
+	//
+	// This endpoint -- not GET /games/{id} -- is what the game page loads, so
+	// the edit form hydrates its community picker from here. Omitting the
+	// field made the picker fall back to "-- Choose a community --" on games
+	// that plainly had one.
+	CommunityID         *int32  `json:"community_id,omitempty"`
+	CommonRoomOpenDay   *int16  `json:"common_room_open_day,omitempty"`
+	CommonRoomOpenTime  *string `json:"common_room_open_time,omitempty"`
+	CommonRoomCloseDay  *int16  `json:"common_room_close_day,omitempty"`
+	CommonRoomCloseTime *string `json:"common_room_close_time,omitempty"`
+	ScheduleTimezone    *string `json:"schedule_timezone,omitempty"`
 	// As stored: sparse, containing only genuine GM overrides. See GameResponse.
 	CharacterSheet *core.CharacterSheetConfig `json:"character_sheet,omitempty"`
 	CurrentPlayers int64                      `json:"current_players"`

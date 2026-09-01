@@ -1502,6 +1502,10 @@ components:
                     type: integer
                 common_room_open_time:
                     type: string
+                community_id:
+                    format: int32
+                    minimum: 1
+                    type: integer
                 description:
                     minLength: 10
                     type: string
@@ -1529,6 +1533,7 @@ components:
             required:
                 - title
                 - description
+                - community_id
             type: object
         CreateHandoutCommentRequest:
             additionalProperties: false
@@ -2477,6 +2482,9 @@ components:
                     type: integer
                 common_room_open_time:
                     type: string
+                community_id:
+                    format: int32
+                    type: integer
                 created_at:
                     format: date-time
                     type: string
@@ -2549,6 +2557,9 @@ components:
                     type: integer
                 common_room_open_time:
                     type: string
+                community_id:
+                    format: int32
+                    type: integer
                 created_at:
                     format: date-time
                     type: string
@@ -4434,6 +4445,10 @@ components:
                     type: integer
                 common_room_open_time:
                     type: string
+                community_id:
+                    format: int32
+                    minimum: 1
+                    type: integer
                 description:
                     minLength: 10
                     type: string
@@ -6772,6 +6787,13 @@ paths:
                   name: has_open_spots
                   schema:
                     description: '"true" or "false"; anything else is ignored'
+                    type: string
+                - description: Only games in this community; omit for all
+                  explode: false
+                  in: query
+                  name: community_id
+                  schema:
+                    description: Only games in this community; omit for all
                     type: string
                 - explode: false
                   in: query

@@ -6,6 +6,7 @@ import { isChunkLoadError } from './lib/chunkLoadError';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PublicArchiveRoute } from './components/PublicArchiveRoute';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useCommunity } from './hooks/useCommunities';
 import { AdminModeProvider } from './contexts/AdminModeContext';
 import { ScreenshotModeProvider } from './contexts/ScreenshotModeContext';
 import { GameProvider } from './contexts/GameContext';
@@ -167,6 +168,37 @@ function CatchAll() {
   return <Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />;
 }
 
+/**
+ * /communities/:slug/games is a redirect into the main games listing, not a page
+ * of its own.
+ *
+ * A dedicated page would be a second, weaker implementation of /games: it had no
+ * pagination, search, state filters, or sorting, and silently truncated at the
+ * API's 100-row page cap. Redirecting means the two surfaces cannot disagree
+ * about which games are visible, and the URL keeps working for anyone who
+ * bookmarked it.
+ *
+ * The route carries a slug but the filter takes an id, so the community has to
+ * be resolved first -- hence the fetch rather than a static <Navigate>.
+ */
+function CommunityGamesRedirect() {
+  const { slug } = useParams<{ slug: string }>();
+  const { community, isLoading, isError } = useCommunity(slug);
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  // An unknown slug falls back to the unfiltered listing rather than an error
+  // page: the destination is a listing either way, and showing every game is a
+  // better failure than a dead end.
+  if (isError || !community) {
+    return <Navigate to="/games" replace />;
+  }
+
+  return <Navigate to={`/games?community_id=${community.id}`} replace />;
+}
+
 function GameDetailsPageWrapper() {
   const { gameId } = useParams<{ gameId: string }>();
 
@@ -225,6 +257,10 @@ const router = createBrowserRouter([
       {
         path: '/communities/:slug',
         element: <ProtectedRoute><CommunityPage /></ProtectedRoute>,
+      },
+      {
+        path: '/communities/:slug/games',
+        element: <ProtectedRoute><CommunityGamesRedirect /></ProtectedRoute>,
       },
       // The manage shell is reachable by moderators too, not just the owner, so
       // it carries no requireAdmin gate. Which controls render is decided

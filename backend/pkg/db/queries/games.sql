@@ -3,10 +3,13 @@ INSERT INTO games (
     title, description, gm_user_id, genre, start_date, end_date,
     recruitment_deadline, max_players, is_public, is_anonymous, auto_accept_audience, allow_group_conversations, portrait_avatars, banner_url,
     common_room_open_day, common_room_open_time, common_room_close_day, common_room_close_time, schedule_timezone,
+    -- Required by the application on every new game (req 5), though the column
+    -- stays nullable so pre-community games remain valid. See the migration.
+    community_id,
     character_sheet
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-    $15, $16, $17, $18, $19,
+    $15, $16, $17, $18, $19, $20,
     -- COALESCE so a caller that builds CreateGameParams directly and leaves
     -- CharacterSheet nil gets '{}' rather than a NOT NULL violation. Naming the
     -- column in the INSERT disables the column DEFAULT, so the default has to be
@@ -40,6 +43,12 @@ SET title = $2, description = $3, genre = $4, start_date = $5,
     end_date = $6, recruitment_deadline = $7, max_players = $8,
     is_public = $9, is_anonymous = $10, auto_accept_audience = $11, allow_group_conversations = $12, portrait_avatars = $13,
     banner_url = COALESCE($14, banner_url),
+    -- Preserve-on-absent, like banner_url above and for the same reason: the
+    -- caller passes a *int32 it can leave nil. It is NOT part of the full
+    -- replace, because an edit that omitted it would otherwise NULL the
+    -- community -- and a game with no community is one no ban can reach.
+    -- The setup-only rule (decision 4) is enforced in the service, not here.
+    community_id = COALESCE(sqlc.narg('community_id')::integer, games.community_id),
     common_room_open_day = $15, common_room_open_time = $16,
     common_room_close_day = $17, common_room_close_time = $18,
     schedule_timezone = $19,

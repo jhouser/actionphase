@@ -431,9 +431,13 @@ type GameApplicationServiceInterface interface {
 
 // CreateGameRequest represents the parameters needed to create a new game
 type CreateGameRequest struct {
-	Title                   string
-	Description             string
-	GMUserID                int32
+	Title       string
+	Description string
+	GMUserID    int32
+	// CommunityID is required on every new game (req 5). The column is
+	// nullable only so pre-community games stay valid; nothing creates a
+	// community-less game any more.
+	CommunityID             int32
 	Genre                   string
 	StartDate               *time.Time
 	EndDate                 *time.Time
@@ -455,9 +459,14 @@ type CreateGameRequest struct {
 
 // UpdateGameRequest represents the parameters needed to update an existing game
 type UpdateGameRequest struct {
-	ID                      int32
-	Title                   string
-	Description             string
+	ID          int32
+	Title       string
+	Description string
+	// CommunityID moves the game to another community. A POINTER because this
+	// field is preserve-on-absent, unlike the rest of this struct: nil means
+	// "leave the community alone", not "clear it". Only honoured while the game
+	// is in setup (decision 4).
+	CommunityID             *int32
 	Genre                   string
 	StartDate               *time.Time
 	EndDate                 *time.Time

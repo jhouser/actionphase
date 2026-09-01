@@ -46,6 +46,10 @@ WHERE
     g.title ILIKE '%' || $7 || '%' OR
     g.description::text ILIKE '%' || $7 || '%'
   )
+
+  -- Filter by community. Must mirror GetFilteredGames exactly or the count and
+  -- the page disagree and pagination breaks.
+  AND ($8::int IS NULL OR $8 = 0 OR g.community_id = $8)
 `
 
 type CountFilteredGamesParams struct {
@@ -56,6 +60,7 @@ type CountFilteredGamesParams struct {
 	Column5 bool     `json:"column_5"`
 	Column6 int32    `json:"column_6"`
 	Column7 string   `json:"column_7"`
+	Column8 int32    `json:"column_8"`
 }
 
 // Count games matching the same filters as GetFilteredGames (for pagination metadata)
@@ -68,6 +73,7 @@ func (q *Queries) CountFilteredGames(ctx context.Context, arg CountFilteredGames
 		arg.Column5,
 		arg.Column6,
 		arg.Column7,
+		arg.Column8,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -113,6 +119,7 @@ ORDER BY state ASC
 // $5: admin_mode (boolean) - bypass is_public filter if user is admin
 // $6: admin_user_id (int, nullable) - user ID to validate admin status
 // $7: search (text, nullable) - case-insensitive search in title and description
+// $8: community_id (int, nullable) - 0/NULL means every community
 func (q *Queries) GetAvailableStates(ctx context.Context) ([]pgtype.Text, error) {
 	rows, err := q.db.Query(ctx, getAvailableStates)
 	if err != nil {
@@ -152,6 +159,11 @@ SELECT
   g.allow_group_conversations,
   g.portrait_avatars,
   g.banner_url,
+  g.community_id,
+  -- LEFT JOIN, not INNER: games predating communities have community_id NULL
+  -- (req 5) and must still appear in every listing.
+  c.name as community_name,
+  c.slug as community_slug,
   g.created_at,
   g.updated_at,
 
@@ -201,6 +213,7 @@ SELECT
 
 FROM games g
 INNER JOIN users u ON g.gm_user_id = u.id
+LEFT JOIN communities c ON c.id = g.community_id
 WHERE
   -- Show public games, OR games user is in, OR all games if admin mode enabled and user is admin
   (g.is_public = true OR
@@ -233,6 +246,11 @@ WHERE
     g.title ILIKE '%' || $8 || '%' OR
     g.description::text ILIKE '%' || $8 || '%'
   )
+
+  -- Filter by community (0 or NULL means "every community"). Legacy games with
+  -- community_id NULL are excluded when a community IS named -- they belong to
+  -- none, so they are not in it.
+  AND ($11::int IS NULL OR $11 = 0 OR g.community_id = $11)
 
 ORDER BY
   -- Dynamic sorting based on $5 parameter
@@ -267,6 +285,7 @@ type GetFilteredGamesParams struct {
 	Column8  string      `json:"column_8"`
 	Column9  int32       `json:"column_9"`
 	Column10 int32       `json:"column_10"`
+	Column11 int32       `json:"column_11"`
 }
 
 type GetFilteredGamesRow struct {
@@ -287,6 +306,9 @@ type GetFilteredGamesRow struct {
 	AllowGroupConversations bool               `json:"allow_group_conversations"`
 	PortraitAvatars         bool               `json:"portrait_avatars"`
 	BannerUrl               pgtype.Text        `json:"banner_url"`
+	CommunityID             pgtype.Int4        `json:"community_id"`
+	CommunityName           pgtype.Text        `json:"community_name"`
+	CommunitySlug           pgtype.Text        `json:"community_slug"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	CurrentPlayers          int64              `json:"current_players"`
@@ -311,6 +333,7 @@ func (q *Queries) GetFilteredGames(ctx context.Context, arg GetFilteredGamesPara
 		arg.Column8,
 		arg.Column9,
 		arg.Column10,
+		arg.Column11,
 	)
 	if err != nil {
 		return nil, err
@@ -337,6 +360,9 @@ func (q *Queries) GetFilteredGames(ctx context.Context, arg GetFilteredGamesPara
 			&i.AllowGroupConversations,
 			&i.PortraitAvatars,
 			&i.BannerUrl,
+			&i.CommunityID,
+			&i.CommunityName,
+			&i.CommunitySlug,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CurrentPlayers,

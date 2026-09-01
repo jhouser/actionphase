@@ -52,6 +52,22 @@ var ErrCommunityNotFound = errors.New("community not found")
 // unique-violation.
 var ErrCommunitySlugTaken = errors.New("community slug already taken")
 
+// ErrCommunityInactive is returned when a game would be created in, or moved
+// into, a community that is no longer active. An inactive community accepts no
+// new games -- that is what deactivating one means.
+var ErrCommunityInactive = errors.New("community is not active")
+
+// ErrGameCommunityLocked is returned when a GM tries to move a game between
+// communities after it has left `setup` (decision 4).
+//
+// Reassignment changes which banlist applies, so it is moderation-relevant once
+// players have joined. There is no admin override.
+//
+// Only an actual MOVE trips this. Resending the community the game already has
+// is not a move and is allowed, so a client that round-trips a GET into a PUT
+// can still edit a recruiting game.
+var ErrGameCommunityLocked = errors.New("game community can only be changed during setup")
+
 // ErrOwnerCannotBeModerator is returned when adding the community owner to the
 // moderator roster.
 //

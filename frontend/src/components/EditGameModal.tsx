@@ -5,6 +5,7 @@ import { apiClient } from '../lib/api';
 import { Button, Alert } from './ui';
 import { Modal } from './Modal';
 import { GameFormFields } from './GameFormFields';
+import { useActiveCommunities } from '../hooks/useCommunities';
 import type { GameFormTabId } from './gameFormTabs';
 import { useRevealInvalidTab } from '../hooks/useRevealInvalidTab';
 import { HelpTooltip } from './ui/HelpTooltip';
@@ -40,6 +41,13 @@ export function EditGameModal({ game, isOpen, onClose, onGameUpdated }: EditGame
     deleteBanner,
     buildApiPayload,
   } = useGameForm(game);
+
+  // Reassignment is setup-only (decision 4). Past setup the game has recruited
+  // under one community's rules and banlist, so the picker is not offered --
+  // the server refuses the change regardless; this keeps the form honest about
+  // what it can do.
+  const canChangeCommunity = game?.state === 'setup';
+  const { communities } = useActiveCommunities();
 
   useEffect(() => {
     if (isOpen && game) {
@@ -217,6 +225,7 @@ export function EditGameModal({ game, isOpen, onClose, onGameUpdated }: EditGame
           bannerUpload={bannerUpload}
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          communities={canChangeCommunity ? communities : undefined}
         />
 
         {error && (

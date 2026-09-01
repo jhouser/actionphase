@@ -54,6 +54,9 @@ export class GamesApi extends BaseApiClient {
     if (filters?.participation) {
       params.append('participation', filters.participation);
     }
+    if (filters?.community_id) {
+      params.append('community_id', filters.community_id.toString());
+    }
     if (filters?.has_open_spots !== undefined) {
       params.append('has_open_spots', filters.has_open_spots.toString());
     }
