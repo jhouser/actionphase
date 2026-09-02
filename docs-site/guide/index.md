@@ -2,7 +2,7 @@
 
 This guide covers every feature in ActionPhase — what it does, how to use it, and what GMs can control that players cannot.
 
-Throughout this guide, sections with headings prefixed **GM:** describe controls that only the game's GM(s) can access.
+Throughout this guide, sections with headings prefixed **GM:** describe controls that only the game's GM(s) can access. Sections prefixed **Moderator:** describe controls limited to a community's moderators and owner.
 
 ## Getting Oriented
 
@@ -10,6 +10,7 @@ Throughout this guide, sections with headings prefixed **GM:** describe controls
 - [Notifications](./notifications) — What generates notifications and how to manage them
 - [User Settings](./user-settings) — Themes, read tracking, and account security
 - [User Profiles](./user-profiles) — Public profile pages and game history
+- [Communities](./communities) — Groups that run their own games, guidelines, and moderation
 
 ## Games
 
@@ -17,6 +18,7 @@ Throughout this guide, sections with headings prefixed **GM:** describe controls
 - [Game Settings](./game-settings) — Anonymous mode, audience settings, and other GM configuration
 - [Player Applications](./player-applications) — Applying to games, managing participants, and Co-GMs
 - [Deadlines](./deadlines) — Phase deadlines and custom deadline management
+- [Public Game Archive](./public-archive) — What becomes publicly readable once a game is completed
 
 ## Playing
 

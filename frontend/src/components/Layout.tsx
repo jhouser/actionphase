@@ -345,8 +345,8 @@ export const Layout = ({ children }: LayoutProps) => {
             &copy; 2025 ActionPhase. A collaborative role-playing platform.
           </p>
           <p className="text-center text-sm text-content-secondary mt-2">
-            <Link to="/community-guidelines" className="hover:underline">
-              Community Guidelines
+            <Link to="/site-guidelines" className="hover:underline">
+              Site Guidelines
             </Link>
           </p>
           <p className="text-center text-xs text-content-secondary mt-1">

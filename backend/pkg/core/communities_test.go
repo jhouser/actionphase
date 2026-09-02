@@ -70,4 +70,13 @@ func TestIsReservedCommunitySlug(t *testing.T) {
 	assert.True(t, IsReservedCommunitySlug("NEW"), "reservation must be case-insensitive")
 	assert.True(t, IsReservedCommunitySlug("  admin  "), "reservation must ignore surrounding space")
 	assert.False(t, IsReservedCommunitySlug("ravens"))
+
+	// Both guideline spellings stay reserved. /community-guidelines was renamed
+	// to /site-guidelines and survives only as a redirect -- if a community
+	// could claim the old slug, /communities/community-guidelines would exist
+	// alongside a redirect pointing elsewhere, and the community would shadow a
+	// path that is still linked from outside the app.
+	assert.True(t, IsReservedCommunitySlug("site-guidelines"))
+	assert.True(t, IsReservedCommunitySlug("community-guidelines"),
+		"the pre-rename path is still routed, so its slug must stay reserved")
 }
