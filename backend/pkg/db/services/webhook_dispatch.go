@@ -248,17 +248,18 @@ func (gs *GameService) markWebhookError(ctx context.Context, hook models.Communi
 // state clears is_anonymous (see UpdateGameState), so a completed game does name
 // its GM; that is the same disclosure the archive itself makes.
 func (gs *GameService) buildGameStateEmbed(ctx context.Context, game *models.Game, newState string) core.DiscordEmbed {
-	embed := core.DiscordEmbed{
-		Title:     game.Title,
-		Color:     webhookColorForState(newState),
-		Footer:    "ActionPhase",
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Description: fmt.Sprintf("Game state changed to **%s**",
-			core.GetGameStateDescriptionBrief(newState)),
+	gameURL := ""
+	if frontendURL := strings.TrimRight(os.Getenv("FRONTEND_URL"), "/"); frontendURL != "" {
+		gameURL = fmt.Sprintf("%s/games/%d", frontendURL, game.ID)
 	}
 
-	if frontendURL := strings.TrimRight(os.Getenv("FRONTEND_URL"), "/"); frontendURL != "" {
-		embed.URL = fmt.Sprintf("%s/games/%d", frontendURL, game.ID)
+	embed := core.DiscordEmbed{
+		Title:       game.Title,
+		URL:         gameURL,
+		Color:       webhookColorForState(newState),
+		Footer:      "ActionPhase",
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Description: webhookMessageForState(newState),
 	}
 
 	if !game.IsAnonymous {
@@ -270,6 +271,49 @@ func (gs *GameService) buildGameStateEmbed(ctx context.Context, game *models.Gam
 	}
 
 	return embed
+}
+
+// webhookMessageForState is the human-facing copy for a transition.
+//
+// Deliberately NOT core.GetGameStateDescriptionBrief, which returns ALL CAPS
+// state names ("CHARACTER CREATION"). That function serves log lines and admin
+// tables, where shouting the enum is fine; in a Discord channel it reads as an
+// alarm, and the state name alone tells a reader nothing about what changed for
+// them.
+//
+// Each message answers "what does this mean for me?" rather than naming the
+// enum. Two of them carry information the state name cannot: entering epilogue
+// or completed makes the whole archive publicly readable, which for a channel
+// of people watching a game they are not in IS the news.
+//
+// No link is built into the copy: the embed's Title is already a hyperlink to
+// the game (embed.URL), so an inline "apply here" would point at the same place
+// twice.
+func webhookMessageForState(state string) string {
+	switch state {
+	case core.GameStateRecruitment:
+		return "**Now recruiting players.** Applications are open."
+	case core.GameStateCharacterCreation:
+		return "**Character creation has begun.** The roster is set."
+	case core.GameStateInProgress:
+		return "**The game has begun.**"
+	case core.GameStatePaused:
+		return "**Paused.** The GM has put things on hold for now."
+	case core.GameStateEpilogue:
+		// Epilogue is not-quite-terminal: play is functionally over, but the
+		// game stays writable for epilogue posts and meta discussion, and the
+		// archive is public from here on (see core.IsPublicArchive).
+		return "**The game is wrapping up.** Players are posting epilogues and meta discussion, and the archive is now open to read."
+	case core.GameStateCompleted:
+		return "**Completed.** The game is now read-only, and the archive is open to read."
+	case core.GameStateCancelled:
+		return "**Cancelled.** This game has ended early."
+	default:
+		// Unreachable via dispatch: ListWebhooksForGameState only matches states
+		// in core.ValidWebhookEvents. A neutral fallback rather than a panic, so
+		// a future state added without copy still delivers something readable.
+		return fmt.Sprintf("Game state changed to %s.", state)
+	}
 }
 
 // webhookColorForState gives the embed a left-border colour matching the

@@ -80,7 +80,12 @@ func TestWebhookDispatch_FiresForSubscribedState(t *testing.T) {
 	require.Len(t, sent, 1, "one webhook subscribed to recruitment should fire once")
 	assert.Equal(t, testHookURL, sent[0].URL)
 	assert.Equal(t, "Webhook Game", sent[0].Embed.Title)
-	assert.Contains(t, sent[0].Embed.Description, "RECRUITMENT")
+	// Asserts the right MESSAGE was selected, not its exact wording -- the copy
+	// itself is covered by the webhookMessageForState tests below, so rewording
+	// it should not break this dispatch test.
+	assert.Equal(t, webhookMessageForState(core.GameStateRecruitment),
+		strings.Split(sent[0].Embed.Description, "\n")[0],
+		"the embed should carry the recruitment copy")
 }
 
 func TestWebhookDispatch_SilentWhenNotSubscribed(t *testing.T) {
@@ -558,4 +563,68 @@ func TestWebhookDispatch_ConcurrentTransitionsAreIndependent(t *testing.T) {
 
 	sent := waitForSends(t, mock, gameCount, 3*time.Second)
 	assert.Len(t, sent, gameCount, "each transition delivers exactly once")
+}
+
+// ------------------------------------------------------- message copy
+
+// The copy is what a human actually reads in a Discord channel, so it is worth
+// asserting directly rather than only through a dispatch. These are pure-string
+// tests: no DB, no goroutine.
+
+func TestWebhookMessageForState_CoversEveryNotifiableEvent(t *testing.T) {
+	// The default branch is a fallback for a state added without copy. Every
+	// state a webhook can actually subscribe to must have real copy, so this
+	// fails the moment core.ValidWebhookEvents grows without this file changing.
+	for _, state := range core.ValidWebhookEvents {
+		msg := webhookMessageForState(state)
+		assert.NotContains(t, msg, "Game state changed to",
+			"state %q fell through to the generic fallback and needs its own copy", state)
+		assert.NotEmpty(t, msg, "state %q has no message", state)
+	}
+}
+
+func TestWebhookMessageForState_NeverNamesTheRawState(t *testing.T) {
+	// The old copy shouted the enum ("**CHARACTER CREATION**"), which reads as
+	// an alarm in a channel. The message should say what changed for the reader,
+	// not name the internal state.
+	for _, state := range core.ValidWebhookEvents {
+		msg := webhookMessageForState(state)
+		assert.NotContains(t, msg, core.GetGameStateDescriptionBrief(state),
+			"state %q leaks the ALL CAPS state name into user-facing copy", state)
+	}
+}
+
+func TestWebhookMessageForState_NoEmDashes(t *testing.T) {
+	// House style: em-dashes read as machine-generated text.
+	for _, state := range core.ValidWebhookEvents {
+		assert.NotContains(t, webhookMessageForState(state), "—",
+			"state %q uses an em-dash", state)
+	}
+}
+
+func TestWebhookMessageForState_CopyCarriesNoLinks(t *testing.T) {
+	// The embed's Title is already a hyperlink to the game (embed.URL), so the
+	// copy must not build a second link to the same place. This also keeps the
+	// copy independent of FRONTEND_URL, which is not guaranteed to be set.
+	for _, state := range core.ValidWebhookEvents {
+		msg := webhookMessageForState(state)
+		assert.NotContains(t, msg, "](", "state %q builds a markdown link; the title already links", state)
+		assert.NotContains(t, msg, "http", "state %q embeds a URL in the copy", state)
+	}
+}
+
+func TestWebhookMessageForState_ArchiveStatesAnnounceReadability(t *testing.T) {
+	// Entering epilogue or completed makes the whole archive publicly readable
+	// (core.IsPublicArchive). For a channel of people watching a game they are
+	// not in, that is the actual news, and the bare state name cannot say it.
+	for _, state := range []string{core.GameStateEpilogue, core.GameStateCompleted} {
+		assert.Contains(t, webhookMessageForState(state), "open to read",
+			"state %q should tell readers the archive is now public", state)
+	}
+}
+
+func TestWebhookMessageForState_UnknownStateFallsBack(t *testing.T) {
+	// Unreachable through dispatch, but it must not panic or return empty.
+	msg := webhookMessageForState("some_future_state")
+	assert.Contains(t, msg, "some_future_state")
 }
