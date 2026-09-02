@@ -202,3 +202,26 @@ func documentFromDB(row models.CommunityDocument) *core.CommunityDocument {
 		UpdatedAt:       row.UpdatedAt.Time,
 	}
 }
+
+// webhookFromDB converts a webhook row, MASKING the URL.
+//
+// This is the single place a stored webhook URL becomes an outbound value, and
+// it masks unconditionally. That is deliberate: the URL is a credential, and an
+// optional "include the real URL" parameter would eventually be passed true by
+// a caller who did not realise what it meant. No caller can opt out, so no
+// caller can leak it.
+func webhookFromDB(row models.CommunityWebhook) *core.CommunityWebhook {
+	return &core.CommunityWebhook{
+		ID:            row.ID,
+		CommunityID:   row.CommunityID,
+		URL:           core.MaskWebhookURL(row.Url),
+		Label:         textPtr(row.Label),
+		IsEnabled:     row.IsEnabled,
+		Events:        row.Events,
+		LastSuccessAt: timePtr(row.LastSuccessAt),
+		LastError:     textPtr(row.LastError),
+		LastErrorAt:   timePtr(row.LastErrorAt),
+		CreatedAt:     row.CreatedAt.Time,
+		UpdatedAt:     row.UpdatedAt.Time,
+	}
+}

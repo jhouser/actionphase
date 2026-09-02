@@ -260,3 +260,102 @@ export interface UpdateCommunityDocumentRequest {
   status?: DocumentStatus;
   sort_order?: number;
 }
+
+/**
+ * A game state a webhook can announce.
+ *
+ * Mirrors core.ValidWebhookEvents. `setup` is deliberately absent: a game in
+ * setup is not yet public, and announcing it would leak an unlisted game into a
+ * Discord channel before its GM has shown it to anyone.
+ */
+export type WebhookEvent =
+  | 'recruitment'
+  | 'character_creation'
+  | 'in_progress'
+  | 'paused'
+  | 'epilogue'
+  | 'completed'
+  | 'cancelled';
+
+/** Every notifiable event, in lifecycle order, for rendering the picker. */
+export const WEBHOOK_EVENTS: readonly WebhookEvent[] = [
+  'recruitment',
+  'character_creation',
+  'in_progress',
+  'paused',
+  'epilogue',
+  'completed',
+  'cancelled',
+] as const;
+
+/** Human labels for the event checkboxes. */
+export const WEBHOOK_EVENT_LABELS: Record<WebhookEvent, string> = {
+  recruitment: 'Recruiting players',
+  character_creation: 'Character creation',
+  in_progress: 'Game started',
+  paused: 'Paused',
+  epilogue: 'Epilogue',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+/**
+ * A community's Discord webhook.
+ *
+ * 🔴 `url` is ALWAYS MASKED (`https://discord.com/api/webhooks/123/••••ab12`).
+ * The real URL is a credential — anyone holding it can post to the channel — and
+ * the server never returns it on any endpoint. Never display this as though it
+ * were re-usable, and never send it back as the `url` of an update: doing so
+ * would overwrite the stored credential with bullet characters.
+ */
+export interface CommunityWebhook {
+  id: number;
+  community_id: number;
+  /** Masked. See the warning above. */
+  url: string;
+  label?: string;
+  is_enabled: boolean;
+  events: WebhookEvent[];
+  /**
+   * Delivery status — the entire observability story, since there is no
+   * delivery history table. All three null means "never used yet", which is a
+   * distinct UI state from a failure.
+   *
+   * `last_success_at` survives a later failure on purpose: "worked at 09:00,
+   * broken since 14:00" is the diagnosis a moderator needs.
+   */
+  last_success_at?: string;
+  last_error?: string;
+  last_error_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Register a webhook. `is_enabled` omitted means enabled. */
+export interface CreateCommunityWebhookRequest {
+  /** The REAL Discord webhook URL. This is the only direction it travels. */
+  url: string;
+  label?: string;
+  is_enabled?: boolean;
+  events?: WebhookEvent[];
+}
+
+/**
+ * Partial update; an omitted field is unchanged.
+ *
+ * 🔴 OMIT `url` unless the moderator typed a new one. Omitting it keeps the
+ * stored credential, which is what lets this form save a label or event change
+ * without ever holding the secret. Sending the masked URL back would destroy it.
+ */
+export interface UpdateCommunityWebhookRequest {
+  url?: string;
+  label?: string;
+  is_enabled?: boolean;
+  events?: WebhookEvent[];
+}
+
+/** Result of the synchronous "send a test message" button. */
+export interface WebhookTestResult {
+  success: boolean;
+  message: string;
+}

@@ -128,6 +128,47 @@ BEGIN
      'Extended after a second incident.', NOW() - INTERVAL '40 days', NOW() - INTERVAL '55 days'),
     (ravens_id, player3_id, gm_id, 'unbanned',
      'Appeal accepted; matter resolved.', NULL, NOW() - INTERVAL '45 days');
+  -- Discord webhooks (req 9). Four rows covering every state the config UI has
+  -- to render, because a screen is only as tested as its worst row:
+  --
+  --   healthy   -- delivered recently, no error. The ordinary case.
+  --   broken    -- delivered once long ago, failing since. This is the row the
+  --                last_* columns exist for; it is what a moderator sees when
+  --                they ask "why did my webhook stop working?"
+  --   disabled  -- switched off. Must appear in the config list (it is there to
+  --                be re-enabled) and must NEVER be dispatched to.
+  --   never-run -- no delivery attempted yet. All three status columns NULL,
+  --                which the UI must render as "not yet used" rather than as a
+  --                failure or a blank.
+  --
+  -- The URLs are obvious fakes. They must still satisfy core.ValidateWebhookURL
+  -- (https, a Discord host, /api/webhooks/{id}/{token}) or the dispatcher would
+  -- reject them at send time and these rows would exercise nothing.
+  INSERT INTO community_webhooks
+    (community_id, url, label, is_enabled, events, last_success_at, last_error, last_error_at)
+  VALUES
+    (ravens_id, 'https://discord.com/api/webhooks/100000000000000001/FixtureHealthyTokenAAAAAAAAAAAA',
+     '#game-announcements', TRUE,
+     ARRAY['recruitment', 'in_progress', 'completed'],
+     NOW() - INTERVAL '2 hours', NULL, NULL),
+
+    (ravens_id, 'https://discord.com/api/webhooks/100000000000000002/FixtureBrokenTokenBBBBBBBBBBBBB',
+     '#recruitment', TRUE,
+     ARRAY['recruitment'],
+     NOW() - INTERVAL '9 days',
+     'discord webhook: HTTP 404: {"message": "Unknown Webhook", "code": 10015}',
+     NOW() - INTERVAL '30 minutes'),
+
+    (harbor_id, 'https://discord.com/api/webhooks/100000000000000003/FixtureDisabledTokenCCCCCCCCCC',
+     '#voyages', FALSE,
+     ARRAY['recruitment', 'character_creation'],
+     NOW() - INTERVAL '20 days', NULL, NULL),
+
+    (harbor_id, 'https://discord.com/api/webhooks/100000000000000004/FixtureUnusedTokenDDDDDDDDDDDDD',
+     NULL, TRUE,
+     ARRAY['completed', 'cancelled'],
+     NULL, NULL, NULL);
+
 END $$;
 
 COMMIT;

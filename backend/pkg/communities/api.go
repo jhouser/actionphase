@@ -26,4 +26,11 @@ type Handler struct {
 	// on GAME visibility, not on community standing -- a player in a game may
 	// read its community's published rules without moderating that community.
 	GameService core.GameServiceInterface
+
+	// WebhookSender backs the synchronous "send a test message" button only.
+	// Game-state announcements are dispatched by GameService, not from here.
+	//
+	// NIL IS VALID -- a deployment without Discord configured leaves it unset --
+	// so the test endpoint answers 503 rather than panicking.
+	WebhookSender core.DiscordWebhookSender
 }

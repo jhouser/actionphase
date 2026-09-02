@@ -234,6 +234,20 @@ type CommunityModerator struct {
 	GrantedAt       pgtype.Timestamptz `json:"granted_at"`
 }
 
+type CommunityWebhook struct {
+	ID            int32              `json:"id"`
+	CommunityID   int32              `json:"community_id"`
+	Url           string             `json:"url"`
+	Label         pgtype.Text        `json:"label"`
+	IsEnabled     bool               `json:"is_enabled"`
+	Events        []string           `json:"events"`
+	LastSuccessAt pgtype.Timestamptz `json:"last_success_at"`
+	LastError     pgtype.Text        `json:"last_error"`
+	LastErrorAt   pgtype.Timestamptz `json:"last_error_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Conversation struct {
 	ID               int32              `json:"id"`
 	GameID           int32              `json:"game_id"`

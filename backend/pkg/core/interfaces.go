@@ -214,6 +214,24 @@ type CommunityServiceInterface interface {
 	// slice for a legacy game with no community; the grandfathering is in the
 	// SQL join so no caller can forget it.
 	ListPublishedDocumentsForGame(ctx context.Context, gameID int32) ([]*CommunityDocument, error)
+
+	// Webhooks (req 9) -- configuration only; delivery hangs off
+	// GameService.UpdateGameState.
+	//
+	// EVERY method here returns a MASKED URL. The credential travels inbound
+	// only: there is deliberately no method that returns a raw webhook URL, so
+	// no handler can leak one by choosing the wrong call.
+	CreateWebhook(ctx context.Context, communityID int32, req *CreateCommunityWebhookRequest) (*CommunityWebhook, error)
+	GetWebhook(ctx context.Context, communityID, webhookID int32) (*CommunityWebhook, error)
+	ListWebhooks(ctx context.Context, communityID int32) ([]*CommunityWebhook, error)
+	UpdateWebhook(ctx context.Context, communityID, webhookID int32, req *UpdateCommunityWebhookRequest) (*CommunityWebhook, error)
+	DeleteWebhook(ctx context.Context, communityID, webhookID int32) error
+
+	// TestWebhook sends a test embed SYNCHRONOUSLY and reports the outcome --
+	// the moderator clicked the button and is waiting for that answer. It takes
+	// the sender as a parameter rather than holding one, so the community
+	// service does not need a Discord dependency for the CRUD it mostly does.
+	TestWebhook(ctx context.Context, communityID, webhookID int32, sender DiscordWebhookSender) error
 }
 
 // FingerprintBanServiceInterface defines the contract for device fingerprint banning.
@@ -1901,6 +1919,22 @@ type DiscordEmbed struct {
 type DiscordClientInterface interface {
 	// SendDM sends a rich embed DM to a Discord user by their Discord user ID.
 	SendDM(ctx context.Context, discordUserID string, embed DiscordEmbed) error
+}
+
+// DiscordWebhookSender posts an embed to a Discord webhook URL.
+//
+// Separate from DiscordClientInterface because it is a different transport, not
+// a different method of the same one: DMs authenticate with a bot token and
+// must first open a DM channel, while a webhook is an unauthenticated POST to a
+// URL that is itself the credential. A single interface would force every
+// implementation to carry a bot token it does not use.
+type DiscordWebhookSender interface {
+	// Send posts the embed to webhookURL.
+	//
+	// Returns an error for a non-2xx response so the caller can decide whether
+	// to retry; it performs NO retries of its own. Retry policy belongs to the
+	// dispatcher, which owns the timeout budget the retries have to fit in.
+	Send(ctx context.Context, webhookURL string, embed DiscordEmbed) error
 }
 
 // DiscordAccount represents a linked Discord account for a user.

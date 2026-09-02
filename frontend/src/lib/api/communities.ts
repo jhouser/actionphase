@@ -6,12 +6,16 @@ import type {
   CommunityBanEvent,
   CommunityDocument,
   CommunityModerator,
+  CommunityWebhook,
   CreateCommunityBanRequest,
   CreateCommunityDocumentRequest,
   CreateCommunityRequest,
+  CreateCommunityWebhookRequest,
   UpdateCommunityDocumentRequest,
   UpdateCommunityProfileRequest,
   UpdateCommunityRequest,
+  UpdateCommunityWebhookRequest,
+  WebhookTestResult,
 } from '../../types/communities';
 
 /**
@@ -22,7 +26,8 @@ import type {
  * including inactive ones. The /communities routes are gated per-community on
  * the caller's own standing, so they list only ACTIVE communities.
  *
- * Webhooks arrive in a later phase.
+ * Webhook URLs are credentials: every response masks them, and no method here
+ * can retrieve a real one.
  */
 export class CommunitiesApi extends BaseApiClient {
   /** Admin: create a community and assign its owner. */
@@ -215,6 +220,73 @@ export class CommunitiesApi extends BaseApiClient {
   async listGameCommunityDocuments(gameId: number) {
     return this.client.get<CommunityDocument[]>(
       `/api/v1/games/${gameId}/community-documents`
+    );
+  }
+  // ------------------------------------------------------------- webhooks
+
+  /**
+   * Moderator: list a community's Discord webhooks.
+   *
+   * URLs come back MASKED and disabled webhooks are included -- re-enabling
+   * them is the point of the screen. There is no public read: unlike documents,
+   * nothing here is visible to ordinary members.
+   */
+  async listWebhooks(slug: string) {
+    return this.client.get<CommunityWebhook[]>(
+      `/api/v1/communities/${slug}/webhooks`
+    );
+  }
+
+  /**
+   * Moderator: register a webhook.
+   *
+   * The server rejects any URL that is not an https Discord webhook endpoint --
+   * it makes outbound requests to this address, so the check is a security
+   * control rather than a formatting rule. The response masks the URL.
+   */
+  async createWebhook(slug: string, data: CreateCommunityWebhookRequest) {
+    return this.client.post<CommunityWebhook>(
+      `/api/v1/communities/${slug}/webhooks`,
+      data
+    );
+  }
+
+  /**
+   * Moderator: partially update a webhook.
+   *
+   * 🔴 OMIT `url` unless the moderator typed a new one. The client only ever
+   * holds a masked URL, and sending that mask back would overwrite the stored
+   * credential with bullet characters, silently breaking delivery.
+   */
+  async updateWebhook(
+    slug: string,
+    webhookId: number,
+    data: UpdateCommunityWebhookRequest
+  ) {
+    return this.client.patch<CommunityWebhook>(
+      `/api/v1/communities/${slug}/webhooks/${webhookId}`,
+      data
+    );
+  }
+
+  /** Moderator: delete a webhook. 404s if it does not exist. */
+  async deleteWebhook(slug: string, webhookId: number) {
+    return this.client.delete<void>(
+      `/api/v1/communities/${slug}/webhooks/${webhookId}`
+    );
+  }
+
+  /**
+   * Moderator: send a test message, SYNCHRONOUSLY.
+   *
+   * Unlike game-state announcements, which are fire-and-forget, this waits for
+   * Discord and reports the outcome -- that answer is the whole point of the
+   * button. A rejection surfaces as a 502 carrying Discord's reason.
+   */
+  async testWebhook(slug: string, webhookId: number) {
+    return this.client.post<WebhookTestResult>(
+      `/api/v1/communities/${slug}/webhooks/${webhookId}/test`,
+      {}
     );
   }
 }

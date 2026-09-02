@@ -3,7 +3,9 @@ import { apiClient } from '../lib/api';
 import type {
   CreateCommunityBanRequest,
   CreateCommunityDocumentRequest,
+  CreateCommunityWebhookRequest,
   UpdateCommunityDocumentRequest,
+  UpdateCommunityWebhookRequest,
   CreateCommunityRequest,
   UpdateCommunityProfileRequest,
   UpdateCommunityRequest,
@@ -376,4 +378,78 @@ export function useGameCommunityDocuments(gameId: number | undefined, enabled = 
   });
 
   return { documents: data ?? [], isLoading, isError, error };
+}
+
+/**
+ * Query key for a community's webhooks.
+ *
+ * Only ONE key, unlike documents which need a public and a moderator variant.
+ * There is no public webhook list at all: every endpoint is moderator-gated,
+ * because the rows carry a channel credential and its delivery status.
+ */
+const webhooksQueryKey = (slug: string) => ['communities', slug, 'webhooks'] as const;
+
+/**
+ * Moderator: a community's Discord webhooks (req 9).
+ *
+ * 🔴 Every `url` in this data is MASKED. The real URL is a credential the server
+ * never returns, so nothing here may be sent back as an update's `url` -- doing
+ * so would overwrite the stored credential with bullet characters. Omit `url`
+ * on any save that is not a deliberate rotation.
+ */
+export function useCommunityWebhooks(slug: string | undefined, enabled = true) {
+  const queryClient = useQueryClient();
+  const key = webhooksQueryKey(slug ?? '');
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: key,
+    queryFn: () => apiClient.communities.listWebhooks(slug!).then((res) => res.data),
+    enabled: Boolean(slug) && enabled,
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: key });
+  };
+
+  const createWebhook = useMutation({
+    mutationFn: (payload: CreateCommunityWebhookRequest) =>
+      apiClient.communities.createWebhook(slug!, payload).then((res) => res.data),
+    onSuccess: invalidate,
+  });
+
+  const updateWebhook = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateCommunityWebhookRequest }) =>
+      apiClient.communities.updateWebhook(slug!, id, data).then((res) => res.data),
+    onSuccess: invalidate,
+  });
+
+  const deleteWebhook = useMutation({
+    mutationFn: (id: number) => apiClient.communities.deleteWebhook(slug!, id),
+    onSuccess: invalidate,
+  });
+
+  /**
+   * Send a test message and refresh afterwards.
+   *
+   * Invalidates on SUCCESS AND FAILURE, unlike the mutations above: a failed
+   * test stamps `last_error` on the row, and that new diagnosis is exactly what
+   * the moderator pressed the button to obtain. Refreshing only on success
+   * would leave the stale status on screen in the one case that matters.
+   */
+  const testWebhook = useMutation({
+    mutationFn: (id: number) =>
+      apiClient.communities.testWebhook(slug!, id).then((res) => res.data),
+    onSettled: invalidate,
+  });
+
+  return {
+    webhooks: data ?? [],
+    isLoading,
+    isError,
+    error,
+    createWebhook,
+    updateWebhook,
+    deleteWebhook,
+    testWebhook,
+  };
 }

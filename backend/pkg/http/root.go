@@ -638,6 +638,9 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			App:              h.App,
 			UserService:      &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 			CommunityService: &dbcommunities.CommunityService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+			// Backs the synchronous webhook test button. Nil when Discord is
+			// not configured, which that endpoint answers as 503.
+			WebhookSender: db.AppWebhookSender(),
 		}
 
 		r.Group(func(r chi.Router) {
@@ -652,6 +655,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			communitiesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
 			communities.RegisterHumaCommunities(communitiesAPI, communityHandler)
 			communities.RegisterHumaCommunityDocuments(communitiesAPI, communityHandler)
+			communities.RegisterHumaCommunityWebhooks(communitiesAPI, communityHandler)
 		})
 	})
 	apiV1Router.Mount("/communities", communitiesRouter)

@@ -25,6 +25,7 @@ import (
 	"actionphase/pkg/core"
 	dbsvc "actionphase/pkg/db/services"
 	communitysvc "actionphase/pkg/db/services/communities"
+	"actionphase/pkg/discord"
 	"actionphase/pkg/humaconfig"
 )
 
@@ -32,6 +33,11 @@ import (
 // AdminModeMiddleware included -- without it an admin's X-Admin-Mode header
 // would never reach the permission helpers and the admin cases below would
 // silently test the wrong thing.
+// testWebhookSender backs the test button in handler tests. Package-level so a
+// test can inspect or fail it after the router is built; each test that cares
+// resets it, since the router captures this value at construction.
+var testWebhookSender = &discord.MockWebhookClient{}
+
 func setupCommunityTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 	tokenAuth := jwtauth.New("HS256", []byte(app.Config.JWT.Secret), nil)
 	userService := &dbsvc.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
@@ -47,6 +53,9 @@ func setupCommunityTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux
 			App:              app,
 			UserService:      userService,
 			CommunityService: &communitysvc.CommunityService{DB: testDB.Pool, Logger: app.ObsLogger},
+			// A mock sender so the webhook test button can be exercised without
+			// posting to Discord. Tests that need it to fail set ShouldFail.
+			WebhookSender: testWebhookSender,
 		}
 		// One huma API for both registrations, matching production: two
 		// separate New() calls on the same router would each install their own
@@ -54,6 +63,7 @@ func setupCommunityTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux
 		api := humaconfig.New(r, "ActionPhase API", "1.0.0")
 		RegisterHumaCommunities(api, handler)
 		RegisterHumaCommunityDocuments(api, handler)
+		RegisterHumaCommunityWebhooks(api, handler)
 	})
 
 	return r
@@ -83,7 +93,7 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(func() {
 		testDB.CleanupTables(t,
 			"community_ban_events", "community_bans", "community_documents",
-			"community_moderators", "communities", "users")
+			"community_webhooks", "community_moderators", "communities", "users")
 	})
 
 	app := core.NewTestApp(testDB.Pool)
@@ -117,6 +127,12 @@ func newHarness(t *testing.T) *harness {
 	require.NoError(t, err)
 
 	return h
+}
+
+// communityService builds a service against the harness pool, for setup a test
+// needs to perform directly rather than through HTTP.
+func (h *harness) communityService() *communitysvc.CommunityService {
+	return &communitysvc.CommunityService{DB: h.testDB.Pool, Logger: h.app.ObsLogger}
 }
 
 func (h *harness) token(t *testing.T, u *core.User) string {

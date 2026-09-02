@@ -113,3 +113,29 @@ var ErrCannotBanCommunityStaff = errors.New("remove this user from the moderator
 
 // ErrBanNotFound is returned when lifting a ban that does not exist.
 var ErrBanNotFound = errors.New("no ban found for that user in this community")
+
+// ErrCommunityWebhookNotFound is returned when a webhook lookup finds no row.
+//
+// Also returned when the webhook exists but belongs to a DIFFERENT community
+// than the request path names -- the queries are scoped by (id, community_id).
+// 404 rather than 403 for the same reason as documents, with more at stake: a
+// response that distinguished "exists elsewhere" from "does not exist" would
+// let a moderator of one community probe for another's webhook rows.
+var ErrCommunityWebhookNotFound = errors.New("community webhook not found")
+
+// ErrWebhookURLRequired is returned when a webhook is created with no URL.
+// Separate from ErrInvalidWebhookURL so the moderator is told which mistake
+// they made: an empty box reads differently from a rejected one.
+var ErrWebhookURLRequired = errors.New("webhook URL is required")
+
+// ErrInvalidWebhookURL is returned when a URL is not an https Discord webhook
+// endpoint. Handlers translate it to 400.
+//
+// This is an SSRF control, not a formatting preference: the server POSTs to
+// this URL from inside the network, so accepting an arbitrary host would make
+// the feature an outbound request proxy. See core.ValidateWebhookURL.
+var ErrInvalidWebhookURL = errors.New("webhook URL must be an https Discord webhook endpoint")
+
+// ErrInvalidWebhookEvent is returned when a webhook subscribes to something
+// that is not a notifiable game state. Handlers translate it to 400.
+var ErrInvalidWebhookEvent = errors.New("webhook event must be a valid game state")

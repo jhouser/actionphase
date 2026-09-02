@@ -7,20 +7,24 @@ import { BansTab } from './community/BansTab';
 import { DocumentsTab } from './community/DocumentsTab';
 import { ModeratorsTab } from './community/ModeratorsTab';
 import { SettingsTab } from './community/SettingsTab';
+import { WebhooksTab } from './community/WebhooksTab';
 
-/**
- * Management shell for one community.
- *
- * Webhooks arrive in a later phase; the tab list grows here rather than the
- * routing changing shape.
- */
-type TabId = 'moderators' | 'bans' | 'history' | 'documents' | 'settings';
-const VALID_TABS: TabId[] = ['moderators', 'bans', 'history', 'documents', 'settings'];
+/** Management shell for one community. */
+type TabId = 'moderators' | 'bans' | 'history' | 'documents' | 'webhooks' | 'settings';
+const VALID_TABS: TabId[] = [
+  'moderators',
+  'bans',
+  'history',
+  'documents',
+  'webhooks',
+  'settings',
+];
 const TABS: { id: TabId; label: string }[] = [
   { id: 'moderators', label: 'Moderators' },
   { id: 'bans', label: 'Bans' },
   { id: 'history', label: 'Ban history' },
   { id: 'documents', label: 'Documents' },
+  { id: 'webhooks', label: 'Discord' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -97,6 +101,10 @@ export function CommunityManagePage() {
 
       {activeTab === 'documents' && (
         <DocumentsTab community={community} canModerate={canModerate} />
+      )}
+
+      {activeTab === 'webhooks' && (
+        <WebhooksTab community={community} canModerate={canModerate} />
       )}
 
       {activeTab === 'settings' && (

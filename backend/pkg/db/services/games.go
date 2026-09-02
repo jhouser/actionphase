@@ -22,6 +22,13 @@ import (
 type GameService struct {
 	DB     *pgxpool.Pool
 	Logger *observability.Logger
+
+	// WebhookNotifier posts community Discord webhooks on state transitions.
+	//
+	// NIL IS A VALID CONFIGURATION -- most tests and any deployment without
+	// Discord leave it unset -- so every dispatch path must no-op rather than
+	// panic. Best-effort: a webhook failure never fails a transition.
+	WebhookNotifier core.DiscordWebhookSender
 }
 
 // Ensure GameService implements the interface at compile time
@@ -355,6 +362,17 @@ func (gs *GameService) UpdateGameState(ctx context.Context, gameID int32, newSta
 			}
 		}
 	}
+
+	// Announce the transition to the community's Discord webhooks (req 9).
+	//
+	// Last, and deliberately so: every side effect above has already run, so the
+	// notification describes a transition that is fully complete rather than one
+	// still in progress. Returns immediately -- delivery happens on a detached
+	// goroutine and can neither block nor fail this call.
+	//
+	// `game` is passed rather than re-read: it is the post-update row, and
+	// re-reading would race a concurrent edit.
+	gs.dispatchStateChangeWebhooks(ctx, &game, newState)
 
 	return &game, nil
 }

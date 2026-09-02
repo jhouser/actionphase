@@ -1192,6 +1192,50 @@ components:
                 - username
                 - granted_at
             type: object
+        CommunityWebhook:
+            additionalProperties: false
+            properties:
+                community_id:
+                    format: int32
+                    type: integer
+                created_at:
+                    format: date-time
+                    type: string
+                events:
+                    items:
+                        type: string
+                    type:
+                        - array
+                        - "null"
+                id:
+                    format: int32
+                    type: integer
+                is_enabled:
+                    type: boolean
+                label:
+                    type: string
+                last_error:
+                    type: string
+                last_error_at:
+                    format: date-time
+                    type: string
+                last_success_at:
+                    format: date-time
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+                url:
+                    type: string
+            required:
+                - id
+                - community_id
+                - url
+                - is_enabled
+                - events
+                - created_at
+                - updated_at
+            type: object
         ControllableCharacterResponse:
             additionalProperties: false
             properties:
@@ -1868,6 +1912,29 @@ components:
             required:
                 - user_id
                 - parts
+            type: object
+        CreateWebhookInputBody:
+            additionalProperties: false
+            properties:
+                events:
+                    description: Game states to announce
+                    items:
+                        type: string
+                    type:
+                        - array
+                        - "null"
+                is_enabled:
+                    description: Whether this webhook fires; defaults to true
+                    type: boolean
+                label:
+                    description: 'Name for this channel, e.g. #recruitment'
+                    maxLength: 100
+                    type: string
+                url:
+                    description: Discord webhook URL (https://discord.com/api/webhooks/...)
+                    type: string
+            required:
+                - url
             type: object
         CurrentPhaseOutputBody:
             additionalProperties: false
@@ -4847,6 +4914,27 @@ components:
             required:
                 - delay_minutes
             type: object
+        UpdateWebhookInputBody:
+            additionalProperties: false
+            properties:
+                events:
+                    description: Game states to announce
+                    items:
+                        type: string
+                    type:
+                        - array
+                        - "null"
+                is_enabled:
+                    description: Whether this webhook fires
+                    type: boolean
+                label:
+                    description: Name for this channel
+                    maxLength: 100
+                    type: string
+                url:
+                    description: Replacement Discord webhook URL; omit to keep the current one
+                    type: string
+            type: object
         UploadAvatarResponse:
             additionalProperties: false
             properties:
@@ -5127,6 +5215,17 @@ components:
             required:
                 - user_id
                 - character_name
+            type: object
+        WebhookTestOutputBody:
+            additionalProperties: false
+            properties:
+                message:
+                    type: string
+                success:
+                    type: boolean
+            required:
+                - success
+                - message
             type: object
     securitySchemes:
         BearerAuth:
@@ -7221,6 +7320,198 @@ paths:
             security:
                 - BearerAuth: []
             summary: Revoke a user's moderation powers
+            tags:
+                - Communities
+    /communities/{slug}/webhooks:
+        get:
+            description: Requires moderation rights. URLs are MASKED -- the full webhook URL is a credential and is never returned. Disabled webhooks are included, since re-enabling them is the point of the screen.
+            operationId: listCommunityWebhooks
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityWebhook'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not a moderator of this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: List a community's Discord webhooks
+            tags:
+                - Communities
+        post:
+            description: Requires moderation rights. The URL must be an https Discord webhook endpoint; anything else is rejected, since the server makes outbound requests to it. The response masks the URL.
+            operationId: createCommunityWebhook
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateWebhookInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityWebhook'
+                    description: Created
+                "400":
+                    description: URL is not a Discord webhook, or an event is not a game state
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not a moderator of this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Add a Discord webhook to a community
+            tags:
+                - Communities
+    /communities/{slug}/webhooks/{webhookID}:
+        delete:
+            description: Requires moderation rights.
+            operationId: deleteCommunityWebhook
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Webhook ID
+                  in: path
+                  name: webhookID
+                  required: true
+                  schema:
+                    description: Webhook ID
+                    format: int32
+                    type: integer
+            responses:
+                "204":
+                    description: No Content
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not a moderator of this community
+                "404":
+                    description: Community or webhook not found
+            security:
+                - BearerAuth: []
+            summary: Remove a Discord webhook
+            tags:
+                - Communities
+        patch:
+            description: Requires moderation rights. Omitted fields are unchanged; omitting the URL keeps the stored credential, so the config form can save a label or event change without ever holding the secret.
+            operationId: updateCommunityWebhook
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Webhook ID
+                  in: path
+                  name: webhookID
+                  required: true
+                  schema:
+                    description: Webhook ID
+                    format: int32
+                    type: integer
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateWebhookInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityWebhook'
+                    description: OK
+                "400":
+                    description: URL is not a Discord webhook, or an event is not a game state
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not a moderator of this community
+                "404":
+                    description: Community or webhook not found
+            security:
+                - BearerAuth: []
+            summary: Edit a Discord webhook
+            tags:
+                - Communities
+    /communities/{slug}/webhooks/{webhookID}/test:
+        post:
+            description: Requires moderation rights. Sends SYNCHRONOUSLY and reports the outcome -- unlike game-state announcements, which are fire-and-forget. Stamps the same delivery status columns as a real delivery.
+            operationId: testCommunityWebhook
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Webhook ID
+                  in: path
+                  name: webhookID
+                  required: true
+                  schema:
+                    description: Webhook ID
+                    format: int32
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WebhookTestOutputBody'
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not a moderator of this community
+                "404":
+                    description: Community or webhook not found
+                "502":
+                    description: Discord rejected the message; the reason is in the error
+                "503":
+                    description: Webhook delivery is not configured on this server
+            security:
+                - BearerAuth: []
+            summary: Send a test message to a Discord webhook
             tags:
                 - Communities
     /dashboard:

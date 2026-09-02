@@ -183,6 +183,32 @@ CREATE TABLE community_documents (
 CREATE INDEX idx_community_documents_listing
     ON community_documents(community_id, status, sort_order, id);
 
+-- Community Discord webhooks: announce a community's game state transitions
+-- into a Discord channel. Best-effort by design -- no deliveries table, no
+-- queue; the three last_* columns are the entire delivery-observability story.
+CREATE TABLE community_webhooks (
+    id SERIAL PRIMARY KEY,
+    community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    -- A CREDENTIAL: never returned by the API in full, only masked.
+    url TEXT NOT NULL,
+    label VARCHAR(100),
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Game states to notify on; empty means this webhook fires for nothing.
+    events TEXT[] NOT NULL DEFAULT '{}',
+    last_success_at TIMESTAMPTZ,
+    last_error TEXT,
+    last_error_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_community_webhooks_dispatch
+    ON community_webhooks(community_id)
+    WHERE is_enabled;
+
+CREATE INDEX idx_community_webhooks_community
+    ON community_webhooks(community_id, id);
+
 -- Games table
 CREATE TABLE games (
     id SERIAL PRIMARY KEY,

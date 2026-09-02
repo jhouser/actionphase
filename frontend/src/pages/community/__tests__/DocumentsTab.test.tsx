@@ -286,13 +286,17 @@ describe('DocumentsTab', () => {
     await screen.findByTestId('document-list')
 
     fireEvent.click(screen.getByTestId('delete-document-20'))
-    expect(deleteDocument).not.toHaveBeenCalled()
 
     // The prompt names the document -- "Delete this document?" is not a
     // question a moderator can answer.
     expect(await screen.findByTestId('confirm-modal-message')).toHaveTextContent(
       'Delete "House rules"? This cannot be undone.'
     )
+
+    // Asserted AFTER the await, not before it. A delete fired alongside opening
+    // the prompt is still pending on the synchronous line, so checking there
+    // passes against exactly the bug this test names -- confirmed by mutation.
+    expect(deleteDocument).not.toHaveBeenCalled()
 
     // By testid, not role+name: the dialog's confirm button and the row button
     // that opened it are BOTH labelled "Delete", so a name lookup matches two
