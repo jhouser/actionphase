@@ -76,6 +76,12 @@ e2e/
 ├── smoke/             # Quick health checks (<5 min)
 │   └── health-check.spec.ts
 │
+├── communities/       # Communities: creation, roster, moderation, ban enforcement
+│   ├── community-admin.spec.ts          # Site admin creates communities
+│   ├── community-moderators.spec.ts     # Owner adds/removes moderators
+│   ├── community-moderation.spec.ts     # Bans, documents, settings
+│   └── community-ban-enforcement.spec.ts # A ban actually blocks joining
+│
 ├── journeys/          # User journey tests
 │   ├── critical/      # Must-pass for deployment
 │   │   ├── game-lifecycle.spec.ts
@@ -243,6 +249,53 @@ expect(FIXTURE_GAMES.ACTION_PHASE.hasActionSubmissions).toBe(true);
 - `PAUSED` - Paused game
 - `COMPLETED` - Completed game
 - `PRIVATE` - Private game
+
+### Using Fixture Communities
+
+Communities are keyed by a **unique slug**, so the fixtures give every worker its
+own copy suffixed with the worker index. Worker 0 keeps the bare slug. Always
+resolve slugs through the helper — a hardcoded `'midnight-ravens'` makes workers
+1-5 assert against worker 0's rows.
+
+```typescript
+import { getCommunitySlug, getUserIdByUsername } from '../fixtures/community-helpers';
+
+// 'midnight-ravens' on worker 0, 'midnight-ravens-w3' on worker 3
+const slug = getCommunitySlug('RAVENS');
+
+// Manage-UI rows are keyed by USER ID (`moderator-row-{id}`, `unban-{id}`),
+// and fixture user ids come from a sequence — resolve them at run time.
+const userId = await getUserIdByUsername(page, getWorkerUsername('TestPlayer1'));
+```
+
+**Shared communities** (`00_communities.sql`) — read-only for specs:
+
+| Key | Owner | Notable state |
+|-----|-------|---------------|
+| `RAVENS` | TestGM | TestPlayer1 moderates; TestPlayer5 permanently banned; TestPlayer4's ban **expired** |
+| `HARBOR` | TestPlayer2 | TestAudience banned (active, future-dated) |
+| `LONG_ROAD` | TestPlayer3 | **Inactive** — the create-game flow must refuse it |
+
+**Per-spec communities** (`01_communities_e2e_owned.sql`) — owned by one spec
+each, safe to mutate (see Best Practice #8):
+
+| Key | Used by | Purpose |
+|-----|---------|---------|
+| `ROSTER` | `community-moderators.spec.ts` | Add/remove moderators |
+| `MODTOOLS` | `community-moderation.spec.ts` | Bans, documents, renames |
+
+**Ban enforcement games** (`31_community_ban_enforcement.sql`) — games `810-812`,
+owned by `community-ban-enforcement.spec.ts`. They carry no pre-seeded
+applications, so that spec can clear and re-apply on every run:
+
+- `E2E_BAN_BLOCKED` (810) — in Midnight Ravens; a banned user must be refused
+- `E2E_BAN_OTHER_COMMUNITY` (811) — in Harbor Lights; the same user must get in
+- `E2E_BAN_EXPIRED` (812) — in Midnight Ravens; a lapsed ban must not block
+
+Every fixture game belongs to a community. Community is a required field on game
+creation, so a community-less game is not a state the product can reach — the
+nullable column exists only for data that predates communities, all of which is
+completed and therefore read-only.
 
 ### Generating New Test Data
 
@@ -490,6 +543,42 @@ await page.click('[data-testid="delete-game"]'); // Breaks other tests!
 const gameData = generateTestGame();
 // Create via API, then test with it
 ```
+
+**A mutating spec should own its fixture.** Playwright shards by **file**, so
+separate spec files run *at the same time* against the same worker's data. Any
+row one file writes can be read mid-change by another — and "restore it at the
+end of the test" does not help, because there is always a window where the value
+is wrong and a concurrent reader can land in it.
+
+Two real examples from the communities specs:
+
+- One file promoted `TestPlayer4` to moderator while another asserted
+  `TestPlayer4` was an ordinary member with no moderator controls.
+- One file renamed a community and restored it moments later, while another
+  asserted that community's card still showed its original name.
+
+Both produced failures that moved around between runs and looked like flakiness
+or timeouts. Neither was.
+
+The fix is a fixture per mutating spec, not more cleanup:
+
+```sql
+-- backend/pkg/db/test_fixtures/e2e/01_communities_e2e_owned.sql
+-- e2e-roster    -> community-moderators.spec.ts   (adds/removes moderators)
+-- e2e-modtools  -> community-moderation.spec.ts   (bans, documents, renames)
+```
+
+Rules of thumb:
+
+- **Writes** → give the spec its own fixture row that nothing else reads.
+- **Reads only** → sharing a fixture is fine, and preferable.
+- Prefer a **new fixture file** over reusing one another spec already mutates.
+  Games `810-812` (`31_community_ban_enforcement.sql`) exist for exactly this:
+  the application games `329-341` pre-seed applications for the same users the
+  ban specs needed to apply as.
+- **Setup should use the API, not the UI.** Clicking a button to reach a
+  starting state races the render that reveals the button; a `fetch` does not.
+  Test the button where the button is the subject.
 
 ### 9. Never Touch the Database Directly From a Spec
 
