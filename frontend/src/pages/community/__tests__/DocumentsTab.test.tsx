@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { renderWithProviders } from '../../../test-utils'
 import { DocumentsTab } from '../DocumentsTab'
 import type { Community, CommunityDocument } from '../../../types/communities'
@@ -289,11 +289,15 @@ describe('DocumentsTab', () => {
     expect(deleteDocument).not.toHaveBeenCalled()
 
     // The prompt names the document -- "Delete this document?" is not a
-    // question a moderator can answer. Scoped to the dialog because the row
-    // carries a Delete button of its own.
-    const prompt = await screen.findByText(/Delete "House rules"\? This cannot be undone\./)
-    const dialog = prompt.closest('div[class*="fixed"]') as HTMLElement
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    // question a moderator can answer.
+    expect(await screen.findByTestId('confirm-modal-message')).toHaveTextContent(
+      'Delete "House rules"? This cannot be undone.'
+    )
+
+    // By testid, not role+name: the dialog's confirm button and the row button
+    // that opened it are BOTH labelled "Delete", so a name lookup matches two
+    // elements and cannot say which one the test meant.
+    fireEvent.click(screen.getByTestId('confirm-modal-confirm'))
 
     await waitFor(() => expect(deleteDocument).toHaveBeenCalledWith('midnight-ravens', 20))
   })
@@ -303,14 +307,11 @@ describe('DocumentsTab', () => {
     await screen.findByTestId('document-list')
 
     fireEvent.click(screen.getByTestId('delete-document-20'))
-    const prompt = await screen.findByText(/Delete "House rules"\? This cannot be undone\./)
-    const dialog = prompt.closest('div[class*="fixed"]') as HTMLElement
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await screen.findByTestId('confirm-modal')
+    fireEvent.click(screen.getByTestId('confirm-modal-cancel'))
 
     await waitFor(() =>
-      expect(
-        screen.queryByText(/Delete "House rules"\? This cannot be undone\./)
-      ).not.toBeInTheDocument()
+      expect(screen.queryByTestId('confirm-modal')).not.toBeInTheDocument()
     )
     expect(deleteDocument).not.toHaveBeenCalled()
   })
