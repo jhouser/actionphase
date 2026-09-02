@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
 import type {
   CreateCommunityBanRequest,
+  CreateCommunityDocumentRequest,
+  UpdateCommunityDocumentRequest,
   CreateCommunityRequest,
   UpdateCommunityProfileRequest,
   UpdateCommunityRequest,
@@ -258,4 +260,120 @@ export function useSelectableCommunities() {
     isError,
     error,
   };
+}
+
+// ---------------------------------------------------------------- documents
+
+/**
+ * Cache keys for a community's documents.
+ *
+ * The public list and the moderator list are SEPARATE keys, not one key with a
+ * flag. They return different data for the same community -- the moderator's
+ * includes drafts -- so sharing a key would let whichever loaded last serve the
+ * other's consumer, leaking a draft into a public view or blanking a manage
+ * screen.
+ */
+const documentsQueryKey = (slug: string) => ['communities', slug, 'documents'] as const;
+const allDocumentsQueryKey = (slug: string) =>
+  ['communities', slug, 'documents', 'manage'] as const;
+const gameDocumentsQueryKey = (gameId: number) =>
+  ['games', gameId, 'community-documents'] as const;
+
+/**
+ * A community's PUBLISHED documents, for the public community page.
+ *
+ * Open to any authenticated user -- a community's rules are what someone reads
+ * before deciding whether to join.
+ */
+export function useCommunityDocuments(slug: string | undefined, enabled = true) {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: documentsQueryKey(slug ?? ''),
+    queryFn: () => apiClient.communities.listDocuments(slug!).then((res) => res.data),
+    enabled: Boolean(slug) && enabled,
+  });
+
+  return { documents: data ?? [], isLoading, isError, error };
+}
+
+/**
+ * Every document including drafts, plus the write mutations. Moderator-only.
+ *
+ * `enabled` gates the request on the caller's standing so a non-moderator does
+ * not fire a request that is certain to 403. The server is the authority
+ * regardless -- this only avoids a pointless round trip.
+ */
+export function useManageCommunityDocuments(slug: string | undefined, enabled = true) {
+  const queryClient = useQueryClient();
+  const key = allDocumentsQueryKey(slug ?? '');
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: key,
+    queryFn: () => apiClient.communities.listAllDocuments(slug!).then((res) => res.data),
+    enabled: Boolean(slug) && enabled,
+  });
+
+  /**
+   * Refresh both lists after any write.
+   *
+   * The public list must be invalidated too: publishing or deleting changes
+   * what an ordinary visitor sees, and it is a different cache key. Without
+   * this a moderator would publish a document and still see the old public
+   * page. The per-game list is invalidated for the same reason -- a published
+   * document appears on the Info tab of every game in the community.
+   */
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: key });
+    queryClient.invalidateQueries({ queryKey: documentsQueryKey(slug ?? '') });
+    // Predicate rather than an exact key: the Info tab lists are keyed by game
+    // id, and one community owns many games. This catches all of them without
+    // the hook needing to know which games exist.
+    queryClient.invalidateQueries({
+      predicate: (query) =>
+        query.queryKey[0] === 'games' && query.queryKey[2] === 'community-documents',
+    });
+  };
+
+  const createDocument = useMutation({
+    mutationFn: (payload: CreateCommunityDocumentRequest) =>
+      apiClient.communities.createDocument(slug!, payload).then((res) => res.data),
+    onSuccess: invalidate,
+  });
+
+  const updateDocument = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateCommunityDocumentRequest }) =>
+      apiClient.communities.updateDocument(slug!, id, data).then((res) => res.data),
+    onSuccess: invalidate,
+  });
+
+  const deleteDocument = useMutation({
+    mutationFn: (id: number) => apiClient.communities.deleteDocument(slug!, id),
+    onSuccess: invalidate,
+  });
+
+  return {
+    documents: data ?? [],
+    isLoading,
+    isError,
+    error,
+    createDocument,
+    updateDocument,
+    deleteDocument,
+  };
+}
+
+/**
+ * The published documents of the community owning a game -- the Info tab.
+ *
+ * Returns an empty list for a legacy game with no community, so the caller
+ * renders no community section rather than special-casing a missing one.
+ */
+export function useGameCommunityDocuments(gameId: number | undefined, enabled = true) {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: gameDocumentsQueryKey(gameId ?? 0),
+    queryFn: () =>
+      apiClient.communities.listGameCommunityDocuments(gameId!).then((res) => res.data),
+    enabled: Boolean(gameId) && enabled,
+  });
+
+  return { documents: data ?? [], isLoading, isError, error };
 }

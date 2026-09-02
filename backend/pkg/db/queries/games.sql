@@ -144,12 +144,21 @@ AND (games.recruitment_deadline IS NULL OR games.recruitment_deadline > NOW())
 ORDER BY games.created_at DESC;
 
 -- name: GetGameWithDetails :one
+-- Joins the owning community's name and slug so a game surface can label and
+-- link its community without a second request.
+--
+-- LEFT JOIN, not inner: a game predating communities has community_id NULL
+-- (req 5) and must still resolve here. Both columns come back NULL for those,
+-- which the caller renders as no community section rather than a placeholder.
 SELECT
     g.*,
     u.username as gm_username,
+    c.name as community_name,
+    c.slug as community_slug,
     COALESCE(pc.player_count, 0) as current_players
 FROM games g
 LEFT JOIN users u ON g.gm_user_id = u.id
+LEFT JOIN communities c ON c.id = g.community_id
 LEFT JOIN (
     SELECT game_id, COUNT(*) as player_count
     FROM game_participants

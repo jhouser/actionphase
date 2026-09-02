@@ -57,6 +57,19 @@ var ErrCommunitySlugTaken = errors.New("community slug already taken")
 // new games -- that is what deactivating one means.
 var ErrCommunityInactive = errors.New("community is not active")
 
+// ErrCommunityDocumentNotFound is returned when a document lookup finds no row.
+//
+// Also returned when the document exists but belongs to a DIFFERENT community
+// than the one in the request path: the queries are scoped by
+// (id, community_id), so a cross-community id misses rather than resolving.
+// Answering 404 rather than 403 is deliberate -- confirming "that document
+// exists, just not here" would leak another community's drafts.
+var ErrCommunityDocumentNotFound = errors.New("community document not found")
+
+// ErrInvalidDocumentStatus is returned when a document status is neither
+// "draft" nor "published". Handlers translate it to 400.
+var ErrInvalidDocumentStatus = errors.New("document status must be draft or published")
+
 // ErrGameCommunityLocked is returned when a GM tries to move a game between
 // communities after it has left `setup` (decision 4).
 //

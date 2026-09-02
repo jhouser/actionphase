@@ -695,6 +695,54 @@ func TestGameService_GetGameWithDetails(t *testing.T) {
 
 		core.AssertError(t, err, "Should return error for non-existent game")
 	})
+
+	// The Info tab names and links the game's community, and this is the
+	// endpoint the game page loads. Without the join it could only show a
+	// community id, which names nothing.
+	t.Run("carries the owning community's name and slug", func(t *testing.T) {
+		ctx := context.Background()
+
+		var communityID int32
+		err := testDB.Pool.QueryRow(ctx,
+			`INSERT INTO communities (name, slug, owner_user_id) VALUES ($1, $2, $3) RETURNING id`,
+			"Midnight Ravens", "details-ravens", int32(gm.ID)).Scan(&communityID)
+		core.AssertNoError(t, err, "Failed to create community")
+		t.Cleanup(func() {
+			_, _ = testDB.Pool.Exec(context.Background(),
+				`UPDATE games SET community_id = NULL WHERE community_id = $1`, communityID)
+			_, _ = testDB.Pool.Exec(context.Background(),
+				`DELETE FROM communities WHERE id = $1`, communityID)
+		})
+
+		_, err = testDB.Pool.Exec(ctx,
+			`UPDATE games SET community_id = $1 WHERE id = $2`, communityID, game.ID)
+		core.AssertNoError(t, err, "Failed to assign community")
+
+		details, err := gameService.GetGameWithDetails(ctx, game.ID)
+		core.AssertNoError(t, err, "Failed to get game with details")
+
+		core.AssertEqual(t, "Midnight Ravens", details.CommunityName.String,
+			"Community name should be joined")
+		core.AssertEqual(t, "details-ravens", details.CommunitySlug.String,
+			"Community slug should be joined")
+	})
+
+	// req 5: a game predating communities has community_id NULL. A LEFT JOIN
+	// keeps it resolving; an inner join would make the game unreadable outright.
+	t.Run("resolves a legacy game with no community", func(t *testing.T) {
+		ctx := context.Background()
+		legacy := testDB.CreateTestGame(t, int32(gm.ID), "Legacy Game")
+
+		details, err := gameService.GetGameWithDetails(ctx, legacy.ID)
+		core.AssertNoError(t, err, "A game with no community must still resolve")
+
+		if details.CommunityName.Valid {
+			t.Errorf("Expected no community name, got %q", details.CommunityName.String)
+		}
+		if details.CommunitySlug.Valid {
+			t.Errorf("Expected no community slug, got %q", details.CommunitySlug.String)
+		}
+	})
 }
 
 func TestGameService_CanUserJoinGame(t *testing.T) {

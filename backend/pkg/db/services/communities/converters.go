@@ -183,3 +183,22 @@ func banEventFromListRow(row models.ListCommunityBanEventsRow) *core.CommunityBa
 		CreatedAt:      row.CreatedAt.Time,
 	}
 }
+
+// documentFromDB converts a community document row.
+//
+// Every document query selects the full row -- including the per-game list,
+// which resolves through games but projects only d.* -- so one converter serves
+// the moderator list, the public list, the per-game list, and the single reads.
+func documentFromDB(row models.CommunityDocument) *core.CommunityDocument {
+	return &core.CommunityDocument{
+		ID:              row.ID,
+		CommunityID:     row.CommunityID,
+		Title:           row.Title,
+		Content:         row.Content,
+		Status:          row.Status,
+		SortOrder:       row.SortOrder,
+		CreatedByUserID: int32Ptr(row.CreatedByUserID),
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+	}
+}

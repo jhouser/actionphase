@@ -339,6 +339,16 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 				// Registers the comment operations too.
 				handouts.RegisterHumaGameHandouts(gameScopedAPI, handoutHandler)
 
+				// The Info tab's community document list (req 8). Gated on
+				// CanUserViewGame rather than community standing: a player
+				// reads their game's community rules without moderating it.
+				communities.RegisterHumaGameCommunityDocuments(gameScopedAPI, &communities.Handler{
+					App:              h.App,
+					UserService:      &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					CommunityService: &dbcommunities.CommunityService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					GameService:      &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+				})
+
 				// Game archive exports (completed games only). Read access is
 				// CanUserViewGame, so any authenticated user may export a
 				// completed game's public archive.
@@ -641,6 +651,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 
 			communitiesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
 			communities.RegisterHumaCommunities(communitiesAPI, communityHandler)
+			communities.RegisterHumaCommunityDocuments(communitiesAPI, communityHandler)
 		})
 	})
 	apiV1Router.Mount("/communities", communitiesRouter)

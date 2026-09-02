@@ -4,11 +4,13 @@ import { renderWithProviders } from '../../test-utils'
 import { CommunityPage } from '../CommunityPage'
 
 const getCommunity = vi.fn()
+const listDocuments = vi.fn()
 
 vi.mock('../../lib/api', () => ({
   apiClient: {
     communities: {
       getCommunity: (slug: string) => getCommunity(slug),
+      listDocuments: (slug: string) => listDocuments(slug),
     },
   },
 }))
@@ -43,6 +45,7 @@ const asRole = (your_role: '' | 'moderator' | 'owner') => ({
 beforeEach(() => {
   vi.clearAllMocks()
   getCommunity.mockResolvedValue(asRole(''))
+  listDocuments.mockResolvedValue({ data: [] })
 })
 
 describe('CommunityPage', () => {
@@ -96,5 +99,51 @@ describe('CommunityPage', () => {
     renderWithProviders(<CommunityPage />)
 
     expect(await screen.findByText('Community not found')).toBeInTheDocument()
+  })
+
+  // The documents section had NO coverage when it was added, which is how it
+  // shipped rendering every document's full markdown inline -- an unreadable
+  // wall on a community with several of them.
+  describe('documents section', () => {
+    const doc = (id: number, title: string, content: string) => ({
+      id,
+      community_id: 1,
+      title,
+      content,
+      status: 'published' as const,
+      sort_order: id,
+      created_at: '2026-08-01T00:00:00Z',
+      updated_at: '2026-08-01T00:00:00Z',
+    })
+
+    it('lists document titles', async () => {
+      listDocuments.mockResolvedValue({
+        data: [doc(20, 'House rules', 'Be excellent'), doc(21, 'Etiquette', 'Be kind')],
+      })
+      renderWithProviders(<CommunityPage />)
+
+      expect(await screen.findByTestId('community-document-20')).toHaveTextContent(
+        'House rules'
+      )
+      expect(screen.getByTestId('community-document-21')).toHaveTextContent('Etiquette')
+    })
+
+    // Bodies are COLLAPSED, not rendered in full. The titles are the
+    // navigation; reading a document is opt-in.
+    it('collapses document bodies rather than rendering them in full', async () => {
+      listDocuments.mockResolvedValue({ data: [doc(20, 'House rules', 'Be excellent')] })
+      renderWithProviders(<CommunityPage />)
+
+      await screen.findByTestId('community-document-20')
+      expect(screen.getByTestId('community-document-body-20')).toBeInTheDocument()
+    })
+
+    it('renders no section when the community has published nothing', async () => {
+      listDocuments.mockResolvedValue({ data: [] })
+      renderWithProviders(<CommunityPage />)
+
+      await screen.findByText('Midnight Ravens')
+      expect(screen.queryByTestId('community-documents')).not.toBeInTheDocument()
+    })
   })
 })

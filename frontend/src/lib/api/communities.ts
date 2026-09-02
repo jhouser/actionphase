@@ -4,9 +4,12 @@ import type {
   Community,
   CommunityBan,
   CommunityBanEvent,
+  CommunityDocument,
   CommunityModerator,
   CreateCommunityBanRequest,
+  CreateCommunityDocumentRequest,
   CreateCommunityRequest,
+  UpdateCommunityDocumentRequest,
   UpdateCommunityProfileRequest,
   UpdateCommunityRequest,
 } from '../../types/communities';
@@ -19,7 +22,7 @@ import type {
  * including inactive ones. The /communities routes are gated per-community on
  * the caller's own standing, so they list only ACTIVE communities.
  *
- * Documents and webhooks arrive in later phases.
+ * Webhooks arrive in a later phase.
  */
 export class CommunitiesApi extends BaseApiClient {
   /** Admin: create a community and assign its owner. */
@@ -126,6 +129,92 @@ export class CommunitiesApi extends BaseApiClient {
     return this.client.get<CommunityBanEvent[]>(
       `/api/v1/communities/${slug}/ban-events`,
       { params }
+    );
+  }
+
+  // ------------------------------------------------------------- documents
+
+  /**
+   * A community's PUBLISHED documents.
+   *
+   * Open to any authenticated user: a community's rules are what someone reads
+   * before deciding whether to join, so gating them on membership would hide
+   * them from exactly the person they inform. Drafts are never included --
+   * moderators use `listAllDocuments` for those.
+   */
+  async listDocuments(slug: string) {
+    return this.client.get<CommunityDocument[]>(`/api/v1/communities/${slug}/documents`);
+  }
+
+  /**
+   * Moderator: every document INCLUDING drafts.
+   *
+   * A separate endpoint from `listDocuments` rather than a query flag on it, so
+   * the privileged read carries its own permission gate on the server.
+   */
+  async listAllDocuments(slug: string) {
+    return this.client.get<CommunityDocument[]>(
+      `/api/v1/communities/${slug}/documents/manage`
+    );
+  }
+
+  /**
+   * One document.
+   *
+   * A draft answers 404 for anyone but a moderator -- not 403, which would
+   * confirm the document exists and let unpublished work be enumerated by id.
+   */
+  async getDocument(slug: string, documentId: number) {
+    return this.client.get<CommunityDocument>(
+      `/api/v1/communities/${slug}/documents/${documentId}`
+    );
+  }
+
+  /** Moderator: create a document. Omitting `status` creates a draft. */
+  async createDocument(slug: string, data: CreateCommunityDocumentRequest) {
+    return this.client.post<CommunityDocument>(
+      `/api/v1/communities/${slug}/documents`,
+      data
+    );
+  }
+
+  /**
+   * Moderator: partial update. Publishing and unpublishing both run through
+   * here, since status sits on the same form as the body.
+   */
+  async updateDocument(
+    slug: string,
+    documentId: number,
+    data: UpdateCommunityDocumentRequest
+  ) {
+    return this.client.patch<CommunityDocument>(
+      `/api/v1/communities/${slug}/documents/${documentId}`,
+      data
+    );
+  }
+
+  /**
+   * Moderator: delete a document.
+   *
+   * 404s if it does not exist rather than succeeding -- a delete that silently
+   * matched nothing would leave a moderator believing published rules are gone.
+   */
+  async deleteDocument(slug: string, documentId: number) {
+    return this.client.delete<void>(
+      `/api/v1/communities/${slug}/documents/${documentId}`
+    );
+  }
+
+  /**
+   * The published documents of the community that owns a GAME -- the Info tab.
+   *
+   * Gated on access to the game, not on standing in the community: a player
+   * reads their game's community rules without moderating it. A game with no
+   * community returns an empty list, so legacy games render no section.
+   */
+  async listGameCommunityDocuments(gameId: number) {
+    return this.client.get<CommunityDocument[]>(
+      `/api/v1/games/${gameId}/community-documents`
     );
   }
 }

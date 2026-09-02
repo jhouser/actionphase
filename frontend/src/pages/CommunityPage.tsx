@@ -1,7 +1,8 @@
 import { Link, useParams } from 'react-router-dom';
 import { Card, CardBody, CardHeader, Button, Spinner, Alert, Badge } from '../components/ui';
 import { MarkdownPreview } from '../components/MarkdownPreview';
-import { useCommunity } from '../hooks/useCommunities';
+import { CollapsibleMarkdown } from '../components/CollapsibleMarkdown';
+import { useCommunity, useCommunityDocuments } from '../hooks/useCommunities';
 
 /**
  * A community's public profile.
@@ -14,6 +15,10 @@ import { useCommunity } from '../hooks/useCommunities';
 export function CommunityPage() {
   const { slug } = useParams<{ slug: string }>();
   const { community, isLoading, isError } = useCommunity(slug);
+  // Published documents only. Open to any authenticated user -- a community's
+  // rules are what someone reads BEFORE deciding whether to join, so gating
+  // them on membership would hide them from the person they inform.
+  const { documents } = useCommunityDocuments(slug);
 
   if (isLoading) {
     return (
@@ -92,6 +97,45 @@ export function CommunityPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Rendered only when there is something to show. A community with no
+          published documents gets no empty section -- an "it has no rules"
+          heading tells a visitor nothing they need. */}
+      {documents.length > 0 && (
+        <Card variant="default" padding="md" className="mt-6">
+          <CardHeader>
+            <h2 className="text-lg font-semibold text-content-primary">Documents</h2>
+          </CardHeader>
+          <CardBody>
+            {/* Collapsed by default. Rendering every document in full made a
+                community with several of them an unreadable wall -- the titles
+                are the navigation, and the body is opt-in.
+
+                CollapsibleMarkdown measures actual overflow rather than
+                guessing from source length, so a short document shows no
+                toggle at all instead of a pointless "Show full content" on
+                two lines of text. */}
+            <ul className="divide-y divide-theme-default" data-testid="community-documents">
+              {documents.map((doc) => (
+                <li
+                  key={doc.id}
+                  className="py-4 first:pt-0 last:pb-0"
+                  data-testid={`community-document-${doc.id}`}
+                >
+                  <h3 className="text-content-primary font-medium mb-2">{doc.title}</h3>
+                  <CollapsibleMarkdown
+                    content={doc.content}
+                    fullWidth
+                    expandLabel="Read more"
+                    collapseLabel="Show less"
+                    data-testid={`community-document-body-${doc.id}`}
+                  />
+                </li>
+              ))}
+            </ul>
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

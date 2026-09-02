@@ -195,6 +195,25 @@ type CommunityServiceInterface interface {
 	// ListBannedCommunityIDs is the bulk form, for filtering the community
 	// picker on game creation without one query per community.
 	ListBannedCommunityIDs(ctx context.Context, userID int32) ([]int32, error)
+
+	// Documents (req 7, 8). Every lookup is scoped by (documentID, communityID):
+	// a bare id would resolve a document in another community than the request
+	// path names.
+	CreateDocument(ctx context.Context, communityID, actorID int32, req *CreateCommunityDocumentRequest) (*CommunityDocument, error)
+	GetDocument(ctx context.Context, communityID, documentID int32) (*CommunityDocument, error)
+	UpdateDocument(ctx context.Context, communityID, documentID int32, req *UpdateCommunityDocumentRequest) (*CommunityDocument, error)
+	DeleteDocument(ctx context.Context, communityID, documentID int32) error
+
+	// ListDocuments includes DRAFTS -- moderator-only. ListPublishedDocuments is
+	// the public read. Two methods rather than one with a flag, so a caller
+	// cannot leak a draft by passing the wrong argument.
+	ListDocuments(ctx context.Context, communityID int32) ([]*CommunityDocument, error)
+	ListPublishedDocuments(ctx context.Context, communityID int32) ([]*CommunityDocument, error)
+
+	// ListPublishedDocumentsForGame backs the Game Info tab. Returns an empty
+	// slice for a legacy game with no community; the grandfathering is in the
+	// SQL join so no caller can forget it.
+	ListPublishedDocumentsForGame(ctx context.Context, gameID int32) ([]*CommunityDocument, error)
 }
 
 // FingerprintBanServiceInterface defines the contract for device fingerprint banning.

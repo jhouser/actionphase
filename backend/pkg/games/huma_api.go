@@ -723,6 +723,14 @@ func (h *Handler) humaGetGameWithDetails(ctx context.Context, in *gameScopedInpu
 		v := game.CommunityID.Int32
 		resp.CommunityID = &v
 	}
+	if game.CommunityName.Valid {
+		v := game.CommunityName.String
+		resp.CommunityName = &v
+	}
+	if game.CommunitySlug.Valid {
+		v := game.CommunitySlug.String
+		resp.CommunitySlug = &v
+	}
 	if game.CommonRoomOpenDay.Valid {
 		v := game.CommonRoomOpenDay.Int16
 		resp.CommonRoomOpenDay = &v

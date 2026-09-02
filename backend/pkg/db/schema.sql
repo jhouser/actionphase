@@ -160,6 +160,29 @@ CREATE TABLE community_ban_events (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Community documents: a community's own rules and reference pages, shown on
+-- the community page and linked from the Info tab of its games. Mirrors
+-- handouts (same draft/published gate, same markdown) minus the comment thread.
+-- Addressed by ID; a slug would freeze at creation while titles keep changing.
+CREATE TABLE community_documents (
+    id SERIAL PRIMARY KEY,
+    community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    -- 'draft' | 'published'; canonical list in core.ValidDocumentStatuses.
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    -- Explicit display order: a community's rules have a reading order that
+    -- neither title nor creation date expresses.
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    -- SET NULL: deleting the author must not delete the community's rules.
+    created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_community_documents_listing
+    ON community_documents(community_id, status, sort_order, id);
+
 -- Games table
 CREATE TABLE games (
     id SERIAL PRIMARY KEY,

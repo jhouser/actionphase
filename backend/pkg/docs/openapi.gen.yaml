@@ -1122,6 +1122,43 @@ components:
                 - action
                 - created_at
             type: object
+        CommunityDocument:
+            additionalProperties: false
+            properties:
+                community_id:
+                    format: int32
+                    type: integer
+                content:
+                    type: string
+                created_at:
+                    format: date-time
+                    type: string
+                created_by_user_id:
+                    format: int32
+                    type: integer
+                id:
+                    format: int32
+                    type: integer
+                sort_order:
+                    format: int32
+                    type: integer
+                status:
+                    type: string
+                title:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - community_id
+                - title
+                - content
+                - status
+                - sort_order
+                - created_at
+                - updated_at
+            type: object
         CommunityModerator:
             additionalProperties: false
             properties:
@@ -1503,6 +1540,31 @@ components:
             required:
                 - title
                 - character_ids
+            type: object
+        CreateDocumentInputBody:
+            additionalProperties: false
+            properties:
+                content:
+                    description: Document body (markdown)
+                    type: string
+                sort_order:
+                    description: Display position, lowest first
+                    format: int32
+                    type: integer
+                status:
+                    description: Visibility; omit for draft
+                    enum:
+                        - draft
+                        - published
+                    type: string
+                title:
+                    description: Document title
+                    maxLength: 255
+                    minLength: 1
+                    type: string
+            required:
+                - title
+                - content
             type: object
         CreateDraftPostRequest:
             additionalProperties: false
@@ -2661,6 +2723,10 @@ components:
                 community_id:
                     format: int32
                     type: integer
+                community_name:
+                    type: string
+                community_slug:
+                    type: string
                 created_at:
                     format: date-time
                     type: string
@@ -4515,6 +4581,28 @@ components:
                     type: string
             required:
                 - deadline
+            type: object
+        UpdateDocumentInputBody:
+            additionalProperties: false
+            properties:
+                content:
+                    description: Document body (markdown)
+                    type: string
+                sort_order:
+                    description: Display position, lowest first
+                    format: int32
+                    type: integer
+                status:
+                    description: Visibility
+                    enum:
+                        - draft
+                        - published
+                    type: string
+                title:
+                    description: Document title
+                    maxLength: 255
+                    minLength: 1
+                    type: string
             type: object
         UpdateDraftPostRequest:
             additionalProperties: false
@@ -6813,6 +6901,223 @@ paths:
             summary: Lift a user's ban
             tags:
                 - Communities
+    /communities/{slug}/documents:
+        get:
+            description: Open to any authenticated user -- a community's rules are what someone reads before deciding to join. Drafts are omitted; moderators use the manage endpoint to see them.
+            operationId: listCommunityDocuments
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityDocument'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: List a community's published documents
+            tags:
+                - Communities
+        post:
+            description: Requires moderation rights. Omit status to create a draft, which is the default so a half-written page binds nobody.
+            operationId: createCommunityDocument
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateDocumentInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityDocument'
+                    description: Created
+                "400":
+                    description: Title is blank or the status is unrecognised
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Create a community document
+            tags:
+                - Communities
+    /communities/{slug}/documents/{documentID}:
+        delete:
+            description: Requires moderation rights. Deleting a document that does not exist answers 404 rather than succeeding, so a delete that silently matched nothing surfaces.
+            operationId: deleteCommunityDocument
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Document ID
+                  in: path
+                  name: documentID
+                  required: true
+                  schema:
+                    description: Document ID
+                    format: int32
+                    type: integer
+            responses:
+                "204":
+                    description: No Content
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community or document not found
+            security:
+                - BearerAuth: []
+            summary: Delete a community document
+            tags:
+                - Communities
+        get:
+            description: Published documents are readable by any authenticated user. A DRAFT is visible only to moderators, and answers 404 rather than 403 for everyone else so unpublished work cannot be enumerated.
+            operationId: getCommunityDocument
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Document ID
+                  in: path
+                  name: documentID
+                  required: true
+                  schema:
+                    description: Document ID
+                    format: int32
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityDocument'
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "404":
+                    description: Community or document not found
+            security:
+                - BearerAuth: []
+            summary: Read one community document
+            tags:
+                - Communities
+        patch:
+            description: Requires moderation rights. Publishing and unpublishing happen here rather than through dedicated endpoints, since status sits on the same form as the body. An omitted field is left unchanged; an empty content is a blank page.
+            operationId: updateCommunityDocument
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Document ID
+                  in: path
+                  name: documentID
+                  required: true
+                  schema:
+                    description: Document ID
+                    format: int32
+                    type: integer
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateDocumentInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityDocument'
+                    description: OK
+                "400":
+                    description: Title is blank or the status is unrecognised
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community or document not found
+            security:
+                - BearerAuth: []
+            summary: Edit a community document
+            tags:
+                - Communities
+    /communities/{slug}/documents/manage:
+        get:
+            description: Requires moderation rights. A separate path from the public list rather than a query flag on it, so the privileged read carries its own gate.
+            operationId: listAllCommunityDocuments
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityDocument'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: List every document including drafts
+            tags:
+                - Communities
     /communities/{slug}/moderators:
         get:
             description: Requires moderation rights. The owner is not included -- ownership is not a moderator row; render it from the community's owner_user_id.
@@ -7965,6 +8270,40 @@ paths:
             summary: List recent comments with their parents
             tags:
                 - Common Room
+    /games/{gameID}/community-documents:
+        get:
+            description: Backs the Info tab. Requires access to the GAME, not standing in the community. A game with no community returns an empty list rather than 404, so legacy games simply render no community section.
+            operationId: listGameCommunityDocuments
+            parameters:
+                - description: Game ID
+                  in: path
+                  name: gameID
+                  required: true
+                  schema:
+                    description: Game ID
+                    format: int32
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityDocument'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller cannot view this game
+            security:
+                - BearerAuth: []
+            summary: List the published documents of the game's community
+            tags:
+                - Games
+                - Communities
     /games/{gameID}/conversations:
         get:
             operationId: listConversations

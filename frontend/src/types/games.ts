@@ -29,6 +29,17 @@ export interface Game {
    * nothing rather than a placeholder, and bans never apply to these.
    */
   community_id?: number;
+  /**
+   * Name and slug of the owning community, joined alongside community_id by
+   * GET /games/{id}/details -- the endpoint the game page loads. Absent for a
+   * legacy game, exactly like community_id.
+   *
+   * Present so a surface can NAME the community without a second request. The
+   * Info tab needs this even when the community has published no documents:
+   * naming it is not conditional on it having written anything.
+   */
+  community_name?: string;
+  community_slug?: string;
   common_room_open_day?: number | null;
   common_room_open_time?: string | null;
   common_room_close_day?: number | null;

@@ -1154,4 +1154,119 @@ describe('useGameTabs', () => {
       });
     });
   });
+
+  // The Info tab went missing for the whole character_creation state because it
+  // was pushed inside each state branch and that one branch forgot it. It is
+  // now appended once, outside the chain -- these tests hold that line.
+  describe('Game Info tab', () => {
+    const STATES = [
+      'setup',
+      'recruitment',
+      'character_creation',
+      'in_progress',
+      'paused',
+      'epilogue',
+      'completed',
+      'cancelled',
+    ] as const;
+
+    it.each(STATES)('is present in the %s state', (gameState) => {
+      const { result } = renderHook(
+        () =>
+          useGameTabs({
+            gameState,
+            isGM: false,
+            participantCount: 3,
+            currentPhaseType: 'action',
+            isAudience: false,
+            isParticipant: true,
+            hasCharacters: true,
+          }),
+        { wrapper }
+      );
+
+      expect(result.current.tabs.map(t => t.id)).toContain('info');
+    });
+
+    it.each(STATES)('is present in the %s state for a GM', (gameState) => {
+      const { result } = renderHook(
+        () =>
+          useGameTabs({
+            gameState,
+            isGM: true,
+            participantCount: 3,
+            currentPhaseType: 'action',
+            isAudience: false,
+            isParticipant: false,
+            hasCharacters: true,
+          }),
+        { wrapper }
+      );
+
+      expect(result.current.tabs.map(t => t.id)).toContain('info');
+    });
+
+    // Order is load-bearing: TabNavigation collapses into "More" from the end
+    // backwards, so this is what decides which tabs survive a narrow viewport.
+    it('sits after Loot Tables and before Game Logs for a GM', () => {
+      const { result } = renderHook(
+        () =>
+          useGameTabs({
+            gameState: 'in_progress',
+            isGM: true,
+            participantCount: 3,
+            currentPhaseType: 'action',
+            isAudience: false,
+            isParticipant: false,
+            hasCharacters: true,
+          }),
+        { wrapper }
+      );
+
+      const ids = result.current.tabs.map(t => t.id);
+      expect(ids.indexOf('loot_tables')).toBeLessThan(ids.indexOf('info'));
+      expect(ids.indexOf('info')).toBeLessThan(ids.indexOf('logs'));
+    });
+
+    // Game Logs is the only tab allowed after Info.
+    it('is second to last when Game Logs is present', () => {
+      const { result } = renderHook(
+        () =>
+          useGameTabs({
+            gameState: 'in_progress',
+            isGM: true,
+            participantCount: 3,
+            currentPhaseType: 'action',
+            isAudience: false,
+            isParticipant: false,
+            hasCharacters: true,
+          }),
+        { wrapper }
+      );
+
+      const ids = result.current.tabs.map(t => t.id);
+      expect(ids[ids.length - 2]).toBe('info');
+      expect(ids[ids.length - 1]).toBe('logs');
+    });
+
+    // A player in a live game sees neither trailing tab, so Info is simply last.
+    it('is last when neither trailing tab applies', () => {
+      const { result } = renderHook(
+        () =>
+          useGameTabs({
+            gameState: 'in_progress',
+            isGM: false,
+            participantCount: 3,
+            currentPhaseType: 'action',
+            isAudience: false,
+            isParticipant: true,
+            hasCharacters: true,
+          }),
+        { wrapper }
+      );
+
+      const ids = result.current.tabs.map(t => t.id);
+      expect(ids[ids.length - 1]).toBe('info');
+    });
+  });
 });

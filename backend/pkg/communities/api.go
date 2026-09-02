@@ -20,4 +20,10 @@ type Handler struct {
 	App              *core.App
 	UserService      core.UserServiceInterface
 	CommunityService core.CommunityServiceInterface
+
+	// GameService answers CanUserViewGame for the one game-scoped endpoint
+	// here: the Info tab's community document list (req 8). That read is gated
+	// on GAME visibility, not on community standing -- a player in a game may
+	// read its community's published rules without moderating that community.
+	GameService core.GameServiceInterface
 }

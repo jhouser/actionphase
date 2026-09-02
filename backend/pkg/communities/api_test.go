@@ -48,7 +48,12 @@ func setupCommunityTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux
 			UserService:      userService,
 			CommunityService: &communitysvc.CommunityService{DB: testDB.Pool, Logger: app.ObsLogger},
 		}
-		RegisterHumaCommunities(humaconfig.New(r, "ActionPhase API", "1.0.0"), handler)
+		// One huma API for both registrations, matching production: two
+		// separate New() calls on the same router would each install their own
+		// middleware chain.
+		api := humaconfig.New(r, "ActionPhase API", "1.0.0")
+		RegisterHumaCommunities(api, handler)
+		RegisterHumaCommunityDocuments(api, handler)
 	})
 
 	return r
@@ -77,7 +82,7 @@ func newHarness(t *testing.T) *harness {
 	// must go before the users they point at.
 	t.Cleanup(func() {
 		testDB.CleanupTables(t,
-			"community_ban_events", "community_bans",
+			"community_ban_events", "community_bans", "community_documents",
 			"community_moderators", "communities", "users")
 	})
 
@@ -1072,4 +1077,200 @@ func TestCommunitiesAPI_IsBanned_ExcludesExpired(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	assert.False(t, got.IsBanned,
 		"a lapsed ban must not flag the community")
+}
+
+// ----------------------------------------------------------------- documents
+
+// docPath builds the document collection path for the harness community.
+func docPath() string { return "/api/v1/communities/midnight-ravens/documents" }
+
+// createDoc adds a document directly through the service, so a test asserting
+// on a READ is not also testing the create endpoint.
+func (h *harness) createDoc(t *testing.T, title, status string) *core.CommunityDocument {
+	t.Helper()
+	svc := &communitysvc.CommunityService{DB: h.testDB.Pool, Logger: h.app.ObsLogger}
+	doc, err := svc.CreateDocument(context.Background(), h.community.ID, int32(h.owner.ID),
+		&core.CreateCommunityDocumentRequest{
+			Title: title, Content: "body", Status: &status,
+		})
+	require.NoError(t, err)
+	return doc
+}
+
+// listDocs reads documents straight from the service, for asserting that a
+// refused request changed nothing.
+func (h *harness) listDocs(t *testing.T) []*core.CommunityDocument {
+	t.Helper()
+	svc := &communitysvc.CommunityService{DB: h.testDB.Pool, Logger: h.app.ObsLogger}
+	docs, err := svc.ListDocuments(context.Background(), h.community.ID)
+	require.NoError(t, err)
+	return docs
+}
+
+// The public list is open to ANY authenticated user -- rules are what someone
+// reads before deciding whether to join -- but it must never carry a draft.
+func TestDocumentsAPI_PublicListExcludesDrafts(t *testing.T) {
+	h := newHarness(t)
+	h.createDoc(t, "Published rules", core.DocumentStatusPublished)
+	h.createDoc(t, "Secret draft", core.DocumentStatusDraft)
+
+	rec := h.request(t, h.outsider, http.MethodGet, docPath(), nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got []*core.CommunityDocument
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Len(t, got, 1, "an outsider must not receive drafts")
+	assert.Equal(t, "Published rules", got[0].Title)
+}
+
+// The manage list is the privileged read and must include drafts.
+func TestDocumentsAPI_ManageListIncludesDrafts(t *testing.T) {
+	h := newHarness(t)
+	h.createDoc(t, "Published rules", core.DocumentStatusPublished)
+	h.createDoc(t, "Secret draft", core.DocumentStatusDraft)
+
+	rec := h.request(t, h.moderator, http.MethodGet, docPath()+"/manage", nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got []*core.CommunityDocument
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Len(t, got, 2)
+}
+
+func TestDocumentsAPI_ManageListRejectsOutsider(t *testing.T) {
+	h := newHarness(t)
+	h.createDoc(t, "Secret draft", core.DocumentStatusDraft)
+
+	rec := h.request(t, h.outsider, http.MethodGet, docPath()+"/manage", nil, false)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+// THE handler-level visibility gate. The service read is deliberately
+// status-blind -- it serves both the editor and the public reader -- so this
+// check in the handler is the only thing between a draft and an outsider who
+// guesses an id. 404 rather than 403, so drafts cannot be enumerated.
+func TestDocumentsAPI_DraftIsHiddenFromOutsiders(t *testing.T) {
+	h := newHarness(t)
+	draft := h.createDoc(t, "Secret draft", core.DocumentStatusDraft)
+
+	rec := h.request(t, h.outsider, http.MethodGet,
+		fmt.Sprintf("%s/%d", docPath(), draft.ID), nil, false)
+	assert.Equal(t, http.StatusNotFound, rec.Code,
+		"a hidden draft must answer 404, not 403 -- 403 confirms it exists")
+}
+
+func TestDocumentsAPI_DraftIsVisibleToModerator(t *testing.T) {
+	h := newHarness(t)
+	draft := h.createDoc(t, "Secret draft", core.DocumentStatusDraft)
+
+	rec := h.request(t, h.moderator, http.MethodGet,
+		fmt.Sprintf("%s/%d", docPath(), draft.ID), nil, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got core.CommunityDocument
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, "Secret draft", got.Title)
+}
+
+func TestDocumentsAPI_PublishedIsVisibleToOutsider(t *testing.T) {
+	h := newHarness(t)
+	doc := h.createDoc(t, "House rules", core.DocumentStatusPublished)
+
+	rec := h.request(t, h.outsider, http.MethodGet,
+		fmt.Sprintf("%s/%d", docPath(), doc.ID), nil, false)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestDocumentsAPI_CreateRequiresModeration(t *testing.T) {
+	h := newHarness(t)
+	body := []byte(`{"title":"Sneaky rules","content":"text"}`)
+
+	rec := h.request(t, h.outsider, http.MethodPost, docPath(), body, false)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Empty(t, h.listDocs(t), "a refused create must write nothing")
+}
+
+// Banning is the moderator tier, and so is document authorship: keeping the
+// community's rules current is ordinary upkeep, not an owner-only act.
+func TestDocumentsAPI_ModeratorCanCreate(t *testing.T) {
+	h := newHarness(t)
+	body := []byte(`{"title":"House rules","content":"# Be excellent"}`)
+
+	rec := h.request(t, h.moderator, http.MethodPost, docPath(), body, false)
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var got core.CommunityDocument
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, "House rules", got.Title)
+	assert.Equal(t, core.DocumentStatusDraft, got.Status, "omitted status means draft")
+}
+
+func TestDocumentsAPI_CreateRejectsBlankTitle(t *testing.T) {
+	h := newHarness(t)
+	body := []byte(`{"title":"","content":"text"}`)
+
+	rec := h.request(t, h.moderator, http.MethodPost, docPath(), body, false)
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+}
+
+func TestDocumentsAPI_UpdatePublishes(t *testing.T) {
+	h := newHarness(t)
+	doc := h.createDoc(t, "Draft rules", core.DocumentStatusDraft)
+
+	body := []byte(`{"status":"published"}`)
+	rec := h.request(t, h.moderator, http.MethodPatch,
+		fmt.Sprintf("%s/%d", docPath(), doc.ID), body, false)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got core.CommunityDocument
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, core.DocumentStatusPublished, got.Status)
+	assert.Equal(t, "Draft rules", got.Title, "an omitted title must survive")
+}
+
+func TestDocumentsAPI_UpdateRequiresModeration(t *testing.T) {
+	h := newHarness(t)
+	doc := h.createDoc(t, "House rules", core.DocumentStatusPublished)
+
+	body := []byte(`{"title":"Defaced"}`)
+	rec := h.request(t, h.outsider, http.MethodPatch,
+		fmt.Sprintf("%s/%d", docPath(), doc.ID), body, false)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+
+	docs := h.listDocs(t)
+	require.Len(t, docs, 1)
+	assert.Equal(t, "House rules", docs[0].Title, "a refused update must change nothing")
+}
+
+func TestDocumentsAPI_Delete(t *testing.T) {
+	h := newHarness(t)
+	doc := h.createDoc(t, "Temporary", core.DocumentStatusDraft)
+
+	rec := h.request(t, h.moderator, http.MethodDelete,
+		fmt.Sprintf("%s/%d", docPath(), doc.ID), nil, false)
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	assert.Empty(t, h.listDocs(t))
+}
+
+func TestDocumentsAPI_DeleteRequiresModeration(t *testing.T) {
+	h := newHarness(t)
+	doc := h.createDoc(t, "House rules", core.DocumentStatusPublished)
+
+	rec := h.request(t, h.outsider, http.MethodDelete,
+		fmt.Sprintf("%s/%d", docPath(), doc.ID), nil, false)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Len(t, h.listDocs(t), 1, "a refused delete must leave the document")
+}
+
+// A site admin qualifies only with ADMIN MODE on, matching every other
+// community permission -- an admin browsing normally is an ordinary user.
+func TestDocumentsAPI_AdminNeedsAdminMode(t *testing.T) {
+	h := newHarness(t)
+	h.createDoc(t, "Secret draft", core.DocumentStatusDraft)
+
+	off := h.request(t, h.admin, http.MethodGet, docPath()+"/manage", nil, false)
+	assert.Equal(t, http.StatusForbidden, off.Code, "admin mode off is an ordinary user")
+
+	on := h.request(t, h.admin, http.MethodGet, docPath()+"/manage", nil, true)
+	assert.Equal(t, http.StatusOK, on.Code)
 }

@@ -294,3 +294,95 @@ const (
 	DefaultBanEventPageSize = 50
 	MaxBanEventPageSize     = 200
 )
+
+// CommunityDocument is one of a community's rules or reference pages (req 7).
+//
+// Modelled on Handout -- same draft/published gate, same markdown body rendered
+// through MarkdownPreview -- but with no comment thread. A community's rules
+// are an announcement; games already have handouts for the discussable kind.
+//
+// Addressed by ID, not by a slug. Slugs were considered and rejected: a
+// document's title is edited as its rules evolve, and a slug frozen at creation
+// would leave a renamed document permanently at the old URL. A slug would also
+// need collision handling (two "FAQ" documents) and a fallback for titles with
+// no Latin characters -- costs paid at write time for a readability benefit
+// only the rare hand-typed link collects.
+type CommunityDocument struct {
+	ID          int32  `json:"id"`
+	CommunityID int32  `json:"community_id"`
+	Title       string `json:"title"`
+	Content     string `json:"content"` // Markdown
+
+	// Status is "draft" or "published". Only published documents are visible to
+	// anyone but a moderator, so this is the whole visibility rule -- see
+	// ValidDocumentStatuses.
+	Status string `json:"status"`
+
+	// SortOrder is the display position, lowest first. Explicit because a
+	// community's documents have a deliberate reading order that neither the
+	// title nor the creation date expresses.
+	SortOrder int32 `json:"sort_order"`
+
+	// CreatedByUserID is nullable: the moderator who wrote a document may since
+	// have been deleted (ON DELETE SET NULL). The document belongs to the
+	// community, not to its author, so it outlives them.
+	CreatedByUserID *int32 `json:"created_by_user_id,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// No community name or slug here, deliberately. An earlier version carried
+	// them on the per-game rows so the Info tab could label its section, back
+	// when GetGameWithDetails did not join communities. It does now, so the game
+	// payload names its own community -- and must, since the section has to name
+	// a community that has published no documents at all.
+}
+
+// Document statuses. A plain VARCHAR column with no CHECK constraint, matching
+// handouts.status and the rest of this schema -- this list is the authority.
+const (
+	// DocumentStatusDraft is visible only to the community's moderators. Lets a
+	// moderator write rules over several sittings before they bind anyone.
+	DocumentStatusDraft = "draft"
+
+	// DocumentStatusPublished is visible to everyone who can see the community.
+	DocumentStatusPublished = "published"
+)
+
+// ValidDocumentStatuses is the canonical set of document statuses.
+var ValidDocumentStatuses = []string{DocumentStatusDraft, DocumentStatusPublished}
+
+// IsValidDocumentStatus reports whether s is a status the service will store.
+func IsValidDocumentStatus(s string) bool {
+	return s == DocumentStatusDraft || s == DocumentStatusPublished
+}
+
+// Document title bounds, matching the column width.
+const (
+	DocumentTitleMinLength = 1
+	DocumentTitleMaxLength = 255
+)
+
+// CreateCommunityDocumentRequest creates a document in a community.
+type CreateCommunityDocumentRequest struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+
+	// Status omitted means DRAFT. Creating straight to published requires
+	// asking for it: the safe default is the one that shows the document to
+	// nobody until its author says otherwise.
+	Status    *string `json:"status,omitempty"`
+	SortOrder *int32  `json:"sort_order,omitempty"`
+}
+
+// UpdateCommunityDocumentRequest is a partial update; a nil field is unchanged.
+//
+// Content is NOT tri-state, unlike Community.Description: the column is NOT
+// NULL, so there is no "clear it" state distinct from "set it to empty". A
+// blank document body is a blank page, not an absent one.
+type UpdateCommunityDocumentRequest struct {
+	Title     *string `json:"title,omitempty"`
+	Content   *string `json:"content,omitempty"`
+	Status    *string `json:"status,omitempty"`
+	SortOrder *int32  `json:"sort_order,omitempty"`
+}

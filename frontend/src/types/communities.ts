@@ -194,3 +194,69 @@ export interface CreateCommunityBanRequest {
   reason?: string;
   expires_at?: string;
 }
+
+/**
+ * One of a community's rules or reference pages.
+ *
+ * Addressed by ID, not a slug: a document's title is edited as its rules
+ * evolve, and a slug frozen at creation would strand a renamed document at its
+ * old URL. See the plan's §3.5 for the full reasoning.
+ */
+export interface CommunityDocument {
+  id: number;
+  community_id: number;
+  title: string;
+  /** Markdown, rendered through MarkdownPreview. */
+  content: string;
+  status: DocumentStatus;
+  /** Display position, lowest first. Ties break by id. */
+  sort_order: number;
+  /** Nullable: the moderator who wrote it may since have been deleted. */
+  created_by_user_id?: number;
+  created_at: string;
+  updated_at: string;
+  // No community_name / community_slug. The per-game list used to carry them so
+  // the Info tab could label its section, back when GET /games/{id}/details did
+  // not join communities. It does now, so identity comes from the GAME -- which
+  // it must, since the section has to name a community that has published no
+  // documents at all.
+}
+
+/**
+ * Whether a document is visible to anyone but a moderator.
+ *
+ * A draft is moderator-only, and the server answers 404 rather than 403 for
+ * everyone else -- so an outsider cannot enumerate unpublished work by walking
+ * ids. Drafts let a moderator write rules over several sittings before they
+ * bind anyone.
+ */
+// Not exported: every consumer reaches it through CommunityDocument.status or
+// the request types below. Exporting it would be an unused public surface.
+type DocumentStatus = 'draft' | 'published';
+
+/**
+ * Create a document. Omit `status` for a draft, which is the default -- a
+ * half-written page should bind nobody until its author says otherwise.
+ */
+export interface CreateCommunityDocumentRequest {
+  title: string;
+  content: string;
+  status?: DocumentStatus;
+  sort_order?: number;
+}
+
+/**
+ * Partial update; an omitted field is left unchanged.
+ *
+ * Publishing and unpublishing both go through here rather than dedicated
+ * endpoints, since status sits on the same form as the body.
+ *
+ * Unlike a community description, `content` is NOT tri-state: the column is NOT
+ * NULL, so an empty string is a blank page rather than a clear.
+ */
+export interface UpdateCommunityDocumentRequest {
+  title?: string;
+  content?: string;
+  status?: DocumentStatus;
+  sort_order?: number;
+}

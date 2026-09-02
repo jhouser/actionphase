@@ -524,9 +524,12 @@ const getGameWithDetails = `-- name: GetGameWithDetails :one
 SELECT
     g.id, g.title, g.description, g.gm_user_id, g.state, g.genre, g.start_date, g.end_date, g.recruitment_deadline, g.max_players, g.is_public, g.is_anonymous, g.auto_accept_audience, g.allow_group_conversations, g.portrait_avatars, g.banner_url, g.common_room_open_day, g.common_room_open_time, g.common_room_close_day, g.common_room_close_time, g.schedule_timezone, g.character_sheet, g.community_id, g.created_at, g.updated_at,
     u.username as gm_username,
+    c.name as community_name,
+    c.slug as community_slug,
     COALESCE(pc.player_count, 0) as current_players
 FROM games g
 LEFT JOIN users u ON g.gm_user_id = u.id
+LEFT JOIN communities c ON c.id = g.community_id
 LEFT JOIN (
     SELECT game_id, COUNT(*) as player_count
     FROM game_participants
@@ -563,9 +566,17 @@ type GetGameWithDetailsRow struct {
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	GmUsername              pgtype.Text        `json:"gm_username"`
+	CommunityName           pgtype.Text        `json:"community_name"`
+	CommunitySlug           pgtype.Text        `json:"community_slug"`
 	CurrentPlayers          int64              `json:"current_players"`
 }
 
+// Joins the owning community's name and slug so a game surface can label and
+// link its community without a second request.
+//
+// LEFT JOIN, not inner: a game predating communities has community_id NULL
+// (req 5) and must still resolve here. Both columns come back NULL for those,
+// which the caller renders as no community section rather than a placeholder.
 func (q *Queries) GetGameWithDetails(ctx context.Context, id int32) (GetGameWithDetailsRow, error) {
 	row := q.db.QueryRow(ctx, getGameWithDetails, id)
 	var i GetGameWithDetailsRow
@@ -596,6 +607,8 @@ func (q *Queries) GetGameWithDetails(ctx context.Context, id int32) (GetGameWith
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.GmUsername,
+		&i.CommunityName,
+		&i.CommunitySlug,
 		&i.CurrentPlayers,
 	)
 	return i, err

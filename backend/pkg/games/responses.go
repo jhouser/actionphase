@@ -69,7 +69,16 @@ type GameWithDetailsResponse struct {
 	// the edit form hydrates its community picker from here. Omitting the
 	// field made the picker fall back to "-- Choose a community --" on games
 	// that plainly had one.
-	CommunityID         *int32  `json:"community_id,omitempty"`
+	CommunityID *int32 `json:"community_id,omitempty"`
+	// Name and slug of the owning community, joined alongside CommunityID so a
+	// game surface can label and link it without a second request. Both nil for
+	// a legacy game, exactly like CommunityID.
+	//
+	// The Info tab's community section needs these even when the community has
+	// published NO documents -- naming the community is not conditional on it
+	// having written anything.
+	CommunityName       *string `json:"community_name,omitempty"`
+	CommunitySlug       *string `json:"community_slug,omitempty"`
 	CommonRoomOpenDay   *int16  `json:"common_room_open_day,omitempty"`
 	CommonRoomOpenTime  *string `json:"common_room_open_time,omitempty"`
 	CommonRoomCloseDay  *int16  `json:"common_room_close_day,omitempty"`

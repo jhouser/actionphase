@@ -214,6 +214,18 @@ type CommunityBanEvent struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type CommunityDocument struct {
+	ID              int32              `json:"id"`
+	CommunityID     int32              `json:"community_id"`
+	Title           string             `json:"title"`
+	Content         string             `json:"content"`
+	Status          string             `json:"status"`
+	SortOrder       int32              `json:"sort_order"`
+	CreatedByUserID pgtype.Int4        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CommunityModerator struct {
 	ID              int32              `json:"id"`
 	CommunityID     int32              `json:"community_id"`

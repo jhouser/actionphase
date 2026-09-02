@@ -4,21 +4,23 @@ import { Alert, Spinner } from '../components/ui';
 import { useCommunity } from '../hooks/useCommunities';
 import { BanHistoryTab } from './community/BanHistoryTab';
 import { BansTab } from './community/BansTab';
+import { DocumentsTab } from './community/DocumentsTab';
 import { ModeratorsTab } from './community/ModeratorsTab';
 import { SettingsTab } from './community/SettingsTab';
 
 /**
  * Management shell for one community.
  *
- * Documents and webhooks arrive in later phases; the tab list grows here rather
- * than the routing changing shape.
+ * Webhooks arrive in a later phase; the tab list grows here rather than the
+ * routing changing shape.
  */
-type TabId = 'moderators' | 'bans' | 'history' | 'settings';
-const VALID_TABS: TabId[] = ['moderators', 'bans', 'history', 'settings'];
+type TabId = 'moderators' | 'bans' | 'history' | 'documents' | 'settings';
+const VALID_TABS: TabId[] = ['moderators', 'bans', 'history', 'documents', 'settings'];
 const TABS: { id: TabId; label: string }[] = [
   { id: 'moderators', label: 'Moderators' },
   { id: 'bans', label: 'Bans' },
   { id: 'history', label: 'Ban history' },
+  { id: 'documents', label: 'Documents' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -91,6 +93,10 @@ export function CommunityManagePage() {
 
       {activeTab === 'history' && (
         <BanHistoryTab community={community} canModerate={canModerate} />
+      )}
+
+      {activeTab === 'documents' && (
+        <DocumentsTab community={community} canModerate={canModerate} />
       )}
 
       {activeTab === 'settings' && (
