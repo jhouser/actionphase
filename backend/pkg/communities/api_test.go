@@ -12,8 +12,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,7 +40,113 @@ import (
 // resets it, since the router captures this value at construction.
 var testWebhookSender = &discord.MockWebhookClient{}
 
+// testStorage backs the banner endpoints. Package-level for the same reason as
+// testWebhookSender: the app captures it at router construction, so a test that
+// wants to inspect or fail it resets this value rather than rebuilding.
+//
+// NewTestApp leaves App.Storage nil, which is a real deployment state (storage
+// is optional) and the reason the banner handlers guard for it. Tests that want
+// to exercise that guard clear App.Storage instead of using this.
+var testStorage = &fakeStorage{}
+
+// fakeStorage is an in-memory core.StorageBackendInterface.
+//
+// Records uploads and deletes by path so tests can assert the ORDERING rules
+// the banner handlers depend on -- old object deleted before the new one is
+// stored, and the new object rolled back when the column write fails. Those are
+// invisible to a status-code assertion.
+type fakeStorage struct {
+	mu sync.Mutex
+
+	// objects maps storage path -> content type for everything currently stored.
+	objects map[string]string
+
+	// uploads and deletes record every call in order, including deletes of paths
+	// that were never stored -- the handler's best-effort cleanup does that, and
+	// a test asserting cleanup happened needs to see the attempt.
+	uploads []string
+	deletes []string
+
+	// UploadErr makes every Upload fail.
+	UploadErr error
+}
+
+var _ core.StorageBackendInterface = (*fakeStorage)(nil)
+
+func (f *fakeStorage) Upload(_ context.Context, path string, file io.Reader, contentType string) (string, error) {
+	if f.UploadErr != nil {
+		return "", f.UploadErr
+	}
+	// Drain the reader so a handler that failed to buffer the body would be
+	// visible here rather than silently storing nothing.
+	if _, err := io.ReadAll(file); err != nil {
+		return "", err
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.objects == nil {
+		f.objects = map[string]string{}
+	}
+	f.objects[path] = contentType
+	f.uploads = append(f.uploads, path)
+	return f.GetURL(path), nil
+}
+
+func (f *fakeStorage) Delete(_ context.Context, path string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deletes = append(f.deletes, path)
+	delete(f.objects, path)
+	return nil
+}
+
+// GetURL mirrors LocalStorage's shape, so ExtractBannerPathFromURL is exercised
+// against a realistic prefix rather than a bare key that would pass trivially.
+func (f *fakeStorage) GetURL(path string) string {
+	return "http://localhost:3000/uploads/" + path
+}
+
+func (f *fakeStorage) reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.objects = map[string]string{}
+	f.uploads = nil
+	f.deletes = nil
+	f.UploadErr = nil
+}
+
+// stored reports whether a path currently holds an object.
+func (f *fakeStorage) stored(path string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.objects[path]
+	return ok
+}
+
+func (f *fakeStorage) uploadCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.uploads)
+}
+
+func (f *fakeStorage) deleteCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.deletes)
+}
+
 func setupCommunityTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
+	return setupCommunityTestRouterWithService(app, testDB,
+		&communitysvc.CommunityService{DB: testDB.Pool, Logger: app.ObsLogger})
+}
+
+// setupCommunityTestRouterWithService builds the same router around a
+// substitute CommunityService, so a test can force a service-layer failure the
+// database cannot be made to produce on its own.
+func setupCommunityTestRouterWithService(
+	app *core.App, testDB *core.TestDatabase, svc core.CommunityServiceInterface,
+) *chi.Mux {
 	tokenAuth := jwtauth.New("HS256", []byte(app.Config.JWT.Secret), nil)
 	userService := &dbsvc.UserService{DB: testDB.Pool, Logger: app.ObsLogger}
 
@@ -52,7 +160,7 @@ func setupCommunityTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux
 		handler := &Handler{
 			App:              app,
 			UserService:      userService,
-			CommunityService: &communitysvc.CommunityService{DB: testDB.Pool, Logger: app.ObsLogger},
+			CommunityService: svc,
 			// A mock sender so the webhook test button can be exercised without
 			// posting to Discord. Tests that need it to fail set ShouldFail.
 			WebhookSender: testWebhookSender,
@@ -64,6 +172,7 @@ func setupCommunityTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux
 		RegisterHumaCommunities(api, handler)
 		RegisterHumaCommunityDocuments(api, handler)
 		RegisterHumaCommunityWebhooks(api, handler)
+		RegisterHumaCommunityBanner(api, handler)
 	})
 
 	return r
@@ -97,6 +206,13 @@ func newHarness(t *testing.T) *harness {
 	})
 
 	app := core.NewTestApp(testDB.Pool)
+
+	// NewTestApp leaves Storage nil; the banner endpoints need a backend. Reset
+	// per harness so uploads recorded by an earlier test are not read as this
+	// one's -- the same hazard testWebhookSender's Reset guards against.
+	testStorage.reset()
+	app.Storage = testStorage
+
 	router := setupCommunityTestRouter(app, testDB)
 
 	h := &harness{

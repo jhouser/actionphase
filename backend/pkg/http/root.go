@@ -656,6 +656,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			communities.RegisterHumaCommunities(communitiesAPI, communityHandler)
 			communities.RegisterHumaCommunityDocuments(communitiesAPI, communityHandler)
 			communities.RegisterHumaCommunityWebhooks(communitiesAPI, communityHandler)
+			communities.RegisterHumaCommunityBanner(communitiesAPI, communityHandler)
 		})
 	})
 	apiV1Router.Mount("/communities", communitiesRouter)

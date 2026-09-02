@@ -45,8 +45,9 @@ export function ModeratorsTab({ community, canAdminister }: ModeratorsTabProps) 
         setSelected(null);
       },
       onError: (err: unknown) => {
+        // `error`, not `detail` -- see the note in SettingsTab.
         const detail =
-          (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+          (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
         showError(detail ?? 'Could not add that moderator');
       },
     });

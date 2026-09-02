@@ -160,6 +160,12 @@ type CommunityServiceInterface interface {
 	ListActiveCommunities(ctx context.Context) ([]*Community, error)
 	UpdateCommunity(ctx context.Context, id int32, req *UpdateCommunityRequest) (*Community, error)
 
+	// UpdateCommunityBannerURL is the ONLY writer of banner_url; nil clears it.
+	// Deliberately not a field on UpdateCommunityRequest -- a banner is an
+	// uploaded object whose file and column must stay in sync, so the caller
+	// stores the file first and rolls it back if this fails.
+	UpdateCommunityBannerURL(ctx context.Context, id int32, bannerURL *string) (*Community, error)
+
 	// Moderator roster. AddModerator/RemoveModerator are owner-only at the
 	// handler layer; the service enforces only data integrity.
 	AddModerator(ctx context.Context, communityID, userID, grantedBy int32) (*CommunityModerator, error)

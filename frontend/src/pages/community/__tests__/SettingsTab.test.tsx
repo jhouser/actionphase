@@ -133,9 +133,13 @@ describe('SettingsTab', () => {
     expect(screen.getByTestId('community-settings-save')).toBeDisabled()
   })
 
+  // The payload shape here is the one the server actually sends: LegacyError
+  // serializes its message as `error`. A `detail` key never appears on the
+  // wire, so a test using one would pass against a component that reads a
+  // field the API does not emit.
   it('reports a failed save', async () => {
     updateCommunityProfile.mockRejectedValue({
-      response: { data: { detail: 'name cannot be blank' } },
+      response: { data: { error: 'name cannot be blank' } },
     })
     renderWithProviders(<SettingsTab community={community} canEdit />)
 

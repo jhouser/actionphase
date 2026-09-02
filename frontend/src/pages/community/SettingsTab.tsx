@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardBody, CardHeader, Button, Input, Alert } from '../../components/ui';
 import { CommentEditor } from '../../components/CommentEditor';
+import { CommunityBannerSection } from './CommunityBannerSection';
 import { useToast } from '../../contexts/ToastContext';
 import { useUpdateCommunityProfile } from '../../hooks/useCommunities';
 import type { Community } from '../../types/communities';
@@ -64,8 +65,12 @@ export function SettingsTab({ community, canEdit }: SettingsTabProps) {
     updateProfile.mutate(payload, {
       onSuccess: () => showSuccess('Community profile updated'),
       onError: (err: unknown) => {
+        // `error` is the field the API actually sends: LegacyError
+        // (pkg/humaconfig) serializes as { status, code, error }. Nothing on
+        // the backend emits `detail`, so reading that discarded every server
+        // message and always showed the fallback.
         const detail =
-          (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+          (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
         showError(detail ?? 'Could not save those changes');
       },
     });
@@ -90,6 +95,13 @@ export function SettingsTab({ community, canEdit }: SettingsTabProps) {
         </p>
       </CardHeader>
       <CardBody>
+        {/* Outside the form on purpose: the banner uploads immediately on
+            confirm, while the fields below are saved together. Nesting it would
+            put its buttons inside a form whose submit does something else. */}
+        <div className="mb-6 pb-6 border-b border-theme-default">
+          <CommunityBannerSection community={community} />
+        </div>
+
         <form onSubmit={handleSubmit} data-testid="community-settings-form">
           <Input
             label="Name"

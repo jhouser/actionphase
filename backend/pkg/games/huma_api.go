@@ -2612,14 +2612,14 @@ func (h *Handler) humaUploadGameBanner(ctx context.Context, in *uploadBannerInpu
 	file := in.RawBody.Data().Banner
 	contentType := file.ContentType
 	if contentType == "" {
-		contentType = bannerMimeTypeFromFilename(file.Filename)
+		contentType = core.BannerMimeTypeFromFilename(file.Filename)
 	}
-	if !allowedBannerMimeTypes[contentType] {
+	if !core.AllowedBannerMimeTypes[contentType] {
 		return nil, h.logAndErr(ctx, core.ErrInvalidRequest(fmt.Errorf("invalid file type %s. Only JPG, PNG, and WebP images are allowed", contentType)),
 			"Invalid upload game banner request")
 	}
 
-	fileData, err := readAndValidateBannerSize(file)
+	fileData, err := core.ReadAndValidateBannerSize(file)
 	if err != nil {
 		return nil, h.logAndErr(ctx, core.ErrInvalidRequest(err), "Invalid upload game banner request", "error", err)
 	}
@@ -2627,12 +2627,12 @@ func (h *Handler) humaUploadGameBanner(ctx context.Context, in *uploadBannerInpu
 	// Removed before the new one is stored, so a game never accumulates orphaned
 	// banner objects. Best-effort: a failed delete must not block the upload.
 	if game.BannerUrl.Valid && game.BannerUrl.String != "" {
-		_ = h.App.Storage.Delete(ctx, extractBannerPathFromURL(game.BannerUrl.String))
+		_ = h.App.Storage.Delete(ctx, core.ExtractBannerPathFromURL(game.BannerUrl.String))
 	}
 
 	ext := filepath.Ext(file.Filename)
 	if ext == "" {
-		ext = bannerExtFromMime(contentType)
+		ext = core.BannerExtFromMime(contentType)
 	}
 	storagePath := fmt.Sprintf("banners/games/%d/%d%s", game.ID, time.Now().Unix(), ext)
 
@@ -2668,7 +2668,7 @@ func (h *Handler) humaDeleteGameBanner(ctx context.Context, in *gameScopedInput)
 	}
 
 	if game.BannerUrl.Valid && game.BannerUrl.String != "" {
-		_ = h.App.Storage.Delete(ctx, extractBannerPathFromURL(game.BannerUrl.String))
+		_ = h.App.Storage.Delete(ctx, core.ExtractBannerPathFromURL(game.BannerUrl.String))
 	}
 
 	if err := h.GameService.UpdateGameBannerURL(ctx, game.ID, nil); err != nil {

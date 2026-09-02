@@ -438,3 +438,42 @@ func (q *Queries) UpdateCommunity(ctx context.Context, arg UpdateCommunityParams
 	)
 	return i, err
 }
+
+const updateCommunityBannerURL = `-- name: UpdateCommunityBannerURL :one
+UPDATE communities
+SET banner_url = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING id, name, slug, description, banner_url, owner_user_id, is_active, created_at, updated_at
+`
+
+type UpdateCommunityBannerURLParams struct {
+	ID        int32       `json:"id"`
+	BannerUrl pgtype.Text `json:"banner_url"`
+}
+
+// The dedicated banner write the PATCH above deliberately excludes.
+//
+// Kept separate rather than folded into UpdateCommunity because the column and
+// the stored object must move together: the handler uploads first and stamps
+// the URL here, rolling the object back if this fails. A PATCH field could set
+// banner_url to anything, leaving a row pointing at a file nothing owns.
+//
+// $2 NULL clears the banner. Unlike description there is no set_/narg dance:
+// there is no "leave it alone" case, since the only callers are set-a-banner
+// and remove-the-banner.
+func (q *Queries) UpdateCommunityBannerURL(ctx context.Context, arg UpdateCommunityBannerURLParams) (Community, error) {
+	row := q.db.QueryRow(ctx, updateCommunityBannerURL, arg.ID, arg.BannerUrl)
+	var i Community
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.BannerUrl,
+		&i.OwnerUserID,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

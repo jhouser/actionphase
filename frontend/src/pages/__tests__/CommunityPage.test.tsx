@@ -56,6 +56,32 @@ describe('CommunityPage', () => {
     expect(screen.getByText('corvid')).toBeInTheDocument()
   })
 
+  it('renders the banner when the community has one', async () => {
+    getCommunity.mockResolvedValue({
+      data: {
+        ...community,
+        your_role: '',
+        banner_url: 'http://localhost:3000/uploads/banners/communities/1/123.png',
+      },
+    })
+    renderWithProviders(<CommunityPage />)
+
+    const banner = await screen.findByTestId('community-banner')
+    expect(banner).toHaveAttribute(
+      'src',
+      'http://localhost:3000/uploads/banners/communities/1/123.png',
+    )
+  })
+
+  // No banner should render no frame at all, rather than an empty 6:1 band
+  // above the name.
+  it('renders no banner frame when the community has none', async () => {
+    renderWithProviders(<CommunityPage />)
+
+    expect(await screen.findByText('Midnight Ravens')).toBeInTheDocument()
+    expect(screen.queryByTestId('community-banner')).not.toBeInTheDocument()
+  })
+
   it('offers Manage to the owner', async () => {
     getCommunity.mockResolvedValue(asRole('owner'))
     renderWithProviders(<CommunityPage />)

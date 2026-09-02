@@ -6895,6 +6895,82 @@ paths:
             summary: Read a community's ban audit log
             tags:
                 - Communities
+    /communities/{slug}/banner:
+        delete:
+            description: Requires moderation rights. Deletes the stored file and clears the column. Succeeds when there is no banner set.
+            operationId: deleteCommunityBanner
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Remove a community's banner image
+            tags:
+                - Communities
+        post:
+            description: Requires moderation rights. JPG, PNG or WebP, at most 5MB. Replaces any existing banner, deleting the previous file. Returns the refreshed community.
+            operationId: uploadCommunityBanner
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    multipart/form-data:
+                        encoding:
+                            banner:
+                                contentType: application/octet-stream
+                        schema:
+                            properties:
+                                banner:
+                                    contentEncoding: binary
+                                    contentMediaType: application/octet-stream
+                                    description: 'Banner image: JPG, PNG or WebP, at most 5MB'
+                                    format: binary
+                                    type: string
+                            required:
+                                - banner
+                            type: object
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Community'
+                    description: OK
+                "400":
+                    description: Missing file, unsupported type, or larger than 5MB
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+                "503":
+                    description: File storage is not configured
+            security:
+                - BearerAuth: []
+            summary: Upload a community banner image
+            tags:
+                - Communities
     /communities/{slug}/bans:
         get:
             description: Requires moderation rights -- the list names users and carries the moderator's reason. Expired bans are included, marked is_active=false, so a lapsed ban is visible rather than appearing to vanish.

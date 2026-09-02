@@ -68,6 +68,33 @@ export class CommunitiesApi extends BaseApiClient {
   }
 
   /**
+   * Moderator: replace a community's banner image.
+   *
+   * Deliberately NOT a field on `updateCommunityProfile` -- a banner is an
+   * uploaded object whose file and column must stay in sync, so the server
+   * exposes it only through this endpoint and rejects `banner_url` in a PATCH.
+   *
+   * Returns the refreshed community rather than the URL alone, so callers can
+   * replace their cached profile without a follow-up GET.
+   */
+  async uploadCommunityBanner(slug: string, file: File) {
+    const formData = new FormData();
+    formData.append('banner', file);
+    return this.client.post<Community>(`/api/v1/communities/${slug}/banner`, formData, {
+      headers: {
+        // Undefined rather than a literal multipart type: axios has to set the
+        // header itself so it can append the boundary it generated.
+        'Content-Type': undefined,
+      },
+    });
+  }
+
+  /** Moderator: remove a community's banner. Succeeds when there is none. */
+  async deleteCommunityBanner(slug: string) {
+    return this.client.delete(`/api/v1/communities/${slug}/banner`);
+  }
+
+  /**
    * A community's moderator roster. Requires moderation rights.
    *
    * The OWNER IS NOT IN THIS LIST -- ownership is not a moderator row. Render

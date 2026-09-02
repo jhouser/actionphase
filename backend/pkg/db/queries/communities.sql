@@ -77,6 +77,22 @@ SET
 WHERE id = sqlc.arg('id')
 RETURNING *;
 
+-- name: UpdateCommunityBannerURL :one
+-- The dedicated banner write the PATCH above deliberately excludes.
+--
+-- Kept separate rather than folded into UpdateCommunity because the column and
+-- the stored object must move together: the handler uploads first and stamps
+-- the URL here, rolling the object back if this fails. A PATCH field could set
+-- banner_url to anything, leaving a row pointing at a file nothing owns.
+--
+-- $2 NULL clears the banner. Unlike description there is no set_/narg dance:
+-- there is no "leave it alone" case, since the only callers are set-a-banner
+-- and remove-the-banner.
+UPDATE communities
+SET banner_url = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
 -- Moderators -----------------------------------------------------------------
 
 -- name: AddCommunityModerator :one

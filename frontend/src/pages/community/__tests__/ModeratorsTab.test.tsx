@@ -178,8 +178,10 @@ describe('ModeratorsTab', () => {
   // The server explains precisely why a grant was refused (the owner, a
   // duplicate, an unknown user); a generic failure string would throw that away.
   it('surfaces the server’s explanation when a grant is refused', async () => {
+    // `error`, not `detail` -- see the LegacyError shape note in
+    // SettingsTab.test.tsx.
     addModerator.mockRejectedValue({
-      response: { data: { detail: 'that user already moderates this community' } },
+      response: { data: { error: 'that user already moderates this community' } },
     })
 
     renderWithProviders(<ModeratorsTab community={community} canAdminister />)

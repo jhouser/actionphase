@@ -120,6 +120,39 @@ export function useUpdateCommunityProfile(slug: string | undefined) {
 }
 
 /**
+ * A community's banner image.
+ *
+ * Upload and remove are separate mutations rather than one taking `File | null`
+ * so a component can show independent pending states -- removing while an
+ * upload is in flight is a different affordance from either alone.
+ *
+ * Invalidates the same three keys as the profile edit: the banner appears on
+ * the community page, the active listing, and the admin table.
+ */
+export function useCommunityBanner(slug: string | undefined) {
+  const queryClient = useQueryClient();
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: communityQueryKey(slug ?? '') });
+    queryClient.invalidateQueries({ queryKey: ACTIVE_COMMUNITIES_QUERY_KEY });
+    queryClient.invalidateQueries({ queryKey: COMMUNITIES_QUERY_KEY });
+  };
+
+  const upload = useMutation({
+    mutationFn: (file: File) =>
+      apiClient.communities.uploadCommunityBanner(slug!, file).then((res) => res.data),
+    onSuccess: invalidate,
+  });
+
+  const remove = useMutation({
+    mutationFn: () => apiClient.communities.deleteCommunityBanner(slug!),
+    onSuccess: invalidate,
+  });
+
+  return { upload, remove };
+}
+
+/**
  * A community's moderator roster plus the owner-only mutations.
  *
  * `enabled` lets a caller hold the request back until it knows the viewer may

@@ -44,6 +44,24 @@ export function CommunityPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {community.banner_url && (
+        <div className="w-full overflow-hidden rounded-lg mb-6" style={{ aspectRatio: '6/1' }}>
+          <img
+            src={community.banner_url}
+            alt={`${community.name} banner`}
+            className="w-full h-full object-cover"
+            data-testid="community-banner"
+            onError={(e) => {
+              // Hide the frame rather than leaving a broken-image icon above
+              // the name. Matches GameBanner: a banner whose object has gone
+              // missing should degrade to no banner, not to visible breakage.
+              const img = e.target as HTMLImageElement;
+              if (img.parentElement) img.parentElement.style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-content-primary">{community.name}</h1>

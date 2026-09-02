@@ -194,3 +194,39 @@ func (s *CommunityService) UpdateCommunity(ctx context.Context, id int32, req *c
 	s.Logger.Info(ctx, "Community updated", "community_id", id)
 	return communityFromDB(row), nil
 }
+
+// UpdateCommunityBannerURL sets or clears a community's banner_url.
+// Pass nil to clear it.
+//
+// Separate from UpdateCommunity because a banner is an uploaded object: the
+// handler stores the file first and stamps the URL here, rolling the object
+// back if this write fails. Mirrors GameService.UpdateGameBannerURL.
+//
+// Unlike that method this returns the updated community, because the community
+// handlers answer with the full refreshed profile rather than the URL alone.
+func (s *CommunityService) UpdateCommunityBannerURL(ctx context.Context, id int32, bannerURL *string) (*core.Community, error) {
+	queries := models.New(s.DB)
+
+	var pgBannerURL pgtype.Text
+	if bannerURL != nil {
+		pgBannerURL = pgtype.Text{String: *bannerURL, Valid: true}
+	}
+
+	row, err := queries.UpdateCommunityBannerURL(ctx, models.UpdateCommunityBannerURLParams{
+		ID:        id,
+		BannerUrl: pgBannerURL,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, core.ErrCommunityNotFound
+		}
+		s.Logger.LogError(ctx, err, "Failed to update community banner", "community_id", id)
+		return nil, fmt.Errorf("update community banner: %w", err)
+	}
+
+	s.Logger.Info(ctx, "Community banner updated",
+		"community_id", id,
+		"cleared", bannerURL == nil,
+	)
+	return communityFromDB(row), nil
+}
