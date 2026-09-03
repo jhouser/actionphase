@@ -177,7 +177,7 @@ export function DeadlineCard({ deadline, isGM, onEdit, onDelete, onExtend, onCli
                 e.stopPropagation();
                 onDelete();
               }}
-              className="p-1 rounded bg-surface-page hover:bg-semantic-danger-subtle transition-colors text-semantic-danger"
+              className="p-1 rounded bg-surface-page hover:bg-semantic-danger-subtle transition-colors text-semantic-danger hover:text-content-primary"
               aria-label="Delete deadline"
               title="Delete deadline"
             >

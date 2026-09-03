@@ -10,6 +10,7 @@ type GameListingFilters struct {
 	States              []string // Filter by game states
 	ParticipationFilter *string  // 'my_games', 'applied', 'not_joined'
 	HasOpenSpots        *bool    // Only games with available player spots
+	CommunityID         *int32   // Only games in this community; nil means all
 	SortBy              string   // 'recent_activity', 'created', 'start_date', 'alphabetical'
 	AdminMode           bool     // Admin mode: bypasses is_public filter when user is admin
 	AdminUserID         *int32   // User ID requesting admin mode (for validation)
@@ -37,9 +38,14 @@ type EnrichedGameListItem struct {
 	AllowGroupConversations bool       `json:"allow_group_conversations"`
 	PortraitAvatars         bool       `json:"portrait_avatars"`
 	BannerURL               *string    `json:"banner_url,omitempty"`
-	CreatedAt               time.Time  `json:"created_at"`
-	UpdatedAt               time.Time  `json:"updated_at"`
-	CurrentPlayers          int32      `json:"current_players"`
+	// Nil for games predating communities (req 5). Absent means "no community",
+	// never community 0, so listings render nothing rather than a placeholder.
+	CommunityID    *int32    `json:"community_id,omitempty"`
+	CommunityName  *string   `json:"community_name,omitempty"`
+	CommunitySlug  *string   `json:"community_slug,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	CurrentPlayers int32     `json:"current_players"`
 
 	// Enrichment fields
 	UserRelationship     *string    `json:"user_relationship,omitempty"` // 'gm', 'co_gm', 'participant', 'audience', 'applied', 'none'

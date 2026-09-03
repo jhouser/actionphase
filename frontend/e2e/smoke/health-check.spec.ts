@@ -37,4 +37,27 @@ test.describe('Smoke: Application Health', () => {
     await loginAs(page, 'PLAYER_5');
     await expect(page.locator('[data-testid="notification-bell"]')).toBeVisible();
   });
+
+  // The guidelines live at /site-guidelines, renamed from /community-guidelines
+  // once communities became a real entity and the old name read as one
+  // community's rules rather than the site-wide floor.
+  //
+  // Tested here rather than in a component test because the redirect only
+  // exists in the real router: App.test.tsx asserts against a hand-written copy
+  // of the route table, so a redirect added there would pass without the
+  // application having one.
+  test(tagTest([tags.SMOKE], 'Site guidelines are readable without logging in'), async ({ page }) => {
+    await page.goto('/site-guidelines');
+    await expect(page).toHaveURL(/\/site-guidelines/);
+    await expect(page.getByRole('heading', { name: 'Site Guidelines' })).toBeVisible();
+  });
+
+  test(tagTest([tags.SMOKE], 'Old community-guidelines URL redirects to site-guidelines'), async ({ page }) => {
+    // The old path is linked from outside the app, so it has to keep working.
+    // Asserting the heading too, not just the URL: a redirect that lands on a
+    // route rendering nothing would still satisfy a URL-only check.
+    await page.goto('/community-guidelines');
+    await expect(page).toHaveURL(/\/site-guidelines/);
+    await expect(page.getByRole('heading', { name: 'Site Guidelines' })).toBeVisible();
+  });
 });

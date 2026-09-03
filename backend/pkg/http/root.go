@@ -5,11 +5,13 @@ import (
 	"actionphase/pkg/auth"
 	"actionphase/pkg/avatars"
 	"actionphase/pkg/characters"
+	"actionphase/pkg/communities"
 	"actionphase/pkg/conversations"
 	"actionphase/pkg/core"
 	"actionphase/pkg/dashboard"
 	db "actionphase/pkg/db/services"
 	dbactions "actionphase/pkg/db/services/actions"
+	dbcommunities "actionphase/pkg/db/services/communities"
 	dbmessages "actionphase/pkg/db/services/messages"
 	dbphases "actionphase/pkg/db/services/phases"
 	"actionphase/pkg/deadlines"
@@ -337,6 +339,16 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 				// Registers the comment operations too.
 				handouts.RegisterHumaGameHandouts(gameScopedAPI, handoutHandler)
 
+				// The Info tab's community document list (req 8). Gated on
+				// CanUserViewGame rather than community standing: a player
+				// reads their game's community rules without moderating it.
+				communities.RegisterHumaGameCommunityDocuments(gameScopedAPI, &communities.Handler{
+					App:              h.App,
+					UserService:      &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					CommunityService: &dbcommunities.CommunityService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+					GameService:      &db.GameService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+				})
+
 				// Game archive exports (completed games only). Read access is
 				// CanUserViewGame, so any authenticated user may export a
 				// completed game's public archive.
@@ -611,6 +623,44 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 	})
 	apiV1Router.Mount("/notifications", notificationsRouter)
 
+	// Communities API — member- and moderator-facing routes (huma / type-first).
+	//
+	// Site-admin community routes (create, list-all, edit) live under
+	// /api/v1/admin/communities instead: creating a community is a site-admin
+	// act, while everything here is gated per-community on the caller's
+	// standing. AdminModeMiddleware is required because CanModerateCommunity /
+	// CanAdministerCommunity only grant an admin moderation powers when admin
+	// mode is on.
+	var communitiesAPI huma.API
+	communitiesRouter := chi.NewRouter()
+	communitiesRouter.Route("/", func(r chi.Router) {
+		communityHandler := &communities.Handler{
+			App:              h.App,
+			UserService:      &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+			CommunityService: &dbcommunities.CommunityService{DB: h.App.Pool, Logger: h.App.ObsLogger},
+			// Backs the synchronous webhook test button. Nil when Discord is
+			// not configured, which that endpoint answers as 503.
+			WebhookSender: db.AppWebhookSender(),
+		}
+
+		r.Group(func(r chi.Router) {
+			tokenAuth := h.getTokenAuth()
+			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
+			r.Use(jwtauth.Verifier(tokenAuth))
+			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(h.sessionValidateMW())
+			r.Use(core.RequireAuthenticationMiddleware(userService))
+			r.Use(core.AdminModeMiddleware)
+
+			communitiesAPI = newHumaAPI(r, "ActionPhase API", "1.0.0")
+			communities.RegisterHumaCommunities(communitiesAPI, communityHandler)
+			communities.RegisterHumaCommunityDocuments(communitiesAPI, communityHandler)
+			communities.RegisterHumaCommunityWebhooks(communitiesAPI, communityHandler)
+			communities.RegisterHumaCommunityBanner(communitiesAPI, communityHandler)
+		})
+	})
+	apiV1Router.Mount("/communities", communitiesRouter)
+
 	// Dashboard API (huma / type-first — see .claude/planning/huma-migration.md)
 	var dashboardAPI huma.API
 	dashboardRouter := chi.NewRouter()
@@ -675,6 +725,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			IPBanService:          &db.IPBanService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 			FingerprintBanService: &db.FingerprintBanService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 			MessageService:        &dbmessages.MessageService{DB: h.App.Pool, Logger: h.App.ObsLogger, Metrics: h.App.Observability.OTELMetrics},
+			CommunityService:      &dbcommunities.CommunityService{DB: h.App.Pool, Logger: h.App.ObsLogger},
 		}
 
 		// All admin routes require authentication and admin privileges
@@ -709,10 +760,11 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 	docsHandler := &docs.Handler{
 		GeneratedSpec: func() ([]byte, error) {
 			return generatedSpecFor(map[string][]huma.API{
-				"/admin":      {adminAPI},
-				"/dashboard":  {dashboardAPI},
-				"/characters": {charactersAPI},
-				"/exports":    {exportDownloadsAPI},
+				"/admin":       {adminAPI},
+				"/dashboard":   {dashboardAPI},
+				"/communities": {communitiesAPI},
+				"/characters":  {charactersAPI},
+				"/exports":     {exportDownloadsAPI},
 				// Registered on the /{gameID} subrouter, so the documented URL
 				// needs that segment added back.
 				"/deadlines":      {deadlinesAPI},

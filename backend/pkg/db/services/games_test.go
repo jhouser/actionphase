@@ -2,12 +2,16 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
 	"actionphase/pkg/core"
 	models "actionphase/pkg/db/models"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGameService_CreateGame(t *testing.T) {
@@ -32,6 +36,7 @@ func TestGameService_CreateGame(t *testing.T) {
 				Title:       "Test Game",
 				Description: "A test game for our new system",
 				GMUserID:    int32(fixtures.TestUser.ID),
+				CommunityID: int32(fixtures.TestCommunity.ID),
 				Genre:       "Fantasy",
 				StartDate:   core.TimePtr(time.Now().Add(24 * time.Hour)),
 				EndDate:     core.TimePtr(time.Now().Add(7 * 24 * time.Hour)),
@@ -47,6 +52,7 @@ func TestGameService_CreateGame(t *testing.T) {
 				Title:       "Minimal Game",
 				Description: "Minimal test game",
 				GMUserID:    int32(fixtures.TestUser.ID),
+				CommunityID: int32(fixtures.TestCommunity.ID),
 				IsPublic:    false,
 			},
 			expectError: false,
@@ -87,6 +93,7 @@ func TestGameService_UpdateGameState(t *testing.T) {
 		Title:       "State Test Game",
 		Description: "Testing state transitions",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    false,
 	}
 
@@ -149,6 +156,7 @@ func TestGameService_UpdateGameState_InvalidTransitions(t *testing.T) {
 			Title:       "Transition Test Game " + targetState,
 			Description: "Test game for invalid transition tests",
 			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: int32(fixtures.TestCommunity.ID),
 		}
 		game, err := gameService.CreateGame(context.Background(), req)
 		core.AssertNoError(t, err, "setup: create game")
@@ -215,6 +223,7 @@ func TestGameService_LeaveGame(t *testing.T) {
 		Title:       "Leave Test Game",
 		Description: "Testing game leaving",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	}
 
@@ -377,6 +386,7 @@ func TestGameService_DeleteGame(t *testing.T) {
 		Title:       "Test Cancelled Game",
 		Description: "A test game to be deleted",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create test game")
@@ -390,6 +400,7 @@ func TestGameService_DeleteGame(t *testing.T) {
 		Title:       "Active Game",
 		Description: "Should not be deletable",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create active game")
@@ -400,6 +411,7 @@ func TestGameService_DeleteGame(t *testing.T) {
 		Title:       "Other GM's Game",
 		Description: "Owned by different GM",
 		GMUserID:    int32(otherGM.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create other GM's game")
@@ -482,6 +494,7 @@ func BenchmarkGameService_CreateGame(b *testing.B) {
 			Title:       "Benchmark Game",
 			Description: "Benchmark test game",
 			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: int32(fixtures.TestCommunity.ID),
 			IsPublic:    true,
 		}
 
@@ -682,6 +695,54 @@ func TestGameService_GetGameWithDetails(t *testing.T) {
 
 		core.AssertError(t, err, "Should return error for non-existent game")
 	})
+
+	// The Info tab names and links the game's community, and this is the
+	// endpoint the game page loads. Without the join it could only show a
+	// community id, which names nothing.
+	t.Run("carries the owning community's name and slug", func(t *testing.T) {
+		ctx := context.Background()
+
+		var communityID int32
+		err := testDB.Pool.QueryRow(ctx,
+			`INSERT INTO communities (name, slug, owner_user_id) VALUES ($1, $2, $3) RETURNING id`,
+			"Midnight Ravens", "details-ravens", int32(gm.ID)).Scan(&communityID)
+		core.AssertNoError(t, err, "Failed to create community")
+		t.Cleanup(func() {
+			_, _ = testDB.Pool.Exec(context.Background(),
+				`UPDATE games SET community_id = NULL WHERE community_id = $1`, communityID)
+			_, _ = testDB.Pool.Exec(context.Background(),
+				`DELETE FROM communities WHERE id = $1`, communityID)
+		})
+
+		_, err = testDB.Pool.Exec(ctx,
+			`UPDATE games SET community_id = $1 WHERE id = $2`, communityID, game.ID)
+		core.AssertNoError(t, err, "Failed to assign community")
+
+		details, err := gameService.GetGameWithDetails(ctx, game.ID)
+		core.AssertNoError(t, err, "Failed to get game with details")
+
+		core.AssertEqual(t, "Midnight Ravens", details.CommunityName.String,
+			"Community name should be joined")
+		core.AssertEqual(t, "details-ravens", details.CommunitySlug.String,
+			"Community slug should be joined")
+	})
+
+	// req 5: a game predating communities has community_id NULL. A LEFT JOIN
+	// keeps it resolving; an inner join would make the game unreadable outright.
+	t.Run("resolves a legacy game with no community", func(t *testing.T) {
+		ctx := context.Background()
+		legacy := testDB.CreateTestGame(t, int32(gm.ID), "Legacy Game")
+
+		details, err := gameService.GetGameWithDetails(ctx, legacy.ID)
+		core.AssertNoError(t, err, "A game with no community must still resolve")
+
+		if details.CommunityName.Valid {
+			t.Errorf("Expected no community name, got %q", details.CommunityName.String)
+		}
+		if details.CommunitySlug.Valid {
+			t.Errorf("Expected no community slug, got %q", details.CommunitySlug.String)
+		}
+	})
 }
 
 func TestGameService_CanUserJoinGame(t *testing.T) {
@@ -788,6 +849,7 @@ func TestGameService_GetFilteredGames(t *testing.T) {
 		Title:       "Fantasy Adventure",
 		Description: "An epic fantasy quest",
 		GMUserID:    int32(gm.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		Genre:       "Fantasy",
 		IsPublic:    true,
 		MaxPlayers:  5,
@@ -798,6 +860,7 @@ func TestGameService_GetFilteredGames(t *testing.T) {
 		Title:       "Space Odyssey",
 		Description: "A sci-fi adventure",
 		GMUserID:    int32(gm.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		Genre:       "Sci-Fi",
 		IsPublic:    true,
 		MaxPlayers:  4,
@@ -808,6 +871,7 @@ func TestGameService_GetFilteredGames(t *testing.T) {
 		Title:       "Haunted Mansion",
 		Description: "A horror investigation",
 		GMUserID:    int32(gm.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		Genre:       "Horror",
 		IsPublic:    true,
 		MaxPlayers:  3,
@@ -1027,6 +1091,7 @@ func TestGameService_AudienceParticipation(t *testing.T) {
 		Title:              "Audience Test Game",
 		Description:        "Testing audience participation",
 		GMUserID:           int32(fixtures.TestUser.ID),
+		CommunityID:        int32(fixtures.TestCommunity.ID),
 		IsPublic:           true,
 		AutoAcceptAudience: true,
 	})
@@ -1246,6 +1311,7 @@ func TestGameService_CancelledGameRejectsPendingApplications(t *testing.T) {
 		Title:       "Bug #8 Test Game",
 		Description: "Testing cancelled game application handling",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	}
 
@@ -1311,6 +1377,7 @@ func TestGameService_PromoteToCoGM(t *testing.T) {
 		Title:              "Co-GM Test Game",
 		Description:        "Testing co-GM promotion",
 		GMUserID:           int32(fixtures.TestUser.ID),
+		CommunityID:        int32(fixtures.TestCommunity.ID),
 		IsPublic:           false,
 		AutoAcceptAudience: true,
 	})
@@ -1410,6 +1477,7 @@ func TestGameService_PromoteToCoGM_OnlyOneCoGMAllowed(t *testing.T) {
 		Title:              "Co-GM Limit Test Game",
 		Description:        "Testing single co-GM limit",
 		GMUserID:           int32(fixtures.TestUser.ID),
+		CommunityID:        int32(fixtures.TestCommunity.ID),
 		IsPublic:           false,
 		AutoAcceptAudience: true,
 	})
@@ -1450,6 +1518,7 @@ func TestGameService_PromoteToCoGM_OnlyAudienceCanBePromoted(t *testing.T) {
 		Title:       "Co-GM Role Test Game",
 		Description: "Testing role restrictions",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		MaxPlayers:  5,
 		IsPublic:    false,
 	})
@@ -1482,6 +1551,7 @@ func TestGameService_DemoteFromCoGM(t *testing.T) {
 		Title:              "Co-GM Demotion Test Game",
 		Description:        "Testing co-GM demotion",
 		GMUserID:           int32(fixtures.TestUser.ID),
+		CommunityID:        int32(fixtures.TestCommunity.ID),
 		IsPublic:           false,
 		AutoAcceptAudience: true,
 	})
@@ -1582,11 +1652,18 @@ func TestGameService_DatabaseConstraintViolations(t *testing.T) {
 
 	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 
+	// A real owner and community, so these cases reach the GM foreign key.
+	// Without them the community check rejects first and the test would pass
+	// for the wrong reason -- proving nothing about the FK it names.
+	owner := testDB.CreateTestUser(t, "constraintowner", "constraintowner@example.com")
+	community := testDB.CreateTestCommunity(t, int32(owner.ID))
+
 	t.Run("fails to create game with non-existent GM user", func(t *testing.T) {
 		req := core.CreateGameRequest{
 			Title:       "Game with Invalid GM",
 			Description: "Testing FK constraint",
 			GMUserID:    99999, // Non-existent user ID
+			CommunityID: community.ID,
 			IsPublic:    true,
 		}
 
@@ -1600,6 +1677,7 @@ func TestGameService_DatabaseConstraintViolations(t *testing.T) {
 			Title:       "Game with Zero GM",
 			Description: "Testing zero FK",
 			GMUserID:    0, // Invalid user ID
+			CommunityID: community.ID,
 			IsPublic:    true,
 		}
 
@@ -1612,6 +1690,7 @@ func TestGameService_DatabaseConstraintViolations(t *testing.T) {
 			Title:       "Game with Negative GM",
 			Description: "Testing negative FK",
 			GMUserID:    -1, // Invalid user ID
+			CommunityID: community.ID,
 			IsPublic:    true,
 		}
 
@@ -1974,4 +2053,361 @@ func TestGameService_ReplaceLootTableContents(t *testing.T) {
 	// rather than faked: they are one-line "log and wrap" paths, and the branch
 	// that actually protects the GM's data (rollback on a failed insert) is
 	// covered above.
+}
+
+// ---------------------------------------------------------- community (req 5)
+
+// Every new game belongs to a community. This is the create-side half of req 5;
+// the read-side half (legacy games with no community still work) is below.
+func TestGameService_CreateGame_RequiresCommunity(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "games", "sessions", "users")
+
+	fixtures := testDB.SetupFixtures(t)
+	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	t.Run("rejects a missing community", func(t *testing.T) {
+		_, err := gameService.CreateGame(ctx, core.CreateGameRequest{
+			Title:       "No Community",
+			Description: "Should not be creatable",
+			GMUserID:    int32(fixtures.TestUser.ID),
+			// CommunityID deliberately zero.
+		})
+		core.AssertError(t, err, "a game with no community must be refused")
+		if !errors.Is(err, core.ErrCommunityNotFound) {
+			t.Fatalf("expected ErrCommunityNotFound, got %v", err)
+		}
+	})
+
+	t.Run("rejects an unknown community", func(t *testing.T) {
+		_, err := gameService.CreateGame(ctx, core.CreateGameRequest{
+			Title:       "Unknown Community",
+			Description: "Should not be creatable",
+			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: 999999,
+		})
+		if !errors.Is(err, core.ErrCommunityNotFound) {
+			t.Fatalf("expected ErrCommunityNotFound, got %v", err)
+		}
+	})
+
+	// A deactivated community accepts no new games -- that is what deactivating
+	// one means. The foreign key cannot express this, so only the service can.
+	t.Run("rejects an inactive community", func(t *testing.T) {
+		queries := models.New(testDB.Pool)
+		inactive, err := queries.CreateCommunity(ctx, models.CreateCommunityParams{
+			Name:        "Retired",
+			Slug:        fmt.Sprintf("retired-%d", time.Now().UnixNano()),
+			OwnerUserID: int32(fixtures.TestUser.ID),
+		})
+		core.AssertNoError(t, err, "community creation should succeed")
+
+		_, err = queries.UpdateCommunity(ctx, models.UpdateCommunityParams{
+			ID:       inactive.ID,
+			IsActive: pgtype.Bool{Bool: false, Valid: true},
+		})
+		core.AssertNoError(t, err, "deactivation should succeed")
+
+		_, err = gameService.CreateGame(ctx, core.CreateGameRequest{
+			Title:       "Into A Closed Community",
+			Description: "Should not be creatable",
+			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: inactive.ID,
+		})
+		if !errors.Is(err, core.ErrCommunityInactive) {
+			t.Fatalf("expected ErrCommunityInactive, got %v", err)
+		}
+	})
+
+	t.Run("stores the community on success", func(t *testing.T) {
+		game, err := gameService.CreateGame(ctx, core.CreateGameRequest{
+			Title:       "Community Game",
+			Description: "Belongs to the fixture community",
+			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: int32(fixtures.TestCommunity.ID),
+		})
+		core.AssertNoError(t, err, "creation should succeed")
+		if !game.CommunityID.Valid || game.CommunityID.Int32 != int32(fixtures.TestCommunity.ID) {
+			t.Fatalf("community not stored: %+v", game.CommunityID)
+		}
+	})
+}
+
+// THE GRANDFATHERING GUARD FOR REQ 5.
+//
+// Games predating communities have community_id NULL and must keep working
+// everywhere. The column is nullable for exactly this reason, and the plan asks
+// that a legacy game stay in the fixtures permanently. If this fails, someone
+// has "fixed" the nullability and broken every pre-existing game.
+func TestGameService_LegacyGameWithoutCommunityStillReads(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "games", "sessions", "users")
+
+	fixtures := testDB.SetupFixtures(t)
+	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	// Written directly, bypassing the service: this is the shape rows already
+	// in production have, which the service can no longer produce.
+	legacy := testDB.CreateTestGame(t, int32(fixtures.TestUser.ID), "Legacy Game")
+	if legacy.CommunityID.Valid {
+		t.Fatal("fixture precondition: legacy game must have no community")
+	}
+
+	got, err := gameService.GetGame(ctx, legacy.ID)
+	core.AssertNoError(t, err, "a legacy game must still load")
+	core.AssertEqual(t, legacy.ID, got.ID, "same game")
+	if got.CommunityID.Valid {
+		t.Error("a legacy game must not acquire a community by being read")
+	}
+
+	// And it must survive an ordinary state transition untouched.
+	updated, err := gameService.UpdateGameState(ctx, legacy.ID, core.GameStateRecruitment)
+	core.AssertNoError(t, err, "a legacy game must still transition")
+	if updated.CommunityID.Valid {
+		t.Error("a state change must not invent a community")
+	}
+}
+
+// Reassignment rules from decision 4: the GM may move a game only during setup.
+// It rides on UpdateGame rather than a dedicated endpoint because that is where
+// the GM actually does it -- the edit form.
+func TestGameService_UpdateGame_Community(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "games", "sessions", "users")
+
+	fixtures := testDB.SetupFixtures(t)
+	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	other := testDB.CreateTestCommunity(t, int32(fixtures.TestUser.ID))
+
+	newGame := func(t *testing.T, title string) int32 {
+		t.Helper()
+		g, err := gameService.CreateGame(ctx, core.CreateGameRequest{
+			Title:       title,
+			Description: "A game for reassignment testing",
+			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: int32(fixtures.TestCommunity.ID),
+		})
+		core.AssertNoError(t, err, "creation should succeed")
+		return g.ID
+	}
+
+	baseReq := func(id int32) core.UpdateGameRequest {
+		return core.UpdateGameRequest{
+			ID:          id,
+			Title:       "Edited Title",
+			Description: "An edited description",
+			MaxPlayers:  6,
+			IsPublic:    true,
+		}
+	}
+
+	// THE REGRESSION GUARD FOR THE FULL-REPLACE HAZARD.
+	//
+	// UpdateGame replaces every other field it is given, so if community_id were
+	// part of that replace, an ordinary edit that omitted it would NULL the
+	// column -- and a game with no community is one no ban can reach. Absent
+	// must mean "leave it alone".
+	t.Run("an edit that omits the community leaves it untouched", func(t *testing.T) {
+		id := newGame(t, "Untouched")
+
+		updated, err := gameService.UpdateGame(ctx, baseReq(id))
+		core.AssertNoError(t, err, "an ordinary edit should succeed")
+
+		if !updated.CommunityID.Valid {
+			t.Fatal("an edit that said nothing about the community must not clear it")
+		}
+		core.AssertEqual(t, int32(fixtures.TestCommunity.ID), updated.CommunityID.Int32,
+			"the community must survive an unrelated edit")
+	})
+
+	t.Run("moves the game during setup", func(t *testing.T) {
+		id := newGame(t, "Setup Move")
+
+		req := baseReq(id)
+		req.CommunityID = &other.ID
+		updated, err := gameService.UpdateGame(ctx, req)
+		core.AssertNoError(t, err, "a setup game may be moved by its GM")
+		core.AssertEqual(t, other.ID, updated.CommunityID.Int32, "community should be updated")
+	})
+
+	t.Run("refuses to move the game after setup", func(t *testing.T) {
+		id := newGame(t, "Recruiting Move")
+		_, err := gameService.UpdateGameState(ctx, id, core.GameStateRecruitment)
+		core.AssertNoError(t, err, "transition should succeed")
+
+		req := baseReq(id)
+		req.CommunityID = &other.ID
+		_, err = gameService.UpdateGame(ctx, req)
+		if !errors.Is(err, core.ErrGameCommunityLocked) {
+			t.Fatalf("expected ErrGameCommunityLocked, got %v", err)
+		}
+	})
+
+	// A client that echoes the game's CURRENT community back on an unrelated
+	// edit is not moving it, so it must not be refused. Our own edit form omits
+	// the field, but the API is public: any client that round-trips a GET into a
+	// PUT sends it, and rejecting that would make an ordinary rename impossible
+	// for them. The lock is on CHANGING the community, not on naming it.
+	t.Run("allows resending the unchanged community after setup", func(t *testing.T) {
+		id := newGame(t, "Recruiting Resend")
+		_, err := gameService.UpdateGameState(ctx, id, core.GameStateRecruitment)
+		core.AssertNoError(t, err, "transition should succeed")
+
+		req := baseReq(id)
+		same := int32(fixtures.TestCommunity.ID)
+		req.CommunityID = &same
+		req.Title = "Renamed While Recruiting"
+
+		updated, err := gameService.UpdateGame(ctx, req)
+		core.AssertNoError(t, err, "resending the same community is not a move")
+		if updated.Title != "Renamed While Recruiting" {
+			t.Fatalf("title = %q, want the edit to have applied", updated.Title)
+		}
+		if updated.CommunityID.Int32 != same {
+			t.Fatalf("community = %d, want it unchanged at %d", updated.CommunityID.Int32, same)
+		}
+	})
+
+	// The lock is on CHANGING the community, not on editing a game that has one.
+	// If this fails, a GM can no longer rename a recruiting game.
+	t.Run("still allows ordinary edits after setup", func(t *testing.T) {
+		id := newGame(t, "Recruiting Edit")
+		_, err := gameService.UpdateGameState(ctx, id, core.GameStateRecruitment)
+		core.AssertNoError(t, err, "transition should succeed")
+
+		updated, err := gameService.UpdateGame(ctx, baseReq(id))
+		core.AssertNoError(t, err, "a post-setup game must still be editable")
+		core.AssertEqual(t, "Edited Title", updated.Title, "the edit should apply")
+	})
+
+	t.Run("refuses an inactive destination", func(t *testing.T) {
+		queries := models.New(testDB.Pool)
+		dead, err := queries.CreateCommunity(ctx, models.CreateCommunityParams{
+			Name:        "Closed",
+			Slug:        fmt.Sprintf("closed-%d", time.Now().UnixNano()),
+			OwnerUserID: int32(fixtures.TestUser.ID),
+		})
+		core.AssertNoError(t, err, "community creation should succeed")
+		_, err = queries.UpdateCommunity(ctx, models.UpdateCommunityParams{
+			ID:       dead.ID,
+			IsActive: pgtype.Bool{Bool: false, Valid: true},
+		})
+		core.AssertNoError(t, err, "deactivation should succeed")
+
+		id := newGame(t, "Into The Void")
+		req := baseReq(id)
+		req.CommunityID = &dead.ID
+		_, err = gameService.UpdateGame(ctx, req)
+		if !errors.Is(err, core.ErrCommunityInactive) {
+			t.Fatalf("expected ErrCommunityInactive, got %v", err)
+		}
+	})
+}
+
+// Filtering the listing by community (req 5 / phase 3). This is what backs both
+// the /games filter and the /communities/:slug/games page.
+func TestGameService_GetFilteredGames_ByCommunity(t *testing.T) {
+	testDB := core.NewTestDatabase(t)
+	app := core.NewTestApp(testDB.Pool)
+	defer testDB.Close()
+	defer testDB.CleanupTables(t, "games", "sessions", "users")
+
+	fixtures := testDB.SetupFixtures(t)
+	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
+	ctx := context.Background()
+
+	other := testDB.CreateTestCommunity(t, int32(fixtures.TestUser.ID))
+
+	mk := func(t *testing.T, title string, communityID int32) int32 {
+		t.Helper()
+		g, err := gameService.CreateGame(ctx, core.CreateGameRequest{
+			Title:       title,
+			Description: "A game for community filtering",
+			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: communityID,
+			IsPublic:    true,
+		})
+		core.AssertNoError(t, err, "creation should succeed")
+		return g.ID
+	}
+
+	inFixture := mk(t, "Fixture Community Game", int32(fixtures.TestCommunity.ID))
+	inOther := mk(t, "Other Community Game", other.ID)
+
+	// Written directly to get the pre-communities shape the service cannot make.
+	legacy := testDB.CreateTestGame(t, int32(fixtures.TestUser.ID), "Legacy Game").ID
+
+	titlesFor := func(t *testing.T, filters core.GameListingFilters) map[int32]bool {
+		t.Helper()
+		res, err := gameService.GetFilteredGames(ctx, filters)
+		core.AssertNoError(t, err, "listing should succeed")
+		ids := map[int32]bool{}
+		for _, g := range res.Games {
+			ids[g.ID] = true
+		}
+		return ids
+	}
+
+	t.Run("no filter returns every game including legacy ones", func(t *testing.T) {
+		ids := titlesFor(t, core.GameListingFilters{})
+		for _, want := range []int32{inFixture, inOther, legacy} {
+			if !ids[want] {
+				t.Errorf("game %d missing from the unfiltered listing", want)
+			}
+		}
+	})
+
+	t.Run("filtering narrows to that community", func(t *testing.T) {
+		id := int32(fixtures.TestCommunity.ID)
+		ids := titlesFor(t, core.GameListingFilters{CommunityID: &id})
+
+		if !ids[inFixture] {
+			t.Error("the filtered community's game should be listed")
+		}
+		if ids[inOther] {
+			t.Error("another community's game must not leak into the filter")
+		}
+		// A legacy game belongs to NO community, so it is not in this one.
+		// (It still appears unfiltered -- asserted above.)
+		if ids[legacy] {
+			t.Error("a community-less game must not appear under a named community")
+		}
+	})
+
+	t.Run("the count agrees with the page", func(t *testing.T) {
+		id := int32(fixtures.TestCommunity.ID)
+		res, err := gameService.GetFilteredGames(ctx, core.GameListingFilters{CommunityID: &id})
+		core.AssertNoError(t, err, "listing should succeed")
+
+		// FilteredCount, not TotalCount: TotalCount is deliberately the
+		// unfiltered total (it drives the "showing X of Y" line), while
+		// FilteredCount drives pagination. The filter lives in two queries --
+		// rows and count -- so if they drift, pagination reports a page count
+		// the rows cannot fill.
+		core.AssertEqual(t, len(res.Games), res.Metadata.FilteredCount,
+			"filtered count must match the filtered rows")
+	})
+
+	t.Run("carries the community name for display", func(t *testing.T) {
+		id := int32(fixtures.TestCommunity.ID)
+		res, err := gameService.GetFilteredGames(ctx, core.GameListingFilters{CommunityID: &id})
+		core.AssertNoError(t, err, "listing should succeed")
+		require.NotEmpty(t, res.Games, "expected at least one game")
+
+		for _, g := range res.Games {
+			if g.CommunityName == nil || *g.CommunityName == "" {
+				t.Fatalf("game %d carries no community name", g.ID)
+			}
+		}
+	})
 }

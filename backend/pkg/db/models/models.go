@@ -181,6 +181,73 @@ type CommonRoomPoll struct {
 	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Community struct {
+	ID          int32              `json:"id"`
+	Name        string             `json:"name"`
+	Slug        string             `json:"slug"`
+	Description pgtype.Text        `json:"description"`
+	BannerUrl   pgtype.Text        `json:"banner_url"`
+	OwnerUserID int32              `json:"owner_user_id"`
+	IsActive    bool               `json:"is_active"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CommunityBan struct {
+	ID             int32              `json:"id"`
+	CommunityID    int32              `json:"community_id"`
+	UserID         int32              `json:"user_id"`
+	Reason         pgtype.Text        `json:"reason"`
+	BannedByUserID pgtype.Int4        `json:"banned_by_user_id"`
+	BannedAt       pgtype.Timestamptz `json:"banned_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+}
+
+type CommunityBanEvent struct {
+	ID           int32              `json:"id"`
+	CommunityID  int32              `json:"community_id"`
+	TargetUserID int32              `json:"target_user_id"`
+	ActorUserID  pgtype.Int4        `json:"actor_user_id"`
+	Action       string             `json:"action"`
+	Reason       pgtype.Text        `json:"reason"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type CommunityDocument struct {
+	ID              int32              `json:"id"`
+	CommunityID     int32              `json:"community_id"`
+	Title           string             `json:"title"`
+	Content         string             `json:"content"`
+	Status          string             `json:"status"`
+	SortOrder       int32              `json:"sort_order"`
+	CreatedByUserID pgtype.Int4        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CommunityModerator struct {
+	ID              int32              `json:"id"`
+	CommunityID     int32              `json:"community_id"`
+	UserID          int32              `json:"user_id"`
+	GrantedByUserID pgtype.Int4        `json:"granted_by_user_id"`
+	GrantedAt       pgtype.Timestamptz `json:"granted_at"`
+}
+
+type CommunityWebhook struct {
+	ID            int32              `json:"id"`
+	CommunityID   int32              `json:"community_id"`
+	Url           string             `json:"url"`
+	Label         pgtype.Text        `json:"label"`
+	IsEnabled     bool               `json:"is_enabled"`
+	Events        []string           `json:"events"`
+	LastSuccessAt pgtype.Timestamptz `json:"last_success_at"`
+	LastError     pgtype.Text        `json:"last_error"`
+	LastErrorAt   pgtype.Timestamptz `json:"last_error_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Conversation struct {
 	ID               int32              `json:"id"`
 	GameID           int32              `json:"game_id"`
@@ -252,6 +319,7 @@ type Game struct {
 	CommonRoomCloseTime     pgtype.Time        `json:"common_room_close_time"`
 	ScheduleTimezone        pgtype.Text        `json:"schedule_timezone"`
 	CharacterSheet          []byte             `json:"character_sheet"`
+	CommunityID             pgtype.Int4        `json:"community_id"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }

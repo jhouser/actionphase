@@ -1059,5 +1059,54 @@ describe('EditGameModal', () => {
         expect(mockOnClose).toHaveBeenCalledTimes(1);
       });
     });
+  
+  // Reassignment rides on the edit form (decision 4), setup-only.
+  describe('Community reassignment', () => {
+    it('offers the picker while the game is in setup', async () => {
+      renderWithProviders(
+        <EditGameModal game={mockGame} isOpen={true} onClose={() => {}} onGameUpdated={() => {}} />
+      );
+
+      expect(await screen.findByTestId('game-community')).toBeInTheDocument();
+    });
+
+    it('withholds the picker once the game has left setup', async () => {
+      const recruiting = { ...mockGame, state: 'recruitment' as const };
+      renderWithProviders(
+        <EditGameModal game={recruiting} isOpen={true} onClose={() => {}} onGameUpdated={() => {}} />
+      );
+
+      // The title field proves the form rendered at all.
+      await screen.findByDisplayValue('Test Game');
+      expect(screen.queryByTestId('game-community')).not.toBeInTheDocument();
+    });
+
+    // THE FULL-REPLACE GUARD, at the wire level. UpdateGame replaces the fields
+    // it is given, so an edit that says nothing about the community must send
+    // no community_id at all -- otherwise it would clear it, and a game with no
+    // community is one no ban can reach.
+    it('omits community_id from an edit that did not touch it', async () => {
+      const user = userEvent.setup();
+      let sentBody: Record<string, unknown> | null = null;
+      server.use(
+        http.put('/api/v1/games/1', async ({ request }) => {
+          sentBody = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({ ...mockGame, title: 'Renamed' });
+        })
+      );
+
+      renderWithProviders(
+        <EditGameModal game={mockGame} isOpen={true} onClose={() => {}} onGameUpdated={() => {}} />
+      );
+
+      const title = await screen.findByDisplayValue('Test Game');
+      await user.clear(title);
+      await user.type(title, 'Renamed');
+      await user.click(screen.getByRole('button', { name: /save/i }));
+
+      await waitFor(() => expect(sentBody).not.toBeNull());
+      expect(sentBody!).not.toHaveProperty('community_id');
+    });
   });
+});
 });

@@ -127,6 +127,7 @@ func TestGameService_UpdateGameUnsetsCharacterSheetLabels(t *testing.T) {
 		Title:       "Game With Renamed Tabs",
 		Description: "Starts with GM label overrides.",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 		CharacterSheet: core.CharacterSheetConfig{
 			Labels: &core.CharacterSheetLabels{Skills: "Approaches", Numbers: "Stress"},
@@ -175,6 +176,7 @@ func TestGameService_UpdateGameReplacesCharacterSheetLabels(t *testing.T) {
 		Title:       "Game With Two Renamed Tabs",
 		Description: "Starts with two GM label overrides.",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 		CharacterSheet: core.CharacterSheetConfig{
 			Labels: &core.CharacterSheetLabels{Skills: "Approaches", Numbers: "Stress"},

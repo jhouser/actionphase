@@ -143,4 +143,70 @@ describe('ConfirmModal', () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     }
   });
+
+  // These testids are the contract other tests select through. A confirm
+  // dialog's buttons are labelled for the action they complete ("Delete"),
+  // which collides with the row button that opened it -- so role+name lookups
+  // are ambiguous and callers need stable hooks instead.
+  describe('test hooks', () => {
+    const renderOpen = (props = {}) =>
+      render(
+        <ConfirmModal
+          isOpen
+          onClose={vi.fn()}
+          onConfirm={vi.fn()}
+          title="Delete document"
+          message='Delete "House rules"? This cannot be undone.'
+          confirmText="Delete"
+          {...props}
+        />
+      );
+
+    it('exposes the panel, message, and both buttons by testid', () => {
+      renderOpen();
+
+      expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+      expect(screen.getByTestId('confirm-modal-message')).toHaveTextContent(
+        'Delete "House rules"? This cannot be undone.'
+      );
+      expect(screen.getByTestId('confirm-modal-confirm')).toHaveTextContent('Delete');
+      expect(screen.getByTestId('confirm-modal-cancel')).toHaveTextContent('Cancel');
+    });
+
+    it('distinguishes its confirm button from a same-labelled button outside it', async () => {
+      const user = userEvent.setup();
+      const onConfirm = vi.fn();
+      const rowDelete = vi.fn();
+
+      render(
+        <div>
+          {/* The caller's own row button, sharing the dialog's label. */}
+          <button onClick={rowDelete}>Delete</button>
+          <ConfirmModal
+            isOpen
+            onClose={vi.fn()}
+            onConfirm={onConfirm}
+            title="Delete document"
+            message="Delete it?"
+            confirmText="Delete"
+          />
+        </div>
+      );
+
+      // The ambiguity the testids exist to resolve.
+      expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(2);
+
+      await user.click(screen.getByTestId('confirm-modal-confirm'));
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+      expect(rowDelete).not.toHaveBeenCalled();
+    });
+
+    it('renames the panel testid so two dialogs can be told apart', () => {
+      renderOpen({ testId: 'delete-document-confirm' });
+
+      expect(screen.getByTestId('delete-document-confirm')).toBeInTheDocument();
+      expect(screen.queryByTestId('confirm-modal')).not.toBeInTheDocument();
+    });
+  });
+
 });

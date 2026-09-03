@@ -31,6 +31,7 @@ func TestCharacterAPI_CompleteCharacterLifecycle(t *testing.T) {
 
 	// Create test users
 	gmUser := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	playerUser := testDB.CreateTestUser(t, "player", "player@example.com")
 
 	// Create test game
@@ -39,6 +40,7 @@ func TestCharacterAPI_CompleteCharacterLifecycle(t *testing.T) {
 		Title:       "Character Test Game",
 		Description: "Testing character functionality",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create test game")
@@ -235,6 +237,7 @@ func TestCharacterAPI_CompletedGamePlayersCanViewPrivateData(t *testing.T) {
 	app := core.NewTestApp(testDB.Pool)
 
 	gmUser := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	// player1 owns the character; player2 is a fellow participant viewing it
 	player1User := testDB.CreateTestUser(t, "player1", "player1@example.com")
 	player2User := testDB.CreateTestUser(t, "player2", "player2@example.com")
@@ -245,6 +248,7 @@ func TestCharacterAPI_CompletedGamePlayersCanViewPrivateData(t *testing.T) {
 		Title:       "Completed Game",
 		Description: "A finished game",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create test game")
@@ -364,6 +368,7 @@ func TestCharacterAPI_NPCManagement(t *testing.T) {
 
 	// Create test users
 	gmUser := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	audienceUser := testDB.CreateTestUser(t, "audience", "audience@example.com")
 
 	// Create test game
@@ -372,6 +377,7 @@ func TestCharacterAPI_NPCManagement(t *testing.T) {
 		Title:       "NPC Test Game",
 		Description: "Testing NPC functionality",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create test game")
@@ -494,6 +500,7 @@ func TestCharacterAPI_Authorization(t *testing.T) {
 
 	// Create test users
 	gmUser := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	playerUser := testDB.CreateTestUser(t, "player", "player@example.com")
 	otherUser := testDB.CreateTestUser(t, "other", "other@example.com")
 
@@ -503,6 +510,7 @@ func TestCharacterAPI_Authorization(t *testing.T) {
 		Title:       "Authorization Test Game",
 		Description: "Testing character authorization",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create test game")
@@ -740,6 +748,7 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 
 	// Create test user and game
 	gmUser := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	playerUser := testDB.CreateTestUser(t, "player", "player@example.com")
 
 	gameService := &services.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
@@ -747,6 +756,7 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 		Title:       "Error Test Game",
 		Description: "Testing error handling",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create test game")
@@ -951,6 +961,7 @@ func TestCharacterAPI_ControllableAndInactive(t *testing.T) {
 
 	// Create test users
 	gmUser := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	playerUser := testDB.CreateTestUser(t, "player", "player@example.com")
 	audienceUser := testDB.CreateTestUser(t, "audience", "audience@example.com")
 	inactivePlayerUser := testDB.CreateTestUser(t, "inactive_player", "inactive@example.com")
@@ -961,6 +972,7 @@ func TestCharacterAPI_ControllableAndInactive(t *testing.T) {
 		Title:       "Character Management Test",
 		Description: "Testing controllable and inactive characters",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create test game")

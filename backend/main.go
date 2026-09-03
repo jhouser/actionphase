@@ -215,6 +215,23 @@ func main() {
 	// service-internal NotificationService instantiations also dispatch DMs.
 	dbsvc.SetAppDiscordNotifier(discordNotifier)
 
+	// Community Discord webhooks (req 9). Always the REAL client, with no mock
+	// counterpart -- unlike DMs above.
+	//
+	// A mock would report success for a webhook that was never delivered, and
+	// the moderator-facing status columns exist precisely to answer "is my
+	// webhook working?" Answering "yes" from a mock is worse than not shipping
+	// the feature. The URL is supplied per-community, so there is no server
+	// credential to be missing and nothing to fall back to: a community that
+	// configures no webhook simply gets no dispatch.
+	webhookSender := &discord.WebhookClient{Logger: obs.Logger}
+
+	// Registered application-wide for the same reason as the DM notifier above:
+	// GameService is built as a bare struct literal throughout the routing
+	// layer, and threading a field through every one of them would leave
+	// dispatch silently absent wherever it was missed.
+	dbsvc.SetAppWebhookSender(webhookSender)
+
 	// Initialize application context with observability
 	app := &core.App{
 		Logger:          *logger,

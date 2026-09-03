@@ -75,6 +75,7 @@ func TestGetFilteredGames_PaginationCustomValues(t *testing.T) {
 			Title:       "Test Game " + string(rune(i)),
 			Description: "Testing pagination",
 			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: int32(fixtures.TestCommunity.ID),
 			IsPublic:    true,
 		})
 		core.AssertNoError(t, err, "Game creation should succeed")
@@ -263,6 +264,7 @@ func TestGetFilteredGames_PaginationMetadata(t *testing.T) {
 			Title:       "Pagination Test Game " + string(rune(i)),
 			Description: "Testing metadata",
 			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: int32(fixtures.TestCommunity.ID),
 			IsPublic:    true,
 		})
 		core.AssertNoError(t, err, "Game creation should succeed")
@@ -378,6 +380,7 @@ func TestCreateGame_ValidationErrors(t *testing.T) {
 			payload: CreateGameRequest{
 				Title:       "Valid Game Title",
 				Description: "A valid game",
+				CommunityID: int32(fixtures.TestCommunity.ID),
 			},
 			expectedStatus: 201,
 			description:    "Should accept game with just title and description",
@@ -387,6 +390,7 @@ func TestCreateGame_ValidationErrors(t *testing.T) {
 			payload: CreateGameRequest{
 				Title:              "Complete Game",
 				Description:        "A game with all optional fields",
+				CommunityID:        int32(fixtures.TestCommunity.ID),
 				Genre:              "Fantasy",
 				MaxPlayers:         6,
 				IsAnonymous:        true,

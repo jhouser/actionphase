@@ -221,6 +221,12 @@ describe('CreateGameForm', () => {
       const onSuccess = vi.fn();
       renderWithProviders(<CreateGameForm onSuccess={onSuccess} />);
 
+      // Community is required (req 5) and preselected asynchronously once the
+      // list arrives. This test fills every field in one synchronous burst, so
+      // without waiting it would submit before the preselect lands.
+      const communitySelect = (await screen.findByTestId('game-community')) as HTMLSelectElement;
+      await waitFor(() => expect(communitySelect.value).not.toBe(''));
+
       // Fill all fields. fireEvent.change commits the whole value in one update
       // instead of one re-render per keystroke across seven fields, which is what
       // pushed this test past the timeout under parallel load.
@@ -690,6 +696,94 @@ describe('CreateGameForm', () => {
 
       await user.clear(screen.getByLabelText(/game title/i));
       expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    });
+  });
+
+  // Req 5: every new game belongs to a community.
+  describe('Community selection', () => {
+    it('preselects the only community without counting it as an unsaved edit', async () => {
+      const onDirtyChange = vi.fn();
+      renderWithProviders(<CreateGameForm onDirtyChange={onDirtyChange} />);
+
+      const select = (await screen.findByTestId('game-community')) as HTMLSelectElement;
+      await waitFor(() => expect(select.value).toBe('1'));
+
+      // A default the form filled in for itself is not an edit -- otherwise
+      // closing an untouched form would prompt to discard changes.
+      expect(onDirtyChange).not.toHaveBeenCalledWith(true);
+    });
+
+    it('makes the GM choose when several communities exist', async () => {
+      server.use(
+        http.get('/api/v1/communities', () =>
+          HttpResponse.json([
+            { id: 1, name: 'Midnight Ravens', slug: 'midnight-ravens', owner_user_id: 1, is_active: true, created_at: '', updated_at: '' },
+            { id: 2, name: 'Dawn Chorus', slug: 'dawn-chorus', owner_user_id: 2, is_active: true, created_at: '', updated_at: '' },
+          ])
+        )
+      );
+
+      renderWithProviders(<CreateGameForm />);
+
+      const select = (await screen.findByTestId('game-community')) as HTMLSelectElement;
+      await screen.findByRole('option', { name: 'Dawn Chorus' });
+      // Ambiguous, so nothing is chosen for them.
+      expect(select.value).toBe('');
+    });
+
+    it('refuses to submit without a community', async () => {
+      const user = userEvent.setup();
+      server.use(
+        http.get('/api/v1/communities', () =>
+          HttpResponse.json([
+            { id: 1, name: 'Midnight Ravens', slug: 'midnight-ravens', owner_user_id: 1, is_active: true, created_at: '', updated_at: '' },
+            { id: 2, name: 'Dawn Chorus', slug: 'dawn-chorus', owner_user_id: 2, is_active: true, created_at: '', updated_at: '' },
+          ])
+        )
+      );
+      const createSpy = vi.fn();
+      server.use(
+        http.post('/api/v1/games', async () => {
+          createSpy();
+          return HttpResponse.json({ id: 1 }, { status: 201 });
+        })
+      );
+
+      renderWithProviders(<CreateGameForm />);
+      await screen.findByTestId('game-community');
+
+      await user.type(screen.getByLabelText(/game title/i), 'A Game Without A Home');
+      await user.type(screen.getByLabelText(/description/i), 'A description long enough to pass validation.');
+      fireEvent.submit(screen.getByRole('button', { name: /create game/i }).closest('form')!);
+
+      // By testid: the form renders its error in two places (top and bottom),
+      // and the picker's own placeholder option matches a looser text query.
+      expect(await screen.findByTestId('error-message')).toHaveTextContent(
+        'Please choose a community for this game'
+      );
+      expect(createSpy).not.toHaveBeenCalled();
+    });
+
+    it('sends the chosen community on create', async () => {
+      const user = userEvent.setup();
+      let sentBody: Record<string, unknown> | null = null;
+      server.use(
+        http.post('/api/v1/games', async ({ request }) => {
+          sentBody = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({ id: 7 }, { status: 201 });
+        })
+      );
+
+      renderWithProviders(<CreateGameForm />);
+      const select = (await screen.findByTestId('game-community')) as HTMLSelectElement;
+      await waitFor(() => expect(select.value).toBe('1'));
+
+      await user.type(screen.getByLabelText(/game title/i), 'A Community Game');
+      await user.type(screen.getByLabelText(/description/i), 'A description long enough to pass validation.');
+      fireEvent.submit(screen.getByRole('button', { name: /create game/i }).closest('form')!);
+
+      await waitFor(() => expect(sentBody).not.toBeNull());
+      expect(sentBody!.community_id).toBe(1);
     });
   });
 });

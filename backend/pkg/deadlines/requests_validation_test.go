@@ -32,12 +32,14 @@ func TestDeadlineRequestValidation(t *testing.T) {
 	router := setupDeadlineTestRouter(app, testDB)
 
 	gmUser := testDB.CreateTestUser(t, "valdeadlinegm", "valdeadlinegm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	game, err := gameService.CreateGame(context.Background(), core.CreateGameRequest{
 		Title:       "Deadline Validation Game",
 		Description: "Testing deadline request validation",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")

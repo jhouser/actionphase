@@ -114,6 +114,7 @@ func TestGetPublicGameApplicants_Success(t *testing.T) {
 		Title:       "Test Recruiting Game",
 		Description: "Testing public applicants",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -233,6 +234,7 @@ func TestGetPublicGameApplicants_ForbiddenWhenNotRecruiting(t *testing.T) {
 				Title:       "Test Game - " + tt.gameState,
 				Description: "Testing forbidden access",
 				GMUserID:    int32(fixtures.TestUser.ID),
+				CommunityID: int32(fixtures.TestCommunity.ID),
 				IsPublic:    true,
 			})
 			core.AssertNoError(t, err, "Game creation should succeed")
@@ -281,6 +283,7 @@ func TestGetPublicGameApplicants_EmptyList(t *testing.T) {
 		Title:       "Test Recruiting Game",
 		Description: "Testing empty applicant list",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -323,6 +326,7 @@ func TestGetPublicGameApplicants_NoStatusExposed(t *testing.T) {
 		Title:       "Test Recruiting Game",
 		Description: "Testing status privacy",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -415,6 +419,7 @@ func TestGetPublicGameApplicants_OrderedByAppliedAt(t *testing.T) {
 		Title:       "Test Recruiting Game",
 		Description: "Testing ordering",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")

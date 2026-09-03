@@ -5,6 +5,7 @@ import type { Character } from '../types/characters';
 import { GameApplicationsList } from './GameApplicationsList';
 import { PublicApplicantsList } from './PublicApplicantsList';
 import { GameExportPanel } from './GameExportPanel';
+import { GameCommunitySection } from './GameCommunitySection';
 import { PhaseManagement } from './PhaseManagement';
 import { ActionSubmission } from './ActionSubmission';
 import { ActionsList } from './ActionsList';
@@ -160,6 +161,15 @@ export function GameTabContent({
             </div>
           </>
         )}
+
+        {/* The owning community's published documents, titles linking to the
+            community page. Renders nothing for a legacy game with no community
+            or one whose community has published nothing. */}
+        <GameCommunitySection
+          gameId={gameId}
+          communityName={game.community_name}
+          communitySlug={game.community_slug}
+        />
 
         {/* Show public applicants list during recruitment */}
         {game.state === 'recruitment' && (

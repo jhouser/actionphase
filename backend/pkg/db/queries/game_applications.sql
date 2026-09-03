@@ -88,14 +88,6 @@ JOIN users u ON ga.user_id = u.id
 WHERE ga.game_id = $1 AND ga.status = 'approved'
 ORDER BY ga.reviewed_at ASC;
 
--- name: BulkApproveApplications :exec
-UPDATE game_applications
-SET
-    status = 'approved',
-    reviewed_at = NOW(),
-    reviewed_by_user_id = $2
-WHERE game_id = $1 AND status = 'pending';
-
 -- name: BulkRejectApplications :exec
 -- Reject all pending applications for a game
 -- This is called when GM closes recruitment
@@ -114,6 +106,21 @@ SELECT EXISTS(
 
 -- name: CanUserApplyToGame :one
 SELECT CASE
+    -- Banned first: a banned user is not merely ineligible for this game, they
+    -- are excluded from the whole community, and that is the reason the UI
+    -- should show. Ordering it after 'not_recruiting' would tell a banned user
+    -- to come back when recruitment opens.
+    --
+    -- The join through games.community_id is what grandfathers legacy games:
+    -- a NULL community_id matches no ban row, so those games are never blocked.
+    WHEN EXISTS(
+        SELECT 1
+        FROM games gb
+        JOIN community_bans cb ON cb.community_id = gb.community_id
+        WHERE gb.id = sqlc.arg('game_id')
+          AND cb.user_id = sqlc.arg('user_id')
+          AND (cb.expires_at IS NULL OR cb.expires_at > NOW())
+    ) THEN 'community_banned'
     WHEN EXISTS(SELECT 1 FROM games g WHERE g.id = sqlc.arg('game_id') AND g.gm_user_id = sqlc.arg('user_id')) THEN 'is_game_master'
     WHEN EXISTS(SELECT 1 FROM game_participants gp WHERE gp.game_id = sqlc.arg('game_id') AND gp.user_id = sqlc.arg('user_id') AND gp.status = 'active') THEN 'already_participant'
     WHEN EXISTS(SELECT 1 FROM game_applications ga WHERE ga.game_id = sqlc.arg('game_id') AND ga.user_id = sqlc.arg('user_id') AND ga.status = 'pending') THEN 'application_pending'

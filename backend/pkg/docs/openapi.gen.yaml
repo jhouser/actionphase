@@ -257,6 +257,17 @@ components:
                 - updated_at
                 - username
             type: object
+        AddModeratorInputBody:
+            additionalProperties: false
+            properties:
+                user_id:
+                    description: User to grant moderation powers
+                    format: int32
+                    minimum: 1
+                    type: integer
+            required:
+                - user_id
+            type: object
         AddParticipantBody:
             additionalProperties: false
             properties:
@@ -984,6 +995,247 @@ components:
                 - created_at
                 - updated_at
             type: object
+        Community:
+            additionalProperties: false
+            properties:
+                banner_url:
+                    type:
+                        - string
+                        - "null"
+                created_at:
+                    format: date-time
+                    type: string
+                description:
+                    type:
+                        - string
+                        - "null"
+                game_count:
+                    format: int64
+                    type: integer
+                id:
+                    format: int32
+                    type: integer
+                is_active:
+                    type: boolean
+                is_banned:
+                    type: boolean
+                name:
+                    type: string
+                owner_user_id:
+                    format: int32
+                    type: integer
+                owner_username:
+                    type: string
+                slug:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+                your_role:
+                    type: string
+            required:
+                - id
+                - name
+                - slug
+                - description
+                - banner_url
+                - owner_user_id
+                - is_active
+                - created_at
+                - updated_at
+                - your_role
+                - is_banned
+            type: object
+        CommunityBan:
+            additionalProperties: false
+            properties:
+                avatar_url:
+                    type: string
+                banned_at:
+                    format: date-time
+                    type: string
+                banned_by_user_id:
+                    format: int32
+                    type: integer
+                banned_by_username:
+                    type: string
+                community_id:
+                    format: int32
+                    type: integer
+                display_name:
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                id:
+                    format: int32
+                    type: integer
+                is_active:
+                    type: boolean
+                reason:
+                    type: string
+                user_id:
+                    format: int32
+                    type: integer
+                username:
+                    type: string
+            required:
+                - id
+                - community_id
+                - user_id
+                - banned_at
+                - is_active
+            type: object
+        CommunityBanEvent:
+            additionalProperties: false
+            properties:
+                action:
+                    type: string
+                actor_user_id:
+                    format: int32
+                    type: integer
+                actor_username:
+                    type: string
+                community_id:
+                    format: int32
+                    type: integer
+                created_at:
+                    format: date-time
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                id:
+                    format: int32
+                    type: integer
+                reason:
+                    type: string
+                target_user_id:
+                    format: int32
+                    type: integer
+                target_username:
+                    type: string
+            required:
+                - id
+                - community_id
+                - target_user_id
+                - action
+                - created_at
+            type: object
+        CommunityDocument:
+            additionalProperties: false
+            properties:
+                community_id:
+                    format: int32
+                    type: integer
+                content:
+                    type: string
+                created_at:
+                    format: date-time
+                    type: string
+                created_by_user_id:
+                    format: int32
+                    type: integer
+                id:
+                    format: int32
+                    type: integer
+                sort_order:
+                    format: int32
+                    type: integer
+                status:
+                    type: string
+                title:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - community_id
+                - title
+                - content
+                - status
+                - sort_order
+                - created_at
+                - updated_at
+            type: object
+        CommunityModerator:
+            additionalProperties: false
+            properties:
+                avatar_url:
+                    type: string
+                community_id:
+                    format: int32
+                    type: integer
+                display_name:
+                    type: string
+                granted_at:
+                    format: date-time
+                    type: string
+                granted_by_user_id:
+                    format: int32
+                    type: integer
+                granted_by_username:
+                    type: string
+                id:
+                    format: int32
+                    type: integer
+                user_id:
+                    format: int32
+                    type: integer
+                username:
+                    type: string
+            required:
+                - id
+                - community_id
+                - user_id
+                - username
+                - granted_at
+            type: object
+        CommunityWebhook:
+            additionalProperties: false
+            properties:
+                community_id:
+                    format: int32
+                    type: integer
+                created_at:
+                    format: date-time
+                    type: string
+                events:
+                    items:
+                        type: string
+                    type:
+                        - array
+                        - "null"
+                id:
+                    format: int32
+                    type: integer
+                is_enabled:
+                    type: boolean
+                label:
+                    type: string
+                last_error:
+                    type: string
+                last_error_at:
+                    format: date-time
+                    type: string
+                last_success_at:
+                    format: date-time
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+                url:
+                    type: string
+            required:
+                - id
+                - community_id
+                - url
+                - is_enabled
+                - events
+                - created_at
+                - updated_at
+            type: object
         ControllableCharacterResponse:
             additionalProperties: false
             properties:
@@ -1222,6 +1474,25 @@ components:
                 - user_id
                 - content
             type: object
+        CreateBanInputBody:
+            additionalProperties: false
+            properties:
+                expires_at:
+                    description: When the ban lapses; omit for a permanent ban
+                    format: date-time
+                    type: string
+                reason:
+                    description: Why the user was banned; shown to moderators only
+                    maxLength: 1000
+                    type: string
+                user_id:
+                    description: User to ban
+                    format: int32
+                    minimum: 1
+                    type: integer
+            required:
+                - user_id
+            type: object
         CreateCharacterRequest:
             additionalProperties: false
             properties:
@@ -1268,6 +1539,32 @@ components:
                 - character_id
                 - content
             type: object
+        CreateCommunityInputBody:
+            additionalProperties: false
+            properties:
+                description:
+                    description: Markdown blurb shown on the community page
+                    type: string
+                name:
+                    description: Display name
+                    maxLength: 255
+                    minLength: 2
+                    type: string
+                owner_user_id:
+                    description: User who will own this community
+                    format: int32
+                    minimum: 1
+                    type: integer
+                slug:
+                    description: URL identifier; lowercase letters, digits, and single interior hyphens. Immutable after creation.
+                    maxLength: 100
+                    minLength: 2
+                    type: string
+            required:
+                - name
+                - slug
+                - owner_user_id
+            type: object
         CreateConversationRequest:
             additionalProperties: false
             properties:
@@ -1287,6 +1584,31 @@ components:
             required:
                 - title
                 - character_ids
+            type: object
+        CreateDocumentInputBody:
+            additionalProperties: false
+            properties:
+                content:
+                    description: Document body (markdown)
+                    type: string
+                sort_order:
+                    description: Display position, lowest first
+                    format: int32
+                    type: integer
+                status:
+                    description: Visibility; omit for draft
+                    enum:
+                        - draft
+                        - published
+                    type: string
+                title:
+                    description: Document title
+                    maxLength: 255
+                    minLength: 1
+                    type: string
+            required:
+                - title
+                - content
             type: object
         CreateDraftPostRequest:
             additionalProperties: false
@@ -1387,6 +1709,10 @@ components:
                     type: integer
                 common_room_open_time:
                     type: string
+                community_id:
+                    format: int32
+                    minimum: 1
+                    type: integer
                 description:
                     minLength: 10
                     type: string
@@ -1414,6 +1740,7 @@ components:
             required:
                 - title
                 - description
+                - community_id
             type: object
         CreateHandoutCommentRequest:
             additionalProperties: false
@@ -1585,6 +1912,29 @@ components:
             required:
                 - user_id
                 - parts
+            type: object
+        CreateWebhookInputBody:
+            additionalProperties: false
+            properties:
+                events:
+                    description: Game states to announce
+                    items:
+                        type: string
+                    type:
+                        - array
+                        - "null"
+                is_enabled:
+                    description: Whether this webhook fires; defaults to true
+                    type: boolean
+                label:
+                    description: 'Name for this channel, e.g. #recruitment'
+                    maxLength: 100
+                    type: string
+                url:
+                    description: Discord webhook URL (https://discord.com/api/webhooks/...)
+                    type: string
+            required:
+                - url
             type: object
         CurrentPhaseOutputBody:
             additionalProperties: false
@@ -2362,6 +2712,9 @@ components:
                     type: integer
                 common_room_open_time:
                     type: string
+                community_id:
+                    format: int32
+                    type: integer
                 created_at:
                     format: date-time
                     type: string
@@ -2433,6 +2786,13 @@ components:
                     format: int32
                     type: integer
                 common_room_open_time:
+                    type: string
+                community_id:
+                    format: int32
+                    type: integer
+                community_name:
+                    type: string
+                community_slug:
                     type: string
                 created_at:
                     format: date-time
@@ -4248,6 +4608,38 @@ components:
             required:
                 - content
             type: object
+        UpdateCommunityInputBody:
+            additionalProperties: false
+            properties:
+                description:
+                    description: Markdown blurb
+                    type: string
+                is_active:
+                    description: Deactivate to stop the community accepting new games
+                    type: boolean
+                name:
+                    description: Display name
+                    maxLength: 255
+                    minLength: 2
+                    type: string
+                owner_user_id:
+                    description: Reassign ownership to this user
+                    format: int32
+                    minimum: 1
+                    type: integer
+            type: object
+        UpdateCommunityProfileInputBody:
+            additionalProperties: false
+            properties:
+                description:
+                    description: Profile blurb (markdown); empty string clears it
+                    type: string
+                name:
+                    description: Display name
+                    maxLength: 255
+                    minLength: 2
+                    type: string
+            type: object
         UpdateDeadlineBody:
             additionalProperties: false
             properties:
@@ -4256,6 +4648,28 @@ components:
                     type: string
             required:
                 - deadline
+            type: object
+        UpdateDocumentInputBody:
+            additionalProperties: false
+            properties:
+                content:
+                    description: Document body (markdown)
+                    type: string
+                sort_order:
+                    description: Display position, lowest first
+                    format: int32
+                    type: integer
+                status:
+                    description: Visibility
+                    enum:
+                        - draft
+                        - published
+                    type: string
+                title:
+                    description: Document title
+                    maxLength: 255
+                    minLength: 1
+                    type: string
             type: object
         UpdateDraftPostRequest:
             additionalProperties: false
@@ -4299,6 +4713,10 @@ components:
                     type: integer
                 common_room_open_time:
                     type: string
+                community_id:
+                    format: int32
+                    minimum: 1
+                    type: integer
                 description:
                     minLength: 10
                     type: string
@@ -4495,6 +4913,27 @@ components:
                     type: integer
             required:
                 - delay_minutes
+            type: object
+        UpdateWebhookInputBody:
+            additionalProperties: false
+            properties:
+                events:
+                    description: Game states to announce
+                    items:
+                        type: string
+                    type:
+                        - array
+                        - "null"
+                is_enabled:
+                    description: Whether this webhook fires
+                    type: boolean
+                label:
+                    description: Name for this channel
+                    maxLength: 100
+                    type: string
+                url:
+                    description: Replacement Discord webhook URL; omit to keep the current one
+                    type: string
             type: object
         UploadAvatarResponse:
             additionalProperties: false
@@ -4777,6 +5216,17 @@ components:
                 - user_id
                 - character_name
             type: object
+        WebhookTestOutputBody:
+            additionalProperties: false
+            properties:
+                message:
+                    type: string
+                success:
+                    type: boolean
+            required:
+                - success
+                - message
+            type: object
     securitySchemes:
         BearerAuth:
             bearerFormat: JWT
@@ -4820,6 +5270,87 @@ paths:
             security:
                 - BearerAuth: []
             summary: List all admin users
+            tags:
+                - Admin
+    /admin/communities:
+        get:
+            operationId: adminListCommunities
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/Community'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not an admin
+            security:
+                - BearerAuth: []
+            summary: List all communities
+            tags:
+                - Admin
+        post:
+            operationId: adminCreateCommunity
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateCommunityInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Community'
+                    description: Created
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not an admin
+            security:
+                - BearerAuth: []
+            summary: Create a community and assign its owner
+            tags:
+                - Admin
+    /admin/communities/{id}:
+        patch:
+            operationId: adminUpdateCommunity
+            parameters:
+                - description: Community ID
+                  in: path
+                  name: id
+                  required: true
+                  schema:
+                    description: Community ID
+                    format: int32
+                    type: integer
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateCommunityInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Community'
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not an admin
+            security:
+                - BearerAuth: []
+            summary: Update a community, reassign its owner, or deactivate it
             tags:
                 - Admin
     /admin/fingerprint-bans:
@@ -6223,6 +6754,842 @@ paths:
             summary: List controllable characters across all the caller's games
             tags:
                 - Characters
+    /communities:
+        get:
+            description: Returns every active community. Inactive communities are omitted -- they accept no new games. Site admins see the full list via the admin endpoint.
+            operationId: listCommunities
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/Community'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+            security:
+                - BearerAuth: []
+            summary: List active communities
+            tags:
+                - Communities
+    /communities/{slug}:
+        get:
+            operationId: getCommunity
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Community'
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Get a community profile
+            tags:
+                - Communities
+        patch:
+            description: 'Requires moderation rights -- keeping the profile current is ordinary upkeep. Narrower than the admin PATCH: ownership and active status are not editable here, and the slug is immutable. An empty description clears it.'
+            operationId: updateCommunity
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateCommunityProfileInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Community'
+                    description: OK
+                "400":
+                    description: Name is blank or out of range
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Edit a community's name and description
+            tags:
+                - Communities
+    /communities/{slug}/ban-events:
+        get:
+            description: Requires moderation rights. Newest first, paged. Lifting a ban deletes its row, so for an unbanned user this log is the only surviving record that the ban existed. Entries snapshot the reason and expiry as they stood.
+            operationId: listCommunityBanEvents
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Entries per page
+                  explode: false
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Entries per page
+                    format: int32
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - description: Entries to skip
+                  explode: false
+                  in: query
+                  name: offset
+                  schema:
+                    default: 0
+                    description: Entries to skip
+                    format: int32
+                    minimum: 0
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityBanEvent'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Read a community's ban audit log
+            tags:
+                - Communities
+    /communities/{slug}/banner:
+        delete:
+            description: Requires moderation rights. Deletes the stored file and clears the column. Succeeds when there is no banner set.
+            operationId: deleteCommunityBanner
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Remove a community's banner image
+            tags:
+                - Communities
+        post:
+            description: Requires moderation rights. JPG, PNG or WebP, at most 5MB. Replaces any existing banner, deleting the previous file. Returns the refreshed community.
+            operationId: uploadCommunityBanner
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    multipart/form-data:
+                        encoding:
+                            banner:
+                                contentType: application/octet-stream
+                        schema:
+                            properties:
+                                banner:
+                                    contentEncoding: binary
+                                    contentMediaType: application/octet-stream
+                                    description: 'Banner image: JPG, PNG or WebP, at most 5MB'
+                                    format: binary
+                                    type: string
+                            required:
+                                - banner
+                            type: object
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Community'
+                    description: OK
+                "400":
+                    description: Missing file, unsupported type, or larger than 5MB
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+                "503":
+                    description: File storage is not configured
+            security:
+                - BearerAuth: []
+            summary: Upload a community banner image
+            tags:
+                - Communities
+    /communities/{slug}/bans:
+        get:
+            description: Requires moderation rights -- the list names users and carries the moderator's reason. Expired bans are included, marked is_active=false, so a lapsed ban is visible rather than appearing to vanish.
+            operationId: listCommunityBans
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityBan'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: List a community's banned users
+            tags:
+                - Communities
+        post:
+            description: Requires moderation rights. Re-banning an already-banned user updates the reason and expiry in place rather than failing, preserving the original banned_at; the audit log records that as "modified". Omit expires_at for a permanent ban. Community staff cannot be banned -- remove them from the roster first, which is owner-only.
+            operationId: banUserFromCommunity
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateBanInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityBan'
+                    description: OK
+                "400":
+                    description: Unknown user, community staff, or an expiry in the past
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Ban a user from a community, or edit an existing ban
+            tags:
+                - Communities
+    /communities/{slug}/bans/{userID}:
+        delete:
+            description: Requires moderation rights. Answers 404 if the user is not banned, since reaching this from a stale banlist should surface rather than look like success. The ban row is deleted; the audit log retains what it said.
+            operationId: unbanUserFromCommunity
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: User whose ban is lifted
+                  in: path
+                  name: userID
+                  required: true
+                  schema:
+                    description: User whose ban is lifted
+                    format: int32
+                    type: integer
+            responses:
+                "204":
+                    description: No Content
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found, or the user is not banned
+            security:
+                - BearerAuth: []
+            summary: Lift a user's ban
+            tags:
+                - Communities
+    /communities/{slug}/documents:
+        get:
+            description: Open to any authenticated user -- a community's rules are what someone reads before deciding to join. Drafts are omitted; moderators use the manage endpoint to see them.
+            operationId: listCommunityDocuments
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityDocument'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: List a community's published documents
+            tags:
+                - Communities
+        post:
+            description: Requires moderation rights. Omit status to create a draft, which is the default so a half-written page binds nobody.
+            operationId: createCommunityDocument
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateDocumentInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityDocument'
+                    description: Created
+                "400":
+                    description: Title is blank or the status is unrecognised
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Create a community document
+            tags:
+                - Communities
+    /communities/{slug}/documents/{documentID}:
+        delete:
+            description: Requires moderation rights. Deleting a document that does not exist answers 404 rather than succeeding, so a delete that silently matched nothing surfaces.
+            operationId: deleteCommunityDocument
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Document ID
+                  in: path
+                  name: documentID
+                  required: true
+                  schema:
+                    description: Document ID
+                    format: int32
+                    type: integer
+            responses:
+                "204":
+                    description: No Content
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community or document not found
+            security:
+                - BearerAuth: []
+            summary: Delete a community document
+            tags:
+                - Communities
+        get:
+            description: Published documents are readable by any authenticated user. A DRAFT is visible only to moderators, and answers 404 rather than 403 for everyone else so unpublished work cannot be enumerated.
+            operationId: getCommunityDocument
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Document ID
+                  in: path
+                  name: documentID
+                  required: true
+                  schema:
+                    description: Document ID
+                    format: int32
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityDocument'
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "404":
+                    description: Community or document not found
+            security:
+                - BearerAuth: []
+            summary: Read one community document
+            tags:
+                - Communities
+        patch:
+            description: Requires moderation rights. Publishing and unpublishing happen here rather than through dedicated endpoints, since status sits on the same form as the body. An omitted field is left unchanged; an empty content is a blank page.
+            operationId: updateCommunityDocument
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Document ID
+                  in: path
+                  name: documentID
+                  required: true
+                  schema:
+                    description: Document ID
+                    format: int32
+                    type: integer
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateDocumentInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityDocument'
+                    description: OK
+                "400":
+                    description: Title is blank or the status is unrecognised
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community or document not found
+            security:
+                - BearerAuth: []
+            summary: Edit a community document
+            tags:
+                - Communities
+    /communities/{slug}/documents/manage:
+        get:
+            description: Requires moderation rights. A separate path from the public list rather than a query flag on it, so the privileged read carries its own gate.
+            operationId: listAllCommunityDocuments
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityDocument'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: List every document including drafts
+            tags:
+                - Communities
+    /communities/{slug}/moderators:
+        get:
+            description: Requires moderation rights. The owner is not included -- ownership is not a moderator row; render it from the community's owner_user_id.
+            operationId: listCommunityModerators
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityModerator'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller does not moderate this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: List a community's moderators
+            tags:
+                - Communities
+        post:
+            description: Owner-only. Managing the roster is the single power a moderator does not have; site admins qualify only with admin mode enabled.
+            operationId: addCommunityModerator
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddModeratorInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityModerator'
+                    description: Created
+                "400":
+                    description: Unknown user, the owner, or already a moderator
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller is not the community owner
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Grant a user moderation powers
+            tags:
+                - Communities
+    /communities/{slug}/moderators/{userID}:
+        delete:
+            description: Owner-only. Removing a user who does not moderate succeeds -- the caller's intended end state already holds.
+            operationId: removeCommunityModerator
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: User whose moderation powers are revoked
+                  in: path
+                  name: userID
+                  required: true
+                  schema:
+                    description: User whose moderation powers are revoked
+                    format: int32
+                    type: integer
+            responses:
+                "204":
+                    description: No Content
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller is not the community owner
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Revoke a user's moderation powers
+            tags:
+                - Communities
+    /communities/{slug}/webhooks:
+        get:
+            description: Requires moderation rights. URLs are MASKED -- the full webhook URL is a credential and is never returned. Disabled webhooks are included, since re-enabling them is the point of the screen.
+            operationId: listCommunityWebhooks
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityWebhook'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not a moderator of this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: List a community's Discord webhooks
+            tags:
+                - Communities
+        post:
+            description: Requires moderation rights. The URL must be an https Discord webhook endpoint; anything else is rejected, since the server makes outbound requests to it. The response masks the URL.
+            operationId: createCommunityWebhook
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateWebhookInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityWebhook'
+                    description: Created
+                "400":
+                    description: URL is not a Discord webhook, or an event is not a game state
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not a moderator of this community
+                "404":
+                    description: Community not found
+            security:
+                - BearerAuth: []
+            summary: Add a Discord webhook to a community
+            tags:
+                - Communities
+    /communities/{slug}/webhooks/{webhookID}:
+        delete:
+            description: Requires moderation rights.
+            operationId: deleteCommunityWebhook
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Webhook ID
+                  in: path
+                  name: webhookID
+                  required: true
+                  schema:
+                    description: Webhook ID
+                    format: int32
+                    type: integer
+            responses:
+                "204":
+                    description: No Content
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not a moderator of this community
+                "404":
+                    description: Community or webhook not found
+            security:
+                - BearerAuth: []
+            summary: Remove a Discord webhook
+            tags:
+                - Communities
+        patch:
+            description: Requires moderation rights. Omitted fields are unchanged; omitting the URL keeps the stored credential, so the config form can save a label or event change without ever holding the secret.
+            operationId: updateCommunityWebhook
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Webhook ID
+                  in: path
+                  name: webhookID
+                  required: true
+                  schema:
+                    description: Webhook ID
+                    format: int32
+                    type: integer
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateWebhookInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommunityWebhook'
+                    description: OK
+                "400":
+                    description: URL is not a Discord webhook, or an event is not a game state
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not a moderator of this community
+                "404":
+                    description: Community or webhook not found
+            security:
+                - BearerAuth: []
+            summary: Edit a Discord webhook
+            tags:
+                - Communities
+    /communities/{slug}/webhooks/{webhookID}/test:
+        post:
+            description: Requires moderation rights. Sends SYNCHRONOUSLY and reports the outcome -- unlike game-state announcements, which are fire-and-forget. Stamps the same delivery status columns as a real delivery.
+            operationId: testCommunityWebhook
+            parameters:
+                - description: Community URL slug
+                  in: path
+                  name: slug
+                  required: true
+                  schema:
+                    description: Community URL slug
+                    type: string
+                - description: Webhook ID
+                  in: path
+                  name: webhookID
+                  required: true
+                  schema:
+                    description: Webhook ID
+                    format: int32
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WebhookTestOutputBody'
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Not a moderator of this community
+                "404":
+                    description: Community or webhook not found
+                "502":
+                    description: Discord rejected the message; the reason is in the error
+                "503":
+                    description: Webhook delivery is not configured on this server
+            security:
+                - BearerAuth: []
+            summary: Send a test message to a Discord webhook
+            tags:
+                - Communities
     /dashboard:
         get:
             description: |-
@@ -6402,6 +7769,13 @@ paths:
                   name: has_open_spots
                   schema:
                     description: '"true" or "false"; anything else is ignored'
+                    type: string
+                - description: Only games in this community; omit for all
+                  explode: false
+                  in: query
+                  name: community_id
+                  schema:
+                    description: Only games in this community; omit for all
                     type: string
                 - explode: false
                   in: query
@@ -7263,6 +8637,40 @@ paths:
             summary: List recent comments with their parents
             tags:
                 - Common Room
+    /games/{gameID}/community-documents:
+        get:
+            description: Backs the Info tab. Requires access to the GAME, not standing in the community. A game with no community returns an empty list rather than 404, so legacy games simply render no community section.
+            operationId: listGameCommunityDocuments
+            parameters:
+                - description: Game ID
+                  in: path
+                  name: gameID
+                  required: true
+                  schema:
+                    description: Game ID
+                    format: int32
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/CommunityDocument'
+                                type:
+                                    - array
+                                    - "null"
+                    description: OK
+                "401":
+                    description: Not authenticated
+                "403":
+                    description: Caller cannot view this game
+            security:
+                - BearerAuth: []
+            summary: List the published documents of the game's community
+            tags:
+                - Games
+                - Communities
     /games/{gameID}/conversations:
         get:
             operationId: listConversations
@@ -11478,6 +12886,8 @@ tags:
       name: Users
     - description: Aggregated dashboard data for user overview
       name: Dashboard
+    - description: Community profiles and moderator rosters
+      name: Communities
     - description: User notification system for game events and updates
       name: Notifications
     - description: Game creation, management, and participation

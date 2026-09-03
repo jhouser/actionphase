@@ -146,6 +146,100 @@ type IPBanServiceInterface interface {
 	CleanupExpiredIPBans(ctx context.Context) error
 }
 
+// CommunityServiceInterface defines the contract for community management.
+//
+// Creating a community and assigning its owner are site-admin operations; the
+// service does not itself enforce that, the admin route group does. Moderator
+// roster changes are owner-only, which callers gate with
+// CanAdministerCommunity -- see permissions.go.
+type CommunityServiceInterface interface {
+	CreateCommunity(ctx context.Context, req *CreateCommunityRequest) (*Community, error)
+	GetCommunityByID(ctx context.Context, id int32) (*Community, error)
+	GetCommunityBySlug(ctx context.Context, slug string) (*Community, error)
+	ListCommunities(ctx context.Context) ([]*Community, error)
+	ListActiveCommunities(ctx context.Context) ([]*Community, error)
+	UpdateCommunity(ctx context.Context, id int32, req *UpdateCommunityRequest) (*Community, error)
+
+	// UpdateCommunityBannerURL is the ONLY writer of banner_url; nil clears it.
+	// Deliberately not a field on UpdateCommunityRequest -- a banner is an
+	// uploaded object whose file and column must stay in sync, so the caller
+	// stores the file first and rolls it back if this fails.
+	UpdateCommunityBannerURL(ctx context.Context, id int32, bannerURL *string) (*Community, error)
+
+	// Moderator roster. AddModerator/RemoveModerator are owner-only at the
+	// handler layer; the service enforces only data integrity.
+	AddModerator(ctx context.Context, communityID, userID, grantedBy int32) (*CommunityModerator, error)
+	RemoveModerator(ctx context.Context, communityID, userID int32) error
+	ListModerators(ctx context.Context, communityID int32) ([]*CommunityModerator, error)
+
+	// GetRole resolves a user's standing in one round-trip. Owner outranks
+	// moderator; CommunityRoleNone means neither.
+	GetRole(ctx context.Context, communityID, userID int32) (CommunityRole, error)
+
+	// Bans. BanUser upserts: re-banning an already-banned user updates the
+	// reason and expiry in place rather than failing, and logs "modified"
+	// instead of "banned". Both writes append to the audit log in the SAME
+	// transaction as the ban itself, so the log can never disagree with the
+	// banlist.
+	BanUser(ctx context.Context, communityID, actorID int32, req *CreateCommunityBanRequest) (*CommunityBan, error)
+	UnbanUser(ctx context.Context, communityID, userID, actorID int32) error
+	ListBans(ctx context.Context, communityID int32) ([]*CommunityBan, error)
+	ListBanEvents(ctx context.Context, communityID int32, limit, offset int32) ([]*CommunityBanEvent, error)
+
+	// IsUserBanned is THE ban primitive -- every enforcement path in the
+	// codebase calls this or IsUserBannedFromGame, never its own query.
+	// Respects expires_at: a lapsed ban does not block.
+	IsUserBanned(ctx context.Context, communityID, userID int32) (bool, error)
+
+	// IsUserBannedFromGame resolves game -> community first.
+	//
+	// Returns FALSE for a game with no community. Grandfathering is guaranteed
+	// here rather than at each call site, so a legacy game can never be blocked
+	// by a caller who forgot to check.
+	IsUserBannedFromGame(ctx context.Context, gameID, userID int32) (bool, error)
+
+	// ListBannedCommunityIDs is the bulk form, for filtering the community
+	// picker on game creation without one query per community.
+	ListBannedCommunityIDs(ctx context.Context, userID int32) ([]int32, error)
+
+	// Documents (req 7, 8). Every lookup is scoped by (documentID, communityID):
+	// a bare id would resolve a document in another community than the request
+	// path names.
+	CreateDocument(ctx context.Context, communityID, actorID int32, req *CreateCommunityDocumentRequest) (*CommunityDocument, error)
+	GetDocument(ctx context.Context, communityID, documentID int32) (*CommunityDocument, error)
+	UpdateDocument(ctx context.Context, communityID, documentID int32, req *UpdateCommunityDocumentRequest) (*CommunityDocument, error)
+	DeleteDocument(ctx context.Context, communityID, documentID int32) error
+
+	// ListDocuments includes DRAFTS -- moderator-only. ListPublishedDocuments is
+	// the public read. Two methods rather than one with a flag, so a caller
+	// cannot leak a draft by passing the wrong argument.
+	ListDocuments(ctx context.Context, communityID int32) ([]*CommunityDocument, error)
+	ListPublishedDocuments(ctx context.Context, communityID int32) ([]*CommunityDocument, error)
+
+	// ListPublishedDocumentsForGame backs the Game Info tab. Returns an empty
+	// slice for a legacy game with no community; the grandfathering is in the
+	// SQL join so no caller can forget it.
+	ListPublishedDocumentsForGame(ctx context.Context, gameID int32) ([]*CommunityDocument, error)
+
+	// Webhooks (req 9) -- configuration only; delivery hangs off
+	// GameService.UpdateGameState.
+	//
+	// EVERY method here returns a MASKED URL. The credential travels inbound
+	// only: there is deliberately no method that returns a raw webhook URL, so
+	// no handler can leak one by choosing the wrong call.
+	CreateWebhook(ctx context.Context, communityID int32, req *CreateCommunityWebhookRequest) (*CommunityWebhook, error)
+	GetWebhook(ctx context.Context, communityID, webhookID int32) (*CommunityWebhook, error)
+	ListWebhooks(ctx context.Context, communityID int32) ([]*CommunityWebhook, error)
+	UpdateWebhook(ctx context.Context, communityID, webhookID int32, req *UpdateCommunityWebhookRequest) (*CommunityWebhook, error)
+	DeleteWebhook(ctx context.Context, communityID, webhookID int32) error
+
+	// TestWebhook sends a test embed SYNCHRONOUSLY and reports the outcome --
+	// the moderator clicked the button and is waiting for that answer. It takes
+	// the sender as a parameter rather than holding one, so the community
+	// service does not need a Discord dependency for the CRUD it mostly does.
+	TestWebhook(ctx context.Context, communityID, webhookID int32, sender DiscordWebhookSender) error
+}
+
 // FingerprintBanServiceInterface defines the contract for device fingerprint banning.
 type FingerprintBanServiceInterface interface {
 	CreateFingerprintBan(ctx context.Context, fingerprint, reason string, createdBy int32, bannedUserID *int32) (*FingerprintBan, error)
@@ -379,9 +473,6 @@ type GameApplicationServiceInterface interface {
 	// CountPendingApplicationsForGame returns count of pending applications
 	CountPendingApplicationsForGame(ctx context.Context, gameID int32) (int64, error)
 
-	// BulkApproveApplications approves all pending applications for a game
-	BulkApproveApplications(ctx context.Context, gameID, reviewerID int32) error
-
 	// GetApprovedApplicationsForGame retrieves approved applications for participant creation
 	GetApprovedApplicationsForGame(ctx context.Context, gameID int32) ([]models.GetApprovedApplicationsForGameRow, error)
 
@@ -406,9 +497,13 @@ type GameApplicationServiceInterface interface {
 
 // CreateGameRequest represents the parameters needed to create a new game
 type CreateGameRequest struct {
-	Title                   string
-	Description             string
-	GMUserID                int32
+	Title       string
+	Description string
+	GMUserID    int32
+	// CommunityID is required on every new game (req 5). The column is
+	// nullable only so pre-community games stay valid; nothing creates a
+	// community-less game any more.
+	CommunityID             int32
 	Genre                   string
 	StartDate               *time.Time
 	EndDate                 *time.Time
@@ -430,9 +525,14 @@ type CreateGameRequest struct {
 
 // UpdateGameRequest represents the parameters needed to update an existing game
 type UpdateGameRequest struct {
-	ID                      int32
-	Title                   string
-	Description             string
+	ID          int32
+	Title       string
+	Description string
+	// CommunityID moves the game to another community. A POINTER because this
+	// field is preserve-on-absent, unlike the rest of this struct: nil means
+	// "leave the community alone", not "clear it". Only honoured while the game
+	// is in setup (decision 4).
+	CommunityID             *int32
 	Genre                   string
 	StartDate               *time.Time
 	EndDate                 *time.Time
@@ -1825,6 +1925,22 @@ type DiscordEmbed struct {
 type DiscordClientInterface interface {
 	// SendDM sends a rich embed DM to a Discord user by their Discord user ID.
 	SendDM(ctx context.Context, discordUserID string, embed DiscordEmbed) error
+}
+
+// DiscordWebhookSender posts an embed to a Discord webhook URL.
+//
+// Separate from DiscordClientInterface because it is a different transport, not
+// a different method of the same one: DMs authenticate with a bot token and
+// must first open a DM channel, while a webhook is an unauthenticated POST to a
+// URL that is itself the credential. A single interface would force every
+// implementation to carry a bot token it does not use.
+type DiscordWebhookSender interface {
+	// Send posts the embed to webhookURL.
+	//
+	// Returns an error for a non-2xx response so the caller can decide whether
+	// to retry; it performs NO retries of its own. Retry policy belongs to the
+	// dispatcher, which owns the timeout budget the retries have to fit in.
+	Send(ctx context.Context, webhookURL string, embed DiscordEmbed) error
 }
 
 // DiscordAccount represents a linked Discord account for a user.

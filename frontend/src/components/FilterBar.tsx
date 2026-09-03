@@ -13,15 +13,23 @@ interface FilterBarProps {
   selectedStates: GameState[];
   participation?: ParticipationFilter;
   hasOpenSpots?: boolean;
+  communityId?: number;
   sortBy: SortBy;
 
   // Available options
   availableStates: GameState[];
+  /**
+   * Communities to offer. Omit to hide the picker entirely -- the community
+   * games page is already scoped to one, so a picker there would be a way to
+   * navigate off the page you are on.
+   */
+  communities?: { id: number; name: string }[];
 
   // Callbacks
   onStatesChange: (states: GameState[]) => void;
   onParticipationChange: (participation?: ParticipationFilter) => void;
   onHasOpenSpotsChange: (hasOpenSpots?: boolean) => void;
+  onCommunityChange?: (communityId?: number) => void;
   onSortByChange: (sortBy: SortBy) => void;
   onClearFilters: () => void;
 
@@ -34,11 +42,14 @@ export function FilterBar({
   selectedStates,
   participation,
   hasOpenSpots,
+  communityId,
   sortBy,
   availableStates,
+  communities,
   onStatesChange,
   onParticipationChange,
   onHasOpenSpotsChange,
+  onCommunityChange,
   onSortByChange,
   onClearFilters,
   filteredCount,
@@ -49,7 +60,8 @@ export function FilterBar({
   const hasActiveFilters =
     selectedStates.length > 0 ||
     participation !== undefined ||
-    hasOpenSpots !== undefined;
+    hasOpenSpots !== undefined ||
+    communityId !== undefined;
 
   const handleStateToggle = (state: GameState) => {
     if (selectedStates.includes(state)) {
@@ -168,6 +180,25 @@ export function FilterBar({
             )}
             Has Open Spots
           </Button>
+
+          {/* Community filter. Absent when the caller did not supply a list. */}
+          {communities && communities.length > 0 && onCommunityChange && (
+            <Select
+              value={communityId ?? ''}
+              onChange={(e) =>
+                onCommunityChange(e.target.value === '' ? undefined : Number(e.target.value))
+              }
+              data-testid="community-filter"
+              aria-label="Filter by community"
+            >
+              <option value="">All communities</option>
+              {communities.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          )}
 
           {/* Sort dropdown */}
           <Select

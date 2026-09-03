@@ -11,25 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const bulkApproveApplications = `-- name: BulkApproveApplications :exec
-UPDATE game_applications
-SET
-    status = 'approved',
-    reviewed_at = NOW(),
-    reviewed_by_user_id = $2
-WHERE game_id = $1 AND status = 'pending'
-`
-
-type BulkApproveApplicationsParams struct {
-	GameID           int32       `json:"game_id"`
-	ReviewedByUserID pgtype.Int4 `json:"reviewed_by_user_id"`
-}
-
-func (q *Queries) BulkApproveApplications(ctx context.Context, arg BulkApproveApplicationsParams) error {
-	_, err := q.db.Exec(ctx, bulkApproveApplications, arg.GameID, arg.ReviewedByUserID)
-	return err
-}
-
 const bulkRejectApplications = `-- name: BulkRejectApplications :exec
 UPDATE game_applications
 SET
@@ -53,6 +34,21 @@ func (q *Queries) BulkRejectApplications(ctx context.Context, arg BulkRejectAppl
 
 const canUserApplyToGame = `-- name: CanUserApplyToGame :one
 SELECT CASE
+    -- Banned first: a banned user is not merely ineligible for this game, they
+    -- are excluded from the whole community, and that is the reason the UI
+    -- should show. Ordering it after 'not_recruiting' would tell a banned user
+    -- to come back when recruitment opens.
+    --
+    -- The join through games.community_id is what grandfathers legacy games:
+    -- a NULL community_id matches no ban row, so those games are never blocked.
+    WHEN EXISTS(
+        SELECT 1
+        FROM games gb
+        JOIN community_bans cb ON cb.community_id = gb.community_id
+        WHERE gb.id = $1
+          AND cb.user_id = $2
+          AND (cb.expires_at IS NULL OR cb.expires_at > NOW())
+    ) THEN 'community_banned'
     WHEN EXISTS(SELECT 1 FROM games g WHERE g.id = $1 AND g.gm_user_id = $2) THEN 'is_game_master'
     WHEN EXISTS(SELECT 1 FROM game_participants gp WHERE gp.game_id = $1 AND gp.user_id = $2 AND gp.status = 'active') THEN 'already_participant'
     WHEN EXISTS(SELECT 1 FROM game_applications ga WHERE ga.game_id = $1 AND ga.user_id = $2 AND ga.status = 'pending') THEN 'application_pending'

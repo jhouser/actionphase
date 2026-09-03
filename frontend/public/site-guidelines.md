@@ -1,4 +1,4 @@
-# Community Guidelines
+# Site Guidelines
 
 Welcome to Action Phase--a collaborative play-by-post RPG platform. These guidelines exist to keep the community a place where everyone can enjoy our unique games together. They set a platform-wide floor--individual Game Masters set additional rules for their own games.
 

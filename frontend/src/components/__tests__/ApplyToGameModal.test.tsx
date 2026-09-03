@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AxiosError } from 'axios';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test-utils/render';
@@ -103,6 +104,86 @@ describe('ApplyToGameModal', () => {
     await waitFor(() => {
       expect(screen.getByText('Already applied')).toBeInTheDocument();
     });
+  });
+
+  /**
+   * Regression: a community ban surfaced as "Request failed with status code
+   * 403" instead of the reason the server actually sent.
+   *
+   * The backend renders errors as {status, error} -- there is no `message` key
+   * -- so reading response.data.message always found undefined and fell through
+   * to axios's own generic string. Building the rejection as a real AxiosError
+   * is the point of the test: the previous version rejected with a plain Error,
+   * which is why the bug survived a passing suite.
+   */
+  it('surfaces the server error message on a 403 rather than the axios default', async () => {
+    const user = userEvent.setup();
+    const banned = new AxiosError('Request failed with status code 403');
+    banned.response = {
+      status: 403,
+      data: { status: 'Forbidden.', error: 'you are banned from this community' },
+    } as AxiosError['response'];
+    vi.mocked(apiClient.games.applyToGame).mockRejectedValue(banned);
+
+    renderWithProviders(<ApplyToGameModal {...defaultProps} />);
+    await user.click(screen.getByTestId('submit-application'));
+
+    await waitFor(() => {
+      expect(screen.getByText('you are banned from this community')).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText(/request failed with status code/i)
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * The server sends `status` alone when it has no specific detail to add.
+   * Falling back to it beats showing the axios string, which names a number the
+   * user cannot act on.
+   */
+  it('falls back to the status field when no error detail is present', async () => {
+    const user = userEvent.setup();
+    const failure = new AxiosError('Request failed with status code 403');
+    failure.response = {
+      status: 403,
+      data: { status: 'Forbidden.' },
+    } as AxiosError['response'];
+    vi.mocked(apiClient.games.applyToGame).mockRejectedValue(failure);
+
+    renderWithProviders(<ApplyToGameModal {...defaultProps} />);
+    await user.click(screen.getByTestId('submit-application'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Forbidden.')).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * The region stays mounted (and empty, so it occupies no height) rather than
+   * being conditionally rendered: a live region has to exist before the error
+   * lands in it for screen readers to announce the change.
+   */
+  it('keeps the error region mounted so the error is announced in place', async () => {
+    const user = userEvent.setup();
+    const failure = new AxiosError('Request failed with status code 403');
+    failure.response = {
+      status: 403,
+      data: { status: 'Forbidden.', error: 'you are banned from this community' },
+    } as AxiosError['response'];
+    vi.mocked(apiClient.games.applyToGame).mockRejectedValue(failure);
+
+    renderWithProviders(<ApplyToGameModal {...defaultProps} />);
+    const region = screen.getByTestId('application-error');
+    expect(region).toBeInTheDocument();
+    expect(region).toBeEmptyDOMElement();
+
+    await user.click(screen.getByTestId('submit-application'));
+
+    await waitFor(() => {
+      expect(screen.getByText('you are banned from this community')).toBeInTheDocument();
+    });
+    // Same node, now filled -- not a sibling inserted above the form.
+    expect(screen.getByTestId('application-error')).toBe(region);
   });
 
   it('calls onClose when Cancel is clicked (not submitting)', async () => {

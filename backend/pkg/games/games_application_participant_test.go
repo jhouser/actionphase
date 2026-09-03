@@ -51,6 +51,7 @@ func TestGameAPI_ApplicationManagement(t *testing.T) {
 		Title:       "Test Game for App Management",
 		Description: "Testing application endpoints",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -223,6 +224,7 @@ func TestGameAPI_AudienceMemberCanRejoinAfterLeaving(t *testing.T) {
 		Title:       "Test Game for Audience Rejoin",
 		Description: "Testing audience leave/reapply",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -381,6 +383,7 @@ func TestGameAPI_RejectedAudienceApplicationShowsRejected(t *testing.T) {
 		Title:       "Test Game for Audience Rejection",
 		Description: "Testing audience rejection visibility",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -494,6 +497,7 @@ func TestGameAPI_ParticipantManagementAdvanced(t *testing.T) {
 		Title:       "Test Game for Participant Mgmt",
 		Description: "Testing participant endpoints",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -678,6 +682,7 @@ func TestGameAPI_RemovePlayer_DeactivatesCharacters(t *testing.T) {
 
 	gm := testDB.CreateTestUser(t, "gm", "gm@example.com")
 	player := testDB.CreateTestUser(t, "player", "player@example.com")
+	community := testDB.CreateTestCommunity(t, int32(gm.ID))
 
 	gmToken, err := core.CreateTestJWTTokenForUser(app, gm)
 	require.NoError(t, err)
@@ -687,6 +692,7 @@ func TestGameAPI_RemovePlayer_DeactivatesCharacters(t *testing.T) {
 		Title:       "Removal Test Game",
 		Description: "Test game for player removal",
 		GMUserID:    int32(gm.ID),
+		CommunityID: community.ID,
 		IsPublic:    true,
 	})
 	require.NoError(t, err)
@@ -739,11 +745,14 @@ func TestGameAPI_ReviewGameApplication_ApprovesAndRejects(t *testing.T) {
 	playerToken, err := core.CreateTestJWTTokenForUser(app, player1)
 	require.NoError(t, err)
 
+	community := testDB.CreateTestCommunity(t, int32(gm.ID))
+
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	game, err := gameService.CreateGame(context.Background(), core.CreateGameRequest{
 		Title:       "Application Review Game",
 		Description: "Test game for application review",
 		GMUserID:    int32(gm.ID),
+		CommunityID: community.ID,
 		IsPublic:    true,
 	})
 	require.NoError(t, err)

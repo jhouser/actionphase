@@ -24,14 +24,14 @@ func TestGameService_FilterByOpenSpots(t *testing.T) {
 	ctx := context.Background()
 
 	// Create games in different states with open spots
-	recruitingGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), "recruitment", 5, 2)
-	inProgressGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), "in_progress", 5, 2)
-	pausedGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), "paused", 5, 1)
-	completedGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), "completed", 5, 3)
-	setupGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), "setup", 5, 0)
+	recruitingGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), int32(fixtures.TestCommunity.ID), "recruitment", 5, 2)
+	inProgressGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), int32(fixtures.TestCommunity.ID), "in_progress", 5, 2)
+	pausedGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), int32(fixtures.TestCommunity.ID), "paused", 5, 1)
+	completedGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), int32(fixtures.TestCommunity.ID), "completed", 5, 3)
+	setupGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), int32(fixtures.TestCommunity.ID), "setup", 5, 0)
 
 	// Create recruiting game with NO open spots (full)
-	fullRecruitingGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), "recruitment", 3, 3)
+	fullRecruitingGame := createTestGameInState(t, testDB, gameService, int32(fixtures.TestUser.ID), int32(fixtures.TestCommunity.ID), "recruitment", 3, 3)
 
 	testCases := []struct {
 		name           string
@@ -135,6 +135,7 @@ func TestGameService_FilterByParticipation(t *testing.T) {
 		Title:       "GM Game",
 		Description: "Game where test user is GM",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	require.NoError(t, err)
@@ -144,6 +145,7 @@ func TestGameService_FilterByParticipation(t *testing.T) {
 		Title:       "Participant Game",
 		Description: "Game where test user is participant",
 		GMUserID:    int32(player2.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	require.NoError(t, err)
@@ -155,6 +157,7 @@ func TestGameService_FilterByParticipation(t *testing.T) {
 		Title:       "Applied Game",
 		Description: "Game where test user has applied",
 		GMUserID:    int32(player2.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	require.NoError(t, err)
@@ -175,6 +178,7 @@ func TestGameService_FilterByParticipation(t *testing.T) {
 		Title:       "Not Joined Game",
 		Description: "Game where test user is not involved",
 		GMUserID:    int32(player2.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	require.NoError(t, err)
@@ -256,13 +260,14 @@ func TestGameService_FilterByParticipation(t *testing.T) {
 }
 
 // Helper function to create a game in a specific state with participants
-func createTestGameInState(t *testing.T, testDB *core.TestDatabase, gameService *GameService, gmUserID int32, state string, maxPlayers int, currentPlayers int) int32 {
+func createTestGameInState(t *testing.T, testDB *core.TestDatabase, gameService *GameService, gmUserID, communityID int32, state string, maxPlayers int, currentPlayers int) int32 {
 	ctx := context.Background()
 
 	game, err := gameService.CreateGame(ctx, core.CreateGameRequest{
 		Title:       "Test Game - " + state,
 		Description: "Game in " + state + " state",
 		GMUserID:    gmUserID,
+		CommunityID: communityID,
 		MaxPlayers:  int32(maxPlayers),
 		IsPublic:    true,
 		StartDate:   core.TimePtr(time.Now().Add(24 * time.Hour)),
@@ -315,6 +320,7 @@ func TestGameService_CurrentPlayersExcludesAudience(t *testing.T) {
 		Title:       "Audience Count Test Game",
 		Description: "Test that audience members are excluded from player count",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		MaxPlayers:  5,
 		IsPublic:    true,
 	})
@@ -366,6 +372,7 @@ func TestGameService_UserRelationshipDistinguishesRoles(t *testing.T) {
 		Title:       "Relationship Role Test Game",
 		Description: "Test that user_relationship reflects participant role",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		MaxPlayers:  5,
 		IsPublic:    true,
 	})
