@@ -91,20 +91,17 @@ export const ApplyToGameModal = ({
     <Modal isOpen={isOpen} onClose={handleClose} title={modalTitle}>
       <form onSubmit={handleSubmit} className="space-y-6" data-testid="application-form">
         {/*
-          * Always mounted AND always occupying its height, even while empty.
-          * The Modal centres its panel vertically, so an alert appearing on
-          * failure would grow the form and push the panel up -- a visible jump
-          * right where the user is still looking after clicking Submit.
+          * The live region stays mounted so screen readers announce an error in
+          * place, but takes up no space while empty: `empty:hidden` makes the
+          * div display:none when it has no children, which also collapses the
+          * form's space-y gap above the next field.
           *
-          * min-h is sized to a one-line Alert. A longer message still grows the
-          * form, but the common single-line case -- which is every error the
-          * apply endpoint returns -- costs no movement at all.
+          * An earlier version reserved a one-line Alert's height here to avoid
+          * the panel shifting when an error appears. That traded a rare reflow
+          * for a permanent blank band at the top of the form, which every
+          * applicant sees -- the wrong side of the tradeoff.
           */}
-        <div
-          data-testid="application-error"
-          aria-live="polite"
-          className="min-h-14"
-        >
+        <div data-testid="application-error" aria-live="polite" className="empty:hidden">
           {error && <Alert variant="danger">{error}</Alert>}
         </div>
 

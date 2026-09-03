@@ -159,11 +159,11 @@ describe('ApplyToGameModal', () => {
   });
 
   /**
-   * The submit button is the thing that moves during a failed submit, so the
-   * error must not also displace the form. Reserving the alert's row keeps the
-   * modal's height constant between the two states.
+   * The region stays mounted (and empty, so it occupies no height) rather than
+   * being conditionally rendered: a live region has to exist before the error
+   * lands in it for screen readers to announce the change.
    */
-  it('keeps the error region mounted so showing an error does not shift the form', async () => {
+  it('keeps the error region mounted so the error is announced in place', async () => {
     const user = userEvent.setup();
     const failure = new AxiosError('Request failed with status code 403');
     failure.response = {
