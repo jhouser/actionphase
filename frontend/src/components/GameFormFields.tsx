@@ -17,6 +17,12 @@ const MAX_SHEET_LABEL_LENGTH = 24;
 export interface GameFormData {
   title: string;
   description: string;
+  /**
+   * The community this game belongs to. '' means unchosen -- required on
+   * create (req 5), and left alone on edit, where reassignment is a separate
+   * operation with its own rules.
+   */
+  community_id: number | '';
   genre: string;
   max_players: number | '';
   recruitment_deadline: string;
@@ -46,6 +52,14 @@ export interface GameFormData {
 interface GameFormFieldsProps {
   formData: GameFormData;
   onChange: (field: keyof GameFormData, value: string | number | boolean) => void;
+  /**
+   * Active communities for the create-time picker. Omitted on Edit: moving a
+   * game between communities changes which banlist governs it, so it is a
+   * separate operation rather than a field on an ordinary profile edit.
+   */
+  communities?: { id: number; name: string }[];
+  /** Whether a community must be chosen. True on create, false on edit. */
+  communityRequired?: boolean;
   bannerUpload?: ReactNode;
   /**
    * Active tab, owned by the consumer so a failed submit can switch to the tab
@@ -118,7 +132,7 @@ function SectionHeading({ children }: { children: ReactNode }) {
   );
 }
 
-export const GameFormFields = ({ formData, onChange, bannerUpload, activeTab, onTabChange }: GameFormFieldsProps) => {
+export const GameFormFields = ({ formData, onChange, bannerUpload, activeTab, onTabChange, communities, communityRequired = false }: GameFormFieldsProps) => {
   return (
     <>
       <TabNavigation
@@ -150,6 +164,31 @@ export const GameFormFields = ({ formData, onChange, bannerUpload, activeTab, on
           placeholder="Describe your game world, setting, and what players can expect..."
           data-testid="game-description"
         />
+
+        {communities && (
+          <Select
+            label="Community"
+            id="community_id"
+            // Required only on create. On edit the picker is offered so a GM can
+            // MOVE the game, including a legacy game that has no community yet
+            // -- making it required there would block saving any unrelated edit
+            // to such a game.
+            required={communityRequired}
+            value={formData.community_id}
+            onChange={(e) =>
+              onChange('community_id', e.target.value === '' ? '' : Number(e.target.value))
+            }
+            helperText="Which community this game belongs to. This sets whose rules and bans apply."
+            data-testid="game-community"
+          >
+            <option value="">-- Choose a community --</option>
+            {communities.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        )}
 
         <div className="grid grid-cols-3 gap-4">
           <div className="col-span-2">

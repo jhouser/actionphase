@@ -192,6 +192,11 @@ const (
 
 	// NotRecruiting - Game is not currently in recruitment state
 	NotRecruiting = "not_recruiting"
+
+	// CommunityBanned - User is banned from the community that owns this game.
+	// Takes precedence over every other reason: the user is excluded from the
+	// whole community, not merely ineligible for this one game.
+	CommunityBanned = "community_banned"
 )
 
 // ApplicationStatuses define all valid application statuses.

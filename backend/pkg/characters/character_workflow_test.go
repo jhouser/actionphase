@@ -16,6 +16,7 @@ func TestCharacterWorkflow_CompleteApprovalFlow(t *testing.T) {
 
 	// Setup test data
 	gmUser := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	playerUser := testDB.CreateTestUser(t, "player", "player@example.com")
 
 	gameService := &services.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
@@ -23,6 +24,7 @@ func TestCharacterWorkflow_CompleteApprovalFlow(t *testing.T) {
 		Title:       "Workflow Test Game",
 		Description: "Testing character approval workflow",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create test game")
@@ -110,6 +112,7 @@ func TestCharacterWorkflow_NPCAssignmentFlow(t *testing.T) {
 
 	// Setup test data
 	gmUser := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	audienceUser1 := testDB.CreateTestUser(t, "audience1", "audience1@example.com")
 	audienceUser2 := testDB.CreateTestUser(t, "audience2", "audience2@example.com")
 
@@ -118,6 +121,7 @@ func TestCharacterWorkflow_NPCAssignmentFlow(t *testing.T) {
 		Title:       "NPC Assignment Test Game",
 		Description: "Testing NPC assignment workflow",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create test game")
@@ -193,6 +197,7 @@ func TestCharacterWorkflow_PermissionMatrix(t *testing.T) {
 
 	// Setup comprehensive test scenario
 	gmUser := testDB.CreateTestUser(t, "gm", "gm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	playerUser := testDB.CreateTestUser(t, "player", "player@example.com")
 	audienceUser := testDB.CreateTestUser(t, "audience", "audience@example.com")
 	outsideUser := testDB.CreateTestUser(t, "outside", "outside@example.com")
@@ -202,6 +207,7 @@ func TestCharacterWorkflow_PermissionMatrix(t *testing.T) {
 		Title:       "Permission Matrix Test Game",
 		Description: "Testing all permission combinations",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Failed to create test game")

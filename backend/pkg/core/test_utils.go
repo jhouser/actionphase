@@ -234,6 +234,13 @@ func (td *TestDatabase) CleanupTables(t TestingInterface, tables ...string) {
 			"characters",
 			// Top-level tables (least dependent)
 			"games",
+			// Communities sit between games and users: games reference a
+			// community (ON DELETE RESTRICT) and a community references its
+			// owner (also RESTRICT), so both must be cleared after games and
+			// before users or the users DELETE is refused and every later test
+			// collides on the unique email.
+			"community_moderators",
+			"communities",
 			"registration_attempts",
 			"sessions",
 			"users",
@@ -268,42 +275,62 @@ func (td *TestDatabase) CleanupTables(t TestingInterface, tables ...string) {
 		return
 	}
 
-	// Use a single transaction for atomic cleanup of existing tables
-	tx, err := td.Pool.Begin(ctx)
-	if err != nil {
-		t.Logf("Warning: Failed to begin cleanup transaction: %v", err)
-		return
-	}
+	// communities.owner_user_id is ON DELETE RESTRICT, so a caller cleaning
+	// "users" cannot succeed while any community still points at one. Fixtures
+	// now create a community by default (req 5), which would otherwise break
+	// every existing cleanup list that names users but not communities.
+	existingTables = withCommunityCleanup(existingTables)
 
-	committed := false
-	defer func() {
-		if !committed {
-			if err := tx.Rollback(ctx); err != nil {
-				t.Logf("Warning: Failed to rollback cleanup transaction: %v", err)
-			}
-		}
-	}()
-
-	for _, table := range existingTables {
-		// Use DELETE instead of TRUNCATE to avoid deadlock issues with foreign keys
-		_, err := tx.Exec(ctx, "DELETE FROM "+table)
-		if err != nil {
-			t.Logf("Warning: Failed to cleanup table %s: %v", table, err)
+	// Retried: a deadlock (40P01) aborts the whole transaction, and it is a
+	// normal outcome here rather than a bug. Tests leave background goroutines
+	// (notification writers) holding row locks past the request that spawned
+	// them, so cleanup and those writes genuinely interleave. Retrying is what
+	// Postgres expects of a deadlock loser.
+	const cleanupAttempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= cleanupAttempts; attempt++ {
+		lastErr = td.cleanupOnce(ctx, existingTables)
+		if lastErr == nil {
 			return
 		}
-		// Reset sequences for primary key columns
-		_, err = tx.Exec(ctx, "SELECT setval(pg_get_serial_sequence('"+table+"', 'id'), 1, false)")
-		if err != nil {
-			// Not all tables have id columns, so just log this as info
-			t.Logf("Note: No sequence to reset for table %s", table)
+		if attempt < cleanupAttempts {
+			time.Sleep(time.Duration(attempt) * 100 * time.Millisecond)
 		}
+	}
+
+	// Fatal, not a warning: a cleanup that silently gave up leaves rows AND id
+	// sequences behind, and the damage surfaces as a duplicate-key failure in a
+	// later, unrelated test. That indirection is how this failure mode hides.
+	t.Fatalf("CleanupTables: failed after %d attempts: %v\n"+
+		"(a deadlock means a background goroutine is still writing; a FK "+
+		"violation means a table is listed after something that references it "+
+		"with ON DELETE RESTRICT)", cleanupAttempts, lastErr)
+}
+
+// cleanupOnce runs one cleanup transaction, returning its error rather than
+// failing the test, so the caller can retry a deadlock.
+func (td *TestDatabase) cleanupOnce(ctx context.Context, tables []string) error {
+	tx, err := td.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin cleanup transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	for _, table := range tables {
+		// DELETE rather than TRUNCATE: TRUNCATE takes an ACCESS EXCLUSIVE lock
+		// and deadlocks far more readily against concurrent access.
+		if _, err := tx.Exec(ctx, "DELETE FROM "+table); err != nil {
+			return fmt.Errorf("delete from %s: %w", table, err)
+		}
+		// Reset the id sequence so the next test starts from 1. Not every table
+		// has an id column, so a failure here is not an error.
+		_, _ = tx.Exec(ctx, "SELECT setval(pg_get_serial_sequence('"+table+"', 'id'), 1, false)")
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		t.Logf("Warning: Failed to commit cleanup transaction: %v", err)
-	} else {
-		committed = true
+		return fmt.Errorf("commit cleanup: %w", err)
 	}
+	return nil
 }
 
 // generateUniqueUsername creates a unique username for testing
@@ -505,6 +532,9 @@ func (td *TestDatabase) AddTestGameParticipant(t TestingInterface, gameID int32,
 type TestFixtures struct {
 	TestUser *User
 	TestGame *models.Game
+	// TestCommunity owns TestGame. Every game created through the service now
+	// requires a community (req 5), so fixtures supply one by default.
+	TestCommunity *models.Community
 }
 
 // SetupFixtures creates common test data for use across tests
@@ -512,13 +542,68 @@ func (td *TestDatabase) SetupFixtures(t TestingInterface) *TestFixtures {
 	// Create test user
 	testUser := td.CreateTestUser(t, "testuser", "test@example.com")
 
+	// Create the community first: games belong to one (req 5), and the owner
+	// FK is ON DELETE RESTRICT, so cleanup must drop communities before users.
+	testCommunity := td.CreateTestCommunity(t, int32(testUser.ID))
+
 	// Create test game
 	testGame := td.CreateTestGame(t, int32(testUser.ID), "Test Game")
 
 	return &TestFixtures{
-		TestUser: testUser,
-		TestGame: testGame,
+		TestUser:      testUser,
+		TestGame:      testGame,
+		TestCommunity: testCommunity,
 	}
+}
+
+// CreateTestCommunity creates an active community owned by the given user.
+//
+// The slug is uniquified per call: test packages share a template database and
+// communities.slug is UNIQUE, so a fixed slug would collide across tests.
+func (td *TestDatabase) CreateTestCommunity(t TestingInterface, ownerUserID int32) *models.Community {
+	ctx := context.Background()
+	queries := models.New(td.Pool)
+
+	suffix := fmt.Sprintf("%d-%d", time.Now().UnixNano(), rand.Int31())
+	community, err := queries.CreateCommunity(ctx, models.CreateCommunityParams{
+		Name:        "Test Community",
+		Slug:        "test-community-" + suffix,
+		Description: pgtype.Text{String: "Community created for testing purposes", Valid: true},
+		OwnerUserID: ownerUserID,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test community: %v", err)
+	}
+
+	return &community
+}
+
+// withCommunityCleanup ensures community tables are deleted before users.
+//
+// Returns the list unchanged unless it cleans "users" without already naming
+// the community tables -- so a caller that orders them explicitly keeps control.
+func withCommunityCleanup(tables []string) []string {
+	usersAt := -1
+	for i, t := range tables {
+		if t == "communities" {
+			return tables // caller is managing the order themselves
+		}
+		if t == "users" && usersAt == -1 {
+			usersAt = i
+		}
+	}
+	if usersAt == -1 {
+		return tables
+	}
+
+	// Inserted immediately BEFORE users, not at the front: games.community_id
+	// is also ON DELETE RESTRICT, so communities must go after games (which
+	// callers list earlier) but before users. Both constraints at once.
+	out := make([]string, 0, len(tables)+2)
+	out = append(out, tables[:usersAt]...)
+	out = append(out, "community_moderators", "communities")
+	out = append(out, tables[usersAt:]...)
+	return out
 }
 
 // AssertNoError is a test helper that fails the test if err is not nil

@@ -232,3 +232,64 @@ func CanUserControlNPC(ctx context.Context, db *pgxpool.Pool, characterID int32,
 
 	return false
 }
+
+// ---------------------------------------------------------------- communities
+
+// GetCommunityRole resolves a user's standing in a community: owner, moderator,
+// or none. Owner outranks moderator, and the owner is deliberately not a row in
+// community_moderators.
+//
+// This reports the user's OWN standing only. It knows nothing about site
+// admins; use CanModerateCommunity / CanAdministerCommunity for the questions
+// that actually gate handlers.
+func GetCommunityRole(ctx context.Context, db *pgxpool.Pool, communityID, userID int32) CommunityRole {
+	queries := models.New(db)
+
+	role, err := queries.GetCommunityRole(ctx, models.GetCommunityRoleParams{
+		CommunityID: communityID,
+		UserID:      userID,
+	})
+	if err != nil {
+		// A failed lookup must never read as elevated access.
+		return CommunityRoleNone
+	}
+
+	switch role {
+	case string(CommunityRoleOwner):
+		return CommunityRoleOwner
+	case string(CommunityRoleModerator):
+		return CommunityRoleModerator
+	default:
+		return CommunityRoleNone
+	}
+}
+
+// CanModerateCommunity reports whether the user may perform ordinary moderation
+// in a community: managing bans, documents, webhooks, and the community profile.
+//
+// True for the owner, for any moderator, and for a site admin WITH ADMIN MODE
+// ENABLED. The admin-mode requirement matches the GM-override convention
+// (IsUserGameMasterCtx) and keeps admins from moderating by accident while
+// browsing normally.
+func CanModerateCommunity(ctx context.Context, db *pgxpool.Pool, communityID, userID int32, isAdmin bool) bool {
+	if isAdmin && GetAdminMode(ctx) {
+		return true
+	}
+
+	role := GetCommunityRole(ctx, db, communityID, userID)
+	return role == CommunityRoleOwner || role == CommunityRoleModerator
+}
+
+// CanAdministerCommunity reports whether the user may change the moderator
+// roster -- the one power that separates an owner from a moderator.
+//
+// True for the owner and for a site admin with admin mode enabled. Moderators
+// are excluded on purpose: they may do everything else, but they may not
+// appoint further moderators.
+func CanAdministerCommunity(ctx context.Context, db *pgxpool.Pool, communityID, userID int32, isAdmin bool) bool {
+	if isAdmin && GetAdminMode(ctx) {
+		return true
+	}
+
+	return GetCommunityRole(ctx, db, communityID, userID) == CommunityRoleOwner
+}

@@ -225,6 +225,77 @@ curl -X DELETE http://localhost:3000/api/v1/games/456/leave \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
+### Communities (added 2026-09-02)
+
+Communities are addressed by **slug**, not id — `/api/v1/communities/{slug}/...`
+The one exception is the games filter, which takes an id
+(`GET /api/v1/games?community_id=N`), because that is a column value rather than
+a route.
+
+The full endpoint list is generated and authoritative in the OpenAPI spec
+(`/api/v1/docs/`); what follows is the usage that is not obvious from it.
+
+#### List communities / read a profile
+```bash
+curl -X GET http://localhost:3000/api/v1/communities \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+curl -X GET http://localhost:3000/api/v1/communities/midnight-ravens \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+`GET /communities` returns **active** communities only. Inactive ones accept no
+new games; site admins see the full list via `/admin/communities`.
+
+#### Games in a community
+```bash
+# By id, through the normal games listing -- there is no per-community games
+# endpoint. One implementation means the two surfaces cannot disagree about
+# which games are visible.
+curl -X GET "http://localhost:3000/api/v1/games?community_id=3" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### Permission tiers
+
+Two distinct gates — see ADR-008:
+
+- **Moderator** (`CanModerateCommunity`): bans, documents, webhooks, profile,
+  banner.
+- **Owner** (`CanAdministerCommunity`): the moderator roster, and nothing else.
+  A moderator adding a moderator gets **403**, by design.
+
+Site admins satisfy either gate only with **admin mode enabled**.
+
+#### Webhook URLs are credentials
+
+`GET /communities/{slug}/webhooks` returns **masked** URLs and never echoes the
+secret back — including for disabled rows, which the listing deliberately
+includes so a moderator can repair or re-enable them.
+
+Treat the write endpoints as write-only. On PATCH, `url` is optional
+(`*string`): **omit it to keep the current URL**. Because the client only ever
+holds a masked value, sending back what was read would otherwise write the mask
+in as the real secret.
+
+A webhook belonging to another community answers **404, not 403** — a 403 would
+confirm the row exists and let a moderator of one community probe another's
+configuration.
+
+#### Banners
+
+`POST /communities/{slug}/banner` is multipart (`banner` field), JPG/PNG/WebP,
+5MB cap. It replaces any existing banner, deleting the previous object first.
+`DELETE` removes the object and clears the column, and **succeeds when there is
+no banner** — the caller's intended end state already holds. Returns `503` when
+file storage is not configured.
+
+#### Legacy games
+
+`games.community_id` is nullable. A game created before communities exist
+returns no community and is never blocked by a community ban. Clients must
+render that as *no community section*, not as an error or a "None" placeholder.
+
 ## Frontend Integration
 
 ### JavaScript/TypeScript Usage

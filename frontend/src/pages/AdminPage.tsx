@@ -7,9 +7,10 @@ import { UserListTab } from './admin/UserListTab';
 import { PendingApprovalTab } from './admin/PendingApprovalTab';
 import { IPBansTab } from './admin/IPBansTab';
 import { FingerprintBansTab } from './admin/FingerprintBansTab';
+import { CommunitiesTab } from './admin/CommunitiesTab';
 
-type TabId = 'mode' | 'admins' | 'banned' | 'users' | 'pending' | 'ip-bans' | 'fingerprint-bans';
-const VALID_TABS: TabId[] = ['mode', 'admins', 'banned', 'users', 'pending', 'ip-bans', 'fingerprint-bans'];
+type TabId = 'mode' | 'admins' | 'banned' | 'users' | 'pending' | 'ip-bans' | 'fingerprint-bans' | 'communities';
+const VALID_TABS: TabId[] = ['mode', 'admins', 'banned', 'users', 'pending', 'ip-bans', 'fingerprint-bans', 'communities'];
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'mode', label: 'Admin Mode' },
@@ -19,6 +20,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'pending', label: 'Pending Approval' },
   { id: 'ip-bans', label: 'IP Bans' },
   { id: 'fingerprint-bans', label: 'Device Bans' },
+  { id: 'communities', label: 'Communities' },
 ];
 
 export function AdminPage() {
@@ -77,6 +79,7 @@ export function AdminPage() {
       {activeTab === 'pending' && <PendingApprovalTab />}
       {activeTab === 'ip-bans' && <IPBansTab />}
       {activeTab === 'fingerprint-bans' && <FingerprintBansTab />}
+      {activeTab === 'communities' && <CommunitiesTab />}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { Page, Locator } from '@playwright/test';
+import { LONG_TIMEOUT } from '../config/test-timeouts';
 
 /**
  * Page Object for User Login
@@ -50,7 +51,14 @@ export class LoginPage {
     }
     // Wait for the login form to be visible and network to settle
     // (ensures any in-flight auth requests from prior tests have completed)
-    await this.usernameInput.waitFor({ state: 'visible', timeout: 5000 });
+    //
+    // LONG_TIMEOUT, not the 5s default. Login is the first thing all ~51 specs
+    // do, so this wait competes with five other workers cold-loading the Vite
+    // dev server at once. A budget that only suits a quiet machine turns dev
+    // server contention into "login timed out" failures scattered across
+    // unrelated specs -- the symptom points at whatever the spec was testing
+    // rather than at the shared bottleneck it actually hit.
+    await this.usernameInput.waitFor({ state: 'visible', timeout: LONG_TIMEOUT });
     await this.page.waitForLoadState('networkidle');
   }
 
@@ -68,8 +76,26 @@ export class LoginPage {
     await this.loginButton.click();
 
     if (expectSuccess) {
-      // Wait for redirect to dashboard (successful login)
-      await this.page.waitForURL('/dashboard', { timeout: 10000 });
+      // Wait to land ANYWHERE but /login -- not specifically on /dashboard.
+      //
+      // /dashboard is only the FALLBACK destination. LoginPage.tsx redirects to
+      // `location.state.from.pathname` when it is set, which ProtectedRoute
+      // sets whenever it bounces an unauthenticated user off a protected URL.
+      // React Router keeps that state in SPA history across a page.goto('/login'),
+      // so a spec that deep-links to a protected route and then logs in as
+      // someone else legitimately lands back on THAT route instead.
+      //
+      // Waiting for '/dashboard' therefore timed out on a login that had in fact
+      // succeeded -- and it read as a slow dev server, because the URL bar was
+      // the only place the difference showed. Leaving /login is the real
+      // success signal; where we land afterwards is the app's business.
+      //
+      // LONG_TIMEOUT, not the 10s default: the POST and the subsequent
+      // /auth/me still queue behind other workers on a busy run.
+      await this.page.waitForURL((url) => !url.pathname.startsWith('/login'), {
+        timeout: LONG_TIMEOUT,
+      });
+      await this.page.waitForLoadState('networkidle');
     }
   }
 

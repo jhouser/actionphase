@@ -284,6 +284,72 @@ both. See the header comments in `demo/06b_staged_results.sql`.
 - Games with 2-6 players
 - Audience members (future)
 
+## Community Fixtures (added 2026-09-02)
+
+**Files**: `e2e/00_communities.sql`, `e2e/30_legacy_no_community.sql`,
+`e2e/99_backfill_communities.sql` (demo mirrors these as `demo/01b_` and
+`demo/99_`).
+
+Loaded as `00_` — after users, before any game fixture, since
+`games.community_id` references these rows.
+
+### Three communities
+
+| Name | Slug (worker 0) | Notes |
+|---|---|---|
+| Midnight Ravens | `midnight-ravens` | Owned by TestGM; two bans |
+| Harbor Lights | `harbor-lights` | Carries the webhook fixtures |
+| The Long Road | `the-long-road` | Clean; no bans |
+
+🔴 **Slugs carry a worker suffix** (`-w1`..`-w5`); worker 0 keeps the bare slug.
+Communities are keyed by a UNIQUE slug, so a fixed slug would have all six E2E
+workers fight over the same three rows — the last writer wins and every other
+worker's moderator/ban specs read someone else's data. The suffix is derived
+from the already-rewritten GM email, not passed in.
+
+### Four ban scenarios, each proving a different rule
+
+| User / community | Shape | What it proves |
+|---|---|---|
+| TestPlayer5 / Midnight Ravens | Active, permanent (`expires_at IS NULL`) | Baseline enforcement |
+| TestPlayer4 / Midnight Ravens | **Expired** (16 days ago) | An expired ban does not block |
+| TestAudience / Harbor Lights | Active, expires in 7 days | Bans do not leak across communities — this user must stay free to play in Midnight Ravens |
+| TestPlayer3 | **Audit events only, no `community_bans` row** | Ban → extended → lifted. This is what the separate `community_ban_events` table exists for: the history survives the ban's deletion |
+
+### 🔴 Game 800 — the permanent grandfathering guard
+
+`e2e/30_legacy_no_community.sql` creates one game with **`community_id IS
+NULL`**, and `99_backfill_communities.sql` excludes it by ID —
+`800 + worker_game_id_offset`, not a bare 800, so each worker skips its own
+copy. That file then asserts in both directions and raises on either
+failure, so a broken guard surfaces at fixture load rather than as a
+confusing spec failure later:
+1. the holdout still has `community_id IS NULL`, and
+2. no *other* game of that worker's was left unassigned (an accidentally
+   NULL game would exercise the legacy path instead of the ban paths it
+   was written to cover).
+
+**Never "fix" this game and never let a backfill assign it a community.**
+`games.community_id` is nullable, so NULL is reachable in production. Ban
+enforcement inner-joins through `games.community_id`, so a NULL yields no row
+and no ban applies. Without this fixture, that branch ships untested and a
+legacy game could start 500ing or being wrongly blocked with nothing noticing.
+
+It guards, concretely:
+- `CanUserApplyToGame` returns `can_apply`, never `community_banned`
+- `IsUserBannedFromGameCommunity` returns false even for a user banned elsewhere
+- the game page renders with no community section rather than erroring
+
+TestPlayer5 (banned from Midnight Ravens) is deliberately the user specs should
+apply with here: a banned user must still join a game that belongs to no
+community.
+
+The `community_id` column is **omitted** from the INSERT rather than written as
+`NULL`, so the row looks exactly like one created before communities existed.
+The ID is a bare literal in both the `DELETE` and the `INSERT` because
+`apply_e2e_worker.sh` offsets IDs by rewriting literals it can see — a PL/pgSQL
+variable would hide the number and leave workers 1-5 with no guard at all.
+
 ## Using Test Data in Tests
 
 ### Backend Integration Tests

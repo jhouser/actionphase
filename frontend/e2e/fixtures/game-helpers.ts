@@ -64,6 +64,13 @@ export const FIXTURE_GAMES = {
   // Deep linking test (701)
   DEEP_LINKING_TEST: 'E2E Deep Linking Test',                      // Game #701 - "Deep linking regression tests"
 
+  // Community ban enforcement (810-812) — owned by community-ban-enforcement.spec.ts.
+  // Separate from the 329-341 application games because those pre-seed
+  // applications for the very users the ban specs need to apply as.
+  E2E_BAN_BLOCKED: 'E2E Test: Ban Enforcement - Blocked',           // Game #810 - in Midnight Ravens, banned user refused
+  E2E_BAN_OTHER_COMMUNITY: 'E2E Test: Ban Enforcement - Other Community', // Game #811 - Harbor Lights, must let them in
+  E2E_BAN_EXPIRED: 'E2E Test: Ban Enforcement - Expired Ban',       // Game #812 - Midnight Ravens, lapsed ban must not block
+
   // Infinite scroll test (710) — shared, read-only
   INFINITE_SCROLL: 'E2E Test: Infinite Scroll',                    // Game #710 - "infinite-scroll.spec.ts"
 
@@ -114,7 +121,7 @@ export const FIXTURE_GAMES = {
  * Get worker index for parallel test execution
  * @returns Worker index (0-5)
  */
-function getWorkerIndex(): number {
+export function getWorkerIndex(): number {
   const workerIndex = process.env.TEST_PARALLEL_INDEX
     ? parseInt(process.env.TEST_PARALLEL_INDEX, 10)
     : 0;

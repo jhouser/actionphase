@@ -65,6 +65,9 @@ export const Layout = ({ children }: LayoutProps) => {
                   <Link to="/games" className={navLinkClass('/games')}>
                     Games
                   </Link>
+                  <Link to="/communities" className={navLinkClass('/communities')}>
+                    Communities
+                  </Link>
                   <a
                     href="/docs/"
                     target="_blank"
@@ -235,6 +238,19 @@ export const Layout = ({ children }: LayoutProps) => {
                     </div>
                   </Link>
 
+                  <Link
+                    to="/communities"
+                    className={`block ${navLinkClass('/communities')}`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      <span>Communities</span>
+                    </div>
+                  </Link>
+
                   <a
                     href="/docs/"
                     target="_blank"
@@ -329,8 +345,8 @@ export const Layout = ({ children }: LayoutProps) => {
             &copy; 2025 ActionPhase. A collaborative role-playing platform.
           </p>
           <p className="text-center text-sm text-content-secondary mt-2">
-            <Link to="/community-guidelines" className="hover:underline">
-              Community Guidelines
+            <Link to="/site-guidelines" className="hover:underline">
+              Site Guidelines
             </Link>
           </p>
           <p className="text-center text-xs text-content-secondary mt-1">

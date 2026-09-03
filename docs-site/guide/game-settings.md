@@ -6,6 +6,7 @@ When creating or editing a game, the GM configures a set of options that affect 
 
 - **Title** — The name of the game (required)
 - **Description** — Shown to all players browsing for games (required)
+- **Community** — Which community the game belongs to (required). This sets whose guidelines and bans apply. If only one community is available, it's selected for you. See [Communities](./communities)
 - **Genre** — Optional label such as Fantasy, Sci-Fi, Horror, or Modern
 - **Maximum Players** — How many player characters the game supports (leave blank for default of 6, max: 20)
 
@@ -50,3 +51,5 @@ mind later.
 ## Creating a Game
 
 From the **Games** page, click **Create Game**. After filling in the form and submitting, you are taken directly to your new game, which starts in **Setup** state. From there, use the game actions menu (⋮) to move to **Recruitment** when you're ready to accept applications.
+
+While the game is still in **Setup**, you can change which community it belongs to by editing it. Once you move it to **Recruitment**, the community is locked — players join under that community's rules, so it can't be swapped afterwards.

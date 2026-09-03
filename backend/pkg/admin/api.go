@@ -13,4 +13,5 @@ type Handler struct {
 	IPBanService          core.IPBanServiceInterface
 	FingerprintBanService core.FingerprintBanServiceInterface
 	MessageService        core.MessageServiceInterface
+	CommunityService      core.CommunityServiceInterface
 }

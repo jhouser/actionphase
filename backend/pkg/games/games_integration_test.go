@@ -43,6 +43,7 @@ func TestGameAPI_CompleteGameLifecycle(t *testing.T) {
 	// Step 1: Create a game
 	t.Run("create_game", func(t *testing.T) {
 		gameData := CreateGameRequest{
+			CommunityID: int32(fixtures.TestCommunity.ID),
 			Title:       "Test RPG Campaign",
 			Description: "A comprehensive test campaign for integration testing purposes",
 			Genre:       "Fantasy RPG",
@@ -108,6 +109,15 @@ func TestGameAPI_CompleteGameLifecycle(t *testing.T) {
 		core.AssertEqual(t, createdGameID, response.ID, "Game ID should match")
 		core.AssertEqual(t, int64(0), response.CurrentPlayers, "New game should have 0 players")
 		core.AssertNotEqual(t, "", response.GMUsername, "GM username should be populated")
+
+		// /details is what the game page actually loads, so the edit form
+		// hydrates from THIS payload -- not from GET /games/{id}. Dropping
+		// community_id here made the community picker read "-- Choose a
+		// community --" for a game that plainly had one.
+		if response.CommunityID == nil {
+			t.Fatal("community_id missing from /details; the edit form cannot preselect the community")
+		}
+		core.AssertEqual(t, int32(fixtures.TestCommunity.ID), *response.CommunityID, "Community should match the one the game was created in")
 	})
 
 	// Step 4: Update game details
@@ -218,6 +228,7 @@ func TestGameAPI_PublicEndpoints(t *testing.T) {
 		Title:       "Public Test Game",
 		Description: "A game for testing public endpoints",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		Genre:       "Action",
 		MaxPlayers:  4,
 		IsPublic:    true,
@@ -342,6 +353,7 @@ func TestGameAPI_ParticipantManagement(t *testing.T) {
 		Title:       "Participant Test Game",
 		Description: "A game for testing participant management",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		MaxPlayers:  3,
 		IsPublic:    true,
 	})
@@ -436,6 +448,7 @@ func TestGameAPI_Authorization(t *testing.T) {
 		Title:       "Authorization Test Game",
 		Description: "A game for testing authorization",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Test game creation should succeed")
@@ -727,6 +740,7 @@ func BenchmarkGameAPI_CreateGame(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		gameData := CreateGameRequest{
+			CommunityID: int32(fixtures.TestCommunity.ID),
 			Title:       "Benchmark Game " + strconv.Itoa(i),
 			Description: "A game created during benchmark testing",
 			Genre:       "Test",
@@ -770,6 +784,7 @@ func BenchmarkGameAPI_GetAllGames(b *testing.B) {
 			Title:       "Benchmark Game " + strconv.Itoa(i),
 			Description: "A game for benchmark testing",
 			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: int32(fixtures.TestCommunity.ID),
 			IsPublic:    true,
 		})
 	}
@@ -823,6 +838,7 @@ func TestGameAPI_GameApplications(t *testing.T) {
 		Title:       "Test Game for Applications",
 		Description: "A game to test applications",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -1113,6 +1129,7 @@ func TestGameAPI_AudienceManagement(t *testing.T) {
 		Title:       "Test Game for Audience",
 		Description: "A game to test audience features",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -1308,6 +1325,7 @@ func TestGameAPI_AudienceManagement(t *testing.T) {
 			Title:       "Test Game Character Creation",
 			Description: "A game to test audience joining during character creation",
 			GMUserID:    int32(fixtures.TestUser.ID),
+			CommunityID: int32(fixtures.TestCommunity.ID),
 			IsPublic:    true,
 		})
 		core.AssertNoError(t, err, "Game creation should succeed")
@@ -1411,11 +1429,13 @@ func TestGetGameParticipants_IncludesAvatarUrl(t *testing.T) {
 	testDB.MarkUserVerified(t, userWithoutAvatar.ID)
 
 	// Create a game
+	community := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
 	game, err := gameService.CreateGame(context.Background(), core.CreateGameRequest{
 		Title:       "Avatar Test Game",
 		Description: "Testing avatar URLs in participants",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: community.ID,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
 

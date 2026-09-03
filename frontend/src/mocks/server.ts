@@ -205,6 +205,26 @@ const handlers = [
     return HttpResponse.json([]);
   }),
 
+  // Every new game requires a community (req 5), so the create form fetches
+  // this list. One entry, so the form preselects it and tests that only care
+  // about other fields do not have to pick one.
+  http.get('/api/v1/communities', () => {
+    return HttpResponse.json([
+      {
+        id: 1,
+        name: 'Test Community',
+        slug: 'test-community',
+        description: null,
+        banner_url: null,
+        owner_user_id: 1,
+        owner_username: 'testuser',
+        is_active: true,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+    ]);
+  }),
+
 ];
 
 // Setup server with handlers

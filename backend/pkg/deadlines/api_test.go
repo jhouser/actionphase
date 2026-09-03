@@ -95,6 +95,7 @@ func TestCreateDeadline_Success(t *testing.T) {
 
 	// Create GM user and regular user
 	gmUser := testDB.CreateTestUser(t, "testgm", "testgm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	// Note: only gmUser needed for this test
 
 	// Create a game owned by test GM
@@ -103,6 +104,7 @@ func TestCreateDeadline_Success(t *testing.T) {
 		Title:       "Test Game for Deadlines",
 		Description: "Testing deadline creation",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -164,6 +166,7 @@ func TestCreateDeadline_Unauthorized(t *testing.T) {
 
 	// Create GM user and regular user
 	gmUser := testDB.CreateTestUser(t, "testgm", "testgm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	regularUser := testDB.CreateTestUser(t, "regularuser", "regular@example.com")
 
 	// Create a game owned by test GM
@@ -172,6 +175,7 @@ func TestCreateDeadline_Unauthorized(t *testing.T) {
 		Title:       "Test Game for Deadlines",
 		Description: "Testing unauthorized access",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -250,6 +254,7 @@ func TestGetGameDeadlines_Success(t *testing.T) {
 
 	// Create GM user
 	gmUser := testDB.CreateTestUser(t, "testgm", "testgm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 
 	// Create a game
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
@@ -257,6 +262,7 @@ func TestGetGameDeadlines_Success(t *testing.T) {
 		Title:       "Test Game for Deadlines",
 		Description: "Testing deadline retrieval",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -323,6 +329,7 @@ func TestGetGameDeadlines_NonParticipant(t *testing.T) {
 
 	// Create GM user and a user who is not a participant
 	gmUser := testDB.CreateTestUser(t, "testgm", "testgm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	outsideUser := testDB.CreateTestUser(t, "outsideuser", "outside@example.com")
 
 	// Create a game owned by test GM
@@ -331,6 +338,7 @@ func TestGetGameDeadlines_NonParticipant(t *testing.T) {
 		Title:       "Some Game",
 		Description: "Testing non-participant access",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    false,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -362,6 +370,7 @@ func TestUpdateDeadline_Success(t *testing.T) {
 
 	// Create GM user
 	gmUser := testDB.CreateTestUser(t, "testgm", "testgm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 
 	// Create a game
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
@@ -369,6 +378,7 @@ func TestUpdateDeadline_Success(t *testing.T) {
 		Title:       "Test Game",
 		Description: "Testing deadline update",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -428,6 +438,7 @@ func TestUpdateDeadline_Unauthorized(t *testing.T) {
 
 	// Create GM user and regular user
 	gmUser := testDB.CreateTestUser(t, "testgm", "testgm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	regularUser := testDB.CreateTestUser(t, "regularuser", "regular@example.com")
 
 	// Create a game owned by test GM
@@ -436,6 +447,7 @@ func TestUpdateDeadline_Unauthorized(t *testing.T) {
 		Title:       "Test Game",
 		Description: "Testing unauthorized update",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -522,6 +534,7 @@ func TestDeleteDeadline_Success(t *testing.T) {
 
 	// Create GM user
 	gmUser := testDB.CreateTestUser(t, "testgm", "testgm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 
 	// Create a game
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
@@ -529,6 +542,7 @@ func TestDeleteDeadline_Success(t *testing.T) {
 		Title:       "Test Game",
 		Description: "Testing deadline deletion",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -575,6 +589,7 @@ func TestDeleteDeadline_Unauthorized(t *testing.T) {
 
 	// Create GM user and regular user
 	gmUser := testDB.CreateTestUser(t, "testgm", "testgm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 	regularUser := testDB.CreateTestUser(t, "regularuser", "regular@example.com")
 
 	// Create a game owned by test GM
@@ -583,6 +598,7 @@ func TestDeleteDeadline_Unauthorized(t *testing.T) {
 		Title:       "Test Game",
 		Description: "Testing unauthorized deletion",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")
@@ -651,6 +667,7 @@ func TestGetUpcomingDeadlines_Success(t *testing.T) {
 
 	// Create GM user
 	gmUser := testDB.CreateTestUser(t, "testgm", "testgm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 
 	// Create two games
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
@@ -658,6 +675,7 @@ func TestGetUpcomingDeadlines_Success(t *testing.T) {
 		Title:       "Game 1",
 		Description: "First game",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game 1 creation should succeed")
@@ -666,6 +684,7 @@ func TestGetUpcomingDeadlines_Success(t *testing.T) {
 		Title:       "Game 2",
 		Description: "Second game",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game 2 creation should succeed")
@@ -737,6 +756,7 @@ func TestGetUpcomingDeadlines_WithLimit(t *testing.T) {
 
 	// Create GM user
 	gmUser := testDB.CreateTestUser(t, "testgm", "testgm@example.com")
+	gmCommunity := testDB.CreateTestCommunity(t, int32(gmUser.ID))
 
 	// Create a game
 	gameService := &db.GameService{DB: testDB.Pool, Logger: app.ObsLogger}
@@ -744,6 +764,7 @@ func TestGetUpcomingDeadlines_WithLimit(t *testing.T) {
 		Title:       "Test Game",
 		Description: "Testing limit parameter",
 		GMUserID:    int32(gmUser.ID),
+		CommunityID: gmCommunity.ID,
 		IsPublic:    true,
 	})
 	core.AssertNoError(t, err, "Game creation should succeed")

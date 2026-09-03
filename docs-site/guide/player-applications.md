@@ -9,6 +9,8 @@ When a game is in **Recruitment** state, click **Apply to Join** on the game's p
 
 After submitting, your application shows as **Pending** until the GM acts on it. You can withdraw a pending application with **Withdraw Application** before it's reviewed.
 
+If you're banned from the community that runs the game, you can't apply — you'll be told you are banned from that community. See [Communities](./communities#bans).
+
 ## Application Statuses
 
 - **Pending** — Awaiting GM review (also shown while GM has reviewed but not yet advanced the game)
@@ -33,6 +35,10 @@ For each pending application you can:
 
 - **Approve** — Accept the player into the game
 - **Reject** — Decline the application
+
+You cannot approve an applicant who is banned from the game's community. The approval is refused and the application stays pending, so you can still reject it explicitly.
+
+The check runs again when you advance the game past Recruitment, since a ban can land after you've already approved someone. In that case their application is not converted into a participant, and the record stays in place rather than the applicant quietly vanishing.
 
 Reviewed applications move to the **Reviewed Applications** section below for reference. You can change your decision on any application until the game advances past Recruitment — when you advance the game state, all remaining pending applications are automatically rejected and all statuses are published to applicants.
 
