@@ -61,7 +61,7 @@ func TestMessageRequestValidation(t *testing.T) {
 		body := fmt.Sprintf(`{"character_id": %d, "content": "   \n\t  "}`, character.ID)
 		w := send(t, http.MethodPost, postsPath, body)
 
-		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Whitespace-only content should be rejected")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code, "Whitespace-only content should be rejected")
 		if !bytes.Contains(w.Body.Bytes(), []byte("content is required")) {
 			t.Errorf("expected 'content is required' in body, got %q", w.Body.String())
 		}
@@ -70,7 +70,7 @@ func TestMessageRequestValidation(t *testing.T) {
 	t.Run("reports the JSON field name the client sent", func(t *testing.T) {
 		w := send(t, http.MethodPost, postsPath, `{"content": "orphan post"}`)
 
-		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Missing character_id should be rejected")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code, "Missing character_id should be rejected")
 		// The message names the offending field; the exact wording is huma's
 		// ("expected required property character_id to be present") and is not
 		// worth pinning, but the field name is the part clients read.
@@ -109,7 +109,7 @@ func TestMessageRequestValidation(t *testing.T) {
 		updatePath := fmt.Sprintf("%s/%d", commentPath, commentID)
 		w := send(t, http.MethodPatch, updatePath, `{"content": "  "}`)
 
-		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Whitespace-only edit should be rejected")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code, "Whitespace-only edit should be rejected")
 		if !bytes.Contains(w.Body.Bytes(), []byte("content is required")) {
 			t.Errorf("expected 'content is required' in body, got %q", w.Body.String())
 		}

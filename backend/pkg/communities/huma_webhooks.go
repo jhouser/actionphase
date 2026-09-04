@@ -242,6 +242,7 @@ func RegisterHumaCommunityWebhooks(api huma.API, h *Handler) {
 		Tags:     []string{"Communities"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not a moderator of this community"},
 			"404": {Description: "Community not found"},
@@ -260,6 +261,7 @@ func RegisterHumaCommunityWebhooks(api huma.API, h *Handler) {
 		Tags:     []string{"Communities"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "URL is not a Discord webhook, or an event is not a game state"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not a moderator of this community"},
@@ -278,6 +280,7 @@ func RegisterHumaCommunityWebhooks(api huma.API, h *Handler) {
 		Tags:     []string{"Communities"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "URL is not a Discord webhook, or an event is not a game state"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not a moderator of this community"},
@@ -295,6 +298,7 @@ func RegisterHumaCommunityWebhooks(api huma.API, h *Handler) {
 		Tags:          []string{"Communities"},
 		Security:      []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not a moderator of this community"},
 			"404": {Description: "Community or webhook not found"},
@@ -312,6 +316,7 @@ func RegisterHumaCommunityWebhooks(api huma.API, h *Handler) {
 		Tags:     []string{"Communities"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not a moderator of this community"},
 			"404": {Description: "Community or webhook not found"},

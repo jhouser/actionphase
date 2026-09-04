@@ -209,6 +209,7 @@ func RegisterHumaGameExports(api huma.API, h *Handler) {
 		Tags:     []string{"Exports"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "No access to this game"},
 			"409": {Description: "Game has not completed"},
@@ -245,6 +246,7 @@ func RegisterHumaExportDownloads(api huma.API, h *Handler) {
 		Tags:     []string{"Exports"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"200": {
 				Description: "The archive",
 				Content: map[string]*huma.MediaType{

@@ -1245,6 +1245,7 @@ func RegisterHumaAuthPublic(api huma.API, h *Handler) {
 		Tags:        []string{tagAuth},
 		Security:    noAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Token invalid or expired, or the passwords do not match"},
 		},
 	}, h.HumaResetPassword)
@@ -1271,6 +1272,7 @@ func RegisterHumaAuthPublic(api huma.API, h *Handler) {
 		Tags:        []string{tagAuth},
 		Security:    noAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Token invalid or expired"},
 		},
 	}, h.HumaVerifyEmail)
@@ -1283,6 +1285,7 @@ func RegisterHumaAuthPublic(api huma.API, h *Handler) {
 		Tags:        []string{tagAuth},
 		Security:    noAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Token invalid or expired"},
 		},
 	}, h.HumaCompleteEmailChange)
@@ -1303,6 +1306,7 @@ func RegisterHumaAuthRateLimited(api huma.API, h *Handler) {
 		Tags:     []string{tagAuth},
 		Security: noAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"202": {Description: "Account created and awaiting admin approval"},
 			"400": {Description: "Validation failed, username taken, or blocked by bot prevention"},
 			"403": {Description: "IP address or device fingerprint is banned"},
@@ -1320,6 +1324,7 @@ func RegisterHumaAuthRateLimited(api huma.API, h *Handler) {
 		Tags:     []string{tagAuth},
 		Security: noAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Incorrect password"},
 			"401": {Description: "No such account, or no identifier supplied"},
 			"403": {Description: "Account banned, pending approval, or a banned IP/device"},
@@ -1338,6 +1343,7 @@ func RegisterHumaAuthRateLimited(api huma.API, h *Handler) {
 		Tags:     []string{tagAuth},
 		Security: noAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"429": {Description: "Too many attempts"},
 		},
 	}, h.HumaRequestPasswordReset)
@@ -1394,6 +1400,7 @@ func RegisterHumaAuthProtected(api huma.API, h *Handler) {
 		Tags:        []string{tagAuth},
 		Security:    bearerAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Missing preferences object"},
 			"401": {Description: "Not authenticated"},
 		},
@@ -1450,6 +1457,7 @@ func RegisterHumaAuthProtected(api huma.API, h *Handler) {
 		Tags:        []string{tagAuth},
 		Security:    bearerAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Current password wrong, or the new password is invalid"},
 			"401": {Description: "Not authenticated"},
 		},
@@ -1463,6 +1471,7 @@ func RegisterHumaAuthProtected(api huma.API, h *Handler) {
 		Tags:        []string{tagAuth},
 		Security:    bearerAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Password wrong, or the username is invalid or taken"},
 			"401": {Description: "Not authenticated"},
 		},
@@ -1478,6 +1487,7 @@ func RegisterHumaAuthProtected(api huma.API, h *Handler) {
 		Tags:     []string{tagAuth},
 		Security: bearerAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Password wrong, or the address is invalid or taken"},
 			"401": {Description: "Not authenticated"},
 		},
@@ -1512,6 +1522,7 @@ func RegisterHumaAuthProtected(api huma.API, h *Handler) {
 		Tags:        []string{tagAuth},
 		Security:    bearerAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"404": {Description: "No such session, or it belongs to another user"},
 		},
@@ -1539,6 +1550,7 @@ func RegisterHumaAuthRateLimitedProtected(api huma.API, h *Handler) {
 		Tags:        []string{tagAuth},
 		Security:    bearerAuth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"429": {Description: "Too many attempts"},
 		},

@@ -57,8 +57,11 @@ type CodedError struct {
 
 func (e *CodedError) Error() string { return e.Msg }
 
-// LegacyStatusText mirrors the StatusText values core's error constructors use,
-// so a converted endpoint is byte-identical to the chi one it replaced.
+// LegacyStatusText mirrors the StatusText values core's error constructors use.
+//
+// 400 and 422 share the "Invalid request." text deliberately: the status code
+// carries the distinction (400 = could not parse, 422 = parsed but invalid),
+// while this string is the human-facing summary and reads the same either way.
 func LegacyStatusText(status int) string {
 	switch status {
 	case http.StatusBadRequest:

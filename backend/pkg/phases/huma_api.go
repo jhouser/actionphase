@@ -1558,6 +1558,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body, or the game is archived"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can create phases"},
@@ -1600,6 +1601,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body, no active phase, or the game is archived"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not allowed to submit actions, or the active phase is not an action phase"},
@@ -1643,6 +1645,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body, or no active phase"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can create action results"},
@@ -1659,6 +1662,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid chain shape, or no active phase"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can create action results"},
@@ -1701,6 +1705,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Action Results"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can update action results"},
@@ -1716,6 +1721,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Action Results"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can delete action results"},
 		},
@@ -1730,6 +1736,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Action Results"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Already released, or not a staged part"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can cancel a pending result part"},
@@ -1747,6 +1754,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid chain shape, such as a delay out of range"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can add a result part"},
@@ -1764,6 +1772,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Action Results"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Delay out of range"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can retime a result part"},
@@ -1781,6 +1790,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Action Results"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can publish action results"},
 		},
@@ -1795,6 +1805,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Action Results"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can publish action results"},
 		},
@@ -1809,6 +1820,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Action Results"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can view result counts"},
 		},
@@ -1824,6 +1836,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body, unknown character, or the result belongs to another game"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can manage draft character updates"},
@@ -1840,6 +1853,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Draft Character Updates"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "The result belongs to another game"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can manage draft character updates"},
@@ -1856,6 +1870,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Draft Character Updates"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "The result belongs to another game"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can manage draft character updates"},
@@ -1872,6 +1887,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Draft Character Updates"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body, or the result belongs to another game"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can manage draft character updates"},
@@ -1888,6 +1904,7 @@ func RegisterHumaGamePhases(api huma.API, h *Handler) {
 		Tags:        []string{"Draft Character Updates"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "The result belongs to another game"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can manage draft character updates"},
@@ -1913,6 +1930,7 @@ func RegisterHumaPhases(api huma.API, h *Handler) {
 		Tags:        []string{"Phases"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can activate phases"},
 		},
@@ -1927,6 +1945,7 @@ func RegisterHumaPhases(api huma.API, h *Handler) {
 		Tags:        []string{"Phases"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can update phase deadlines"},
@@ -1942,6 +1961,7 @@ func RegisterHumaPhases(api huma.API, h *Handler) {
 		Tags:        []string{"Phases"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can update phases"},
@@ -1957,6 +1977,7 @@ func RegisterHumaPhases(api huma.API, h *Handler) {
 		Tags:        []string{"Phases"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "The phase has associated content and cannot be deleted"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can delete phases"},

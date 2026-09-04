@@ -64,7 +64,7 @@ func TestDeadlineRequestValidation(t *testing.T) {
 	t.Run("rejects a missing title", func(t *testing.T) {
 		w := post(t, fmt.Sprintf(`{"description": "d", "deadline": %q}`, future))
 
-		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Missing title should be rejected")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code, "Missing title should be rejected")
 		if !bytes.Contains(w.Body.Bytes(), []byte("required property title")) {
 			t.Errorf("expected a missing-title message, got %q", w.Body.String())
 		}
@@ -76,7 +76,7 @@ func TestDeadlineRequestValidation(t *testing.T) {
 		// deadlineBody.Resolve) this returned 201 and stored a blank title.
 		w := post(t, fmt.Sprintf(`{"title": "   ", "description": "d", "deadline": %q}`, future))
 
-		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Whitespace-only title should be rejected")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code, "Whitespace-only title should be rejected")
 		if !bytes.Contains(w.Body.Bytes(), []byte("must not be blank")) {
 			t.Errorf("expected a blank-title message, got %q", w.Body.String())
 		}
@@ -85,7 +85,7 @@ func TestDeadlineRequestValidation(t *testing.T) {
 	t.Run("rejects a missing deadline", func(t *testing.T) {
 		w := post(t, `{"title": "No date", "description": "d"}`)
 
-		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Missing deadline should be rejected")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code, "Missing deadline should be rejected")
 		if !bytes.Contains(w.Body.Bytes(), []byte("required property deadline")) {
 			t.Errorf("expected a missing-deadline message, got %q", w.Body.String())
 		}
@@ -106,7 +106,7 @@ func TestDeadlineRequestValidation(t *testing.T) {
 		w := post(t, fmt.Sprintf(`{"title": %q, "description": "d", "deadline": %q}`,
 			strings.Repeat("a", 150), future))
 
-		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Over-length title should be rejected")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code, "Over-length title should be rejected")
 		if !bytes.Contains(w.Body.Bytes(), []byte("expected length <= 100")) {
 			t.Errorf("expected a max-length message, got %q", w.Body.String())
 		}

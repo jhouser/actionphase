@@ -381,7 +381,7 @@ func TestCreatePoll_HiddenResultsWithIndividualVotes_Rejected(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusBadRequest, rec.Code,
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code,
 		"hidden results and individual vote display are mutually exclusive")
 
 	var count int
@@ -539,7 +539,7 @@ func TestCreatePoll_RunningTotalsWithHiddenResults_Rejected(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusBadRequest, rec.Code,
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code,
 		"hiding results and showing running totals are mutually exclusive")
 
 	var count int
@@ -626,7 +626,7 @@ func TestUpdatePoll_RunningTotalsWithHiddenResults_Rejected(t *testing.T) {
 		HideResultsFromPlayers:     true,
 		ShowRunningTotalsToPlayers: true,
 	})
-	assert.Equal(t, http.StatusBadRequest, rec.Code,
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code,
 		"the update path must enforce the same exclusivity as creation")
 
 	// A rejected update must not partially apply.

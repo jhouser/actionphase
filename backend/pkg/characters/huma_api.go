@@ -1103,6 +1103,7 @@ func RegisterHumaGameCharacters(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid body, or user_id missing when a GM creates a player character"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not allowed to create this kind of character, or email not verified"},
@@ -1216,6 +1217,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 		Tags:     []string{"Characters"},
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"404": {Description: "No such character, or character hidden from the caller (another player's unapproved character in a running game)"},
 		},
@@ -1231,6 +1233,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Character has messages or action submissions"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can delete characters"},
@@ -1248,6 +1251,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 		Tags:     []string{"Characters"},
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "status was not \"approved\""},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can approve characters"},
@@ -1266,6 +1270,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 		// The chi handler answered 204 with no body, which is preserved.
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Target user is not an audience member"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can assign NPCs"},
@@ -1283,6 +1288,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 		Tags:     []string{"Characters"},
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can reassign characters"},
 			"404": {Description: "Character not found"},
@@ -1300,6 +1306,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 		Tags:     []string{"Characters"},
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not allowed to rename this character"},
@@ -1317,6 +1324,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not allowed to edit this character, or this module"},
@@ -1333,6 +1341,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 		Tags:     []string{"Characters"},
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaGetCharacterData)
@@ -1347,6 +1356,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 		Tags:     []string{"Characters"},
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"404": {Description: "Character not found"},
 			"500": {Description: "Game lookup failed"},

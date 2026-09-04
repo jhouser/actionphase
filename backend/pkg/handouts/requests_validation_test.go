@@ -56,7 +56,7 @@ func TestHandoutRequestValidation(t *testing.T) {
 		rec := send(t, http.MethodPost, handoutsPath,
 			`{"title": "Empty", "content": "", "status": "draft"}`)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "content")
 	})
 
@@ -66,7 +66,7 @@ func TestHandoutRequestValidation(t *testing.T) {
 
 		// Only Resolve can catch this one: minLength counts raw characters, so
 		// "   \n  " satisfies the schema.
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "content is required")
 	})
 
@@ -74,7 +74,7 @@ func TestHandoutRequestValidation(t *testing.T) {
 		rec := send(t, http.MethodPost, handoutsPath,
 			`{"content": "Body text", "status": "draft"}`)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "title")
 	})
 
@@ -84,7 +84,7 @@ func TestHandoutRequestValidation(t *testing.T) {
 		rec := send(t, http.MethodPost, handoutsPath,
 			`{"title": "Bad status", "content": "Body text", "status": "archived"}`)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "draft, published")
 	})
 
@@ -103,7 +103,7 @@ func TestHandoutRequestValidation(t *testing.T) {
 
 		rec := send(t, http.MethodPost, commentsPath, `{"content": "  "}`)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "content is required")
 	})
 }

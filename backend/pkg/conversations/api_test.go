@@ -192,7 +192,7 @@ func TestConversationAPI_CreateConversation(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		// The message comes from the schema (minLength) rather than a
 		// hand-written check, so assert on the field, not the phrasing.
 		assert.Contains(t, rec.Body.String(), "title")
@@ -216,7 +216,7 @@ func TestConversationAPI_CreateConversation(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "must not be blank")
 	})
 

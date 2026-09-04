@@ -823,7 +823,7 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 				Name:          "",
 				CharacterType: "player_character",
 			},
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusUnprocessableEntity,
 			reason:         "should reject empty character name",
 		},
 		{
@@ -835,7 +835,7 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 				Name:          "Invalid Character",
 				CharacterType: "invalid_type",
 			},
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusUnprocessableEntity,
 			reason:         "should reject invalid character type",
 		},
 		{
@@ -877,7 +877,7 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 			body: ApproveCharacterRequest{
 				Status: "approved",
 			},
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusUnprocessableEntity,
 			reason:         "should reject invalid character ID format",
 		},
 	}

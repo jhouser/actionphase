@@ -336,7 +336,7 @@ func TestCharacterAPI_ApproveCharacter(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 
 	t.Run("non-GM player cannot approve a character", func(t *testing.T) {

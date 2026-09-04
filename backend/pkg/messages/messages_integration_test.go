@@ -88,7 +88,7 @@ func TestMessageAPI_PostCreationFlow(t *testing.T) {
 			payload: CreatePostRequest{
 				Content: "This should fail",
 			},
-			expectedStatus: 400,
+			expectedStatus: 422,
 			description:    "Post without character ID is rejected at Bind",
 		},
 		{
@@ -97,7 +97,7 @@ func TestMessageAPI_PostCreationFlow(t *testing.T) {
 				CharacterID: gmCharacter.ID,
 				Content:     "",
 			},
-			expectedStatus: 400,
+			expectedStatus: 422,
 			description:    "Post with empty content is rejected at Bind",
 		},
 	}
@@ -218,7 +218,7 @@ func TestMessageAPI_CommentCreationFlow(t *testing.T) {
 			payload: CreateCommentRequest{
 				Content: "This should fail",
 			},
-			expectedStatus: 400,
+			expectedStatus: 422,
 			description:    "Comment without character ID is rejected at Bind",
 		},
 		{
@@ -228,7 +228,7 @@ func TestMessageAPI_CommentCreationFlow(t *testing.T) {
 				CharacterID: playerCharacter.ID,
 				Content:     "",
 			},
-			expectedStatus: 400,
+			expectedStatus: 422,
 			description:    "Comment with empty content is rejected at Bind",
 		},
 	}

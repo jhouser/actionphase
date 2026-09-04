@@ -1220,6 +1220,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the GM or co-GM, or email not verified"},
@@ -1250,6 +1251,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:        commonRoom,
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the post's author"},
@@ -1269,6 +1271,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Email not verified"},
@@ -1286,6 +1289,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaGetPostComments)
@@ -1301,6 +1305,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid limit, offset or max_depth"},
 			"401": {Description: "Not authenticated"},
 		},
@@ -1316,6 +1321,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the comment's author, or the character is not the caller's"},
@@ -1332,6 +1338,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not allowed to delete this comment"},
 		},
@@ -1346,6 +1353,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:        commonRoom,
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaGetMessage)
@@ -1360,6 +1368,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid max_parents"},
 			"401": {Description: "Not authenticated"},
 		},
@@ -1392,6 +1401,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaMarkPostRead)
@@ -1446,6 +1456,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaToggleCommentRead)
@@ -1473,6 +1484,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaMarkAllCommentsRead)
@@ -1493,6 +1505,7 @@ func RegisterHumaCharacterMessages(api huma.API, h *Handler) {
 		Tags:     []string{"Common Room"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid limit or offset"},
 			"401": {Description: "Not authenticated"},
 			"404": {Description: "Character not found"},
@@ -1517,6 +1530,7 @@ func RegisterHumaPhaseDraftPosts(api huma.API, h *Handler) {
 		Tags:     drafts,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the GM or co-GM"},
 			"404": {Description: "Phase not found"},
@@ -1533,6 +1547,7 @@ func RegisterHumaPhaseDraftPosts(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the GM or co-GM"},
@@ -1550,6 +1565,7 @@ func RegisterHumaPhaseDraftPosts(api huma.API, h *Handler) {
 		Tags:        drafts,
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the GM or co-GM"},
@@ -1567,6 +1583,7 @@ func RegisterHumaPhaseDraftPosts(api huma.API, h *Handler) {
 		Tags:     drafts,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the GM or co-GM"},
 			"404": {Description: "Phase has no draft post"},
