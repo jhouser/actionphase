@@ -230,7 +230,7 @@ func TestAvatarUpload_FileTooLarge_400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-func TestAvatarUpload_MissingField_400(t *testing.T) {
+func TestAvatarUpload_MissingField_422(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	defer testDB.Close()
 	defer testDB.CleanupTables(t, "characters", "game_participants", "games", "users")
@@ -260,7 +260,7 @@ func TestAvatarUpload_MissingField_400(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 }
 
 func TestAvatarDelete_Success(t *testing.T) {

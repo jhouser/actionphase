@@ -245,6 +245,33 @@ describe('mapAuthError', () => {
       expect(mapAuthError(error)).toBe('Invalid request. Please check your information and try again.');
     });
 
+    it('maps 422 Unprocessable Entity the same as 400', () => {
+      const error = {
+        response: {
+          status: 422,
+          data: {},
+        },
+      };
+      expect(mapAuthError(error)).toBe('Invalid request. Please check your information and try again.');
+    });
+
+    // Regression: the backend returns 422 (not 400) for schema violations since
+    // huma's 400/422 split was adopted. Without a 422 branch these fell through
+    // to the raw-message fallback and showed the user huma's internals, e.g.
+    // "Expected length >= 8 (body.password: x)".
+    it.each([
+      ['a missing required property', 'expected required property username to be present (body: map[email:a@b.com])'],
+      ['a minLength violation', 'expected length >= 8 (body.password: x)'],
+    ])('does not leak huma schema text for %s', (_label, serverMessage) => {
+      const error = {
+        response: {
+          status: 422,
+          data: { error: serverMessage },
+        },
+      };
+      expect(mapAuthError(error)).toBe('Invalid request. Please check your information and try again.');
+    });
+
     it('maps 401 Unauthorized', () => {
       const error = {
         response: {

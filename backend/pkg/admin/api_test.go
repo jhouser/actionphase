@@ -657,7 +657,7 @@ func TestAdminAPI_GetUserSessions(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 }
 
@@ -757,7 +757,7 @@ func TestAdminAPI_IPBans(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 
 	t.Run("deletes an IP ban and it no longer appears in list", func(t *testing.T) {
@@ -788,7 +788,7 @@ func TestAdminAPI_IPBans(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 }
 
@@ -873,7 +873,7 @@ func TestAdminAPI_FingerprintBans(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 
 	t.Run("returns 400 when fingerprint exceeds 512 characters", func(t *testing.T) {
@@ -892,7 +892,7 @@ func TestAdminAPI_FingerprintBans(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 
 	t.Run("deletes a fingerprint ban and it no longer appears in list", func(t *testing.T) {
@@ -923,6 +923,6 @@ func TestAdminAPI_FingerprintBans(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 }

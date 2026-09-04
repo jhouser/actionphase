@@ -564,7 +564,7 @@ func TestGameAPI_ErrorHandling(t *testing.T) {
 				Description: "Game without title",
 			},
 			requiresAuth:   true,
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			description:    "Creating game without title should fail",
 		},
 		{
@@ -906,7 +906,7 @@ func TestGameAPI_GameApplications(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		core.AssertEqual(t, 400, w.Code, "Should return 400 Bad Request for invalid role")
+		core.AssertEqual(t, 422, w.Code, "Should return 422 Bad Request for invalid role")
 	})
 
 	t.Run("apply_to_game_unauthorized", func(t *testing.T) {
@@ -1090,7 +1090,7 @@ func TestGameAPI_GameApplications(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		core.AssertEqual(t, 400, w.Code, "Should return 400 Bad Request for invalid action")
+		core.AssertEqual(t, 422, w.Code, "Should return 422 Bad Request for invalid action")
 	})
 }
 

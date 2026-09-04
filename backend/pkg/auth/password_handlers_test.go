@@ -519,7 +519,9 @@ func TestV1ValidateResetToken(t *testing.T) {
 			setupToken: func(userID int32) string {
 				return ""
 			},
-			expectedStatus: http.StatusBadRequest,
+			// Absent required query param: huma rejects at binding, so this is
+			// 422 while the invalid-token case above is the handler's own 400.
+			expectedStatus: http.StatusUnprocessableEntity,
 			expectedValid:  false,
 		},
 	}

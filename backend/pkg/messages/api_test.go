@@ -205,7 +205,7 @@ func TestMessageAPI_UpdatePost(t *testing.T) {
 			requestBody: UpdatePostRequest{
 				Content: "",
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			description:    "Should reject empty content",
 		},
 	}
@@ -722,7 +722,7 @@ func TestMessageAPI_GetPostCommentsWithThreads(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 }
 
@@ -832,7 +832,7 @@ func TestMessageAPI_GetMessageThreadContext(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 }
 
@@ -1423,7 +1423,7 @@ func TestMessageAPI_ListRecentCommentsWithParents(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 
 	t.Run("returns 400 for invalid offset", func(t *testing.T) {
@@ -1433,7 +1433,7 @@ func TestMessageAPI_ListRecentCommentsWithParents(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 
 	t.Run("returns 400 for zero limit", func(t *testing.T) {
@@ -1443,7 +1443,7 @@ func TestMessageAPI_ListRecentCommentsWithParents(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 }
 
@@ -1476,7 +1476,7 @@ func TestMessageAPI_GetCharacterComments_InvalidParams(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 
 	t.Run("returns 400 for negative offset", func(t *testing.T) {
@@ -1486,7 +1486,7 @@ func TestMessageAPI_GetCharacterComments_InvalidParams(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 
 	t.Run("returns 400 for zero limit", func(t *testing.T) {
@@ -1496,6 +1496,6 @@ func TestMessageAPI_GetCharacterComments_InvalidParams(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 }

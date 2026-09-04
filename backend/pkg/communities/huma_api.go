@@ -471,6 +471,7 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 		Tags:        []string{"Communities"},
 		Security:    []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"404": {Description: "Community not found"},
 		},
@@ -487,6 +488,7 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 		Tags:     []string{"Communities"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Name is blank or out of range"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Caller does not moderate this community"},
@@ -504,6 +506,7 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 		Tags:     []string{"Communities"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Caller does not moderate this community"},
 			"404": {Description: "Community not found"},
@@ -521,6 +524,7 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 		Security:      []map[string][]string{{"BearerAuth": {}}},
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Unknown user, the owner, or already a moderator"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Caller is not the community owner"},
@@ -539,6 +543,7 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 		Security:      []map[string][]string{{"BearerAuth": {}}},
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Caller is not the community owner"},
 			"404": {Description: "Community not found"},
@@ -556,6 +561,7 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 		Tags:     []string{"Communities"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Caller does not moderate this community"},
 			"404": {Description: "Community not found"},
@@ -575,6 +581,7 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 		Tags:     []string{"Communities"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Unknown user, community staff, or an expiry in the past"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Caller does not moderate this community"},
@@ -594,6 +601,7 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 		Security:      []map[string][]string{{"BearerAuth": {}}},
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Caller does not moderate this community"},
 			"404": {Description: "Community not found, or the user is not banned"},
@@ -611,6 +619,7 @@ func RegisterHumaCommunities(api huma.API, h *Handler) {
 		Tags:     []string{"Communities"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Caller does not moderate this community"},
 			"404": {Description: "Community not found"},

@@ -57,8 +57,11 @@ type CodedError struct {
 
 func (e *CodedError) Error() string { return e.Msg }
 
-// LegacyStatusText mirrors the StatusText values core's error constructors use,
-// so a converted endpoint is byte-identical to the chi one it replaced.
+// LegacyStatusText mirrors the StatusText values core's error constructors use.
+//
+// 400 and 422 share the "Invalid request." text deliberately: the status code
+// carries the distinction (400 = could not parse, 422 = parsed but invalid),
+// while this string is the human-facing summary and reads the same either way.
 func LegacyStatusText(status int) string {
 	switch status {
 	case http.StatusBadRequest:
@@ -92,16 +95,6 @@ func InstallLegacyErrorFormat() {
 			if coded, ok := errs[0].(*CodedError); ok {
 				appCode = coded.Code
 			}
-		}
-
-		// Huma hardcodes 422 for request binding/validation failures (a bad
-		// path param, a missing required field). The chi handlers these
-		// replace parsed by hand and returned 400 via core.ErrInvalidRequest,
-		// and existing tests assert 400. Remap so the migration does not
-		// change status codes. Whether to adopt huma's split is tracked in
-		// .claude/planning/http-status-codes.md.
-		if status == http.StatusUnprocessableEntity {
-			status = http.StatusBadRequest
 		}
 
 		return &LegacyError{

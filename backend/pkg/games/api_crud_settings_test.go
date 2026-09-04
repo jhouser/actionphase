@@ -454,7 +454,7 @@ func TestCreateGame_CommonRoomSchedule(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Should return 400 for partial schedule fields on create")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code, "Should return 422 for partial schedule fields on create")
 	})
 }
 
@@ -501,7 +501,7 @@ func TestUpdateGame_CommonRoomSchedule_PartialFill(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Should return 400 for partial schedule fields")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code, "Should return 422 for partial schedule fields")
 	})
 
 	t.Run("rejects when all day/time fields present but timezone missing", func(t *testing.T) {
@@ -521,7 +521,7 @@ func TestUpdateGame_CommonRoomSchedule_PartialFill(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-		core.AssertEqual(t, http.StatusBadRequest, w.Code, "Should return 400 when timezone is missing")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code, "Should return 422 when timezone is missing")
 	})
 }
 

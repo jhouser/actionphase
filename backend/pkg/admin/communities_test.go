@@ -125,11 +125,11 @@ func TestAdminAPI_CreateCommunity_ValidationErrors(t *testing.T) {
 		},
 		{
 			// Too short for the schema, so huma rejects before the handler
-			// runs. This project's huma config renders schema violations as
-			// 400 rather than huma's default 422.
+			// runs. Schema violations are 422; the handler's own checks above
+			// stay 400. This case is why the two codes are worth separating.
 			name: "single-character name rejected by schema",
 			body: fmt.Sprintf(`{"name":"x","slug":"short-name","owner_user_id":%d}`, admin.ID),
-			want: http.StatusBadRequest,
+			want: http.StatusUnprocessableEntity,
 		},
 		{
 			name: "unknown owner rejected",
