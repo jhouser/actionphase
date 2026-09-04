@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -455,14 +454,8 @@ func (h *Handler) humaUpdatePost(ctx context.Context, in *updatePostInput) (*mes
 
 	canEdit, err := h.MessageService.CanUserEditPost(ctx, in.PostID, userID)
 	if err != nil {
-		// The service reports a missing post as a row-scan failure rather than a
-		// typed error, so the text is all there is to match on.
-		if strings.Contains(err.Error(), "no rows") {
-			h.App.ObsLogger.Warn(ctx, "Post not found", "post_id", in.PostID)
-			return nil, huma.Error404NotFound("post not found")
-		}
-		h.App.ObsLogger.Error(ctx, "Failed to check edit permission", "error", err, "post_id", in.PostID, "user_id", userID)
-		return nil, huma.Error500InternalServerError(err.Error())
+		h.App.ObsLogger.Warn(ctx, "Failed to check edit permission", "error", err, "post_id", in.PostID, "user_id", userID)
+		return nil, core.NotFoundOr500(err, "post")
 	}
 	if !canEdit {
 		h.App.ObsLogger.Warn(ctx, "User attempted to edit post without permission", "post_id", in.PostID, "user_id", userID)
@@ -623,8 +616,8 @@ func (h *Handler) humaUpdateComment(ctx context.Context, in *updateCommentInput)
 
 	canEdit, err := h.MessageService.CanUserEditComment(ctx, in.CommentID, userID)
 	if err != nil {
-		h.App.ObsLogger.Error(ctx, "Failed to check edit permission", "error", err, "comment_id", in.CommentID, "user_id", userID)
-		return nil, huma.Error500InternalServerError(err.Error())
+		h.App.ObsLogger.Warn(ctx, "Failed to check edit permission", "error", err, "comment_id", in.CommentID, "user_id", userID)
+		return nil, core.NotFoundOr500(err, "comment")
 	}
 	if !canEdit {
 		h.App.ObsLogger.Warn(ctx, "User attempted to edit comment without permission", "comment_id", in.CommentID, "user_id", userID)
@@ -674,8 +667,8 @@ func (h *Handler) humaDeleteComment(ctx context.Context, in *commentIDInput) (*d
 
 	canDelete, err := h.MessageService.CanUserDeleteComment(ctx, in.CommentID, userID, isAdmin)
 	if err != nil {
-		h.App.ObsLogger.Error(ctx, "Failed to check delete permission", "error", err, "comment_id", in.CommentID, "user_id", userID)
-		return nil, huma.Error500InternalServerError(err.Error())
+		h.App.ObsLogger.Warn(ctx, "Failed to check delete permission", "error", err, "comment_id", in.CommentID, "user_id", userID)
+		return nil, core.NotFoundOr500(err, "comment")
 	}
 	if !canDelete {
 		h.App.ObsLogger.Warn(ctx, "User attempted to delete comment without permission",
@@ -710,8 +703,8 @@ func (h *Handler) humaGetMessage(ctx context.Context, in *messageIDInput) (*mess
 
 	message, err := h.MessageService.GetMessage(ctx, in.MessageID)
 	if err != nil {
-		h.App.ObsLogger.Error(ctx, "Failed to get message", "error", err, "message_id", in.MessageID)
-		return nil, huma.Error500InternalServerError(err.Error())
+		h.App.ObsLogger.Warn(ctx, "Failed to get message", "error", err, "message_id", in.MessageID)
+		return nil, core.NotFoundOr500(err, "message")
 	}
 
 	resp := messageWithDetailsToResponse(message)
@@ -906,6 +899,9 @@ func (h *Handler) humaMarkPostRead(ctx context.Context, in *markPostReadInput) (
 
 	readMarker, err := h.MessageService.MarkPostAsRead(ctx, userID, in.GameID, in.PostID, lastReadCommentID)
 	if err != nil {
+		// A missing post surfaces here as a foreign-key violation, not
+		// pgx.ErrNoRows, so NotFoundOr500 would not catch it and this stays a
+		// 500. See .claude/planning/http-status-codes.md.
 		h.App.ObsLogger.Error(ctx, "Failed to mark post as read", "error", err, "game_id", in.GameID, "post_id", in.PostID, "user_id", userID)
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
@@ -1220,6 +1216,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the GM or co-GM, or email not verified"},
@@ -1250,6 +1247,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:        commonRoom,
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the post's author"},
@@ -1269,6 +1267,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Email not verified"},
@@ -1286,6 +1285,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaGetPostComments)
@@ -1301,6 +1301,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid limit, offset or max_depth"},
 			"401": {Description: "Not authenticated"},
 		},
@@ -1316,6 +1317,8 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"404": {Description: "No such comment"},
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the comment's author, or the character is not the caller's"},
@@ -1332,6 +1335,8 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"404": {Description: "No such comment"},
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not allowed to delete this comment"},
 		},
@@ -1346,7 +1351,9 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:        commonRoom,
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
+			"404": {Description: "No such message"},
 		},
 	}, h.humaGetMessage)
 
@@ -1360,6 +1367,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid max_parents"},
 			"401": {Description: "Not authenticated"},
 		},
@@ -1392,6 +1400,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Tags:     commonRoom,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaMarkPostRead)
@@ -1446,6 +1455,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaToggleCommentRead)
@@ -1473,6 +1483,7 @@ func RegisterHumaGameMessages(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaMarkAllCommentsRead)
@@ -1493,6 +1504,7 @@ func RegisterHumaCharacterMessages(api huma.API, h *Handler) {
 		Tags:     []string{"Common Room"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid limit or offset"},
 			"401": {Description: "Not authenticated"},
 			"404": {Description: "Character not found"},
@@ -1517,6 +1529,7 @@ func RegisterHumaPhaseDraftPosts(api huma.API, h *Handler) {
 		Tags:     drafts,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the GM or co-GM"},
 			"404": {Description: "Phase not found"},
@@ -1533,6 +1546,7 @@ func RegisterHumaPhaseDraftPosts(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the GM or co-GM"},
@@ -1550,6 +1564,7 @@ func RegisterHumaPhaseDraftPosts(api huma.API, h *Handler) {
 		Tags:        drafts,
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the GM or co-GM"},
@@ -1567,6 +1582,7 @@ func RegisterHumaPhaseDraftPosts(api huma.API, h *Handler) {
 		Tags:     drafts,
 		Security: bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not the GM or co-GM"},
 			"404": {Description: "Phase has no draft post"},

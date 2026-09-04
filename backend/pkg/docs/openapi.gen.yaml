@@ -5825,6 +5825,8 @@ paths:
                     description: Current password wrong, or the new password is invalid
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Change the current user's password
@@ -5850,6 +5852,8 @@ paths:
                     description: Password wrong, or the username is invalid or taken
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Change the current user's username
@@ -5873,6 +5877,8 @@ paths:
                     description: OK
                 "400":
                     description: Token invalid or expired
+                "422":
+                    description: Request failed validation
             security: []
             summary: Complete an email change using an emailed token
             tags:
@@ -5951,6 +5957,8 @@ paths:
                     description: No such account, or no identifier supplied
                 "403":
                     description: Account banned, pending approval, or a banned IP/device
+                "422":
+                    description: Request failed validation
                 "429":
                     description: Too many attempts
             security: []
@@ -6030,6 +6038,8 @@ paths:
                     description: Missing preferences object
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Update the current user's preferences
@@ -6074,6 +6084,8 @@ paths:
                     description: Validation failed, username taken, or blocked by bot prevention
                 "403":
                     description: IP address or device fingerprint is banned
+                "422":
+                    description: Request failed validation
                 "429":
                     description: Too many attempts
             security: []
@@ -6101,6 +6113,8 @@ paths:
                     description: Password wrong, or the address is invalid or taken
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Request a change of email address
@@ -6123,6 +6137,8 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/MessageBody'
                     description: OK
+                "422":
+                    description: Request failed validation
                 "429":
                     description: Too many attempts
             security: []
@@ -6141,6 +6157,8 @@ paths:
                     description: OK
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
                 "429":
                     description: Too many attempts
             security:
@@ -6166,6 +6184,8 @@ paths:
                     description: OK
                 "400":
                     description: Token invalid or expired, or the passwords do not match
+                "422":
+                    description: Request failed validation
             security: []
             summary: Reset a password using an emailed token
             tags:
@@ -6227,6 +6247,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: No such session, or it belongs to another user
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Revoke one session
@@ -6306,6 +6328,8 @@ paths:
                     description: OK
                 "400":
                     description: Token invalid or expired
+                "422":
+                    description: Request failed validation
             security: []
             summary: Verify an email address using an emailed token
             tags:
@@ -6334,6 +6358,8 @@ paths:
                     description: Only the GM can delete characters
                 "404":
                     description: Character not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a character
@@ -6361,9 +6387,9 @@ paths:
                 "401":
                     description: Not authenticated
                 "404":
-                    description: Character hidden from the caller (another player's unapproved character in a running game)
-                "500":
-                    description: No such character. A missing id is reported as a server error, not a 404 -- carried over from the chi handler; see http-status-codes.md
+                    description: No such character, or character hidden from the caller (another player's unapproved character in a running game)
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Get a character
@@ -6400,8 +6426,10 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can approve characters
-                "500":
-                    description: No such character (see the note on getCharacter)
+                "404":
+                    description: No such character
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Approve a character
@@ -6434,8 +6462,10 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can assign NPCs
-                "500":
-                    description: No such character (see the note on getCharacter)
+                "404":
+                    description: No such character
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Assign an NPC to a user
@@ -6460,6 +6490,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not permitted to modify this character
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a character avatar
@@ -6507,6 +6539,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not permitted to modify this character
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Upload a character avatar
@@ -6558,6 +6592,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: Character not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List a character's posts and comments
@@ -6589,6 +6625,8 @@ paths:
                     description: OK
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Get a character's sheet fields
@@ -6620,6 +6658,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not allowed to edit this character, or this module
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Set a character sheet field
@@ -6658,6 +6698,8 @@ paths:
                     description: Character not found
                 "409":
                     description: Character is still active
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Reassign an inactive character
@@ -6696,6 +6738,8 @@ paths:
                     description: Not allowed to rename this character
                 "409":
                     description: A character with that name already exists in the game
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Rename a character
@@ -6725,6 +6769,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: Character not found
+                "422":
+                    description: Request failed validation
                 "500":
                     description: Game lookup failed
             security:
@@ -6798,6 +6844,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Get a community profile
@@ -6835,6 +6883,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Edit a community's name and description
@@ -6890,6 +6940,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Read a community's ban audit log
@@ -6916,6 +6968,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Remove a community's banner image
@@ -6964,6 +7018,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
                 "503":
                     description: File storage is not configured
             security:
@@ -7000,6 +7056,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List a community's banned users
@@ -7037,6 +7095,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Ban a user from a community, or edit an existing ban
@@ -7071,6 +7131,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community not found, or the user is not banned
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Lift a user's ban
@@ -7103,6 +7165,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List a community's published documents
@@ -7140,6 +7204,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create a community document
@@ -7174,6 +7240,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community or document not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a community document
@@ -7209,6 +7277,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: Community or document not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Read one community document
@@ -7254,6 +7324,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community or document not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Edit a community document
@@ -7288,6 +7360,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List every document including drafts
@@ -7322,6 +7396,8 @@ paths:
                     description: Caller does not moderate this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List a community's moderators
@@ -7359,6 +7435,8 @@ paths:
                     description: Caller is not the community owner
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Grant a user moderation powers
@@ -7393,6 +7471,8 @@ paths:
                     description: Caller is not the community owner
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Revoke a user's moderation powers
@@ -7427,6 +7507,8 @@ paths:
                     description: Not a moderator of this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List a community's Discord webhooks
@@ -7464,6 +7546,8 @@ paths:
                     description: Not a moderator of this community
                 "404":
                     description: Community not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Add a Discord webhook to a community
@@ -7498,6 +7582,8 @@ paths:
                     description: Not a moderator of this community
                 "404":
                     description: Community or webhook not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Remove a Discord webhook
@@ -7543,6 +7629,8 @@ paths:
                     description: Not a moderator of this community
                 "404":
                     description: Community or webhook not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Edit a Discord webhook
@@ -7581,6 +7669,8 @@ paths:
                     description: Not a moderator of this community
                 "404":
                     description: Community or webhook not found
+                "422":
+                    description: Request failed validation
                 "502":
                     description: Discord rejected the message; the reason is in the error
                 "503":
@@ -7632,6 +7722,8 @@ paths:
                     description: Not authenticated, or not a GM of this game
                 "404":
                     description: Deadline not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a deadline
@@ -7667,6 +7759,8 @@ paths:
                     description: Not authenticated, or not a GM of this game
                 "404":
                     description: Deadline not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Update a deadline
@@ -7736,6 +7830,8 @@ paths:
                     description: Export not found
                 "409":
                     description: Archive expired, missing, or not yet ready
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Download a completed game archive
@@ -7843,6 +7939,8 @@ paths:
                     description: Only the GM can delete this game
                 "404":
                     description: Game not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a game
@@ -7908,6 +8006,8 @@ paths:
                     description: Only the GM can update this game
                 "404":
                     description: Game not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Update a game
@@ -8026,6 +8126,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not allowed to submit actions, or the active phase is not an action phase
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Submit an action
@@ -8091,6 +8193,8 @@ paths:
                     description: The game is not recruiting
                 "404":
                     description: Game not found
+                "422":
+                    description: Request failed validation
             summary: List public applicants
             tags:
                 - Game Applications
@@ -8116,6 +8220,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: No application found for this game
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Withdraw my application
@@ -8220,6 +8326,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can review game applications
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Review an application
@@ -8256,6 +8364,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Email address not verified
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Apply to a game
@@ -8308,6 +8418,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can remove the game banner
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Remove a game banner
@@ -8355,6 +8467,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can update the game banner
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Upload a game banner
@@ -8421,6 +8535,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not allowed to create this kind of character, or email not verified
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create a character
@@ -9172,6 +9288,8 @@ paths:
                     description: Not authenticated, or not a GM of this game
                 "404":
                     description: Game not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create a deadline for a game
@@ -9233,6 +9351,8 @@ paths:
                     description: No access to this game
                 "409":
                     description: Game has not completed
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Request a game archive export
@@ -9331,6 +9451,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can create handouts
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create a handout
@@ -9364,6 +9486,8 @@ paths:
                     description: Not authenticated, or not the GM
                 "404":
                     description: Handout not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a handout
@@ -9400,6 +9524,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: Handout not found, or not visible to the caller
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Get a handout
@@ -9443,6 +9569,8 @@ paths:
                     description: Not authenticated, or not the GM
                 "404":
                     description: Handout not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Update a handout
@@ -9484,6 +9612,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: Handout not found, or not visible to the caller
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List handout comments
@@ -9527,6 +9657,8 @@ paths:
                     description: Not authenticated, or not the GM
                 "404":
                     description: Handout not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Comment on a handout
@@ -9566,6 +9698,8 @@ paths:
                     description: No Content
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a handout comment
@@ -9615,6 +9749,8 @@ paths:
                     description: Invalid request body
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Edit a handout comment
@@ -9652,6 +9788,8 @@ paths:
                     description: Not authenticated, or not the GM
                 "404":
                     description: Handout not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Publish a handout
@@ -9689,6 +9827,8 @@ paths:
                     description: Not authenticated, or not the GM
                 "404":
                     description: Handout not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Unpublish a handout
@@ -9714,6 +9854,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: The caller is neither a participant nor an applicant
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Leave a game
@@ -9824,6 +9966,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can see and edit loot tables
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create a loot table
@@ -9857,6 +10001,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not the GM, or the table belongs to another game
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a loot table
@@ -9900,6 +10046,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not the GM, or the table belongs to another game
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Rename a loot table
@@ -9942,6 +10090,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not the GM, or the table belongs to another game
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List loot table contents
@@ -9981,6 +10131,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not the GM, or the table belongs to another game
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Replace loot table contents
@@ -10028,6 +10180,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not the GM, the table belongs to another game, or the character cannot be edited
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Roll random loot
@@ -10094,6 +10248,10 @@ paths:
                     description: OK
                 "401":
                     description: Not authenticated
+                "404":
+                    description: No such message
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Get one message
@@ -10142,6 +10300,8 @@ paths:
                     description: Invalid max_parents
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Get a message with its ancestor chain
@@ -10209,6 +10369,8 @@ paths:
                     description: Only the GM can remove players
                 "409":
                     description: The GM cannot remove themselves
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Remove a player
@@ -10244,6 +10406,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the primary GM can demote co-GMs
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Demote a co-GM
@@ -10279,6 +10443,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the primary GM can promote users to co-GM
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Promote to co-GM
@@ -10314,6 +10480,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the primary GM can transition players to audience
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Move a player to the audience
@@ -10352,6 +10520,8 @@ paths:
                     description: Only the GM can add participants directly
                 "404":
                     description: User not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Add a participant directly
@@ -10418,6 +10588,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can create phases
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create a phase
@@ -10449,6 +10621,8 @@ paths:
                     description: No Content
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Mark every comment in a phase read
@@ -10526,6 +10700,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can publish action results
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Publish all results for a phase
@@ -10563,6 +10739,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can view result counts
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Count unpublished results
@@ -10728,6 +10906,8 @@ paths:
                     description: Not the GM or co-GM, or email not verified
                 "409":
                     description: Game is archived
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create a common room post
@@ -10805,6 +10985,8 @@ paths:
                     description: Not the post's author
                 "404":
                     description: Post not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Edit a post
@@ -10844,6 +11026,8 @@ paths:
                     description: OK
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List a post's comments
@@ -10889,6 +11073,8 @@ paths:
                     description: Email not verified
                 "409":
                     description: Game is archived
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Comment on a post or another comment
@@ -10958,6 +11144,8 @@ paths:
                     description: Invalid limit, offset or max_depth
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List a post's comments with nested replies
@@ -11003,6 +11191,10 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not allowed to delete this comment
+                "404":
+                    description: No such comment
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a comment
@@ -11054,6 +11246,10 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not the comment's author, or the character is not the caller's
+                "404":
+                    description: No such comment
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Edit a comment
@@ -11098,6 +11294,8 @@ paths:
                     description: No Content
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Mark one comment read or unread
@@ -11138,6 +11336,8 @@ paths:
                     description: OK
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Mark a post read
@@ -11232,6 +11432,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: The caller cannot view this game's content
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Read a private conversation
@@ -11374,6 +11576,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can create action results
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create an action result
@@ -11407,6 +11611,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can delete action results
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a draft action result
@@ -11450,6 +11656,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can update action results
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Update an action result
@@ -11495,6 +11703,8 @@ paths:
                     description: Only the GM can manage draft character updates
                 "404":
                     description: Action result not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: List draft character updates
@@ -11540,6 +11750,8 @@ paths:
                     description: Only the GM can manage draft character updates
                 "404":
                     description: Action result not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create a draft character update
@@ -11585,6 +11797,8 @@ paths:
                     description: Only the GM can manage draft character updates
                 "404":
                     description: Action result not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a draft character update
@@ -11638,6 +11852,8 @@ paths:
                     description: Only the GM can manage draft character updates
                 "404":
                     description: Action result not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Update a draft character update
@@ -11679,6 +11895,8 @@ paths:
                     description: Only the GM can manage draft character updates
                 "404":
                     description: Action result not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Count draft character updates
@@ -11727,6 +11945,8 @@ paths:
                     description: Result not found, or it belongs to another game
                 "409":
                     description: The part has already released
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Retime a staged part
@@ -11775,6 +11995,8 @@ paths:
                     description: Result not found, or it belongs to another game
                 "409":
                     description: The chain is already published and cannot be extended
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Append a staged part
@@ -11812,6 +12034,8 @@ paths:
                     description: Only the GM can cancel a pending result part
                 "404":
                     description: Result not found, or it belongs to another game
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Cancel a pending staged part
@@ -11849,6 +12073,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can publish action results
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Publish an action result
@@ -11920,6 +12146,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can create action results
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create a staged result chain
@@ -11956,6 +12184,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can update this setting
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Set auto-accept for audience
@@ -11994,6 +12224,8 @@ paths:
                     description: Only the GM can update this game state
                 "409":
                     description: The transition is not legal from the game's current state
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Update game state
@@ -12319,6 +12551,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can delete phases
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a phase
@@ -12354,6 +12588,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can update phases
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Update a phase
@@ -12383,6 +12619,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can activate phases
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Activate a phase
@@ -12419,6 +12657,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Only the GM can update phase deadlines
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Update a phase deadline
@@ -12450,6 +12690,8 @@ paths:
                     description: Not the GM or co-GM
                 "404":
                     description: Phase has no draft post
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete a phase's draft post
@@ -12480,6 +12722,8 @@ paths:
                     description: Not the GM or co-GM
                 "404":
                     description: Phase not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Get a phase's draft post
@@ -12519,6 +12763,8 @@ paths:
                     description: Phase not found
                 "409":
                     description: A draft already exists for this phase, or the game is archived
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Create a phase's draft post
@@ -12556,6 +12802,8 @@ paths:
                     description: Not the GM or co-GM
                 "404":
                     description: Phase has no draft post
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Replace a phase's draft post
@@ -12757,6 +13005,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: User profile not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Get a user's profile by ID
@@ -12774,6 +13024,8 @@ paths:
                     description: OK
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Delete your own avatar
@@ -12810,6 +13062,8 @@ paths:
                     description: Missing, oversized, or unsupported image
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Upload your own avatar
@@ -12834,6 +13088,8 @@ paths:
                     description: OK
                 "401":
                     description: Not authenticated
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Update your own profile
@@ -12863,6 +13119,8 @@ paths:
                     description: Not authenticated
                 "404":
                     description: User not found
+                "422":
+                    description: Request failed validation
             security:
                 - BearerAuth: []
             summary: Get a user's profile by username

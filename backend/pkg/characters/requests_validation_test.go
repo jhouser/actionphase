@@ -76,7 +76,7 @@ func TestCharacterRequestValidation(t *testing.T) {
 	t.Run("rejects rename with missing name", func(t *testing.T) {
 		rec := send(t, http.MethodPut, renamePath, `{}`)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "name")
 	})
 
@@ -87,7 +87,7 @@ func TestCharacterRequestValidation(t *testing.T) {
 		// user the server had broken.
 		rec := send(t, http.MethodPut, renamePath, `{"name": "   "}`)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "name")
 	})
 
@@ -98,7 +98,7 @@ func TestCharacterRequestValidation(t *testing.T) {
 		}
 		rec := send(t, http.MethodPut, renamePath, fmt.Sprintf(`{"name": %q}`, longName))
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "255")
 	})
 
@@ -115,7 +115,7 @@ func TestCharacterRequestValidation(t *testing.T) {
 		rec := send(t, http.MethodPost, dataPath,
 			`{"field_name": "strength", "field_value": "10", "field_type": "number", "is_public": true}`)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "module_type")
 	})
 
@@ -131,21 +131,21 @@ func TestCharacterRequestValidation(t *testing.T) {
 	t.Run("rejects approve with missing status", func(t *testing.T) {
 		rec := send(t, http.MethodPost, approvePath, `{}`)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "status")
 	})
 
 	t.Run("rejects assign with missing assigned_user_id", func(t *testing.T) {
 		rec := send(t, http.MethodPost, assignPath, `{}`)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "assigned_user_id")
 	})
 
 	t.Run("rejects reassign with missing new_owner_user_id", func(t *testing.T) {
 		rec := send(t, http.MethodPut, reassignPath, `{}`)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "new_owner_user_id")
 	})
 }

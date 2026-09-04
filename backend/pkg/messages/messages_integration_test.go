@@ -88,7 +88,7 @@ func TestMessageAPI_PostCreationFlow(t *testing.T) {
 			payload: CreatePostRequest{
 				Content: "This should fail",
 			},
-			expectedStatus: 400,
+			expectedStatus: 422,
 			description:    "Post without character ID is rejected at Bind",
 		},
 		{
@@ -97,7 +97,7 @@ func TestMessageAPI_PostCreationFlow(t *testing.T) {
 				CharacterID: gmCharacter.ID,
 				Content:     "",
 			},
-			expectedStatus: 400,
+			expectedStatus: 422,
 			description:    "Post with empty content is rejected at Bind",
 		},
 	}
@@ -218,7 +218,7 @@ func TestMessageAPI_CommentCreationFlow(t *testing.T) {
 			payload: CreateCommentRequest{
 				Content: "This should fail",
 			},
-			expectedStatus: 400,
+			expectedStatus: 422,
 			description:    "Comment without character ID is rejected at Bind",
 		},
 		{
@@ -228,7 +228,7 @@ func TestMessageAPI_CommentCreationFlow(t *testing.T) {
 				CharacterID: playerCharacter.ID,
 				Content:     "",
 			},
-			expectedStatus: 400,
+			expectedStatus: 422,
 			description:    "Comment with empty content is rejected at Bind",
 		},
 	}
@@ -567,8 +567,10 @@ func TestMessageAPI_GetMessage(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		// Current behavior returns 500 - TODO: improve handler to return 404
-		core.AssertEqual(t, 500, w.Code, "Should return error for not found")
+		// A deep link to a message that no longer exists is a stale URL, not a
+		// server fault. 500 would also make the frontend discard the message
+		// and show a generic "server error" (see lib/errors.ts).
+		core.AssertEqual(t, 404, w.Code, "Should return 404 for a missing message")
 	})
 
 	t.Run("get_message_unauthorized", func(t *testing.T) {
@@ -635,8 +637,10 @@ func TestMessageAPI_MarkPostRead(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)
-
-		// Current behavior returns 500 - TODO: improve handler to return 404
+		// Still 500: MarkPostAsRead is an upsert, so a missing post fails as a
+		// foreign-key violation rather than pgx.ErrNoRows, which is what
+		// core.NotFoundOr500 keys on. Mapping SQLSTATE 23503 to 404 is a
+		// separate change -- see .claude/planning/http-status-codes.md.
 		core.AssertEqual(t, 500, w.Code, "Should return error for not found")
 	})
 
@@ -733,8 +737,10 @@ func TestMessageAPI_UpdateDeleteComment(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		// Current behavior returns 500 - TODO: improve handler to return 404
-		core.AssertEqual(t, 500, w.Code, "Should return error for not found")
+		// A deep link to a message that no longer exists is a stale URL, not a
+		// server fault. 500 would also make the frontend discard the message
+		// and show a generic "server error" (see lib/errors.ts).
+		core.AssertEqual(t, 404, w.Code, "Should return 404 for a missing message")
 	})
 
 	t.Run("update_comment_unauthorized", func(t *testing.T) {
@@ -780,8 +786,10 @@ func TestMessageAPI_UpdateDeleteComment(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		// Current behavior returns 500 - TODO: improve handler to return 404
-		core.AssertEqual(t, 500, w.Code, "Should return error for not found")
+		// A deep link to a message that no longer exists is a stale URL, not a
+		// server fault. 500 would also make the frontend discard the message
+		// and show a generic "server error" (see lib/errors.ts).
+		core.AssertEqual(t, 404, w.Code, "Should return 404 for a missing message")
 	})
 
 	t.Run("delete_comment_unauthorized", func(t *testing.T) {

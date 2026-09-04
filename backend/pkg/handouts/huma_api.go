@@ -497,6 +497,7 @@ func RegisterHumaGameHandouts(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can create handouts"},
@@ -525,6 +526,7 @@ func RegisterHumaGameHandouts(api huma.API, h *Handler) {
 		Tags:        []string{"Handouts"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"404": {Description: "Handout not found, or not visible to the caller"},
 		},
@@ -539,6 +541,7 @@ func RegisterHumaGameHandouts(api huma.API, h *Handler) {
 		Tags:        []string{"Handouts"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated, or not the GM"},
 			"404": {Description: "Handout not found"},
@@ -555,6 +558,7 @@ func RegisterHumaGameHandouts(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated, or not the GM"},
 			"404": {Description: "Handout not found"},
 		},
@@ -569,6 +573,7 @@ func RegisterHumaGameHandouts(api huma.API, h *Handler) {
 		Tags:        []string{"Handouts"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated, or not the GM"},
 			"404": {Description: "Handout not found"},
 		},
@@ -583,6 +588,7 @@ func RegisterHumaGameHandouts(api huma.API, h *Handler) {
 		Tags:        []string{"Handouts"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated, or not the GM"},
 			"404": {Description: "Handout not found"},
 		},
@@ -598,6 +604,7 @@ func RegisterHumaGameHandouts(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusCreated,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated, or not the GM"},
 			"404": {Description: "Handout not found"},
@@ -613,6 +620,7 @@ func RegisterHumaGameHandouts(api huma.API, h *Handler) {
 		Tags:        []string{"Handouts"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"404": {Description: "Handout not found, or not visible to the caller"},
 		},
@@ -627,6 +635,7 @@ func RegisterHumaGameHandouts(api huma.API, h *Handler) {
 		Tags:        []string{"Handouts"},
 		Security:    bearer,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Invalid request body"},
 			"401": {Description: "Not authenticated"},
 		},
@@ -642,6 +651,7 @@ func RegisterHumaGameHandouts(api huma.API, h *Handler) {
 		Security:      bearer,
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.humaDeleteComment)

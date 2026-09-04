@@ -150,6 +150,7 @@ func RegisterHumaAvatars(api huma.API, h *Handler) {
 		Tags:     []string{"Characters"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Missing, oversized, or unsupported image"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not permitted to modify this character"},
@@ -165,6 +166,7 @@ func RegisterHumaAvatars(api huma.API, h *Handler) {
 		DefaultStatus: http.StatusNoContent,
 		Security:      []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Not permitted to modify this character"},
 		},

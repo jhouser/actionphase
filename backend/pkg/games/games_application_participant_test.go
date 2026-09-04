@@ -561,7 +561,7 @@ func TestGameAPI_ParticipantManagementAdvanced(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		core.AssertEqual(t, 400, w.Code, "Should return 400 for invalid role")
+		core.AssertEqual(t, 422, w.Code, "Should return 422 for invalid role")
 	})
 
 	t.Run("add_player_directly_as_non_gm", func(t *testing.T) {
@@ -592,7 +592,7 @@ func TestGameAPI_ParticipantManagementAdvanced(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		core.AssertEqual(t, 400, w.Code, "Should return 400 Bad Request")
+		core.AssertEqual(t, 422, w.Code, "Should return 422 Bad Request")
 	})
 
 	t.Run("add_player_directly_unauthorized", func(t *testing.T) {

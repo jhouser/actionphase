@@ -823,7 +823,7 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 				Name:          "",
 				CharacterType: "player_character",
 			},
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusUnprocessableEntity,
 			reason:         "should reject empty character name",
 		},
 		{
@@ -835,7 +835,7 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 				Name:          "Invalid Character",
 				CharacterType: "invalid_type",
 			},
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusUnprocessableEntity,
 			reason:         "should reject invalid character type",
 		},
 		{
@@ -844,8 +844,8 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 			method:         "GET",
 			token:          gmToken,
 			body:           nil,
-			expectedStatus: http.StatusInternalServerError,
-			reason:         "should handle nonexistent character",
+			expectedStatus: http.StatusNotFound,
+			reason:         "a missing character is the caller's mistake, not a server fault",
 		},
 		{
 			name:     "approve nonexistent character",
@@ -855,8 +855,19 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 			body: ApproveCharacterRequest{
 				Status: "approved",
 			},
-			expectedStatus: http.StatusInternalServerError,
-			reason:         "should handle nonexistent character for approval",
+			expectedStatus: http.StatusNotFound,
+			reason:         "a missing character is the caller's mistake, not a server fault",
+		},
+		{
+			name:     "assign nonexistent character",
+			endpoint: "/api/v1/characters/99999/assign",
+			method:   "POST",
+			token:    gmToken,
+			body: AssignNPCRequest{
+				AssignedUserID: 1,
+			},
+			expectedStatus: http.StatusNotFound,
+			reason:         "a missing character is the caller's mistake, not a server fault",
 		},
 		{
 			name:     "invalid character ID format",
@@ -866,7 +877,7 @@ func TestCharacterAPI_ErrorHandling(t *testing.T) {
 			body: ApproveCharacterRequest{
 				Status: "approved",
 			},
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusUnprocessableEntity,
 			reason:         "should reject invalid character ID format",
 		},
 	}

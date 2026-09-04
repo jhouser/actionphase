@@ -232,6 +232,7 @@ func RegisterHumaUsers(api huma.API, h *Handler) {
 		Tags:        []string{"Users"},
 		Security:    auth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"404": {Description: "User profile not found"},
 		},
@@ -246,6 +247,7 @@ func RegisterHumaUsers(api huma.API, h *Handler) {
 		Tags:        []string{"Users"},
 		Security:    auth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"404": {Description: "User not found"},
 		},
@@ -260,6 +262,7 @@ func RegisterHumaUsers(api huma.API, h *Handler) {
 		Tags:        []string{"Users"},
 		Security:    auth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.HumaUpdateUserProfile)
@@ -274,6 +277,7 @@ func RegisterHumaUsers(api huma.API, h *Handler) {
 		DefaultStatus: http.StatusCreated,
 		Security:      auth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Missing, oversized, or unsupported image"},
 			"401": {Description: "Not authenticated"},
 		},
@@ -287,6 +291,7 @@ func RegisterHumaUsers(api huma.API, h *Handler) {
 		Tags:        []string{"Users"},
 		Security:    auth,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 		},
 	}, h.HumaDeleteUserAvatar)

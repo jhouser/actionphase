@@ -129,7 +129,12 @@ export function mapAuthError(error: ErrorResponse | unknown): string {
   // HTTP status code errors
   if (rawError?.response?.status) {
     const status = rawError.response.status;
-    if (status === 400) {
+    // 400 (could not parse) and 422 (parsed, failed validation) are both
+    // "your input was wrong". The specific-message branches above already
+    // caught anything we can phrase well; reaching here means the message is
+    // raw server text -- for 422 that is a schema error like
+    // "expected length >= 8 (body.password: x)", which must not be shown.
+    if (status === 400 || status === 422) {
       return 'Invalid request. Please check your information and try again.';
     }
     if (status === 401) {

@@ -167,6 +167,7 @@ func RegisterHumaCommunityBanner(api huma.API, h *Handler) {
 		Tags:     []string{"Communities"},
 		Security: []map[string][]string{{"BearerAuth": {}}},
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"400": {Description: "Missing file, unsupported type, or larger than 5MB"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Caller does not moderate this community"},
@@ -186,6 +187,7 @@ func RegisterHumaCommunityBanner(api huma.API, h *Handler) {
 		Security:      []map[string][]string{{"BearerAuth": {}}},
 		DefaultStatus: http.StatusNoContent,
 		Responses: map[string]*huma.Response{
+			"422": {Description: "Request failed validation"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Caller does not moderate this community"},
 			"404": {Description: "Community not found"},

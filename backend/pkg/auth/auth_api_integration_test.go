@@ -54,7 +54,7 @@ func TestAuthAPI_RegistrationEndpoint(t *testing.T) {
 				"email":    "test@example.com",
 				"password": "securepassword123",
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			description:    "Registration without username should fail",
 		},
 		{
@@ -63,7 +63,7 @@ func TestAuthAPI_RegistrationEndpoint(t *testing.T) {
 				"username": "testuser",
 				"password": "securepassword123",
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			description:    "Registration without email should fail",
 		},
 		{
@@ -72,7 +72,7 @@ func TestAuthAPI_RegistrationEndpoint(t *testing.T) {
 				"username": "testuser",
 				"email":    "test@example.com",
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			description:    "Registration without password should fail",
 		},
 		{
@@ -824,7 +824,7 @@ func TestAuthAPI_Preferences(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		core.AssertEqual(t, 400, w.Code, "Should return 400 Bad Request for missing preferences field")
+		core.AssertEqual(t, 422, w.Code, "Should return 422 Bad Request for missing preferences field")
 	})
 
 	t.Run("unauthorized_access", func(t *testing.T) {
@@ -894,7 +894,7 @@ func TestAuthAPI_SearchUsers(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		core.AssertEqual(t, 400, w.Code, "Should return 400 Bad Request for missing query")
+		core.AssertEqual(t, 422, w.Code, "Should return 422 Bad Request for missing query")
 	})
 
 	t.Run("search_empty_query", func(t *testing.T) {
@@ -904,7 +904,7 @@ func TestAuthAPI_SearchUsers(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 
-		core.AssertEqual(t, 400, w.Code, "Should return 400 Bad Request for empty query")
+		core.AssertEqual(t, 422, w.Code, "Should return 422 Bad Request for empty query")
 	})
 
 	t.Run("search_no_results", func(t *testing.T) {

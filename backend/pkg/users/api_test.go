@@ -83,7 +83,7 @@ func TestUserAPI_GetUserProfile(t *testing.T) {
 		{
 			name:           "invalid_user_id",
 			userID:         "invalid",
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			description:    "Should return 400 for invalid user ID",
 		},
 	}
@@ -161,7 +161,7 @@ func TestUserAPI_UpdateUserProfile(t *testing.T) {
 			payload: map[string]interface{}{
 				"display_name": string(make([]byte, 300)), // >255 chars
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			description:    "Should reject display name that's too long",
 		},
 		{
@@ -169,7 +169,7 @@ func TestUserAPI_UpdateUserProfile(t *testing.T) {
 			payload: map[string]interface{}{
 				"bio": string(make([]byte, 11000)), // >10000 chars
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			description:    "Should reject bio that's too long",
 		},
 	}
@@ -272,7 +272,7 @@ func TestUpdateUserProfile_ValidationErrors(t *testing.T) {
 			payload: map[string]interface{}{
 				"display_name": strings.Repeat("a", 256), // 256 bytes
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			expectedError:  "display name must be 255 characters or less",
 			description:    "Should reject display name exceeding 255 characters",
 		},
@@ -281,7 +281,7 @@ func TestUpdateUserProfile_ValidationErrors(t *testing.T) {
 			payload: map[string]interface{}{
 				"display_name": strings.Repeat("a", 1000),
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			expectedError:  "display name must be 255 characters or less",
 			description:    "Should reject display name far exceeding limit",
 		},
@@ -298,7 +298,7 @@ func TestUpdateUserProfile_ValidationErrors(t *testing.T) {
 			payload: map[string]interface{}{
 				"bio": strings.Repeat("a", 10001), // 10001 bytes
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			expectedError:  "bio must be 10000 characters or less",
 			description:    "Should reject bio exceeding 10000 characters",
 		},
@@ -307,7 +307,7 @@ func TestUpdateUserProfile_ValidationErrors(t *testing.T) {
 			payload: map[string]interface{}{
 				"bio": strings.Repeat("a", 20000),
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			expectedError:  "bio must be 10000 characters or less",
 			description:    "Should reject bio far exceeding limit",
 		},
@@ -326,7 +326,7 @@ func TestUpdateUserProfile_ValidationErrors(t *testing.T) {
 				"display_name": strings.Repeat("a", 300),
 				"bio":          strings.Repeat("a", 11000),
 			},
-			expectedStatus: 400,
+			expectedStatus: http.StatusUnprocessableEntity,
 			expectedError:  "display name must be 255 characters or less",
 			description:    "Should reject when display name exceeds limit (first validation error)",
 		},
@@ -526,7 +526,7 @@ func TestUserAPI_UploadUserAvatar(t *testing.T) {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
-		core.AssertEqual(t, http.StatusBadRequest, rec.Code, "missing avatar file should return 400")
+		core.AssertEqual(t, http.StatusUnprocessableEntity, rec.Code, "missing avatar file should return 422")
 	})
 
 	t.Run("invalid content type returns 400", func(t *testing.T) {

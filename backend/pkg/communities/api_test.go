@@ -637,7 +637,7 @@ func TestCommunitiesAPI_UpdateCommunity_RejectsOwnerAndActiveFields(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			rec := h.request(t, h.moderator, http.MethodPatch,
 				"/api/v1/communities/midnight-ravens", []byte(tc.body), false)
-			assert.Equal(t, http.StatusBadRequest, rec.Code,
+			assert.Equal(t, http.StatusUnprocessableEntity, rec.Code,
 				"a moderator must not be able to set %s", tc.name)
 		})
 	}
@@ -1342,7 +1342,7 @@ func TestDocumentsAPI_CreateRejectsBlankTitle(t *testing.T) {
 	body := []byte(`{"title":"","content":"text"}`)
 
 	rec := h.request(t, h.moderator, http.MethodPost, docPath(), body, false)
-	assert.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, "body: %s", rec.Body.String())
 }
 
 func TestDocumentsAPI_UpdatePublishes(t *testing.T) {

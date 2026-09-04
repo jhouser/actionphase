@@ -758,7 +758,7 @@ func TestLootTableRequestValidation(t *testing.T) {
 	for _, tc := range rejected {
 		t.Run("create rejects "+tc.name, func(t *testing.T) {
 			w := post(t, base, tc.body)
-			core.AssertEqual(t, http.StatusBadRequest, w.Code,
+			core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code,
 				"should be rejected with 400, got "+w.Body.String())
 		})
 	}
@@ -786,7 +786,7 @@ func TestLootTableRequestValidation(t *testing.T) {
 
 		contentsPath := fmt.Sprintf("%s/%d/contents", base, created.ID)
 		w = post(t, contentsPath, `{"items":[{"name":"","data":"{}"}]}`)
-		core.AssertEqual(t, http.StatusBadRequest, w.Code,
+		core.AssertEqual(t, http.StatusUnprocessableEntity, w.Code,
 			"blank item name should be rejected, got "+w.Body.String())
 
 		// The existing contents must survive a rejected update: the handler deletes
