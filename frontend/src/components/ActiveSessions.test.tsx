@@ -313,7 +313,7 @@ describe('ActiveSessions', () => {
       }),
       http.delete('http://localhost:3000/api/v1/auth/sessions/:id', async () => {
         return HttpResponse.json(
-          { error: 'Failed to revoke session' },
+          { detail: 'Failed to revoke session' },
           { status: 500 }
         );
       })
@@ -549,7 +549,7 @@ describe('ActiveSessions', () => {
       }),
       http.post('http://localhost:3000/api/v1/auth/revoke-all-sessions', async () => {
         return HttpResponse.json(
-          { error: 'Failed to revoke all sessions' },
+          { detail: 'Failed to revoke all sessions' },
           { status: 500 }
         );
       })

@@ -709,7 +709,7 @@ describe('GameResultsManager', () => {
         }),
         http.put('/api/v1/games/:gameId/results/:resultId', () => {
           return HttpResponse.json(
-            { error: 'Failed to update result' },
+            { detail: 'Failed to update result' },
             { status: 500 }
           );
         })
@@ -743,7 +743,7 @@ describe('GameResultsManager', () => {
         }),
         http.put('/api/v1/games/:gameId/results/:resultId', () => {
           return HttpResponse.json(
-            { error: 'Failed to update result' },
+            { detail: 'Failed to update result' },
             { status: 500 }
           );
         })
@@ -1167,7 +1167,7 @@ describe('GameResultsManager', () => {
           return HttpResponse.json([mockUnpublishedResult]);
         }),
         http.delete('/api/v1/games/:gameId/results/:resultId', () => {
-          return HttpResponse.json({ error: 'Failed to delete' }, { status: 500 });
+          return HttpResponse.json({ detail: 'Failed to delete' }, { status: 500 });
         })
       );
 
@@ -1642,7 +1642,7 @@ describe('GameResultsManager', () => {
       setupDefaultHandlers([mockUnpublishedResult]);
       server.use(
         http.post('/api/v1/games/:gameId/results/:resultId/parts', () =>
-          HttpResponse.json({ error: 'nope' }, { status: 500 })
+          HttpResponse.json({ detail: 'nope' }, { status: 500 })
         )
       );
 

@@ -386,7 +386,7 @@ describe('ConversationList', () => {
       server.use(
         http.get('http://localhost:3000/api/v1/games/:gameId/conversations', () => {
           return HttpResponse.json(
-            { error: 'Internal server error' },
+            { detail: 'Internal server error' },
             { status: 500 }
           )
         })

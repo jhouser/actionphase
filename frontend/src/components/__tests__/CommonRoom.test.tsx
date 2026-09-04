@@ -756,7 +756,7 @@ describe('CommonRoom', () => {
         server.use(
           http.get('/api/v1/games/:gameId/messages/:messageId/thread-context', async () => {
             await new Promise(resolve => setTimeout(resolve, 100));
-            return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+            return HttpResponse.json({ detail: 'Not found' }, { status: 404 });
           })
         );
 

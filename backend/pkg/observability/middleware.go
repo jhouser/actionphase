@@ -1,8 +1,10 @@
 package observability
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"path"
@@ -140,16 +142,52 @@ func ErrorRecoveryMiddleware(logger *Logger) func(next http.Handler) http.Handle
 						"stack_trace", stackTrace,
 					)
 
-					// Return 500 error to client
-					w.Header().Set("Content-Type", "application/json")
+					// Answer with RFC 7807, like every other error path. This is
+					// the last emitter a client can hit and the one it is least
+					// able to anticipate, so a panic must not be the single
+					// response whose shape differs from the rest of the API.
+					//
+					// The body is assembled here rather than through
+					// core.ErrResponse because core imports this package;
+					// TestPanicResponseMatchesErrResponse pins the two together.
+					body := problemJSON{
+						Title:    http.StatusText(http.StatusInternalServerError),
+						Status:   http.StatusInternalServerError,
+						Detail:   "Internal server error",
+						Instance: CorrelationInstance(correlationIDForPanic(ctx, w)),
+					}
+					encoded, marshalErr := json.Marshal(body)
+					if marshalErr != nil {
+						// Marshalling a fixed struct cannot realistically fail,
+						// but a panic handler must never panic itself.
+						encoded = []byte(`{"title":"Internal Server Error","status":500}`)
+					}
+
+					w.Header().Set("Content-Type", ProblemContentType)
 					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte(`{"error":"Internal server error","code":500}`))
+					w.Write(encoded)
 				}
 			}()
 
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// correlationIDForPanic finds the correlation ID for a panicking request.
+//
+// Recovery is deliberately the outermost middleware, so that it also catches a
+// panic inside tracing. The consequence is that the context it unwinds to is
+// the one from *before* RequestTracingMiddleware attached the ID, so reading
+// the context alone yields nothing on exactly the responses that most need to
+// be traceable. The response header is already set by then, so it is the
+// reliable source here; the context is still checked first for the case where
+// recovery is composed without tracing.
+func correlationIDForPanic(ctx context.Context, w http.ResponseWriter) string {
+	if id := GetCorrelationID(ctx); id != "" {
+		return id
+	}
+	return w.Header().Get("X-Correlation-ID")
 }
 
 // generateID creates a unique identifier with the given prefix

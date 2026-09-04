@@ -213,7 +213,7 @@ describe('WebhooksTab', () => {
 
     it('reports the server error when the URL is rejected', async () => {
       createWebhook.mockRejectedValue({
-        response: { data: { error: 'webhook URL must be an https Discord webhook endpoint' } },
+        response: { data: { detail: 'webhook URL must be an https Discord webhook endpoint' } },
       })
       renderTab()
 
@@ -281,7 +281,7 @@ describe('WebhooksTab', () => {
     // delivery is failing, so a generic message would defeat the point.
     it("surfaces Discord's reason on failure", async () => {
       testWebhook.mockRejectedValue({
-        response: { data: { error: 'webhook test failed: HTTP 404: Unknown Webhook' } },
+        response: { data: { detail: 'webhook test failed: HTTP 404: Unknown Webhook' } },
       })
       renderTab()
 

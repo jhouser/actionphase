@@ -92,7 +92,7 @@ describe('LoginForm', () => {
     server.use(
       http.post('http://localhost:3000/api/v1/auth/login', async () => {
         return HttpResponse.json(
-          { error: 'Invalid credentials' },
+          { detail: 'Invalid credentials' },
           { status: 401 }
         )
       })

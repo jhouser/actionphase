@@ -140,7 +140,7 @@ describe('CommunitiesTab', () => {
   // would hide the one thing the admin needs to know.
   it('surfaces the server error message on failure', async () => {
     createCommunity.mockRejectedValue({
-      response: { data: { error: 'that slug is already taken' } },
+      response: { data: { detail: 'that slug is already taken' } },
     })
 
     renderWithProviders(<CommunitiesTab />)

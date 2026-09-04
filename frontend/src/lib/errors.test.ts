@@ -4,10 +4,7 @@ import { createAppError, extractApiErrorMessage } from './errors';
 import { ERROR_MESSAGES } from '../types/errors';
 
 /**
- * These cover the transition described in .claude/planning/rfc7807-error-format.md:
- * the API emits the legacy `{status, error}` body today and RFC 7807
- * `{type, title, status, detail}` after the backend migrates. Both shapes must
- * produce a sensible user-facing message throughout.
+ * The API emits one error shape: RFC 7807 `{type, title, status, detail}`.
  *
  * The failure this guards against is silent: RFC 7807's `status` is a number,
  * so a fallback chain that reaches it renders a bare "422" to the user without
@@ -21,10 +18,13 @@ function axios422(data: unknown): AxiosError {
 }
 
 describe('extractApiErrorMessage', () => {
-  it('reads the legacy error field', () => {
+  it('ignores a stray legacy error field', () => {
+    // No endpoint emits `error` any more. If one regresses, `detail` is still
+    // absent, so the caller must fall back rather than surface a half-migrated
+    // body -- and must never reach for `status`.
     expect(
-      extractApiErrorMessage(axios422({ status: 'Invalid request.', error: 'title is required' }))
-    ).toBe('title is required');
+      extractApiErrorMessage(axios422({ status: 422, error: 'title is required' }))
+    ).toBeUndefined();
   });
 
   it('reads the RFC 7807 detail field', () => {
@@ -74,13 +74,10 @@ describe('extractApiErrorMessage', () => {
     expect(extractApiErrorMessage(axios422({ status: 422 }))).toBeUndefined();
   });
 
-  it('does not return the legacy status string either', () => {
-    expect(extractApiErrorMessage(axios422({ status: 'Invalid request.' }))).toBeUndefined();
-  });
-
   it('ignores blank and whitespace-only messages', () => {
-    expect(extractApiErrorMessage(axios422({ error: '   ' }))).toBeUndefined();
+    expect(extractApiErrorMessage(axios422({ detail: '   ' }))).toBeUndefined();
     expect(extractApiErrorMessage(axios422({ detail: '' }))).toBeUndefined();
+    expect(extractApiErrorMessage(axios422({ title: '  ' }))).toBeUndefined();
   });
 
   it('returns undefined for non-API errors', () => {
@@ -121,18 +118,17 @@ describe('createAppError fallbacks', () => {
     expect(appError.context?.userMessage).toBe('you are banned from this community');
   });
 
-  it('surfaces the legacy error field unchanged', () => {
-    const appError = createAppError(
-      axiosWithStatus(403, { status: 'Forbidden.', error: 'admin privileges required' })
-    );
-    expect(appError.context?.userMessage).toBe('admin privileges required');
+  it('falls back to the default 403 message when the body carries no detail', () => {
+    const appError = createAppError(axiosWithStatus(403, { status: 403 }));
+    expect(appError.context?.userMessage).toBe(ERROR_MESSAGES.UNAUTHORIZED);
   });
 });
 
 /**
  * Payloads captured verbatim from the running API after the backend adopted
- * RFC 7807, one per emitter. The API has three independent error emitters --
- * the jwt middleware, chi/render for other middleware, and huma for handlers --
+ * RFC 7807, one per emitter. The API has five independent error emitters -- the
+ * jwt middleware, chi/render for other middleware, huma for handlers, the
+ * tollbooth rate limiter, and the panic recovery middleware --
  * and they can drift apart without any of them failing on its own. Pinning a
  * real body from each is what catches that.
  */
@@ -160,6 +156,40 @@ describe('extractApiErrorMessage against live API payloads', () => {
         },
       })
     ).toBe('admin privileges required');
+  });
+
+  it('reads a 429 from the rate limiter', () => {
+    // tollbooth takes a fixed string, so this body alone carries no
+    // `instance` -- the one emitter that cannot.
+    expect(
+      extractApiErrorMessage({
+        response: {
+          data: {
+            title: 'Too Many Requests',
+            status: 429,
+            detail: 'Rate limit exceeded. Please try again later.',
+          },
+        },
+      })
+    ).toBe('Rate limit exceeded. Please try again later.');
+  });
+
+  it('reads a 500 from the panic recovery middleware', () => {
+    // Shape asserted server-side by
+    // TestErrorRecoveryMiddleware_EmitsProblemJSON; there is deliberately no
+    // route that panics on demand to capture this from a live server.
+    expect(
+      extractApiErrorMessage({
+        response: {
+          data: {
+            title: 'Internal Server Error',
+            status: 500,
+            detail: 'Internal server error',
+            instance: 'urn:actionphase:correlation:corr_1f2a9c4b7e0d5a63',
+          },
+        },
+      })
+    ).toBe('Internal server error');
   });
 
   it('reads a 404 from a huma handler', () => {

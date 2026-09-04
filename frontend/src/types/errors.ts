@@ -19,14 +19,16 @@ export interface ApiErrorDetail {
  * as a message renders a bare `403` to the user without throwing. Never display
  * it — go through `extractApiErrorMessage` in lib/errors.ts.
  */
+/**
+ * An RFC 7807 problem document, the single error shape the API emits.
+ *
+ * `status` is the numeric HTTP status, never a display string — see
+ * extractApiErrorMessage, which deliberately refuses to fall back to it.
+ */
 export interface ApiError {
-  // Legacy shape
-  status?: string | number;
-  error?: string;
-
-  // RFC 7807 (application/problem+json)
   type?: string;
   title?: string;
+  status?: number;
   detail?: string;
   instance?: string;
   errors?: ApiErrorDetail[];

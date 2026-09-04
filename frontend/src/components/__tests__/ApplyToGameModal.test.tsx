@@ -122,7 +122,7 @@ describe('ApplyToGameModal', () => {
     const banned = new AxiosError('Request failed with status code 403');
     banned.response = {
       status: 403,
-      data: { status: 'Forbidden.', error: 'you are banned from this community' },
+      data: { title: 'Forbidden', status: 403, detail: 'you are banned from this community' },
     } as AxiosError['response'];
     vi.mocked(apiClient.games.applyToGame).mockRejectedValue(banned);
 
@@ -201,7 +201,7 @@ describe('ApplyToGameModal', () => {
     const failure = new AxiosError('Request failed with status code 403');
     failure.response = {
       status: 403,
-      data: { status: 'Forbidden.', error: 'you are banned from this community' },
+      data: { title: 'Forbidden', status: 403, detail: 'you are banned from this community' },
     } as AxiosError['response'];
     vi.mocked(apiClient.games.applyToGame).mockRejectedValue(failure);
 

@@ -181,7 +181,7 @@ describe('ModeratorsTab', () => {
     // `error`, not `detail` -- see the LegacyError shape note in
     // SettingsTab.test.tsx.
     addModerator.mockRejectedValue({
-      response: { data: { error: 'that user already moderates this community' } },
+      response: { data: { detail: 'that user already moderates this community' } },
     })
 
     renderWithProviders(<ModeratorsTab community={community} canAdminister />)

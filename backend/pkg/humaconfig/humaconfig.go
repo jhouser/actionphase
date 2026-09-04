@@ -64,10 +64,7 @@ func InstallProblemErrorFormat() {
 // occurrence for support to grep for, not a page anyone can fetch; inventing a
 // dereferenceable URL would promise a lookup endpoint that does not exist.
 func CorrelationInstance(correlationID string) string {
-	if correlationID == "" {
-		return ""
-	}
-	return "urn:actionphase:correlation:" + correlationID
+	return observability.CorrelationInstance(correlationID)
 }
 
 // New builds a huma API bound to an existing chi router.

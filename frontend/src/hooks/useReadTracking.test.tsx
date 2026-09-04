@@ -71,7 +71,7 @@ describe('useReadTracking hooks', () => {
     it('handles API errors gracefully', async () => {
       server.use(
         http.get('/api/v1/games/10/unread-comment-ids', () => {
-          return HttpResponse.json({ error: 'Server error' }, { status: 500 });
+          return HttpResponse.json({ detail: 'Server error' }, { status: 500 });
         })
       );
 
@@ -337,7 +337,7 @@ describe('useReadTracking hooks', () => {
     it('handles mark as read errors gracefully', async () => {
       server.use(
         http.post('/api/v1/games/10/posts/1/mark-read', () => {
-          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+          return HttpResponse.json({ detail: 'Unauthorized' }, { status: 401 });
         })
       );
 

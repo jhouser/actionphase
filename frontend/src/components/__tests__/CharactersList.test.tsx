@@ -963,7 +963,7 @@ describe('CharactersList', () => {
       server.use(
         http.delete('http://localhost:3000/api/v1/characters/:id', () => {
           return HttpResponse.json(
-            { error: 'cannot delete character with existing messages' },
+            { detail: 'cannot delete character with existing messages' },
             { status: 400 }
           )
         })

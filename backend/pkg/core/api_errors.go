@@ -58,7 +58,7 @@ func (e *ErrResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	// not. Carrying the ID in `instance` is what makes a user-reported error
 	// traceable.
 	if id := observability.GetCorrelationID(r.Context()); id != "" {
-		e.Instance = "urn:actionphase:correlation:" + id
+		e.Instance = observability.CorrelationInstance(id)
 	}
 
 	// Mark the active span as an error for 5xx responses so Tempo shows them
@@ -104,6 +104,11 @@ func InstallProblemJSONResponder() {
 	}
 }
 
+// ProblemContentType is re-exported from observability, which owns the
+// canonical definition because the panic recovery middleware there emits
+// problem documents and cannot import core.
+const ProblemContentType = observability.ProblemContentType
+
 // problemJSONWriter rewrites the Content-Type at the moment the status line is
 // written, which is the last point before headers become immutable.
 type problemJSONWriter struct {
@@ -114,7 +119,7 @@ type problemJSONWriter struct {
 func (w *problemJSONWriter) WriteHeader(status int) {
 	if !w.written {
 		w.written = true
-		w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
+		w.Header().Set("Content-Type", ProblemContentType)
 	}
 	w.ResponseWriter.WriteHeader(status)
 }
@@ -122,7 +127,7 @@ func (w *problemJSONWriter) WriteHeader(status int) {
 func (w *problemJSONWriter) Write(b []byte) (int, error) {
 	if !w.written {
 		w.written = true
-		w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
+		w.Header().Set("Content-Type", ProblemContentType)
 	}
 	return w.ResponseWriter.Write(b)
 }

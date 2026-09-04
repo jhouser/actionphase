@@ -4,9 +4,17 @@ import (
 	"net/http"
 	"time"
 
+	core "actionphase/pkg/core"
+
 	"github.com/didip/tollbooth/v7"
 	"github.com/didip/tollbooth/v7/limiter"
 )
+
+// rateLimitProblemJSON is the 429 body, written as a literal because tollbooth
+// wants a string rather than a renderer. It is kept in sync with
+// core.ErrResponse by TestRateLimitBodyMatchesErrResponse.
+const rateLimitProblemJSON = `{"title":"Too Many Requests","status":429,` +
+	`"detail":"Rate limit exceeded. Please try again later."}`
 
 // RateLimitConfig holds rate limiting configuration
 type RateLimitConfig struct {
@@ -28,9 +36,15 @@ func RateLimitMiddleware(config RateLimitConfig) func(http.Handler) http.Handler
 	// Configure IP lookup methods
 	lmt.SetIPLookups(config.IPLookups)
 
-	// Custom error message
-	lmt.SetMessage(`{"error": "Rate limit exceeded. Please try again later."}`)
-	lmt.SetMessageContentType("application/json")
+	// Rate limiting is a fourth error emitter, alongside huma, chi/render and
+	// core.Authenticator, and it must speak RFC 7807 like the other three.
+	//
+	// tollbooth takes a fixed string rather than a handler, so this body cannot
+	// carry a per-request `instance` correlation ID the way the others do. That
+	// is acceptable here -- a 429 is caused by the caller's own request rate,
+	// not by server state a correlation ID would help trace.
+	lmt.SetMessage(rateLimitProblemJSON)
+	lmt.SetMessageContentType(core.ProblemContentType)
 
 	return func(next http.Handler) http.Handler {
 		return tollbooth.LimitHandler(lmt, next)

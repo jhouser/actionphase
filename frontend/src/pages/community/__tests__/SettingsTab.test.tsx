@@ -139,7 +139,7 @@ describe('SettingsTab', () => {
   // field the API does not emit.
   it('reports a failed save', async () => {
     updateCommunityProfile.mockRejectedValue({
-      response: { data: { error: 'name cannot be blank' } },
+      response: { data: { detail: 'name cannot be blank' } },
     })
     renderWithProviders(<SettingsTab community={community} canEdit />)
 

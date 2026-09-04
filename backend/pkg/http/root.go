@@ -101,6 +101,19 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 	r.Use(middleware.URLFormat)
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
+	// chi answers an unmatched route or a wrong method with its own plain-text
+	// default ("404 page not found"). Those are the two errors a client is most
+	// likely to hit while integrating -- a typo'd path, a GET where a POST was
+	// meant -- and they were the last responses whose body a client could not
+	// parse. Route them through the same renderer as everything else.
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		render.Render(w, r, core.ErrNotFound("no route matches "+r.Method+" "+r.URL.Path))
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		render.Render(w, r, core.ErrWithStatus(http.StatusMethodNotAllowed,
+			r.Method+" is not allowed on "+r.URL.Path))
+	})
+
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("root."))
 	})

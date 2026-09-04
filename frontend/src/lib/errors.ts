@@ -15,16 +15,14 @@ import {
 import { logger } from '@/services/LoggingService';
 
 /**
- * Pulls a displayable message out of an API error response body.
+ * Pulls a displayable message out of an RFC 7807 problem document
+ * (see `ApiError`), preferring `detail`, then field-level `errors[]`, then
+ * `title`.
  *
- * Understands both shapes the API can return (see `ApiError`): the legacy
- * `error` field and RFC 7807's `detail` / `errors[]`.
- *
- * Deliberately never returns `status`. In the legacy shape that field is a
- * human-readable string ("Forbidden."), but under RFC 7807 it is the numeric
- * status code — so falling back to it renders a bare `403` as the user's error
- * message, silently and without throwing. Callers that want a fallback should
- * supply their own via `??`.
+ * Deliberately never returns `status`: under RFC 7807 it is the numeric status
+ * code, so falling back to it renders a bare `403` as the user's error message,
+ * silently and without throwing. Callers that want a fallback should supply
+ * their own via `??`.
  *
  * Returns undefined when the body carries no usable message, which lets callers
  * distinguish "server said nothing" from "server said something" — the
@@ -33,12 +31,6 @@ import { logger } from '@/services/LoggingService';
 export function extractApiErrorMessage(error: unknown): string | undefined {
   const body = extractApiErrorBody(error);
   if (!body) return undefined;
-
-  // Legacy shape first: while both formats are live, an `error` field is the
-  // more specific signal, since RFC 7807 responses never carry one.
-  if (typeof body.error === 'string' && body.error.trim() !== '') {
-    return body.error;
-  }
 
   if (typeof body.detail === 'string' && body.detail.trim() !== '') {
     return body.detail;

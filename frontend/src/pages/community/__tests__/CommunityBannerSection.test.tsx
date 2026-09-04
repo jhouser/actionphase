@@ -181,7 +181,7 @@ describe('CommunityBannerSection', () => {
   // ("image too large", "invalid file type") rather than a generic failure.
   it('surfaces the server error message on a failed upload', async () => {
     uploadCommunityBanner.mockRejectedValue({
-      response: { data: { error: 'image too large. Maximum size is 5MB' } },
+      response: { data: { detail: 'image too large. Maximum size is 5MB' } },
     })
     renderWithProviders(<CommunityBannerSection community={community} />)
 
