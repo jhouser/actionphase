@@ -1,8 +1,37 @@
-// Frontend error types that match the backend ErrResponse structure
+// A single field-level failure from an RFC 7807 `errors[]` array.
+export interface ApiErrorDetail {
+  message?: string;
+  location?: string;
+  value?: unknown;
+}
+
+/**
+ * The body of an API error response.
+ *
+ * This covers BOTH shapes the API can currently return, because the backend
+ * migrates to RFC 7807 in a later step and both are live in the meantime:
+ *
+ *   legacy    {"status": "Forbidden.", "error": "admin privileges required"}
+ *   RFC 7807  {"title": "Forbidden", "status": 403, "detail": "...", ...}
+ *
+ * Note `status` is a *string* in the legacy shape and a *number* in RFC 7807.
+ * That difference is the trap this migration exists to defuse: reading `status`
+ * as a message renders a bare `403` to the user without throwing. Never display
+ * it — go through `extractApiErrorMessage` in lib/errors.ts.
+ */
+/**
+ * An RFC 7807 problem document, the single error shape the API emits.
+ *
+ * `status` is the numeric HTTP status, never a display string — see
+ * extractApiErrorMessage, which deliberately refuses to fall back to it.
+ */
 export interface ApiError {
-  status: string;
-  code?: number;
-  error?: string;
+  type?: string;
+  title?: string;
+  status?: number;
+  detail?: string;
+  instance?: string;
+  errors?: ApiErrorDetail[];
 }
 
 export const ErrorType = {

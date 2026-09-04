@@ -3,6 +3,7 @@ import { apiClient } from '../lib/api';
 import { useToast } from '../contexts/ToastContext';
 import { Input, Button } from './ui';
 import type { ChangePasswordRequest } from '../types/auth';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 export function ChangePasswordForm() {
   const { showToast } = useToast();
@@ -67,7 +68,7 @@ export function ChangePasswordForm() {
         confirm_password: '',
       });
     } catch (error: unknown) {
-      const errorMessage = (error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to change password. Please try again.';
+      const errorMessage = extractApiErrorMessage(error) || 'Failed to change password. Please try again.';
       showToast(errorMessage, 'danger');
     } finally {
       setIsLoading(false);

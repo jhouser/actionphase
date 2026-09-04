@@ -4,12 +4,12 @@
  */
 
 import { logger } from '@/services/LoggingService';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface ErrorResponse {
   response?: {
     data?: {
       message?: string;
-      error?: string;
     };
     status?: number;
   };
@@ -24,7 +24,7 @@ export function mapAuthError(error: ErrorResponse | unknown): string {
   const rawError = error as ErrorResponse;
   const errorMessage =
     rawError?.response?.data?.message ||
-    rawError?.response?.data?.error ||
+    extractApiErrorMessage(error) ||
     rawError?.message ||
     '';
 

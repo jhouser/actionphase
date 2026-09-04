@@ -15,6 +15,7 @@ vi.mock('../../lib/api', () => ({
 }));
 
 import { apiClient } from '../../lib/api';
+import { ERROR_MESSAGES } from '../../types/errors';
 
 const defaultProps = {
   gameId: 10,
@@ -121,7 +122,7 @@ describe('ApplyToGameModal', () => {
     const banned = new AxiosError('Request failed with status code 403');
     banned.response = {
       status: 403,
-      data: { status: 'Forbidden.', error: 'you are banned from this community' },
+      data: { title: 'Forbidden', status: 403, detail: 'you are banned from this community' },
     } as AxiosError['response'];
     vi.mocked(apiClient.games.applyToGame).mockRejectedValue(banned);
 
@@ -137,11 +138,15 @@ describe('ApplyToGameModal', () => {
   });
 
   /**
-   * The server sends `status` alone when it has no specific detail to add.
-   * Falling back to it beats showing the axios string, which names a number the
-   * user cannot act on.
+   * `status` is never displayed. It is a prose string in the legacy error shape
+   * ("Forbidden.") but the numeric status code under RFC 7807, so showing it
+   * would render a bare "403" once the backend migrates -- silently, since
+   * nothing throws. The per-status fallback is used instead, which is both
+   * friendlier and shape-independent.
+   *
+   * See .claude/planning/rfc7807-error-format.md.
    */
-  it('falls back to the status field when no error detail is present', async () => {
+  it('uses the friendly fallback rather than the status field when no error detail is present', async () => {
     const user = userEvent.setup();
     const failure = new AxiosError('Request failed with status code 403');
     failure.response = {
@@ -154,8 +159,36 @@ describe('ApplyToGameModal', () => {
     await user.click(screen.getByTestId('submit-application'));
 
     await waitFor(() => {
-      expect(screen.getByText('Forbidden.')).toBeInTheDocument();
+      expect(screen.getByText(ERROR_MESSAGES.UNAUTHORIZED)).toBeInTheDocument();
     });
+    expect(screen.queryByText('Forbidden.')).not.toBeInTheDocument();
+  });
+
+  /**
+   * The RFC 7807 counterpart of the case above: same 403, standard shape. The
+   * user must see the server's detail, not the numeric `status`.
+   */
+  it('reads the detail field from an RFC 7807 error body', async () => {
+    const user = userEvent.setup();
+    const banned = new AxiosError('Request failed with status code 403');
+    banned.response = {
+      status: 403,
+      data: {
+        type: 'about:blank',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'you are banned from this community',
+      },
+    } as AxiosError['response'];
+    vi.mocked(apiClient.games.applyToGame).mockRejectedValue(banned);
+
+    renderWithProviders(<ApplyToGameModal {...defaultProps} />);
+    await user.click(screen.getByTestId('submit-application'));
+
+    await waitFor(() => {
+      expect(screen.getByText('you are banned from this community')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('403')).not.toBeInTheDocument();
   });
 
   /**
@@ -168,7 +201,7 @@ describe('ApplyToGameModal', () => {
     const failure = new AxiosError('Request failed with status code 403');
     failure.response = {
       status: 403,
-      data: { status: 'Forbidden.', error: 'you are banned from this community' },
+      data: { title: 'Forbidden', status: 403, detail: 'you are banned from this community' },
     } as AxiosError['response'];
     vi.mocked(apiClient.games.applyToGame).mockRejectedValue(failure);
 

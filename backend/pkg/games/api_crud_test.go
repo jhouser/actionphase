@@ -418,7 +418,7 @@ func TestCreateGame_ValidationErrors(t *testing.T) {
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				core.AssertNoError(t, err, "Should decode error response")
 
-				if errorText, ok := response["error"].(string); ok {
+				if errorText, ok := response["detail"].(string); ok {
 					if len(errorText) == 0 {
 						t.Errorf("Expected error message to contain '%s', but error field was empty", tc.expectedError)
 					}
@@ -591,23 +591,29 @@ func TestUpdateGameState_InvalidTransitionReturns409(t *testing.T) {
 					tt.from, tt.to, tt.because, rec.Code, rec.Body.String())
 			}
 
+			// RFC 7807 problem details. The app-specific "code" this once
+			// asserted was dropped with the format change: nothing consumed it,
+			// and the status plus detail carry the same information.
 			var resp struct {
-				Code  int64  `json:"code"`
-				Error string `json:"error"`
+				Title  string `json:"title"`
+				Status int    `json:"status"`
+				Detail string `json:"detail"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("failed to decode error response: %v (body: %s)", err, rec.Body.String())
 			}
 
-			if resp.Code != core.ErrCodeInvalidGameState {
-				t.Errorf("expected app code %d (ErrCodeInvalidGameState), got %d",
-					core.ErrCodeInvalidGameState, resp.Code)
+			if resp.Status != http.StatusConflict {
+				t.Errorf("body status should mirror the HTTP status, got %d", resp.Status)
+			}
+			if resp.Title != "Conflict" {
+				t.Errorf("unexpected title: %q", resp.Title)
 			}
 
 			// The message must name both states — a GM who sees this needs to
 			// know what the game's state actually is, not just that it refused.
-			if !strings.Contains(resp.Error, tt.from) || !strings.Contains(resp.Error, tt.to) {
-				t.Errorf("error message should name both states, got %q", resp.Error)
+			if !strings.Contains(resp.Detail, tt.from) || !strings.Contains(resp.Detail, tt.to) {
+				t.Errorf("error message should name both states, got %q", resp.Detail)
 			}
 
 			// The rejected transition must not have partially applied.

@@ -255,9 +255,9 @@ func TestGetPublicGameApplicants_ForbiddenWhenNotRecruiting(t *testing.T) {
 			err = json.NewDecoder(w.Body).Decode(&response)
 			core.AssertNoError(t, err, "Should decode error response")
 
-			core.AssertEqual(t, "Forbidden.", response["status"], "Should have forbidden status")
+			core.AssertEqual(t, "Forbidden", response["title"], "Should have forbidden title")
 			// Verify error message contains "recruitment"
-			errMsg, ok := response["error"].(string)
+			errMsg, ok := response["detail"].(string)
 			core.AssertTrue(t, ok, "Should have error message")
 			core.AssertTrue(t, len(errMsg) > 0 && (errMsg == "applicant list is only visible during recruitment" || errMsg == "Applicant list is only visible during recruitment"), "Error message should mention recruitment")
 		})

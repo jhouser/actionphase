@@ -224,7 +224,7 @@ describe('ChangePasswordForm', () => {
     server.use(
       http.post('http://localhost:3000/api/v1/auth/change-password', async () => {
         return HttpResponse.json(
-          { error: 'Current password is incorrect' },
+          { detail: 'Current password is incorrect' },
           { status: 400 }
         );
       })

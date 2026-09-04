@@ -91,7 +91,7 @@ describe('SessionExpiredModal', () => {
 
     server.use(
       http.post('/api/v1/auth/login', () => {
-        return HttpResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+        return HttpResponse.json({ detail: 'Invalid credentials' }, { status: 401 })
       })
     )
 

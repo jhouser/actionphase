@@ -5,6 +5,7 @@ import { CommunityBannerSection } from './CommunityBannerSection';
 import { useToast } from '../../contexts/ToastContext';
 import { useUpdateCommunityProfile } from '../../hooks/useCommunities';
 import type { Community } from '../../types/communities';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface SettingsTabProps {
   community: Community;
@@ -70,7 +71,7 @@ export function SettingsTab({ community, canEdit }: SettingsTabProps) {
         // the backend emits `detail`, so reading that discarded every server
         // message and always showed the fallback.
         const detail =
-          (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+          extractApiErrorMessage(err);
         showError(detail ?? 'Could not save those changes');
       },
     });

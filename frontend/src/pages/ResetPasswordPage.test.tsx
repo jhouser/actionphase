@@ -29,7 +29,7 @@ describe('ResetPasswordPage', () => {
     server.use(
       http.get('http://localhost:3000/api/v1/auth/validate-reset-token', async () => {
         return HttpResponse.json(
-          { error: 'Token expired' },
+          { detail: 'Token expired' },
           { status: 400 }
         );
       })
@@ -294,7 +294,7 @@ describe('ResetPasswordPage', () => {
       }),
       http.post('http://localhost:3000/api/v1/auth/reset-password', async () => {
         return HttpResponse.json(
-          { error: 'Token has expired' },
+          { detail: 'Token has expired' },
           { status: 400 }
         );
       })

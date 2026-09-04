@@ -4,6 +4,7 @@ import { useCommunities } from '../../hooks/useCommunities';
 import { Button, Input, Badge } from '../../components/ui';
 import { UserSearchSelect, type SelectedUser } from '../../components/UserSearchSelect';
 import type { Community } from '../../types/communities';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 /**
  * Derive a slug candidate from a community name.
@@ -73,7 +74,7 @@ export function CommunitiesTab() {
         // surfacing its message beats a generic failure string.
         onError: (err: unknown) => {
           const detail =
-            (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+            extractApiErrorMessage(err);
           showError(detail || 'Failed to create community');
         },
       }

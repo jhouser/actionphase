@@ -266,7 +266,7 @@ describe('mapAuthError', () => {
       const error = {
         response: {
           status: 422,
-          data: { error: serverMessage },
+          data: { detail: serverMessage },
         },
       };
       expect(mapAuthError(error)).toBe('Invalid request. Please check your information and try again.');

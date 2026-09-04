@@ -216,7 +216,7 @@ func TestV1ChangePassword(t *testing.T) {
 				var response map[string]interface{}
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], tt.expectedError)
+				assert.Contains(t, response["detail"], tt.expectedError)
 			}
 
 			// Cleanup
@@ -434,7 +434,7 @@ func TestV1ResetPassword(t *testing.T) {
 				var response map[string]interface{}
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], tt.expectedError)
+				assert.Contains(t, response["detail"], tt.expectedError)
 			}
 
 			// Cleanup

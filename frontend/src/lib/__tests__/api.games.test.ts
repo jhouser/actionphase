@@ -145,7 +145,7 @@ describe('ApiClient - Games', () => {
         const apiError = {
           response: {
             status: 500,
-            data: { error: 'Internal server error' },
+            data: { detail: 'Internal server error' },
           },
         }
 
@@ -236,7 +236,7 @@ describe('ApiClient - Games', () => {
         const notFoundError = {
           response: {
             status: 404,
-            data: { error: 'Game not found' },
+            data: { detail: 'Game not found' },
           },
         }
 
@@ -379,7 +379,7 @@ describe('ApiClient - Games', () => {
           response: {
             status: 422,
             data: {
-              error: 'Validation failed',
+              detail: 'Validation failed',
               details: {
                 title: 'Title is required',
                 max_players: 'Must be at least 1',
@@ -490,7 +490,7 @@ describe('ApiClient - Games', () => {
         const permissionError = {
           response: {
             status: 403,
-            data: { error: 'Only the GM can update this game' },
+            data: { detail: 'Only the GM can update this game' },
           },
         }
 
@@ -574,7 +574,7 @@ describe('ApiClient - Games', () => {
         const permissionError = {
           response: {
             status: 403,
-            data: { error: 'Only the GM can delete this game' },
+            data: { detail: 'Only the GM can delete this game' },
           },
         }
 
@@ -633,7 +633,7 @@ describe('ApiClient - Games', () => {
         const validationError = {
           response: {
             status: 422,
-            data: { error: 'Invalid state transition' },
+            data: { detail: 'Invalid state transition' },
           },
         }
 
@@ -669,7 +669,7 @@ describe('ApiClient - Games', () => {
         const notParticipantError = {
           response: {
             status: 400,
-            data: { error: 'You are not a participant in this game' },
+            data: { detail: 'You are not a participant in this game' },
           },
         }
 
@@ -728,7 +728,7 @@ describe('ApiClient - Games', () => {
         const duplicateError = {
           response: {
             status: 409,
-            data: { error: 'You have already applied to this game' },
+            data: { detail: 'You have already applied to this game' },
           },
         }
 
@@ -791,7 +791,7 @@ describe('ApiClient - Games', () => {
         const permissionError = {
           response: {
             status: 403,
-            data: { error: 'Only the GM can view applications' },
+            data: { detail: 'Only the GM can view applications' },
           },
         }
 
@@ -907,7 +907,7 @@ describe('ApiClient - Games', () => {
         const noApplicationError = {
           response: {
             status: 404,
-            data: { error: 'No application found for this game' },
+            data: { detail: 'No application found for this game' },
           },
         }
 
@@ -932,7 +932,7 @@ describe('ApiClient - Games', () => {
       const authError = {
         response: {
           status: 401,
-          data: { error: 'Authentication required' },
+          data: { detail: 'Authentication required' },
         },
       }
 
@@ -945,7 +945,7 @@ describe('ApiClient - Games', () => {
       const serverError = {
         response: {
           status: 500,
-          data: { error: 'Internal server error' },
+          data: { detail: 'Internal server error' },
         },
       }
 

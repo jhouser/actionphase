@@ -78,10 +78,15 @@ func (h *Handler) Start() {
 // diff against a committed file rather than a heuristic comparison of the
 // router source against a hand-written spec.
 func (h *Handler) Router() (chi.Router, *docs.Handler) {
-	// Huma's default error body is RFC 7807, which the frontend cannot parse.
-	// Install the legacy shape before any huma API is built. See
-	// .claude/planning/rfc7807-error-format.md.
-	InstallLegacyErrorFormat()
+	// Errors leave the API by two independent paths -- huma serializes handler
+	// errors, chi/render serializes middleware errors (notably every 401 and
+	// 403 raised before a handler runs). Both must emit RFC 7807 or clients see
+	// a format that depends on which layer failed.
+	//
+	// Huma's error body is already RFC 7807; this adds the correlation ID as
+	// `instance`. Must run before any huma API is built.
+	InstallProblemErrorFormat()
+	core.InstallProblemJSONResponder()
 
 	r := chi.NewRouter()
 
@@ -95,6 +100,19 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.URLFormat)
 	r.Use(render.SetContentType(render.ContentTypeJSON))
+
+	// chi answers an unmatched route or a wrong method with its own plain-text
+	// default ("404 page not found"). Those are the two errors a client is most
+	// likely to hit while integrating -- a typo'd path, a GET where a POST was
+	// meant -- and they were the last responses whose body a client could not
+	// parse. Route them through the same renderer as everything else.
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		render.Render(w, r, core.ErrNotFound("no route matches "+r.Method+" "+r.URL.Path))
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		render.Render(w, r, core.ErrWithStatus(http.StatusMethodNotAllowed,
+			r.Method+" is not allowed on "+r.URL.Path))
+	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("root."))
@@ -174,7 +192,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 
@@ -238,7 +256,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 		// All routes below require authentication
 		r.Group(func(r chi.Router) {
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
@@ -413,7 +431,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 		r.Group(func(r chi.Router) {
 			tokenAuth := h.getTokenAuth()
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
@@ -460,7 +478,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
@@ -497,7 +515,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
@@ -528,7 +546,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
@@ -558,7 +576,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
@@ -587,7 +605,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
@@ -613,7 +631,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 
@@ -647,7 +665,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(core.AdminModeMiddleware)
@@ -676,7 +694,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 
@@ -700,7 +718,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 
@@ -733,7 +751,7 @@ func (h *Handler) Router() (chi.Router, *docs.Handler) {
 			tokenAuth := h.getTokenAuth()
 			userService := &db.UserService{DB: h.App.Pool, Logger: h.App.ObsLogger}
 			r.Use(jwtauth.Verifier(tokenAuth))
-			r.Use(jwtauth.Authenticator(tokenAuth))
+			r.Use(core.Authenticator(tokenAuth))
 			r.Use(h.sessionValidateMW())
 			r.Use(core.RequireAuthenticationMiddleware(userService))
 			r.Use(httpmiddleware.RequireAdmin(h.App))

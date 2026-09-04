@@ -265,7 +265,7 @@ func TestAuthFlow_InvalidCredentials(t *testing.T) {
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			core.AssertNoError(t, err, "Error response should be valid JSON")
 
-			core.AssertNotEqual(t, "", response["status"], "Error response should have status field")
+			core.AssertNotEqual(t, "", response["title"], "Error response should have title field")
 		})
 	}
 }
@@ -1154,7 +1154,7 @@ func TestAuthFlow_BotPrevention(t *testing.T) {
 
 		var response map[string]interface{}
 		json.Unmarshal(w.Body.Bytes(), &response)
-		errorMsg := response["error"].(string)
+		errorMsg := response["detail"].(string)
 		core.AssertTrue(t, strings.Contains(errorMsg, "Invalid registration attempt"), "Error should mention invalid registration")
 	})
 
@@ -1178,7 +1178,7 @@ func TestAuthFlow_BotPrevention(t *testing.T) {
 
 		var response map[string]interface{}
 		json.Unmarshal(w.Body.Bytes(), &response)
-		errorMsg := response["error"].(string)
+		errorMsg := response["detail"].(string)
 		core.AssertTrue(t, strings.Contains(errorMsg, "Disposable email"), "Error should mention disposable email")
 	})
 
@@ -1237,7 +1237,7 @@ func TestAuthFlow_BotPrevention(t *testing.T) {
 		if w.Code != 201 {
 			var errorResponse map[string]interface{}
 			json.Unmarshal(w.Body.Bytes(), &errorResponse)
-			t.Logf("Registration failed with error: %v", errorResponse["error"])
+			t.Logf("Registration failed with error: %v", errorResponse["detail"])
 		}
 		core.AssertEqual(t, 201, w.Code, "Valid registration should succeed")
 
@@ -1274,7 +1274,7 @@ func TestAuthFlow_BotPrevention(t *testing.T) {
 
 		var response map[string]interface{}
 		json.Unmarshal(w.Body.Bytes(), &response)
-		errorMsg := response["error"].(string)
+		errorMsg := response["detail"].(string)
 		// Should mention honeypot, not disposable email (honeypot checked first)
 		core.AssertTrue(t, strings.Contains(errorMsg, "Invalid registration attempt"), "Error should mention invalid registration (honeypot)")
 	})
@@ -1299,7 +1299,7 @@ func TestAuthFlow_BotPrevention(t *testing.T) {
 
 		var response map[string]interface{}
 		json.Unmarshal(w.Body.Bytes(), &response)
-		errorMsg := response["error"].(string)
+		errorMsg := response["detail"].(string)
 		core.AssertTrue(t, strings.Contains(strings.ToLower(errorMsg), "disposable email"), "Error should mention disposable email")
 	})
 }
@@ -1328,7 +1328,7 @@ func TestAuthFlow_EmailVerification(t *testing.T) {
 
 		var response map[string]interface{}
 		json.Unmarshal(verifyW.Body.Bytes(), &response)
-		errorMsg := response["error"].(string)
+		errorMsg := response["detail"].(string)
 		core.AssertTrue(t, strings.Contains(strings.ToLower(errorMsg), "invalid"), "Error should mention invalid token")
 	})
 
@@ -1409,7 +1409,7 @@ func TestAuthFlow_PasswordReset(t *testing.T) {
 
 		var response map[string]interface{}
 		json.Unmarshal(resetW.Body.Bytes(), &response)
-		errorMsg := response["error"].(string)
+		errorMsg := response["detail"].(string)
 		// Accept either "invalid" or "token" in the error message (API might say "token not found" or similar)
 		hasInvalid := strings.Contains(strings.ToLower(errorMsg), "invalid")
 		hasToken := strings.Contains(strings.ToLower(errorMsg), "token")
@@ -1433,7 +1433,7 @@ func TestAuthFlow_PasswordReset(t *testing.T) {
 
 		var response map[string]interface{}
 		json.Unmarshal(resetW.Body.Bytes(), &response)
-		errorMsg := response["error"].(string)
+		errorMsg := response["detail"].(string)
 		core.AssertTrue(t, strings.Contains(strings.ToLower(errorMsg), "password"), "Error should mention password validation")
 	})
 
@@ -1646,7 +1646,7 @@ func TestAuthFlow_ChangePassword(t *testing.T) {
 
 		var response map[string]interface{}
 		json.Unmarshal(changeW.Body.Bytes(), &response)
-		errorMsg := response["error"].(string)
+		errorMsg := response["detail"].(string)
 		hasCurrentPassword := strings.Contains(strings.ToLower(errorMsg), "current") || strings.Contains(strings.ToLower(errorMsg), "password")
 		core.AssertTrue(t, hasCurrentPassword, "Error should mention current password issue")
 	})
@@ -1682,7 +1682,7 @@ func TestAuthFlow_ChangePassword(t *testing.T) {
 
 		var response map[string]interface{}
 		json.Unmarshal(changeW.Body.Bytes(), &response)
-		errorMsg := response["error"].(string)
+		errorMsg := response["detail"].(string)
 		core.AssertTrue(t, strings.Contains(strings.ToLower(errorMsg), "password"), "Error should mention password validation")
 	})
 

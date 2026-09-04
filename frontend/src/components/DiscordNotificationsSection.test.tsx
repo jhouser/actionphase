@@ -186,7 +186,7 @@ describe('DiscordNotificationsSection', () => {
 
     server.use(
       http.get('/api/v1/auth/discord/connect', () =>
-        HttpResponse.json({ error: 'server error' }, { status: 500 })
+        HttpResponse.json({ detail: 'server error' }, { status: 500 })
       )
     );
 

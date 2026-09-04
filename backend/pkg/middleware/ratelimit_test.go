@@ -1,11 +1,14 @@
 package middleware
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	core "actionphase/pkg/core"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -247,7 +250,7 @@ func TestRateLimitMiddleware_ErrorResponse(t *testing.T) {
 
 	// Verify error response
 	assert.Equal(t, http.StatusTooManyRequests, w2.Code, "Should return 429 status")
-	assert.Equal(t, "application/json", w2.Header().Get("Content-Type"), "Should return JSON content type")
+	assert.Equal(t, core.ProblemContentType, w2.Header().Get("Content-Type"), "Should return RFC 7807 content type")
 	assert.Contains(t, w2.Body.String(), "Rate limit exceeded", "Should contain rate limit error message")
 }
 
@@ -296,4 +299,69 @@ func BenchmarkRateLimitMiddleware(b *testing.B) {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 	}
+}
+
+// TestRateLimitBodyMatchesErrResponse pins the hand-written 429 body to the
+// shape core.ErrResponse actually serializes.
+//
+// The rate limiter is the one error emitter that cannot render through
+// core.ErrResponse -- tollbooth takes a fixed string, not a renderer -- so its
+// body is a literal that nothing else would catch drifting. Marshalling the
+// equivalent ErrResponse and comparing field-for-field means a change to the
+// struct's json tags fails here rather than silently leaving 429 on an older
+// shape, which is exactly how this response came to still be emitting the
+// pre-RFC-7807 {"error": ...} format.
+func TestRateLimitBodyMatchesErrResponse(t *testing.T) {
+	const detail = "Rate limit exceeded. Please try again later."
+
+	rendered, err := json.Marshal(&core.ErrResponse{
+		HTTPStatusCode: http.StatusTooManyRequests,
+		Title:          http.StatusText(http.StatusTooManyRequests),
+		Status:         http.StatusTooManyRequests,
+		Detail:         detail,
+	})
+	require.NoError(t, err)
+
+	var want, got map[string]any
+	require.NoError(t, json.Unmarshal(rendered, &want))
+	require.NoError(t, json.Unmarshal([]byte(rateLimitProblemJSON), &got),
+		"rate limit body must be valid JSON")
+
+	assert.Equal(t, want, got,
+		"429 body has drifted from core.ErrResponse; update rateLimitProblemJSON")
+}
+
+// TestRateLimitResponseIsProblemJSON verifies the 429 a caller actually
+// receives: RFC 7807 body under the problem+json media type, not the
+// application/json the legacy shape used.
+func TestRateLimitResponseIsProblemJSON(t *testing.T) {
+	handler := RateLimitMiddleware(RateLimitConfig{
+		RequestsPerSecond: 1.0,
+		Burst:             1,
+		TTL:               time.Minute,
+		IPLookups:         []string{"RemoteAddr"},
+	})(mockHandler())
+
+	var blocked *httptest.ResponseRecorder
+	for i := 0; i < 10; i++ {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "192.0.2.10:1234"
+		handler.ServeHTTP(rr, req)
+		if rr.Code == http.StatusTooManyRequests {
+			blocked = rr
+			break
+		}
+	}
+	require.NotNil(t, blocked, "expected a request to be rate limited")
+
+	assert.Equal(t, core.ProblemContentType, blocked.Header().Get("Content-Type"))
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(blocked.Body.Bytes(), &body))
+
+	assert.Equal(t, "Too Many Requests", body["title"])
+	assert.Equal(t, float64(http.StatusTooManyRequests), body["status"])
+	assert.NotEmpty(t, body["detail"])
+	assert.NotContains(t, body, "error", "legacy error field must not reappear")
 }

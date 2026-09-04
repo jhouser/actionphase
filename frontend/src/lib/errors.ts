@@ -1,6 +1,7 @@
 import { AxiosError } from 'axios';
 import type {
   ApiError,
+  ApiErrorDetail,
   AppError,
   ErrorContext
 } from '../types/errors';
@@ -12,6 +13,69 @@ import {
   STATUS_CODE_TO_ERROR_TYPE
 } from '../types/errors';
 import { logger } from '@/services/LoggingService';
+
+/**
+ * Pulls a displayable message out of an RFC 7807 problem document
+ * (see `ApiError`), preferring `detail`, then field-level `errors[]`, then
+ * `title`.
+ *
+ * Deliberately never returns `status`: under RFC 7807 it is the numeric status
+ * code, so falling back to it renders a bare `403` as the user's error message,
+ * silently and without throwing. Callers that want a fallback should supply
+ * their own via `??`.
+ *
+ * Returns undefined when the body carries no usable message, which lets callers
+ * distinguish "server said nothing" from "server said something" — the
+ * distinction the 401/403 fallbacks in handleAxiosError depend on.
+ */
+export function extractApiErrorMessage(error: unknown): string | undefined {
+  const body = extractApiErrorBody(error);
+  if (!body) return undefined;
+
+  if (typeof body.detail === 'string' && body.detail.trim() !== '') {
+    return body.detail;
+  }
+
+  // Field-level validation failures. `detail` for these is generic
+  // ("validation failed"), so the individual messages are what a user can act
+  // on; join them rather than surfacing only the first.
+  const details = Array.isArray(body.errors) ? body.errors : [];
+  const messages = details
+    .map((detail: ApiErrorDetail) => detail?.message)
+    .filter((message): message is string => typeof message === 'string' && message.trim() !== '');
+  if (messages.length > 0) {
+    return messages.join('. ');
+  }
+
+  // `title` is a static summary of the error class rather than of this
+  // occurrence, so it is a last resort — but it is still prose, unlike `status`.
+  if (typeof body.title === 'string' && body.title.trim() !== '') {
+    return body.title;
+  }
+
+  return undefined;
+}
+
+/**
+ * Normalizes the various things callers hold to the error response body:
+ * an axios error, an already-unwrapped `response`, or the body itself.
+ */
+function extractApiErrorBody(error: unknown): ApiError | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+
+  const candidate = error as {
+    response?: { data?: unknown };
+    data?: unknown;
+  };
+
+  const body =
+    (candidate.response?.data as unknown) ??
+    (candidate.data as unknown) ??
+    error;
+
+  if (!body || typeof body !== 'object') return undefined;
+  return body as ApiError;
+}
 
 /**
  * Creates a standardized AppError from various error sources
@@ -59,11 +123,12 @@ function handleAxiosError(error: AxiosError, baseContext: ErrorContext): AppErro
   let category: ErrorCategory = ErrorCategory.NON_RECOVERABLE;
   let severity: ErrorSeverity = ErrorSeverity.MEDIUM;
 
-  // Extract user-friendly message from API response
-  if (apiError?.error) {
-    userMessage = apiError.error;
-  } else if (apiError?.status) {
-    userMessage = apiError.status;
+  // Extract user-friendly message from API response.
+  // Note this never falls back to `apiError.status`: under RFC 7807 that is the
+  // numeric status code, and displaying it shows the user a bare "422".
+  const apiMessage = extractApiErrorMessage(error);
+  if (apiMessage) {
+    userMessage = apiMessage;
   }
 
   // Categorize by status code
@@ -75,7 +140,7 @@ function handleAxiosError(error: AxiosError, baseContext: ErrorContext): AppErro
       break;
     case 401:
       // Use API error message if available, otherwise use default session expired message
-      if (!apiError?.error && !apiError?.status) {
+      if (!apiMessage) {
         userMessage = ERROR_MESSAGES.SESSION_EXPIRED;
       }
       category = ErrorCategory.RECOVERABLE;
@@ -83,7 +148,7 @@ function handleAxiosError(error: AxiosError, baseContext: ErrorContext): AppErro
       break;
     case 403:
       // Use API error message if available, otherwise use default unauthorized message
-      if (!apiError?.error && !apiError?.status) {
+      if (!apiMessage) {
         userMessage = ERROR_MESSAGES.UNAUTHORIZED;
       }
       category = ErrorCategory.NON_RECOVERABLE;

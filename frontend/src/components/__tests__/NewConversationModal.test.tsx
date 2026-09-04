@@ -671,7 +671,7 @@ describe('NewConversationModal', () => {
       server.use(
         http.post('/api/v1/games/:gameId/conversations', () => {
           return HttpResponse.json(
-            { error: 'Failed to create conversation' },
+            { detail: 'Failed to create conversation' },
             { status: 500 }
           )
         })

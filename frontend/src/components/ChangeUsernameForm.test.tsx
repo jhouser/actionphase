@@ -163,7 +163,7 @@ describe('ChangeUsernameForm', () => {
     server.use(
       http.post('http://localhost:3000/api/v1/auth/change-username', async () => {
         return HttpResponse.json(
-          { error: 'Username already taken' },
+          { detail: 'Username already taken' },
           { status: 400 }
         );
       })

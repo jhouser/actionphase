@@ -1427,7 +1427,7 @@ describe('ThreadedComment', () => {
 
       server.use(
         http.get('/api/v1/games/:gameId/posts/:postId/comments', () => {
-          return HttpResponse.json({ error: 'Failed to load replies' }, { status: 500 });
+          return HttpResponse.json({ detail: 'Failed to load replies' }, { status: 500 });
         })
       );
 

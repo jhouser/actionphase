@@ -40,7 +40,7 @@ describe('VerifyEmailPage', () => {
     server.use(
       http.post('http://localhost:3000/api/v1/auth/verify-email', async () => {
         return HttpResponse.json(
-          { error: 'Token has expired' },
+          { detail: 'Token has expired' },
           { status: 400 }
         );
       })

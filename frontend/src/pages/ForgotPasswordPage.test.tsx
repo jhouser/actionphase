@@ -62,7 +62,7 @@ describe('ForgotPasswordPage', () => {
     server.use(
       http.post('http://localhost:3000/api/v1/auth/request-password-reset', async () => {
         return HttpResponse.json(
-          { error: 'Email not found' },
+          { detail: 'Email not found' },
           { status: 404 }
         );
       })

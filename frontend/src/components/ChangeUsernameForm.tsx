@@ -4,6 +4,7 @@ import { apiClient } from '../lib/api';
 import { Card, CardHeader, CardBody, Input, Button, Alert } from './ui';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 export function ChangeUsernameForm() {
   const { showToast } = useToast();
@@ -26,7 +27,7 @@ export function ChangeUsernameForm() {
       queryClient.invalidateQueries({ queryKey: ['currentUser'] });
     },
     onError: (error: unknown) => {
-      const message = (error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to change username';
+      const message = extractApiErrorMessage(error) || 'Failed to change username';
       setError(message);
       showToast(message, 'danger');
     },

@@ -1439,7 +1439,7 @@ describe('MessageThread', () => {
 
       server.use(
         http.delete('/api/v1/games/:gameId/conversations/:conversationId', () => {
-          return HttpResponse.json({ error: 'conflict' }, { status: 409 });
+          return HttpResponse.json({ detail: 'conflict' }, { status: 409 });
         })
       );
 

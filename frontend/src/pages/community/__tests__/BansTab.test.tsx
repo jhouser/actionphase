@@ -176,7 +176,7 @@ describe('BansTab', () => {
   // expiry -- so surfacing them beats a generic failure line.
   it('surfaces the server’s reason for a refused ban', async () => {
     banUser.mockRejectedValue({
-      response: { data: { error: 'community staff cannot be banned' } },
+      response: { data: { detail: 'community staff cannot be banned' } },
     })
     renderWithProviders(<BansTab community={community} canModerate />)
 

@@ -324,7 +324,7 @@ describe('DocumentsTab', () => {
   // not. Surfacing it is what tells a moderator why a save was refused.
   it('surfaces the server error message', async () => {
     createDocument.mockRejectedValue({
-      response: { data: { error: 'status must be draft or published' } },
+      response: { data: { detail: 'status must be draft or published' } },
     })
     renderWithProviders(<DocumentsTab community={community} canModerate />)
     await screen.findByTestId('document-list')

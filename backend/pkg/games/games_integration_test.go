@@ -632,7 +632,7 @@ func TestGameAPI_ErrorHandling(t *testing.T) {
 						t.Logf("Content-Type: %s", w.Header().Get("Content-Type"))
 					}
 					core.AssertNoError(t, err, "Error response should be valid JSON")
-					core.AssertNotEqual(t, "", response["status"], "Error response should have status field")
+					core.AssertNotEqual(t, "", response["title"], "Error response should have title field")
 				}
 			}
 		})

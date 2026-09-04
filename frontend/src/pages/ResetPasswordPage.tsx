@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../lib/api';
 import { Input, Button, Card, CardHeader, CardBody, Alert, Spinner } from '../components/ui';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -96,7 +97,7 @@ export function ResetPasswordPage() {
         navigate('/login');
       }, 3000);
     } catch (err: unknown) {
-      setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to reset password. Please try again.');
+      setError(extractApiErrorMessage(err) || 'Failed to reset password. Please try again.');
     } finally {
       setIsLoading(false);
     }

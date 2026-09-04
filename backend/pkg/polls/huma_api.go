@@ -152,7 +152,7 @@ func RegisterHumaPolls(api huma.API, h *Handler) {
 // preserving the status and message the chi handlers produced.
 func humaErr(errResp any) error {
 	if resp, ok := errResp.(*core.ErrResponse); ok {
-		return huma.NewError(resp.HTTPStatusCode, resp.ErrorText)
+		return huma.NewError(resp.HTTPStatusCode, resp.Detail)
 	}
 	return huma.Error500InternalServerError("unexpected error")
 }

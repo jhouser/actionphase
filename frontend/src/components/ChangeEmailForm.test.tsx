@@ -201,7 +201,7 @@ describe('ChangeEmailForm', () => {
     server.use(
       http.post('http://localhost:3000/api/v1/auth/request-email-change', async () => {
         return HttpResponse.json(
-          { error: 'Email already in use' },
+          { detail: 'Email already in use' },
           { status: 400 }
         );
       })

@@ -66,7 +66,7 @@ describe('UserProfilePage', () => {
     server.use(
       http.get('/api/v1/users/username/:username/profile', () => {
         return HttpResponse.json(
-          { error: 'User not found' },
+          { detail: 'User not found' },
           { status: 404 }
         );
       })

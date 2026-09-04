@@ -397,7 +397,7 @@ describe('CreateGameForm', () => {
       server.use(
         http.post('/api/v1/games', () => {
           return HttpResponse.json(
-            { error: 'Game title already exists' },
+            { detail: 'Game title already exists' },
             { status: 400 }
           );
         })
@@ -441,7 +441,7 @@ describe('CreateGameForm', () => {
       server.use(
         http.post('/api/v1/games', () => {
           return HttpResponse.json(
-            { error: 'Validation error' },
+            { detail: 'Validation error' },
             { status: 400 }
           );
         })
@@ -480,7 +480,7 @@ describe('CreateGameForm', () => {
       server.use(
         http.post('/api/v1/games', () => {
           return HttpResponse.json(
-            { error: 'Error' },
+            { detail: 'Error' },
             { status: 500 }
           );
         })

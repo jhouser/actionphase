@@ -2399,6 +2399,58 @@ components:
                 - deadline_urgency
                 - has_recent_activity
             type: object
+        ErrorDetail:
+            additionalProperties: false
+            properties:
+                location:
+                    description: Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id'
+                    type: string
+                message:
+                    description: Error message text
+                    type: string
+                value:
+                    description: The value at the given location
+            type: object
+        ErrorModel:
+            additionalProperties: false
+            properties:
+                detail:
+                    description: A human-readable explanation specific to this occurrence of the problem.
+                    examples:
+                        - Property foo is required but is missing.
+                    type: string
+                errors:
+                    description: Optional list of individual error details
+                    items:
+                        $ref: '#/components/schemas/ErrorDetail'
+                    type:
+                        - array
+                        - "null"
+                instance:
+                    description: A URI reference that identifies the specific occurrence of the problem.
+                    examples:
+                        - https://example.com/error-log/abc123
+                    format: uri
+                    type: string
+                status:
+                    description: HTTP status code
+                    examples:
+                        - 400
+                    format: int64
+                    type: integer
+                title:
+                    description: A short, human-readable summary of the problem type. This value should not change between occurrences of the error.
+                    examples:
+                        - Bad Request
+                    type: string
+                type:
+                    default: about:blank
+                    description: A URI reference to human-readable documentation for the error.
+                    examples:
+                        - https://example.com/errors/example
+                    format: uri
+                    type: string
+            type: object
         ExportResponse:
             additionalProperties: false
             properties:
@@ -3170,19 +3222,6 @@ components:
             required:
                 - Int32
                 - Valid
-            type: object
-        LegacyError:
-            additionalProperties: false
-            properties:
-                code:
-                    format: int64
-                    type: integer
-                error:
-                    type: string
-                status:
-                    type: string
-            required:
-                - status
             type: object
         ListAudienceMembersResponse:
             additionalProperties: false
@@ -5974,9 +6013,9 @@ paths:
                     description: No Content
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             security: []
             summary: Log out
@@ -5994,9 +6033,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             security: []
             summary: Get the current user, or null when not signed in
@@ -7908,9 +7947,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: List games
             tags:
@@ -8824,9 +8863,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: List the caller's conversations
             tags:
@@ -8857,9 +8896,9 @@ paths:
                     description: Created
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Create a conversation
             tags:
@@ -8894,9 +8933,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Delete an empty conversation
             tags:
@@ -8929,9 +8968,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Get conversation details
             tags:
@@ -8973,9 +9012,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Get conversation messages
             tags:
@@ -9014,9 +9053,9 @@ paths:
                     description: Created
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Send a message
             tags:
@@ -9058,9 +9097,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Delete a message
             tags:
@@ -9106,9 +9145,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Edit a message
             tags:
@@ -9147,9 +9186,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Add a participant
             tags:
@@ -9183,9 +9222,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Mark a conversation as read
             tags:
@@ -10661,9 +10700,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: List polls for a phase
             tags:
@@ -10778,9 +10817,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: List game polls
             tags:
@@ -10812,9 +10851,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Create a poll
             tags:
@@ -12377,9 +12416,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: List user notifications
             tags:
@@ -12401,9 +12440,9 @@ paths:
                     description: No Content
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Delete notification
             tags:
@@ -12428,9 +12467,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Get single notification
             tags:
@@ -12456,9 +12495,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Mark notification as read
             tags:
@@ -12484,9 +12523,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Mark notification as unread
             tags:
@@ -12503,9 +12542,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Mark all notifications as read
             tags:
@@ -12522,9 +12561,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Get unread notification count
             tags:
@@ -12850,9 +12889,9 @@ paths:
                     description: No Content
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Delete a poll
             tags:
@@ -12877,9 +12916,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Get a poll
             tags:
@@ -12910,9 +12949,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Update a poll
             tags:
@@ -12939,9 +12978,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Get poll results
             tags:
@@ -12973,9 +13012,9 @@ paths:
                     description: OK
                 default:
                     content:
-                        application/json:
+                        application/problem+json:
                             schema:
-                                $ref: '#/components/schemas/LegacyError'
+                                $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Submit a vote
             tags:

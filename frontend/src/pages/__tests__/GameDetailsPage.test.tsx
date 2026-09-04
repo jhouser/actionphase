@@ -158,7 +158,7 @@ describe('GameDetailsPage', () => {
       server.use(
         http.get('http://localhost:3000/api/v1/games/:id/details', () => {
           return HttpResponse.json(
-            { error: 'Game not found' },
+            { detail: 'Game not found' },
             { status: 404 }
           )
         }),

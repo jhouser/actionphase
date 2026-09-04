@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"actionphase/pkg/observability"
 
 	"github.com/go-chi/render"
 )
@@ -20,8 +23,8 @@ func TestErrResponse_Render(t *testing.T) {
 			name: "400 Bad Request",
 			response: &ErrResponse{
 				HTTPStatusCode: 400,
-				StatusText:     "Bad request.",
-				ErrorText:      "Invalid input",
+				Title:          "Bad Request",
+				Detail:         "Invalid input",
 			},
 			expectedStatusCode: 400,
 		},
@@ -29,7 +32,7 @@ func TestErrResponse_Render(t *testing.T) {
 			name: "401 Unauthorized",
 			response: &ErrResponse{
 				HTTPStatusCode: 401,
-				StatusText:     "Unauthorized.",
+				Title:          "Unauthorized",
 			},
 			expectedStatusCode: 401,
 		},
@@ -37,7 +40,7 @@ func TestErrResponse_Render(t *testing.T) {
 			name: "500 Internal Server Error",
 			response: &ErrResponse{
 				HTTPStatusCode: 500,
-				StatusText:     "Internal server error.",
+				Title:          "Internal Server Error",
 			},
 			expectedStatusCode: 500,
 		},
@@ -71,9 +74,9 @@ func TestErrResponse_JSONSerialization(t *testing.T) {
 	response := &ErrResponse{
 		Err:            internalErr,
 		HTTPStatusCode: 500,
-		StatusText:     "Internal server error.",
-		ErrorText:      "Something went wrong",
-		AppCode:        1401,
+		Title:          "Internal Server Error",
+		Detail:         "Something went wrong",
+		Status:         500,
 	}
 
 	jsonData, err := json.Marshal(response)
@@ -98,14 +101,15 @@ func TestErrResponse_JSONSerialization(t *testing.T) {
 	}
 
 	// Verify expected fields ARE in JSON
-	if parsed["status"] != "Internal server error." {
+	if parsed["title"] != "Internal Server Error" {
+		t.Errorf("status field incorrect: %v", parsed["title"])
+	}
+	if parsed["detail"] != "Something went wrong" {
+		t.Errorf("error field incorrect: %v", parsed["detail"])
+	}
+	// RFC 7807 mirrors the HTTP status inside the body as a number.
+	if parsed["status"] != float64(500) {
 		t.Errorf("status field incorrect: %v", parsed["status"])
-	}
-	if parsed["error"] != "Something went wrong" {
-		t.Errorf("error field incorrect: %v", parsed["error"])
-	}
-	if parsed["code"] != float64(1401) {
-		t.Errorf("code field incorrect: %v", parsed["code"])
 	}
 }
 
@@ -117,11 +121,11 @@ func TestErrInvalidRequest(t *testing.T) {
 	if result.HTTPStatusCode != 400 {
 		t.Errorf("Expected status 400, got %d", result.HTTPStatusCode)
 	}
-	if result.StatusText != "Invalid request." {
-		t.Errorf("Expected 'Invalid request.', got '%s'", result.StatusText)
+	if result.Title != "Bad Request" {
+		t.Errorf("Expected 'Bad Request', got '%s'", result.Title)
 	}
-	if result.ErrorText != "missing required field: email" {
-		t.Errorf("Expected error text to match, got '%s'", result.ErrorText)
+	if result.Detail != "missing required field: email" {
+		t.Errorf("Expected error text to match, got '%s'", result.Detail)
 	}
 	if result.Err != err {
 		t.Error("Expected internal error to be preserved")
@@ -136,11 +140,11 @@ func TestErrInternalError(t *testing.T) {
 	if result.HTTPStatusCode != 500 {
 		t.Errorf("Expected status 500, got %d", result.HTTPStatusCode)
 	}
-	if result.StatusText != "Internal server error." {
-		t.Errorf("Expected 'Internal server error.', got '%s'", result.StatusText)
+	if result.Title != "Internal Server Error" {
+		t.Errorf("Expected 'Internal Server Error', got '%s'", result.Title)
 	}
-	if result.ErrorText != "An unexpected error occurred. Please try again later." {
-		t.Errorf("Expected generic error text, got '%s'", result.ErrorText)
+	if result.Detail != "An unexpected error occurred. Please try again later." {
+		t.Errorf("Expected generic error text, got '%s'", result.Detail)
 	}
 	if result.Err == nil || result.Err.Error() != "database query failed" {
 		t.Errorf("Expected internal error to be preserved on Err field, got '%v'", result.Err)
@@ -165,11 +169,11 @@ func TestErrUnauthorized(t *testing.T) {
 			if result.HTTPStatusCode != 401 {
 				t.Errorf("Expected status 401, got %d", result.HTTPStatusCode)
 			}
-			if result.StatusText != "Unauthorized." {
-				t.Errorf("Expected 'Unauthorized.', got '%s'", result.StatusText)
+			if result.Title != "Unauthorized" {
+				t.Errorf("Expected 'Unauthorized', got '%s'", result.Title)
 			}
-			if result.ErrorText != tt.message {
-				t.Errorf("Expected message '%s', got '%s'", tt.message, result.ErrorText)
+			if result.Detail != tt.message {
+				t.Errorf("Expected message '%s', got '%s'", tt.message, result.Detail)
 			}
 		})
 	}
@@ -183,11 +187,11 @@ func TestErrForbidden(t *testing.T) {
 	if result.HTTPStatusCode != 403 {
 		t.Errorf("Expected status 403, got %d", result.HTTPStatusCode)
 	}
-	if result.StatusText != "Forbidden." {
-		t.Errorf("Expected 'Forbidden.', got '%s'", result.StatusText)
+	if result.Title != "Forbidden" {
+		t.Errorf("Expected 'Forbidden', got '%s'", result.Title)
 	}
-	if result.ErrorText != message {
-		t.Errorf("Expected message '%s', got '%s'", message, result.ErrorText)
+	if result.Detail != message {
+		t.Errorf("Expected message '%s', got '%s'", message, result.Detail)
 	}
 }
 
@@ -199,11 +203,11 @@ func TestErrBadRequest(t *testing.T) {
 	if result.HTTPStatusCode != 400 {
 		t.Errorf("Expected status 400, got %d", result.HTTPStatusCode)
 	}
-	if result.StatusText != "Bad request." {
-		t.Errorf("Expected 'Bad request.', got '%s'", result.StatusText)
+	if result.Title != "Bad Request" {
+		t.Errorf("Expected 'Bad Request', got '%s'", result.Title)
 	}
-	if result.ErrorText != "Cannot join completed game" {
-		t.Errorf("Expected error text to match, got '%s'", result.ErrorText)
+	if result.Detail != "Cannot join completed game" {
+		t.Errorf("Expected error text to match, got '%s'", result.Detail)
 	}
 }
 
@@ -215,14 +219,11 @@ func TestErrNotFound(t *testing.T) {
 	if result.HTTPStatusCode != 404 {
 		t.Errorf("Expected status 404, got %d", result.HTTPStatusCode)
 	}
-	if result.StatusText != "Not found." {
-		t.Errorf("Expected 'Not found.', got '%s'", result.StatusText)
+	if result.Title != "Not Found" {
+		t.Errorf("Expected 'Not Found', got '%s'", result.Title)
 	}
-	if result.ErrorText != message {
-		t.Errorf("Expected message '%s', got '%s'", message, result.ErrorText)
-	}
-	if result.AppCode != ErrCodeGameNotFound {
-		t.Errorf("Expected AppCode %d, got %d", ErrCodeGameNotFound, result.AppCode)
+	if result.Detail != message {
+		t.Errorf("Expected message '%s', got '%s'", message, result.Detail)
 	}
 }
 
@@ -234,96 +235,80 @@ func TestErrConflict(t *testing.T) {
 	if result.HTTPStatusCode != 409 {
 		t.Errorf("Expected status 409, got %d", result.HTTPStatusCode)
 	}
-	if result.StatusText != "Conflict." {
-		t.Errorf("Expected 'Conflict.', got '%s'", result.StatusText)
+	if result.Title != "Conflict" {
+		t.Errorf("Expected 'Conflict', got '%s'", result.Title)
 	}
-	if result.ErrorText != message {
-		t.Errorf("Expected message '%s', got '%s'", message, result.ErrorText)
-	}
-	if result.AppCode != ErrCodeDuplicateValue {
-		t.Errorf("Expected AppCode %d, got %d", ErrCodeDuplicateValue, result.AppCode)
+	if result.Detail != message {
+		t.Errorf("Expected message '%s', got '%s'", message, result.Detail)
 	}
 }
 
-// TestErrWithCode tests custom error responses with specific codes
-func TestErrWithCode(t *testing.T) {
+// TestErrWithStatus tests error responses for statuses without a dedicated
+// constructor.
+func TestErrWithStatus(t *testing.T) {
 	tests := []struct {
-		name           string
-		httpStatus     int
-		appCode        int64
-		message        string
-		expectedStatus string
+		name          string
+		httpStatus    int
+		message       string
+		expectedTitle string
 	}{
 		{
-			name:           "game not recruiting",
-			httpStatus:     400,
-			appCode:        ErrCodeGameNotRecruiting,
-			message:        "Game is not accepting new players",
-			expectedStatus: "Bad request.",
+			name:          "game not recruiting",
+			httpStatus:    400,
+			message:       "Game is not accepting new players",
+			expectedTitle: "Bad Request",
 		},
 		{
-			name:           "game full",
-			httpStatus:     400,
-			appCode:        ErrCodeGameFull,
-			message:        "Game has reached maximum capacity",
-			expectedStatus: "Bad request.",
+			name:          "unauthorized",
+			httpStatus:    401,
+			message:       "Token is invalid",
+			expectedTitle: "Unauthorized",
 		},
 		{
-			name:           "unauthorized with custom code",
-			httpStatus:     401,
-			appCode:        ErrCodeInvalidToken,
-			message:        "Token is invalid",
-			expectedStatus: "Unauthorized.",
-		},
-		{
-			name:           "unknown status code",
-			httpStatus:     418, // I'm a teapot
-			appCode:        9999,
-			message:        "Test error",
-			expectedStatus: "Unknown error.",
+			name:          "unregistered status code",
+			httpStatus:    599,
+			message:       "Test error",
+			expectedTitle: "Unknown Error",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ErrWithCode(tt.httpStatus, tt.appCode, tt.message).(*ErrResponse)
+			result := ErrWithStatus(tt.httpStatus, tt.message).(*ErrResponse)
 
 			if result.HTTPStatusCode != tt.httpStatus {
 				t.Errorf("Expected status %d, got %d", tt.httpStatus, result.HTTPStatusCode)
 			}
-			if result.StatusText != tt.expectedStatus {
-				t.Errorf("Expected status text '%s', got '%s'", tt.expectedStatus, result.StatusText)
+			if result.Title != tt.expectedTitle {
+				t.Errorf("Expected title '%s', got '%s'", tt.expectedTitle, result.Title)
 			}
-			if result.ErrorText != tt.message {
-				t.Errorf("Expected message '%s', got '%s'", tt.message, result.ErrorText)
-			}
-			if result.AppCode != tt.appCode {
-				t.Errorf("Expected AppCode %d, got %d", tt.appCode, result.AppCode)
+			if result.Detail != tt.message {
+				t.Errorf("Expected message '%s', got '%s'", tt.message, result.Detail)
 			}
 		})
 	}
 }
 
-// TestGetStatusText tests the status text mapping helper
-func TestGetStatusText(t *testing.T) {
+// TestGetTitle tests the status text mapping helper
+func TestGetTitle(t *testing.T) {
 	tests := []struct {
 		httpStatus   int
 		expectedText string
 	}{
-		{400, "Bad request."},
-		{401, "Unauthorized."},
-		{403, "Forbidden."},
-		{404, "Not found."},
-		{409, "Conflict."},
-		{422, "Validation failed."},
-		{500, "Internal server error."},
-		{418, "Unknown error."}, // Unknown status code
-		{999, "Unknown error."},
+		{400, "Bad Request"},
+		{401, "Unauthorized"},
+		{403, "Forbidden"},
+		{404, "Not Found"},
+		{409, "Conflict"},
+		{422, "Unprocessable Entity"},
+		{500, "Internal Server Error"},
+		{418, "I'm a teapot"},  // registered, so net/http knows it
+		{999, "Unknown Error"}, // unregistered
 	}
 
 	for _, tt := range tests {
 		t.Run(string(rune(tt.httpStatus)), func(t *testing.T) {
-			result := getStatusText(tt.httpStatus)
+			result := getTitle(tt.httpStatus)
 			if result != tt.expectedText {
 				t.Errorf("Expected '%s', got '%s'", tt.expectedText, result)
 			}
@@ -338,11 +323,8 @@ func TestErrGameArchived(t *testing.T) {
 	if result.HTTPStatusCode != 403 {
 		t.Errorf("Expected status 403, got %d", result.HTTPStatusCode)
 	}
-	if result.AppCode != ErrCodeGameArchived {
-		t.Errorf("Expected AppCode %d, got %d", ErrCodeGameArchived, result.AppCode)
-	}
-	if result.ErrorText != "This game is archived and read-only. No new content can be created." {
-		t.Errorf("Unexpected error text: %s", result.ErrorText)
+	if result.Detail != "This game is archived and read-only. No new content can be created." {
+		t.Errorf("Unexpected error text: %s", result.Detail)
 	}
 }
 
@@ -403,11 +385,11 @@ func TestErrorResponseIntegration(t *testing.T) {
 			renderer:     ErrInvalidRequest(errors.New("bad input")),
 			expectedCode: 400,
 			checkJSON: func(t *testing.T, data map[string]interface{}) {
-				if data["status"] != "Invalid request." {
-					t.Errorf("Unexpected status: %v", data["status"])
+				if data["title"] != "Bad Request" {
+					t.Errorf("Unexpected status: %v", data["title"])
 				}
-				if data["error"] != "bad input" {
-					t.Errorf("Unexpected error: %v", data["error"])
+				if data["detail"] != "bad input" {
+					t.Errorf("Unexpected error: %v", data["detail"])
 				}
 			},
 		},
@@ -416,18 +398,28 @@ func TestErrorResponseIntegration(t *testing.T) {
 			renderer:     ErrUnauthorized("invalid token"),
 			expectedCode: 401,
 			checkJSON: func(t *testing.T, data map[string]interface{}) {
-				if data["status"] != "Unauthorized." {
-					t.Errorf("Unexpected status: %v", data["status"])
+				if data["title"] != "Unauthorized" {
+					t.Errorf("Unexpected status: %v", data["title"])
 				}
 			},
 		},
 		{
-			name:         "game archived renders with code",
+			name:         "game archived renders RFC 7807 fields",
 			renderer:     ErrGameArchived(),
 			expectedCode: 403,
 			checkJSON: func(t *testing.T, data map[string]interface{}) {
-				if data["code"] != float64(ErrCodeGameArchived) {
-					t.Errorf("Expected code %d, got %v", ErrCodeGameArchived, data["code"])
+				if data["title"] != "Forbidden" {
+					t.Errorf("Unexpected title: %v", data["title"])
+				}
+				// RFC 7807 mirrors the status in the body as a number. The
+				// frontend must never render this as a message, which is what
+				// the old bespoke format's string "status" invited.
+				if data["status"] != float64(403) {
+					t.Errorf("Expected status 403, got %v", data["status"])
+				}
+				// The dropped "code" field must not reappear.
+				if _, exists := data["code"]; exists {
+					t.Errorf("code should no longer be serialized: %v", data["code"])
 				}
 			},
 		},
@@ -457,5 +449,64 @@ func TestErrorResponseIntegration(t *testing.T) {
 				tt.checkJSON(t, data)
 			}
 		})
+	}
+}
+
+// TestErrResponse_ProblemJSONContentType pins the RFC 7807 media type.
+//
+// The router installs render.SetContentType(ContentTypeJSON) globally, so
+// without the explicit header in Render an error body would go out as plain
+// application/json and a client content-negotiating on problem+json would not
+// recognize it.
+func TestErrResponse_ProblemJSONContentType(t *testing.T) {
+	// Restore the responder afterwards: it is package-level state, and leaving
+	// a wrapper installed would leak into every later test in this package.
+	original := render.Respond
+	t.Cleanup(func() { render.Respond = original })
+	InstallProblemJSONResponder()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	render.Render(rec, req, ErrForbidden("nope"))
+
+	got := rec.Header().Get("Content-Type")
+	if !strings.HasPrefix(got, "application/problem+json") {
+		t.Errorf("Expected application/problem+json, got %q", got)
+	}
+}
+
+// TestErrResponse_InstanceCarriesCorrelationID verifies the support-ticket path:
+// an error body alone must be enough to find the request in the logs.
+func TestErrResponse_InstanceCarriesCorrelationID(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	req = req.WithContext(observability.WithCorrelationID(req.Context(), "corr-abc123"))
+	rec := httptest.NewRecorder()
+
+	render.Render(rec, req, ErrForbidden("nope"))
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &data); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+	if data["instance"] != "urn:actionphase:correlation:corr-abc123" {
+		t.Errorf("Unexpected instance: %v", data["instance"])
+	}
+}
+
+// TestErrResponse_InstanceOmittedWithoutCorrelationID guards against emitting a
+// meaningless bare "urn:actionphase:correlation:" prefix when no ID is present.
+func TestErrResponse_InstanceOmittedWithoutCorrelationID(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	render.Render(rec, req, ErrForbidden("nope"))
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &data); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+	if _, exists := data["instance"]; exists {
+		t.Errorf("instance should be omitted when no correlation ID: %v", data["instance"])
 	}
 }

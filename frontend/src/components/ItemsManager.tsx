@@ -10,6 +10,7 @@ import { apiClient } from '@/lib/api';
 import { useOptionalGameContext } from '@/contexts/GameContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useDirtyChildren } from '@/hooks/useDirtyChildren';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface ItemsManagerProps {
   characterId: number;
@@ -89,7 +90,7 @@ export const ItemsManager: React.FC<ItemsManagerProps> = ({
         // Without this the request failed silently: the modal stayed open with no
         // feedback (e.g. rolling on an empty loot table returns 400).
         const message =
-          (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+          extractApiErrorMessage(error) ||
           'Failed to roll for a random item. Please try again.';
         logger.error('Random loot roll failed', { lootTableId, characterId, error });
         showError(message);

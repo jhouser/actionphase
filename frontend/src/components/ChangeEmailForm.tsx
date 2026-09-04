@@ -4,6 +4,7 @@ import { apiClient } from '../lib/api';
 import { Card, CardHeader, CardBody, Input, Button, Alert } from './ui';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 export function ChangeEmailForm() {
   const { showToast } = useToast();
@@ -23,7 +24,7 @@ export function ChangeEmailForm() {
       setError(null);
     },
     onError: (error: unknown) => {
-      const message = (error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to request email change';
+      const message = extractApiErrorMessage(error) || 'Failed to request email change';
       setError(message);
       showToast(message, 'danger');
     },

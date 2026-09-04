@@ -3,6 +3,7 @@ import { useSuspenseQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { apiClient } from '../lib/api';
 import { Card, CardHeader, CardBody, Button, Alert, Badge } from './ui';
 import { useToast } from '../contexts/ToastContext';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 export function ActiveSessions() {
   const queryClient = useQueryClient();
@@ -31,7 +32,7 @@ export function ActiveSessions() {
       setRevokeSessionId(null);
     },
     onError: (error: unknown) => {
-      const message = (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to revoke session';
+      const message = extractApiErrorMessage(error) || 'Failed to revoke session';
       showToast(message, 'danger');
       setRevokeSessionId(null);
     },
@@ -48,7 +49,7 @@ export function ActiveSessions() {
       setShowRevokeAllConfirmation(false);
     },
     onError: (error: unknown) => {
-      const message = (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to revoke all sessions';
+      const message = extractApiErrorMessage(error) || 'Failed to revoke all sessions';
       showToast(message, 'danger');
       setShowRevokeAllConfirmation(false);
     },

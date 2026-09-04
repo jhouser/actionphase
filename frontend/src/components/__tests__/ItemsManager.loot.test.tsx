@@ -137,7 +137,7 @@ describe('ItemsManager loot rolls', () => {
   // returned for an empty loot table — left the modal open with no feedback.
   it('surfaces the server error message when the roll fails', async () => {
     vi.mocked(apiClient.games.giveRandomLootTableContent).mockRejectedValue({
-      response: { data: { error: 'loot table is empty: add at least one item before rolling' } },
+      response: { data: { detail: 'loot table is empty: add at least one item before rolling' } },
     });
 
     const { onItemsChange } = renderWithGame();
@@ -177,7 +177,7 @@ describe('ItemsManager loot rolls', () => {
 
   it('keeps the modal open when a roll fails so the GM can retry', async () => {
     vi.mocked(apiClient.games.giveRandomLootTableContent).mockRejectedValue({
-      response: { data: { error: 'loot table is empty' } },
+      response: { data: { detail: 'loot table is empty' } },
     });
 
     renderWithGame();

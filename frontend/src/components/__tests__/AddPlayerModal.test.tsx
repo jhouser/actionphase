@@ -149,7 +149,7 @@ describe('AddParticipantModal', () => {
     const banned = new AxiosError('Request failed with status code 403');
     banned.response = {
       status: 403,
-      data: { status: 'Forbidden.', error: "that user is banned from this game's community" },
+      data: { title: 'Forbidden', status: 403, detail: "that user is banned from this game's community" },
     } as AxiosError['response'];
     vi.mocked(useAddParticipant).mockReturnValue(
       makeMutation({ isError: true, error: banned }) as never

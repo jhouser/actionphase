@@ -126,7 +126,7 @@ describe('ApiClient - Authentication', () => {
       const loginError = {
         response: {
           status: 401,
-          data: { error: 'Invalid credentials' },
+          data: { detail: 'Invalid credentials' },
         },
       }
 
@@ -181,7 +181,7 @@ describe('ApiClient - Authentication', () => {
         response: {
           status: 422,
           data: {
-            error: 'Validation failed',
+            detail: 'Validation failed',
             details: {
               email: 'Invalid email format',
               password: 'Password too short',
@@ -254,7 +254,7 @@ describe('ApiClient - Authentication', () => {
       const refreshError = {
         response: {
           status: 401,
-          data: { error: 'Token expired' },
+          data: { detail: 'Token expired' },
         },
       }
 
@@ -405,7 +405,7 @@ describe('ApiClient - Authentication', () => {
       const serverError = {
         response: {
           status: 500,
-          data: { error: 'Internal server error' },
+          data: { detail: 'Internal server error' },
         },
       }
 

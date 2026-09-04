@@ -93,8 +93,8 @@ func TestGetUserIDFromJWT(t *testing.T) {
 
 				// Check error message
 				errResponse := errResp.(*ErrResponse)
-				if errResponse.ErrorText != tt.expectedErrMsg {
-					t.Errorf("Expected error message '%s', got '%s'", tt.expectedErrMsg, errResponse.ErrorText)
+				if errResponse.Detail != tt.expectedErrMsg {
+					t.Errorf("Expected error message '%s', got '%s'", tt.expectedErrMsg, errResponse.Detail)
 				}
 
 				if userID != 0 {
