@@ -34,14 +34,7 @@ import (
 // preserving the status and message the chi handlers produced.
 func humaErr(errResp any) error {
 	if resp, ok := errResp.(*core.ErrResponse); ok {
-		// The app code travels in the errs slice, which is the only channel
-		// huma.NewError offers; the shim unwraps it back onto the response.
-		// Without this, core.ErrWithCode's "code" field is silently dropped.
-		if resp.AppCode != 0 {
-			return huma.NewError(resp.HTTPStatusCode, resp.ErrorText,
-				&humaconfig.CodedError{Code: resp.AppCode, Msg: resp.ErrorText})
-		}
-		return huma.NewError(resp.HTTPStatusCode, resp.ErrorText)
+		return huma.NewError(resp.HTTPStatusCode, resp.Detail)
 	}
 	return huma.Error500InternalServerError("unexpected error")
 }
@@ -888,7 +881,7 @@ func (h *Handler) humaUpdateGameState(ctx context.Context, in *updateGameStateIn
 		// answer 409 with the states involved rather than a bare 500.
 		if errors.Is(err, core.ErrInvalidStateTransition) {
 			return nil, h.logAndErr(ctx,
-				core.ErrWithCode(http.StatusConflict, core.ErrCodeInvalidGameState,
+				core.ErrWithStatus(http.StatusConflict,
 					fmt.Sprintf("cannot change game state from %s to %s", game.State.String, in.Body.State)),
 				"Invalid game state transition requested",
 				"game_id", game.ID, "from_state", game.State.String, "to_state", in.Body.State)

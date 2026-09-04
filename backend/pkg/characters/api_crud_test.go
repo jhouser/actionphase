@@ -793,7 +793,7 @@ func TestCharacterAPI_ValidationErrors(t *testing.T) {
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				core.AssertNoError(t, err, "Should decode error response")
 
-				if errorText, ok := response["error"].(string); ok {
+				if errorText, ok := response["detail"].(string); ok {
 					if len(errorText) == 0 {
 						t.Errorf("Expected error message to contain '%s', but error field was empty", tc.expectedError)
 					}

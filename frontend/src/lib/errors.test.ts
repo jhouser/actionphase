@@ -128,3 +128,73 @@ describe('createAppError fallbacks', () => {
     expect(appError.context?.userMessage).toBe('admin privileges required');
   });
 });
+
+/**
+ * Payloads captured verbatim from the running API after the backend adopted
+ * RFC 7807, one per emitter. The API has three independent error emitters --
+ * the jwt middleware, chi/render for other middleware, and huma for handlers --
+ * and they can drift apart without any of them failing on its own. Pinning a
+ * real body from each is what catches that.
+ */
+describe('extractApiErrorMessage against live API payloads', () => {
+  it('reads a 401 from the jwt middleware', () => {
+    expect(
+      extractApiErrorMessage({
+        response: {
+          data: {
+            title: 'Unauthorized',
+            status: 401,
+            detail: 'no token found',
+            instance: 'urn:actionphase:correlation:corr_7bcd73cd936d3896',
+          },
+        },
+      })
+    ).toBe('no token found');
+  });
+
+  it('reads a 403 from the admin middleware (chi/render)', () => {
+    expect(
+      extractApiErrorMessage({
+        response: {
+          data: { title: 'Forbidden', status: 403, detail: 'admin privileges required' },
+        },
+      })
+    ).toBe('admin privileges required');
+  });
+
+  it('reads a 404 from a huma handler', () => {
+    expect(
+      extractApiErrorMessage({
+        response: {
+          data: { title: 'Not Found', status: 404, detail: 'game with ID 999999 not found' },
+        },
+      })
+    ).toBe('game with ID 999999 not found');
+  });
+
+  it('reads a 422 carrying field-level errors', () => {
+    expect(
+      extractApiErrorMessage({
+        response: {
+          data: {
+            title: 'Unprocessable Entity',
+            status: 422,
+            detail: 'validation failed',
+            errors: [
+              { message: 'expected length >= 3', location: 'body.title', value: '' },
+              { message: 'title must not be blank', location: 'body.title' },
+            ],
+          },
+        },
+      })
+    ).toBe('validation failed');
+  });
+
+  it('never renders the numeric status as the message', () => {
+    // The trap this whole migration exists to defuse: `status` is a number in
+    // RFC 7807, so a fallback chain reaching it shows the user a bare "422".
+    for (const status of [401, 403, 404, 422, 500]) {
+      expect(extractApiErrorMessage({ response: { data: { status } } })).toBeUndefined();
+    }
+  });
+});

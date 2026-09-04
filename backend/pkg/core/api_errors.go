@@ -4,35 +4,45 @@ import (
 	"net/http"
 	"strings"
 
+	"actionphase/pkg/observability"
+
 	"github.com/go-chi/render"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// ErrResponse represents a structured API error response that follows ActionPhase error handling conventions.
-// It separates internal errors from user-facing messages and provides consistent JSON structure.
+// ErrResponse is the chi/render half of the API's RFC 7807 error responses.
 //
-// Error Response Format:
+// Two emitters, one shape. Handler errors are serialized by huma (see
+// pkg/humaconfig); middleware errors -- notably every 401 and 403 raised before
+// a handler runs -- take this chi path instead. The two must agree, because a
+// client cannot tell which produced a given response.
+//
+// Error Response Format (RFC 7807, application/problem+json):
 //
 //	{
-//	  "status": "user-friendly status message",
-//	  "code": 1001,  // optional application-specific error code
-//	  "error": "detailed error for debugging"
+//	  "title": "Forbidden",
+//	  "status": 403,
+//	  "detail": "admin privileges required",
+//	  "instance": "urn:actionphase:correlation:corr-abc123"
 //	}
 //
 // Design Principles:
 //   - Internal errors (Err field) are never exposed to clients
 //   - HTTP status codes follow REST conventions
-//   - StatusText provides user-friendly messages
-//   - ErrorText gives debugging information (safe for clients)
-//   - AppCode enables application-specific error categorization
+//   - Title is the short, static summary of the problem type
+//   - Detail explains this specific occurrence (client-safe)
+//   - Instance carries the correlation ID, so an error body pasted into a
+//     support ticket is enough to find the request in the logs
 type ErrResponse struct {
 	Err            error `json:"-"` // Internal runtime error (never serialized)
 	HTTPStatusCode int   `json:"-"` // HTTP response status code (never serialized)
 
-	StatusText string `json:"status"`          // User-friendly status message
-	AppCode    int64  `json:"code,omitempty"`  // Application-specific error code
-	ErrorText  string `json:"error,omitempty"` // Debugging error message (client-safe)
+	Type     string `json:"type,omitempty"`     // URI identifying the error class
+	Title    string `json:"title"`              // Short, static summary of the problem type
+	Status   int    `json:"status"`             // HTTP status code, mirrored for client convenience
+	Detail   string `json:"detail,omitempty"`   // Explanation specific to this occurrence
+	Instance string `json:"instance,omitempty"` // URI identifying this occurrence (correlation ID)
 }
 
 // Render implements the chi/render.Renderer interface for HTTP response rendering.
@@ -40,17 +50,81 @@ type ErrResponse struct {
 func (e *ErrResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, e.HTTPStatusCode)
 
+	// Status mirrors the HTTP status code inside the body, per RFC 7807. It is
+	// set here rather than in each constructor so the two cannot drift.
+	e.Status = e.HTTPStatusCode
+
+	// Bodies get pasted into support tickets; the X-Correlation-ID header does
+	// not. Carrying the ID in `instance` is what makes a user-reported error
+	// traceable.
+	if id := observability.GetCorrelationID(r.Context()); id != "" {
+		e.Instance = "urn:actionphase:correlation:" + id
+	}
+
 	// Mark the active span as an error for 5xx responses so Tempo shows them
 	// as failed spans. 4xx errors are client mistakes, not service errors.
 	if e.HTTPStatusCode >= 500 {
 		span := trace.SpanFromContext(r.Context())
-		span.SetStatus(codes.Error, e.ErrorText)
+		span.SetStatus(codes.Error, e.Detail)
 		if e.Err != nil {
 			span.RecordError(e.Err)
 		}
 	}
 
 	return nil
+}
+
+// InstallProblemJSONResponder makes chi/render send error bodies as
+// application/problem+json.
+//
+// The Content-Type cannot simply be set inside Render: render.Render calls the
+// Renderer first and *then* render.Respond, whose JSON responder
+// unconditionally overwrites Content-Type with "application/json"
+// (go-chi/render@v1.0.3 responder.go:102). Anything the Renderer sets is
+// therefore clobbered before the client sees it.
+//
+// render.Respond is a package-level variable that chi/render documents as the
+// extension point for precisely this ("maybe you want to test if v is an error
+// and respond differently"). Wrapping it lets non-error responses keep their
+// existing behaviour untouched while error responses get the RFC 7807 type.
+//
+// It mutates package state, so it must run once during startup, before serving.
+// Idempotent.
+func InstallProblemJSONResponder() {
+	inner := render.Respond
+	render.Respond = func(w http.ResponseWriter, r *http.Request, v interface{}) {
+		if _, isProblem := v.(*ErrResponse); isProblem {
+			// Set after the responder writes, since the responder overwrites
+			// the header; the body has been buffered, not flushed, so the
+			// header is still mutable here only if WriteHeader has not run.
+			// Wrapping the writer is what keeps that true.
+			w = &problemJSONWriter{ResponseWriter: w}
+		}
+		inner(w, r, v)
+	}
+}
+
+// problemJSONWriter rewrites the Content-Type at the moment the status line is
+// written, which is the last point before headers become immutable.
+type problemJSONWriter struct {
+	http.ResponseWriter
+	written bool
+}
+
+func (w *problemJSONWriter) WriteHeader(status int) {
+	if !w.written {
+		w.written = true
+		w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *problemJSONWriter) Write(b []byte) (int, error) {
+	if !w.written {
+		w.written = true
+		w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
+	}
+	return w.ResponseWriter.Write(b)
 }
 
 // ErrInvalidRequest creates a 400 Bad Request error for invalid request data.
@@ -66,8 +140,8 @@ func ErrInvalidRequest(err error) render.Renderer {
 	return &ErrResponse{
 		Err:            err,
 		HTTPStatusCode: 400,
-		StatusText:     "Invalid request.",
-		ErrorText:      err.Error(),
+		Title:          "Bad Request",
+		Detail:         err.Error(),
 	}
 }
 
@@ -86,8 +160,8 @@ func ErrInternalError(err error) render.Renderer {
 	return &ErrResponse{
 		Err:            err,
 		HTTPStatusCode: 500,
-		StatusText:     "Internal server error.",
-		ErrorText:      "An unexpected error occurred. Please try again later.",
+		Title:          "Internal Server Error",
+		Detail:         "An unexpected error occurred. Please try again later.",
 	}
 }
 
@@ -103,8 +177,8 @@ func ErrInternalError(err error) render.Renderer {
 func ErrUnauthorized(message string) render.Renderer {
 	return &ErrResponse{
 		HTTPStatusCode: 401,
-		StatusText:     "Unauthorized.",
-		ErrorText:      message,
+		Title:          "Unauthorized",
+		Detail:         message,
 	}
 }
 
@@ -120,8 +194,8 @@ func ErrUnauthorized(message string) render.Renderer {
 func ErrForbidden(message string) render.Renderer {
 	return &ErrResponse{
 		HTTPStatusCode: 403,
-		StatusText:     "Forbidden.",
-		ErrorText:      message,
+		Title:          "Forbidden",
+		Detail:         message,
 	}
 }
 
@@ -138,8 +212,8 @@ func ErrBadRequest(err error) render.Renderer {
 	return &ErrResponse{
 		Err:            err,
 		HTTPStatusCode: 400,
-		StatusText:     "Bad request.",
-		ErrorText:      err.Error(),
+		Title:          "Bad Request",
+		Detail:         err.Error(),
 	}
 }
 
@@ -156,9 +230,8 @@ func ErrBadRequest(err error) render.Renderer {
 func ErrNotFound(message string) render.Renderer {
 	return &ErrResponse{
 		HTTPStatusCode: 404,
-		StatusText:     "Not found.",
-		ErrorText:      message,
-		AppCode:        ErrCodeGameNotFound, // Default, can be overridden
+		Title:          "Not Found",
+		Detail:         message,
 	}
 }
 
@@ -174,54 +247,49 @@ func ErrNotFound(message string) render.Renderer {
 func ErrConflict(message string) render.Renderer {
 	return &ErrResponse{
 		HTTPStatusCode: 409,
-		StatusText:     "Conflict.",
-		ErrorText:      message,
-		AppCode:        ErrCodeDuplicateValue,
+		Title:          "Conflict",
+		Detail:         message,
 	}
 }
 
-// ErrWithCode creates a custom error response with a specific application error code.
-// This allows for more specific error categorization for client handling.
+// ErrWithStatus creates an error response for a status code that has no
+// dedicated constructor above.
+//
+// It replaced ErrWithCode when the API adopted RFC 7807: the application-
+// specific error codes that function carried had no consumer -- the frontend
+// never read the `code` field -- and RFC 7807's `type` URI is the idiomatic
+// replacement should a machine-readable identifier be wanted again.
 //
 // Example Usage:
 //
 //	if game.State != "recruitment" {
-//	    render.Render(w, r, ErrWithCode(400, ErrCodeGameNotRecruiting,
-//	        "Game is not accepting new players"))
+//	    render.Render(w, r, ErrWithStatus(400, "Game is not accepting new players"))
 //	    return
 //	}
-func ErrWithCode(httpStatus int, appCode int64, message string) render.Renderer {
-	statusText := getStatusText(httpStatus)
+func ErrWithStatus(httpStatus int, message string) render.Renderer {
 	return &ErrResponse{
 		HTTPStatusCode: httpStatus,
-		StatusText:     statusText,
-		ErrorText:      message,
-		AppCode:        appCode,
+		Title:          getTitle(httpStatus),
+		Detail:         message,
 	}
 }
 
-// getStatusText returns a default status text for HTTP status codes.
-func getStatusText(httpStatus int) string {
-	statusTexts := map[int]string{
-		400: "Bad request.",
-		401: "Unauthorized.",
-		403: "Forbidden.",
-		404: "Not found.",
-		409: "Conflict.",
-		422: "Validation failed.",
-		500: "Internal server error.",
-	}
-
-	if text, exists := statusTexts[httpStatus]; exists {
+// getTitle returns the RFC 7807 `title` for an HTTP status code.
+//
+// net/http's own status text is used rather than a hand-maintained map, since
+// RFC 7807 titles are exactly the registered reason phrases ("Not Found",
+// "Unprocessable Entity") and a local copy would only drift from them.
+func getTitle(httpStatus int) string {
+	if text := http.StatusText(httpStatus); text != "" {
 		return text
 	}
-	return "Unknown error."
+	return "Unknown Error"
 }
 
 // ErrGameArchived creates a specific error for write operations on completed/cancelled games.
 // Completed games are read-only archives and no new content can be created.
 func ErrGameArchived() render.Renderer {
-	return ErrWithCode(403, ErrCodeGameArchived,
+	return ErrWithStatus(403,
 		"This game is archived and read-only. No new content can be created.")
 }
 

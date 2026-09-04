@@ -18,92 +18,56 @@ import (
 	"reflect"
 	"strings"
 
+	"actionphase/pkg/observability"
+
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 )
 
-// LegacyError reproduces the error body the API has always sent:
+// InstallProblemErrorFormat makes huma stamp the correlation ID into the
+// RFC 7807 `instance` field.
 //
-//	{"status": "Forbidden.", "error": "admin privileges required"}
+// Huma's own ErrorModel is already RFC 7807-compliant, so the body shape needs
+// no help. The one thing huma cannot know is our correlation ID, and the hook
+// that can reach it is NewErrorWithContext rather than NewError: only the
+// former is handed a huma.Context, and the ID lives on the request context
+// underneath it.
 //
-// Huma's default is RFC 7807 (application/problem+json), which the frontend
-// cannot parse. See .claude/planning/rfc7807-error-format.md.
-type LegacyError struct {
-	StatusText string `json:"status"`
-	// AppCode is the application-specific error code core.ErrResponse carries
-	// as "code". Only some errors have one (core.ErrWithCode), so it is
-	// omitempty -- but when present it must survive the conversion, since it is
-	// the machine-readable half of the response and a caller may switch on it.
-	AppCode  int64  `json:"code,omitempty"`
-	ErrorMsg string `json:"error,omitempty"`
-
-	status int
-}
-
-func (e *LegacyError) Error() string  { return e.ErrorMsg }
-func (e *LegacyError) GetStatus() int { return e.status }
-
-// CodedError carries an application error code alongside the message, so
-// NewError can put it on the LegacyError it builds.
+// A body-borne ID matters because bodies get pasted into support tickets while
+// the X-Correlation-ID response header does not, so a user reporting "it said
+// something went wrong" still gives support something to grep for.
 //
-// huma.NewError's signature only passes a status and a message, so a code has
-// nowhere else to travel; wrapping it in the errs slice is the one channel
-// available.
-type CodedError struct {
-	Code int64
-	Msg  string
-}
-
-func (e *CodedError) Error() string { return e.Msg }
-
-// LegacyStatusText mirrors the StatusText values core's error constructors use.
-//
-// 400 and 422 share the "Invalid request." text deliberately: the status code
-// carries the distinction (400 = could not parse, 422 = parsed but invalid),
-// while this string is the human-facing summary and reads the same either way.
-func LegacyStatusText(status int) string {
-	switch status {
-	case http.StatusBadRequest:
-		return "Invalid request."
-	case http.StatusUnauthorized:
-		return "Unauthorized."
-	case http.StatusForbidden:
-		return "Forbidden."
-	case http.StatusNotFound:
-		return "Resource not found."
-	case http.StatusConflict:
-		return "Conflict."
-	case http.StatusUnprocessableEntity:
-		return "Invalid request."
-	default:
-		return "Internal server error."
-	}
-}
-
-// InstallLegacyErrorFormat points huma's error constructor at the legacy shape.
 // It mutates a package-level variable in huma, so it must run once, before any
 // huma API is served. Idempotent.
-func InstallLegacyErrorFormat() {
-	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
-		// Validation failures arrive as errs; their message is more specific
-		// than the generic msg ("validation failed"), so prefer them.
-		detail := msg
-		var appCode int64
-		if len(errs) > 0 && errs[0] != nil {
-			detail = errs[0].Error()
-			if coded, ok := errs[0].(*CodedError); ok {
-				appCode = coded.Code
+func InstallProblemErrorFormat() {
+	huma.NewErrorWithContext = func(ctx huma.Context, status int, msg string, errs ...error) huma.StatusError {
+		err := huma.NewError(status, msg, errs...)
+
+		model, ok := err.(*huma.ErrorModel)
+		if !ok {
+			return err
+		}
+		if ctx != nil {
+			if id := observability.GetCorrelationID(ctx.Context()); id != "" {
+				model.Instance = CorrelationInstance(id)
 			}
 		}
-
-		return &LegacyError{
-			StatusText: LegacyStatusText(status),
-			AppCode:    appCode,
-			ErrorMsg:   detail,
-			status:     status,
-		}
+		return model
 	}
+}
+
+// CorrelationInstance renders a correlation ID as the URI reference RFC 7807
+// asks `instance` to be.
+//
+// The urn: form is used rather than an http:// URL because the ID identifies an
+// occurrence for support to grep for, not a page anyone can fetch; inventing a
+// dereferenceable URL would promise a lookup endpoint that does not exist.
+func CorrelationInstance(correlationID string) string {
+	if correlationID == "" {
+		return ""
+	}
+	return "urn:actionphase:correlation:" + correlationID
 }
 
 // New builds a huma API bound to an existing chi router.
@@ -113,7 +77,7 @@ func InstallLegacyErrorFormat() {
 //   - the $schema link huma injects into response bodies would change the
 //     response shape that 236 frontend call sites depend on
 func New(r chi.Router, title, version string) huma.API {
-	InstallLegacyErrorFormat()
+	InstallProblemErrorFormat()
 	cfg := huma.DefaultConfig(title, version)
 	cfg.DocsPath = ""
 	cfg.SchemasPath = ""

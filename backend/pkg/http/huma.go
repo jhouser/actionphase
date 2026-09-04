@@ -22,8 +22,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// InstallLegacyErrorFormat keeps huma's errors in the shape clients expect.
-func InstallLegacyErrorFormat() { humaconfig.InstallLegacyErrorFormat() }
+// InstallProblemErrorFormat stamps the correlation ID into RFC 7807 errors.
+func InstallProblemErrorFormat() { humaconfig.InstallProblemErrorFormat() }
 
 // newHumaAPI builds a huma API bound to an existing chi router.
 func newHumaAPI(r chi.Router, title, version string) huma.API {

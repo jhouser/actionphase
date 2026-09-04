@@ -86,7 +86,7 @@ func humaErr(errResp render.Renderer) error {
 	if !ok {
 		return huma.Error500InternalServerError("request failed")
 	}
-	return huma.NewError(resp.HTTPStatusCode, resp.ErrorText)
+	return huma.NewError(resp.HTTPStatusCode, resp.Detail)
 }
 
 // requireGM resolves the caller and confirms they may manage this game's

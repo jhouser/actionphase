@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/jwtauth/v5"
 	"github.com/go-chi/render"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
 // ContextKey is used for context keys to avoid collisions.
@@ -213,3 +214,35 @@ func AdminModeMiddleware(next http.Handler) http.Handler {
 // - Admin mode override
 //
 // See pkg/core/permissions.go for implementation details.
+
+// Authenticator replaces jwtauth.Authenticator so that rejected requests get a
+// JSON problem document instead of plain text.
+//
+// jwtauth's own Authenticator answers with http.Error (jwtauth.go:177), which
+// writes "text/plain" and a bare message. That makes 401 the one status whose
+// body no client can parse as JSON -- the frontend's error handling reads a
+// structured body and finds none, so an expired session surfaces as a generic
+// failure rather than "your session has expired".
+//
+// Behaviour is otherwise identical to jwtauth.Authenticator: a missing or
+// unparseable token and a token failing validation both yield 401, and a valid
+// token passes through untouched.
+func Authenticator(ja *jwtauth.JWTAuth) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token, _, err := jwtauth.FromContext(r.Context())
+
+			if err != nil {
+				render.Render(w, r, ErrUnauthorized(err.Error()))
+				return
+			}
+
+			if token == nil || jwt.Validate(token, ja.ValidateOptions()...) != nil {
+				render.Render(w, r, ErrUnauthorized("invalid or expired token"))
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}

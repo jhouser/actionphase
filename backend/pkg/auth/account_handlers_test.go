@@ -143,7 +143,7 @@ func TestV1VerifyEmail(t *testing.T) {
 				var response map[string]interface{}
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], tt.expectedError)
+				assert.Contains(t, response["detail"], tt.expectedError)
 			}
 
 			// Cleanup
@@ -230,7 +230,7 @@ func TestV1ChangeUsername(t *testing.T) {
 				var response map[string]interface{}
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], tt.expectedError)
+				assert.Contains(t, response["detail"], tt.expectedError)
 			}
 
 			// Cleanup - delete all test users
@@ -325,7 +325,7 @@ func TestV1RequestEmailChange(t *testing.T) {
 				var response map[string]interface{}
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], tt.expectedError)
+				assert.Contains(t, response["detail"], tt.expectedError)
 			}
 
 			// Cleanup
@@ -629,7 +629,7 @@ func TestV1RevokeSession(t *testing.T) {
 				var response map[string]interface{}
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				require.NoError(t, err)
-				assert.Contains(t, response["error"], tt.expectedError)
+				assert.Contains(t, response["detail"], tt.expectedError)
 			}
 
 			// Cleanup

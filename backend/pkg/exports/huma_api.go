@@ -58,7 +58,7 @@ func (h *Handler) authorize(ctx context.Context, gameID int32) (int32, error) {
 	if !ok {
 		return 0, huma.Error500InternalServerError("authorization failed")
 	}
-	return 0, huma.NewError(resp.HTTPStatusCode, resp.ErrorText)
+	return 0, huma.NewError(resp.HTTPStatusCode, resp.Detail)
 }
 
 // HumaRequestExport enqueues (or reuses) an archive export for a completed game.

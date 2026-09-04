@@ -134,7 +134,7 @@ func TestAuthAPI_RegistrationEndpoint(t *testing.T) {
 				var response map[string]interface{}
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				core.AssertNoError(t, err, "Error response should be valid JSON")
-				core.AssertNotEqual(t, "", response["status"], "Error response should have status field")
+				core.AssertNotEqual(t, "", response["title"], "Error response should have title field")
 			}
 		})
 	}
@@ -267,7 +267,7 @@ func TestAuthAPI_LoginEndpoint(t *testing.T) {
 				var response map[string]interface{}
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				core.AssertNoError(t, err, "Error response should be valid JSON")
-				core.AssertNotEqual(t, "", response["status"], "Error response should have status field")
+				core.AssertNotEqual(t, "", response["title"], "Error response should have title field")
 			}
 		})
 	}
@@ -640,7 +640,7 @@ func TestAuthAPI_BannedUserLogin(t *testing.T) {
 	var response map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	core.AssertNoError(t, err, "Response should be valid JSON")
-	core.AssertNotEqual(t, "", response["error"], "Response should contain error message")
+	core.AssertNotEqual(t, "", response["detail"], "Response should contain error message")
 }
 
 // TestAuthAPI_V1Me tests the /me endpoint

@@ -16,8 +16,8 @@ func TestHandleDBErrorWithID(t *testing.T) {
 		resourceName       string
 		id                 interface{}
 		expectedStatusCode int
-		expectedStatusText string
-		expectedErrorText  string
+		expectedTitle      string
+		expectedDetail     string
 		expectNil          bool
 	}{
 		{
@@ -33,8 +33,8 @@ func TestHandleDBErrorWithID(t *testing.T) {
 			resourceName:       "game",
 			id:                 456,
 			expectedStatusCode: 404,
-			expectedStatusText: "Not found.",
-			expectedErrorText:  "game with ID 456 not found",
+			expectedTitle:      "Not Found",
+			expectedDetail:     "game with ID 456 not found",
 			expectNil:          false,
 		},
 		{
@@ -43,8 +43,8 @@ func TestHandleDBErrorWithID(t *testing.T) {
 			resourceName:       "user",
 			id:                 789,
 			expectedStatusCode: 404,
-			expectedStatusText: "Not found.",
-			expectedErrorText:  "user with ID 789 not found",
+			expectedTitle:      "Not Found",
+			expectedDetail:     "user with ID 789 not found",
 			expectNil:          false,
 		},
 		{
@@ -53,8 +53,8 @@ func TestHandleDBErrorWithID(t *testing.T) {
 			resourceName:       "session",
 			id:                 "abc-123-def",
 			expectedStatusCode: 404,
-			expectedStatusText: "Not found.",
-			expectedErrorText:  "session with ID abc-123-def not found",
+			expectedTitle:      "Not Found",
+			expectedDetail:     "session with ID abc-123-def not found",
 			expectNil:          false,
 		},
 		{
@@ -63,8 +63,8 @@ func TestHandleDBErrorWithID(t *testing.T) {
 			resourceName:       "character",
 			id:                 int32(999),
 			expectedStatusCode: 404,
-			expectedStatusText: "Not found.",
-			expectedErrorText:  "character with ID 999 not found",
+			expectedTitle:      "Not Found",
+			expectedDetail:     "character with ID 999 not found",
 			expectNil:          false,
 		},
 		{
@@ -73,8 +73,8 @@ func TestHandleDBErrorWithID(t *testing.T) {
 			resourceName:       "poll",
 			id:                 111,
 			expectedStatusCode: 404,
-			expectedStatusText: "Not found.",
-			expectedErrorText:  "poll with ID 111 not found",
+			expectedTitle:      "Not Found",
+			expectedDetail:     "poll with ID 111 not found",
 			expectNil:          false,
 		},
 		{
@@ -83,8 +83,8 @@ func TestHandleDBErrorWithID(t *testing.T) {
 			resourceName:       "game",
 			id:                 222,
 			expectedStatusCode: 500,
-			expectedStatusText: "Internal server error.",
-			expectedErrorText:  "An unexpected error occurred. Please try again later.",
+			expectedTitle:      "Internal Server Error",
+			expectedDetail:     "An unexpected error occurred. Please try again later.",
 			expectNil:          false,
 		},
 		{
@@ -93,8 +93,8 @@ func TestHandleDBErrorWithID(t *testing.T) {
 			resourceName:       "item",
 			id:                 0,
 			expectedStatusCode: 500,
-			expectedStatusText: "Internal server error.",
-			expectedErrorText:  "An unexpected error occurred. Please try again later.",
+			expectedTitle:      "Internal Server Error",
+			expectedDetail:     "An unexpected error occurred. Please try again later.",
 			expectNil:          false,
 		},
 	}
@@ -121,12 +121,12 @@ func TestHandleDBErrorWithID(t *testing.T) {
 				t.Errorf("Expected status %d, got %d", tt.expectedStatusCode, errResponse.HTTPStatusCode)
 			}
 
-			if errResponse.StatusText != tt.expectedStatusText {
-				t.Errorf("Expected status text '%s', got '%s'", tt.expectedStatusText, errResponse.StatusText)
+			if errResponse.Title != tt.expectedTitle {
+				t.Errorf("Expected title '%s', got '%s'", tt.expectedTitle, errResponse.Title)
 			}
 
-			if errResponse.ErrorText != tt.expectedErrorText {
-				t.Errorf("Expected error text '%s', got '%s'", tt.expectedErrorText, errResponse.ErrorText)
+			if errResponse.Detail != tt.expectedDetail {
+				t.Errorf("Expected detail '%s', got '%s'", tt.expectedDetail, errResponse.Detail)
 			}
 
 			// Verify internal error is preserved for 500 errors
@@ -156,8 +156,8 @@ func TestHandleDBErrorWithID_VariousIDTypes(t *testing.T) {
 			result := HandleDBErrorWithID(sql.ErrNoRows, "resource", tt.id)
 			errResponse := result.(*ErrResponse)
 
-			if errResponse.ErrorText != tt.expectedText {
-				t.Errorf("Expected '%s', got '%s'", tt.expectedText, errResponse.ErrorText)
+			if errResponse.Detail != tt.expectedText {
+				t.Errorf("Expected '%s', got '%s'", tt.expectedText, errResponse.Detail)
 			}
 		})
 	}
