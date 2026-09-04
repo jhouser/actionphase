@@ -129,16 +129,15 @@ func (h *Handler) authUser(ctx context.Context) (*core.AuthenticatedUser, error)
 // loadCharacterGame resolves a character and its game together, which every
 // per-character operation needs before it can decide anything.
 //
-// A missing character surfaces as 500, not 404. That is what the chi handlers
-// did -- they passed the lookup error to core.ErrInternalError -- and this port
-// preserves it rather than quietly changing a status the frontend may branch
-// on. Tracked in .claude/planning/http-status-codes.md; the operations below
-// document the 500 rather than claiming a 404 they do not produce.
+// A missing character answers 404. The game lookup underneath deliberately
+// stays 500: a character row pointing at a game that does not exist is data
+// corruption, not something the caller got wrong, and reporting it as 404
+// would tell the client to stop retrying a bug on our side.
 func (h *Handler) loadCharacterGame(ctx context.Context, characterID int32) (*models.Character, *models.Game, error) {
 	character, err := h.CharacterService.GetCharacter(ctx, characterID)
 	if err != nil {
 		h.App.ObsLogger.Warn(ctx, "Failed to get character", "error", err, "character_id", characterID)
-		return nil, nil, huma.Error500InternalServerError(err.Error())
+		return nil, nil, core.NotFoundOr500(err, "character")
 	}
 
 	game, err := h.GameService.GetGame(ctx, character.GameID)
@@ -1218,8 +1217,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 		Security: bearer,
 		Responses: map[string]*huma.Response{
 			"401": {Description: "Not authenticated"},
-			"404": {Description: "Character hidden from the caller (another player's unapproved character in a running game)"},
-			"500": {Description: "No such character. A missing id is reported as a server error, not a 404 -- carried over from the chi handler; see http-status-codes.md"},
+			"404": {Description: "No such character, or character hidden from the caller (another player's unapproved character in a running game)"},
 		},
 	}, h.humaGetCharacter)
 
@@ -1253,7 +1251,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 			"400": {Description: "status was not \"approved\""},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can approve characters"},
-			"500": {Description: "No such character (see the note on getCharacter)"},
+			"404": {Description: "No such character"},
 		},
 	}, h.humaApproveCharacter)
 
@@ -1271,7 +1269,7 @@ func RegisterHumaCharacters(api huma.API, h *Handler) {
 			"400": {Description: "Target user is not an audience member"},
 			"401": {Description: "Not authenticated"},
 			"403": {Description: "Only the GM can assign NPCs"},
-			"500": {Description: "No such character (see the note on getCharacter)"},
+			"404": {Description: "No such character"},
 		},
 	}, h.humaAssignNPC)
 

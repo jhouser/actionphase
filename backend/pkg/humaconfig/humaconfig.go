@@ -94,16 +94,6 @@ func InstallLegacyErrorFormat() {
 			}
 		}
 
-		// Huma hardcodes 422 for request binding/validation failures (a bad
-		// path param, a missing required field). The chi handlers these
-		// replace parsed by hand and returned 400 via core.ErrInvalidRequest,
-		// and existing tests assert 400. Remap so the migration does not
-		// change status codes. Whether to adopt huma's split is tracked in
-		// .claude/planning/http-status-codes.md.
-		if status == http.StatusUnprocessableEntity {
-			status = http.StatusBadRequest
-		}
-
 		return &LegacyError{
 			StatusText: LegacyStatusText(status),
 			AppCode:    appCode,
