@@ -10,6 +10,7 @@ import { useGameForm } from '../hooks/useGameForm';
 import { useSelectableCommunities } from '../hooks/useCommunities';
 import { useGameFormDirty } from '../hooks/useGameFormDirty';
 import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface CreateGameFormProps {
   onSuccess?: (gameId: number) => void;
@@ -132,9 +133,9 @@ export const CreateGameForm = ({
         onSuccess?.(gameId);
       }
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+      const axiosErr = err as { message?: string };
       const errorMessage =
-        axiosErr?.response?.data?.error ||
+        extractApiErrorMessage(err) ||
         (axiosErr?.message && axiosErr.message !== 'Network Error'
           ? axiosErr.message
           : 'Failed to create game');

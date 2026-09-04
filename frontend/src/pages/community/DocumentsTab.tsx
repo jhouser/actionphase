@@ -16,6 +16,7 @@ import { ConfirmModal } from '../../components/ConfirmModal';
 import { useToast } from '../../contexts/ToastContext';
 import { useManageCommunityDocuments } from '../../hooks/useCommunities';
 import type { Community, CommunityDocument } from '../../types/communities';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface DocumentsTabProps {
   community: Community;
@@ -110,11 +111,8 @@ export function DocumentsTab({ community, canModerate }: DocumentsTabProps) {
   };
 
   /** Reads the server's message, which names the actual problem. */
-  const errorDetail = (err: unknown, fallback: string) => {
-    const detail = (err as { response?: { data?: { error?: string } } })?.response?.data
-      ?.error;
-    return detail ?? fallback;
-  };
+  const errorDetail = (err: unknown, fallback: string) =>
+    extractApiErrorMessage(err) ?? fallback;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

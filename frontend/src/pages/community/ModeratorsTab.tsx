@@ -5,6 +5,7 @@ import { UserSearchSelect, type SelectedUser } from '../../components/UserSearch
 import { useToast } from '../../contexts/ToastContext';
 import { useCommunityModerators } from '../../hooks/useCommunities';
 import type { Community } from '../../types/communities';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface ModeratorsTabProps {
   community: Community;
@@ -47,7 +48,7 @@ export function ModeratorsTab({ community, canAdminister }: ModeratorsTabProps) 
       onError: (err: unknown) => {
         // `error`, not `detail` -- see the note in SettingsTab.
         const detail =
-          (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+          extractApiErrorMessage(err);
         showError(detail ?? 'Could not add that moderator');
       },
     });

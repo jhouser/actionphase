@@ -3,6 +3,7 @@ import { Button, HelpTooltip } from '../../components/ui';
 import { useToast } from '../../contexts/ToastContext';
 import { useCommunityBanner } from '../../hooks/useCommunities';
 import type { Community } from '../../types/communities';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface CommunityBannerSectionProps {
   community: Community;
@@ -59,7 +60,7 @@ export function CommunityBannerSection({ community }: CommunityBannerSectionProp
   };
 
   const errorDetail = (err: unknown, fallback: string) =>
-    (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? fallback;
+    extractApiErrorMessage(err) ?? fallback;
 
   const handleConfirm = () => {
     if (!pendingFile) return;

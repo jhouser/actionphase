@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
 import { Card, CardHeader, CardBody, Alert, Spinner, Button } from '../components/ui';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 export function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
@@ -33,7 +34,7 @@ export function VerifyEmailPage() {
           navigate('/dashboard');
         }, 3000);
       } catch (err: unknown) {
-        setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'This verification link is invalid or has expired');
+        setError(extractApiErrorMessage(err) || 'This verification link is invalid or has expired');
       } finally {
         setIsValidating(false);
       }

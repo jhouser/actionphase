@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '../lib/api';
 import { Alert, Button } from './ui';
 import { useToast } from '../contexts/ToastContext';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 export function EmailVerificationBanner() {
   const { showToast } = useToast();
@@ -16,7 +17,7 @@ export function EmailVerificationBanner() {
       showToast('Verification email sent! Please check your inbox.', 'success');
     },
     onError: (error: unknown) => {
-      const message = (error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to send verification email';
+      const message = extractApiErrorMessage(error) || 'Failed to send verification email';
       showToast(message, 'danger');
     },
   });

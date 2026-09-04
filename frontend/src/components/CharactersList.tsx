@@ -17,6 +17,7 @@ import { logger } from '@/services/LoggingService';
 import { useCharacterOwnership } from '../hooks/useCharacterOwnership';
 import { useCharacterSheetPermissions } from '../hooks/useCharacterSheetPermissions';
 import { isGameWritable } from '@/lib/gamePermissions';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface CharactersListProps {
   gameId: number;
@@ -429,7 +430,7 @@ export function CharactersList({
             {deleteCharacterMutation.isError && (
               <div className="p-3 bg-danger/10 border border-danger rounded-md">
                 <p className="text-sm text-semantic-danger">
-                  {(deleteCharacterMutation.error as Error & { response?: { data?: { error?: string } } })?.response?.data?.error ||
+                  {extractApiErrorMessage(deleteCharacterMutation.error) ||
                    'Failed to delete character. The character may have existing activity.'}
                 </p>
               </div>

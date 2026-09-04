@@ -20,6 +20,7 @@ import type {
   WebhookEvent,
 } from '../../types/communities';
 import { WEBHOOK_EVENTS, WEBHOOK_EVENT_LABELS } from '../../types/communities';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface WebhooksTabProps {
   community: Community;
@@ -166,11 +167,8 @@ export function WebhooksTab({ community, canModerate }: WebhooksTabProps) {
   };
 
   /** Reads the server's message, which names the actual problem. */
-  const errorDetail = (err: unknown, fallback: string) => {
-    const detail = (err as { response?: { data?: { error?: string } } })?.response?.data
-      ?.error;
-    return detail ?? fallback;
-  };
+  const errorDetail = (err: unknown, fallback: string) =>
+    extractApiErrorMessage(err) ?? fallback;
 
   const toggleEvent = (event: WebhookEvent) => {
     setDraft((d) => ({

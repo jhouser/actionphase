@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../lib/api';
 import { Input, Button, Card, CardHeader, CardBody, Alert } from '../components/ui';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -18,7 +19,7 @@ export function ForgotPasswordPage() {
       await apiClient.auth.requestPasswordReset(email);
       setSuccess(true);
     } catch (err: unknown) {
-      setError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to request password reset. Please try again.');
+      setError(extractApiErrorMessage(err) || 'Failed to request password reset. Please try again.');
     } finally {
       setIsLoading(false);
     }

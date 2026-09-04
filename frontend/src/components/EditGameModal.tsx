@@ -12,6 +12,7 @@ import { HelpTooltip } from './ui/HelpTooltip';
 import { useGameForm, gameToFormData } from '../hooks/useGameForm';
 import { useGameFormDirty } from '../hooks/useGameFormDirty';
 import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface EditGameModalProps {
   game: GameWithDetails;
@@ -95,8 +96,9 @@ export function EditGameModal({ game, isOpen, onClose, onGameUpdated }: EditGame
       onGameUpdated();
       onClose();
     } catch (err) {
-      if (isAxiosError(err) && err.response?.data?.error) {
-        setError(err.response.data.error);
+      const apiMessage = isAxiosError(err) ? extractApiErrorMessage(err) : undefined;
+      if (apiMessage) {
+        setError(apiMessage);
       } else {
         setError(err instanceof Error ? err.message : 'Failed to update game');
       }

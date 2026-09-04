@@ -15,6 +15,7 @@ import { UserSearchSelect, type SelectedUser } from '../../components/UserSearch
 import { useToast } from '../../contexts/ToastContext';
 import { useCommunityBans, useCommunityModerators } from '../../hooks/useCommunities';
 import type { Community, CommunityBan } from '../../types/communities';
+import { extractApiErrorMessage } from '@/lib/errors';
 
 interface BansTabProps {
   community: Community;
@@ -100,8 +101,7 @@ export function BansTab({ community, canModerate }: BansTabProps) {
         onError: (err: unknown) => {
           // The server's message is specific -- staff, unknown user, past
           // expiry -- and far more useful than a generic failure line.
-          const detail = (err as { response?: { data?: { error?: string } } })?.response
-            ?.data?.error;
+          const detail = extractApiErrorMessage(err);
           showError(detail ?? 'Could not ban that user');
         },
       }
