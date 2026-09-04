@@ -7,6 +7,7 @@ import type { GameFormTabId } from './gameFormTabs';
 import { useRevealInvalidTab } from '../hooks/useRevealInvalidTab';
 import { HelpTooltip } from './ui/HelpTooltip';
 import { useGameForm } from '../hooks/useGameForm';
+import { useSelectableCommunities } from '../hooks/useCommunities';
 import { useGameFormDirty } from '../hooks/useGameFormDirty';
 import { ConfirmDiscardEdits } from './ConfirmDiscardEdits';
 
@@ -54,7 +55,24 @@ export const CreateGameForm = ({
     uploadPendingBanner,
     uploadBanner,
     buildApiPayload,
+    resetFormData,
   } = useGameForm();
+
+  const { communities } = useSelectableCommunities();
+
+  // Preselect when there is exactly one choice: the picker would otherwise be
+  // a required field with a single option, which is a step, not a decision.
+  // Guarded on the field still being empty so it never overrides the GM.
+  //
+  // resetFormData, NOT handleChange: this moves the unsaved-edit baseline along
+  // with the value. A default the form filled in for itself is not an edit, and
+  // with handleChange an untouched form would prompt "discard your changes?" on
+  // close.
+  useEffect(() => {
+    if (communities.length === 1 && formData.community_id === '') {
+      resetFormData({ ...formData, community_id: communities[0].id });
+    }
+  }, [communities, formData, resetFormData]);
 
   const isDirty = useGameFormDirty(formData, initialFormData, pendingBannerFile);
   const [confirmingClose, setConfirmingClose] = useState(false);
@@ -86,15 +104,23 @@ export const CreateGameForm = ({
     e.preventDefault();
     setError(null);
 
-    const { payload, error: validationError } = buildApiPayload();
+    const { payload, error: validationError } = buildApiPayload(true);
     if (!payload) {
       setError(validationError);
       return;
     }
+    // buildApiPayload(true) already refused a missing community, but the shared
+    // return type cannot express that. Narrow rather than cast, so a future
+    // change that drops the check fails here instead of posting without one.
+    if (payload.community_id === undefined) {
+      setError('Please choose a community for this game');
+      return;
+    }
+    const createPayload = { ...payload, community_id: payload.community_id };
 
     setLoading(true);
     try {
-      const response = await apiClient.games.createGame(payload);
+      const response = await apiClient.games.createGame(createPayload);
       const gameId = response.data.id;
 
       if (pendingBannerFile) {
@@ -193,6 +219,8 @@ export const CreateGameForm = ({
       <form onSubmit={handleSubmit} onInvalid={handleInvalid} className="space-y-6">
         <GameFormFields
           formData={formData}
+          communities={communities}
+          communityRequired
           onChange={handleChange}
           bannerUpload={bannerUpload}
           activeTab={activeTab}

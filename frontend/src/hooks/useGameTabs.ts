@@ -81,8 +81,8 @@ export function useGameTabs({
       // Handouts - players can review game materials while applying
       tabList.push({ id: 'handouts', label: 'Handouts', icon: icons.handouts });
       // Note: During recruitment, applicants are shown in the Game Info tab
-      // No "Participants" tab since there are no confirmed participants yet
-      tabList.push({ id: 'info', label: 'Game Info', icon: icons.info });
+      // (appended below), so there is no "Participants" tab here -- there are
+      // no confirmed participants yet.
     } else if (gameState === 'character_creation') {
       // People tab (combines Characters and Participants)
       tabList.push({ id: 'people', label: 'People', badge: participantCount, icon: icons.people });
@@ -153,8 +153,6 @@ export function useGameTabs({
       // History - context-aware label
       tabList.push({ id: 'history', label: 'History', icon: icons.history });
 
-      // Game Info - always available
-      tabList.push({ id: 'info', label: 'Game Info', icon: icons.info });
     } else if (gameState === 'completed' || gameState === 'cancelled') {
       // Post-game tabs - read-only archive view
       tabList.push({ id: 'history', label: 'History', icon: icons.history });
@@ -179,21 +177,28 @@ export function useGameTabs({
         tabList.push({ id: 'audience', label: 'Audience', icon: icons.audience });
       }
 
-      tabList.push({ id: 'info', label: 'Game Info', icon: icons.info });
     } else {
       // Setup state - allow GM to prepare content before recruitment
       tabList.push({ id: 'handouts', label: 'Handouts', icon: icons.handouts });
-      tabList.push({ id: 'info', label: 'Game Info', icon: icons.info });
     }
 
     // Trailing tabs are ordered least-essential last on purpose: TabNavigation
     // collapses tabs into "More" from the end of this list backwards, so
     // position here is what decides survival on a narrow viewport. Reference
-    // material (Loot Tables) outranks the audit trail (Game Logs).
+    // material (Loot Tables) outranks Game Info, which outranks the audit
+    // trail (Game Logs).
     if (isGM) {
       // Loot Tables tab for GM only (not visible to players or audience)
       tabList.push({ id: 'loot_tables', label: 'Loot Tables', icon: icons.info });
     }
+
+    // Game Info - EVERY state, appended once here rather than inside each state
+    // branch. Keeping it in the branches meant eight places had to remember it,
+    // and character_creation did not: the tab was simply missing for that whole
+    // state. Position is deliberate -- TabNavigation collapses into "More" from
+    // the end backwards, so Info sits below reference material (Loot Tables)
+    // and above the audit trail (Game Logs), and is second-to-last overall.
+    tabList.push({ id: 'info', label: 'Game Info', icon: icons.info });
 
     // Game Logs. Epilogue is deliberately excluded from the non-GM arm even
     // though it is a public archive: the log is the GM's audit trail, and while

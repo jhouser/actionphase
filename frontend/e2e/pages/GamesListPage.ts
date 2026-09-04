@@ -57,6 +57,7 @@ export class GamesListPage {
     maxPlayers?: number;
     isAnonymous?: boolean;
     autoAcceptAudience?: boolean;
+    community?: string;
   }): Promise<number> {
     // Open the create game modal
     await this.page.getByRole('button', { name: 'Create Game' }).click();
@@ -67,6 +68,30 @@ export class GamesListPage {
     // Fill in game details
     await this.page.fill('#title', gameData.title);
     await this.page.fill('#description', gameData.description);
+
+    // Community is REQUIRED on create. The form auto-selects only when exactly
+    // one community is selectable, so a caller that leaves this unset relies on
+    // the fixtures happening to offer exactly one -- which stopped being true
+    // the moment the per-spec communities were added, and turned every game
+    // creation into an opaque "field required" failure at submit. Select
+    // explicitly instead of depending on how many fixtures exist.
+    const communitySelect = this.page.getByTestId('game-community');
+    if (gameData.community) {
+      await communitySelect.selectOption({ label: gameData.community });
+    } else {
+      // No preference: take the first real option, skipping the placeholder.
+      // Deterministic given a fixed fixture load, and independent of the count.
+      const firstCommunity = await communitySelect
+        .locator('option')
+        .nth(1)
+        .getAttribute('value');
+      if (!firstCommunity) {
+        throw new Error(
+          'createGame: no community available to select — fixtures may not be loaded'
+        );
+      }
+      await communitySelect.selectOption(firstCommunity);
+    }
 
     if (gameData.genre) {
       await this.page.fill('#genre', gameData.genre);

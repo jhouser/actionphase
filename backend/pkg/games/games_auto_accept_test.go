@@ -44,6 +44,7 @@ func TestGameAPI_AutoAcceptAudience(t *testing.T) {
 		Title:              "Auto-Accept Test Game",
 		Description:        "Testing auto-accept audience",
 		GMUserID:           int32(fixtures.TestUser.ID),
+		CommunityID:        int32(fixtures.TestCommunity.ID),
 		IsPublic:           true,
 		AutoAcceptAudience: true, // Enable auto-accept
 	})
@@ -148,6 +149,7 @@ func TestGameAPI_AutoAcceptAudience(t *testing.T) {
 			Title:              "Manual Approval Game",
 			Description:        "Testing manual approval",
 			GMUserID:           int32(fixtures.TestUser.ID),
+			CommunityID:        int32(fixtures.TestCommunity.ID),
 			IsPublic:           true,
 			AutoAcceptAudience: false, // Disabled
 		})

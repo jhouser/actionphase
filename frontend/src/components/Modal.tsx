@@ -28,6 +28,15 @@ interface ModalProps {
    * Defaults to `4xl`, the width every caller had before this prop existed.
    */
   size?: ModalSize;
+  /**
+   * Overrides the panel's `data-testid`, which defaults to `modal-panel`.
+   *
+   * Only needed when a screen can show two modals at once and a test has to say
+   * WHICH — otherwise the default is enough, and hardcoding it here means every
+   * caller gets a scoping handle without opting in. The backdrop and close
+   * button keep their fixed testids either way; they are one per modal.
+   */
+  testId?: string;
 }
 
 type ModalSize = '2xl' | '4xl' | '5xl' | '7xl';
@@ -46,7 +55,7 @@ const sizeClasses: Record<ModalSize, string> = {
  * - 70% less code (no more dark: classes)
  * - Automatically adapts to all themes (light, dark, future themes)
  */
-export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50', dismissOnBackdrop = true, size = '4xl' }: ModalProps) => {
+export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50', dismissOnBackdrop = true, size = '4xl', testId = 'modal-panel' }: ModalProps) => {
   // Hold the page still while the modal is up: the panel scrolls internally, so
   // without this a wheel or trackpad gesture past its end chains to the body and
   // scrolls the page behind the backdrop. The lock is ref-counted, so a modal
@@ -67,10 +76,14 @@ export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50', 
           className="fixed inset-0 z-0 bg-black/60 backdrop-blur-sm transition-opacity"
           onClick={dismissOnBackdrop ? onClose : undefined}
           aria-hidden="true"
+          data-testid="modal-backdrop"
         />
 
         {/* Modal */}
-        <div className={`relative z-10 surface-raised rounded-lg shadow-2xl ${sizeClasses[size]} w-full max-h-[90vh] overflow-y-auto border border-theme-default`}>
+        <div
+          className={`relative z-10 surface-raised rounded-lg shadow-2xl ${sizeClasses[size]} w-full max-h-[90vh] overflow-y-auto border border-theme-default`}
+          data-testid={testId}
+        >
           {title && (
             <div className="px-3 py-2 sm:px-6 sm:py-4 border-b border-theme-default">
               <div className="flex items-center justify-between">
@@ -78,6 +91,8 @@ export const Modal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50', 
                 <button
                   onClick={onClose}
                   className="text-content-secondary hover:text-content-primary transition-colors"
+                  aria-label="Close"
+                  data-testid="modal-close"
                 >
                   <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

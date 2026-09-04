@@ -97,6 +97,118 @@ CREATE TABLE fingerprint_bans (
     banned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
+-- Communities: tenant-like groupings that own games, a moderator roster, a
+-- banlist, and their own documentation. Membership is OPEN -- there is no
+-- roster and no allowlist; the banlist is the whole access-control mechanism.
+CREATE TABLE communities (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    banner_url TEXT,
+    -- RESTRICT: deleting a user must never orphan a community.
+    owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Community moderators. The OWNER IS NOT A ROW HERE: ownership lives in
+-- communities.owner_user_id and permission helpers treat owner as a superset
+-- of moderator, which is what makes "moderators can do everything except add
+-- moderators" a clean two-tier check.
+CREATE TABLE community_moderators (
+    id SERIAL PRIMARY KEY,
+    community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    granted_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(community_id, user_id)
+);
+
+-- Community bans: the driver for the Communities feature. A ban excludes a user
+-- from ONE community's games without touching the others.
+--
+-- 🔴 Every enforcement read must carry (expires_at IS NULL OR expires_at > NOW()).
+-- Expired rows stay in the table -- they are history, and lifting a ban is a
+-- separate deliberate act -- so a query omitting the test enforces lapsed bans.
+CREATE TABLE community_bans (
+    id SERIAL PRIMARY KEY,
+    community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason TEXT,
+    -- SET NULL: deleting the moderator who issued a ban must not lift the ban.
+    banned_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    banned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,   -- NULL = permanent
+    UNIQUE(community_id, user_id)
+);
+
+-- Ban audit log, deliberately SEPARATE from community_bans: lifting a ban
+-- deletes its row, but the history has to survive that. Append-only.
+CREATE TABLE community_ban_events (
+    id SERIAL PRIMARY KEY,
+    community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    -- 'banned' | 'unbanned' | 'modified'; canonical list in core.ValidBanEventActions.
+    action VARCHAR(20) NOT NULL,
+    -- Snapshots, not references: the ban row is gone when an 'unbanned' event
+    -- is read, and a 'modified' event must show the values as they were then.
+    reason TEXT,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Community documents: a community's own rules and reference pages, shown on
+-- the community page and linked from the Info tab of its games. Mirrors
+-- handouts (same draft/published gate, same markdown) minus the comment thread.
+-- Addressed by ID; a slug would freeze at creation while titles keep changing.
+CREATE TABLE community_documents (
+    id SERIAL PRIMARY KEY,
+    community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    -- 'draft' | 'published'; canonical list in core.ValidDocumentStatuses.
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    -- Explicit display order: a community's rules have a reading order that
+    -- neither title nor creation date expresses.
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    -- SET NULL: deleting the author must not delete the community's rules.
+    created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_community_documents_listing
+    ON community_documents(community_id, status, sort_order, id);
+
+-- Community Discord webhooks: announce a community's game state transitions
+-- into a Discord channel. Best-effort by design -- no deliveries table, no
+-- queue; the three last_* columns are the entire delivery-observability story.
+CREATE TABLE community_webhooks (
+    id SERIAL PRIMARY KEY,
+    community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    -- A CREDENTIAL: never returned by the API in full, only masked.
+    url TEXT NOT NULL,
+    label VARCHAR(100),
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Game states to notify on; empty means this webhook fires for nothing.
+    events TEXT[] NOT NULL DEFAULT '{}',
+    last_success_at TIMESTAMPTZ,
+    last_error TEXT,
+    last_error_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_community_webhooks_dispatch
+    ON community_webhooks(community_id)
+    WHERE is_enabled;
+
+CREATE INDEX idx_community_webhooks_community
+    ON community_webhooks(community_id, id);
+
 -- Games table
 CREATE TABLE games (
     id SERIAL PRIMARY KEY,
@@ -124,6 +236,10 @@ CREATE TABLE games (
     -- composition later). Sparse: '{}' means all defaults, which live in the
     -- frontend. See core.CharacterSheetConfig.
     character_sheet JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- Owning community. NULLABLE ON PURPOSE: games created before Communities
+    -- existed are grandfathered in without one. New games require a community,
+    -- but that is enforced in the application create path, never by NOT NULL.
+    community_id INTEGER REFERENCES communities(id) ON DELETE RESTRICT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

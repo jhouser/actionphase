@@ -13,6 +13,7 @@ This directory contains Architecture Decision Records for ActionPhase. Each ADR 
 | [005](005-frontend-state-management.md) | Frontend State Management | Accepted | 2025-08-07 |
 | [006](006-observability-approach.md) | Observability Approach | **Superseded** | 2025-08-07 (superseded 2026-06-04) |
 | [007](007-testing-strategy.md) | Testing Strategy | Accepted | 2025-08-07 |
+| [008](008-community-scoping.md) | Community Scoping, Grandfathered Games, and Best-Effort Webhooks | Accepted | 2026-09-02 |
 
 ⚠️ = the decision still holds, but specifics in the ADR diverge from the shipped
 code. Each such ADR carries an **Implementation Divergence** section recording

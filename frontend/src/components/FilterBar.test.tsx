@@ -405,4 +405,75 @@ describe('FilterBar', () => {
       expect(screen.getByRole('button', { name: 'Clear Filters' })).toBeInTheDocument();
     });
   });
+
+  describe('Community filter', () => {
+    const communities = [
+      { id: 1, name: 'Midnight Ravens' },
+      { id: 2, name: 'Dawn Chorus' },
+    ];
+    const mockOnCommunityChange = vi.fn();
+
+    // Absent by default so the community games page -- already scoped to one
+    // community -- does not offer a control that navigates off itself.
+    it('is hidden when no communities are supplied', () => {
+      render(<FilterBar {...defaultProps} />);
+      expect(screen.queryByTestId('community-filter')).not.toBeInTheDocument();
+    });
+
+    it('lists the communities plus an all-communities option', () => {
+      render(
+        <FilterBar
+          {...defaultProps}
+          communities={communities}
+          onCommunityChange={mockOnCommunityChange}
+        />
+      );
+
+      const select = screen.getByTestId('community-filter');
+      expect(within(select).getByRole('option', { name: 'All communities' })).toBeInTheDocument();
+      expect(within(select).getByRole('option', { name: 'Midnight Ravens' })).toBeInTheDocument();
+    });
+
+    it('reports a chosen community as a number, not a string', () => {
+      render(
+        <FilterBar
+          {...defaultProps}
+          communities={communities}
+          onCommunityChange={mockOnCommunityChange}
+        />
+      );
+
+      fireEvent.change(screen.getByTestId('community-filter'), { target: { value: '2' } });
+      expect(mockOnCommunityChange).toHaveBeenCalledWith(2);
+    });
+
+    it('reports clearing as undefined so the filter is dropped', () => {
+      render(
+        <FilterBar
+          {...defaultProps}
+          communityId={2}
+          communities={communities}
+          onCommunityChange={mockOnCommunityChange}
+        />
+      );
+
+      fireEvent.change(screen.getByTestId('community-filter'), { target: { value: '' } });
+      expect(mockOnCommunityChange).toHaveBeenCalledWith(undefined);
+    });
+
+    // Without this the Clear Filters button stays hidden while a community
+    // filter is active, leaving no way to undo it except editing the URL.
+    it('counts as an active filter', () => {
+      render(
+        <FilterBar
+          {...defaultProps}
+          communityId={1}
+          communities={communities}
+          onCommunityChange={mockOnCommunityChange}
+        />
+      );
+
+      expect(screen.getByRole('button', { name: 'Clear Filters' })).toBeInTheDocument();
+    });
+  });
 });

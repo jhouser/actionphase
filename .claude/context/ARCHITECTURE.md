@@ -204,6 +204,74 @@ session — that, not a short expiry, is the containment mechanism.
 > `RefreshTokenExpiry` fields, removed in August 2026. Lifetime now lives in one
 > place: `core.SessionLifetime`, shared by the token `exp` and the session row.
 
+### 5b. Community Permission Tiers (added 2026-09-02)
+
+Community authority is **two** functions, not one
+(`backend/pkg/core/permissions.go:274,289`). Picking the wrong one is a
+security bug, not a visible error:
+
+| Function | Grants | Owner | Moderator | Site admin |
+|---|---|---|---|---|
+| `CanModerateCommunity` | bans, documents, webhooks, profile, banner | ✅ | ✅ | admin mode only |
+| `CanAdministerCommunity` | moderator roster **only** | ✅ | ❌ | admin mode only |
+
+**A moderator may do everything except appoint more moderators.** Without that
+split, one moderator could grow the roster faster than the owner could prune it,
+making ownership advisory. The defining test is
+`TestCanAdministerCommunity_ModeratorCannotManageRoster`.
+
+Site admins qualify only with **admin mode enabled**, matching the GM-override
+convention (`IsUserGameMasterCtx`) — an admin browsing normally is not one
+misclick from a moderation action.
+
+`GetCommunityRole` returns `CommunityRoleNone` on a lookup error: a failed
+permission check must never read as elevated access.
+
+**`games.community_id` is nullable on purpose.** Games predating communities
+carry `NULL` and must keep working:
+- Always `LEFT JOIN communities`, never `INNER JOIN` — an inner join silently
+  drops every legacy game from listings, which looks like an empty page rather
+  than an error.
+- `community_id IS NULL` means no ban can reach the game; there is no community
+  whose ban would apply.
+- New games require a community, but that is enforced in the **application
+  create path**, never as a `NOT NULL` constraint.
+
+**See**: `/docs-site/developer/architecture/adrs/008-community-scoping.md`
+
+### 5c. Detached Background Dispatch (added 2026-09-02)
+
+Work that outlives the request — webhook delivery, notification fan-out — must
+**not** close over the request context. It is cancelled the moment the response
+is written, so delivery fails in production and passes in every synchronous
+test.
+
+```go
+// backend/pkg/db/services/webhook_dispatch.go:100
+dispatchCtx, cancel := context.WithTimeout(
+    observability.WithCorrelationID(context.Background(), observability.GetCorrelationID(ctx)),
+    core.WebhookDispatchTimeout,
+)
+observability.SafeGo(dispatchCtx, gs.Logger, "dispatch-community-webhooks", func() {
+    defer cancel()
+    gs.deliverStateChangeWebhooks(dispatchCtx, game, newState)
+})
+```
+
+Three non-negotiable parts:
+1. **`context.Background()`**, with the correlation ID carried across so the
+   detached work stays traceable.
+2. **A timeout**, so a hanging endpoint cannot leak the goroutine.
+3. **`SafeGo`, never a bare `go func()`** — an unrecovered panic in any
+   goroutine kills the process.
+
+Failure never fails the triggering operation: the state change is the user's
+intent, and a third party's outage must not block it. Persistent breakage
+surfaces via `last_error`.
+
+`context.WithoutCancel(ctx)` is the equivalent idiom used by the notification
+paths (`services/messages/posts.go:68`, `services/phases/transitions.go:320`).
+
 ### 6. Error Handling Pattern
 
 **Use typed errors with context**:
@@ -549,6 +617,7 @@ log.Info().
 - ADR-005: Frontend State Management
 - ADR-006: Observability Approach
 - ADR-007: Testing Strategy
+- ADR-008: Community Scoping, Grandfathered Games, and Best-Effort Webhooks
 
 ### System Design
 **Location**: `/docs-site/developer/architecture/`

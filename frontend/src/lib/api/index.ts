@@ -56,6 +56,7 @@ import { MessagesApi } from './messages';
 import { ConversationsApi } from './conversations';
 import { NotificationsApi } from './notifications';
 import { AdminApi } from './admin';
+import { CommunitiesApi } from './communities';
 import { HandoutsApi } from './handouts';
 import { DeadlinesApi } from './deadlines';
 import { PollsApi } from './polls';
@@ -71,6 +72,7 @@ class ApiClient extends BaseApiClient {
   public conversations: ConversationsApi;
   public notifications: NotificationsApi;
   public admin: AdminApi;
+  public communities: CommunitiesApi;
   public handouts: HandoutsApi;
   public deadlines: DeadlinesApi;
   public polls: PollsApi;
@@ -89,6 +91,7 @@ class ApiClient extends BaseApiClient {
     this.conversations = new ConversationsApi();
     this.notifications = new NotificationsApi();
     this.admin = new AdminApi();
+    this.communities = new CommunitiesApi();
     this.handouts = new HandoutsApi();
     this.deadlines = new DeadlinesApi();
     this.polls = new PollsApi();

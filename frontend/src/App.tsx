@@ -6,6 +6,7 @@ import { isChunkLoadError } from './lib/chunkLoadError';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PublicArchiveRoute } from './components/PublicArchiveRoute';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useCommunity } from './hooks/useCommunities';
 import { AdminModeProvider } from './contexts/AdminModeContext';
 import { ScreenshotModeProvider } from './contexts/ScreenshotModeContext';
 import { GameProvider } from './contexts/GameContext';
@@ -32,7 +33,10 @@ const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m
 const UserProfilePage = lazy(() => import('./pages/UserProfilePage').then(m => ({ default: m.UserProfilePage })));
 const CharacterPage = lazy(() => import('./pages/CharacterPage').then(m => ({ default: m.CharacterPage })));
 const ThemeTestPage = lazy(() => import('./pages/ThemeTestPage'));
-const CommunityGuidelinesPage = lazy(() => import('./pages/CommunityGuidelinesPage').then(m => ({ default: m.CommunityGuidelinesPage })));
+const SiteGuidelinesPage = lazy(() => import('./pages/SiteGuidelinesPage').then(m => ({ default: m.SiteGuidelinesPage })));
+const CommunitiesPage = lazy(() => import('./pages/CommunitiesPage').then(m => ({ default: m.CommunitiesPage })));
+const CommunityPage = lazy(() => import('./pages/CommunityPage').then(m => ({ default: m.CommunityPage })));
+const CommunityManagePage = lazy(() => import('./pages/CommunityManagePage').then(m => ({ default: m.CommunityManagePage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -164,6 +168,37 @@ function CatchAll() {
   return <Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />;
 }
 
+/**
+ * /communities/:slug/games is a redirect into the main games listing, not a page
+ * of its own.
+ *
+ * A dedicated page would be a second, weaker implementation of /games: it had no
+ * pagination, search, state filters, or sorting, and silently truncated at the
+ * API's 100-row page cap. Redirecting means the two surfaces cannot disagree
+ * about which games are visible, and the URL keeps working for anyone who
+ * bookmarked it.
+ *
+ * The route carries a slug but the filter takes an id, so the community has to
+ * be resolved first -- hence the fetch rather than a static <Navigate>.
+ */
+function CommunityGamesRedirect() {
+  const { slug } = useParams<{ slug: string }>();
+  const { community, isLoading, isError } = useCommunity(slug);
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  // An unknown slug falls back to the unfiltered listing rather than an error
+  // page: the destination is a listing either way, and showing every game is a
+  // better failure than a dead end.
+  if (isError || !community) {
+    return <Navigate to="/games" replace />;
+  }
+
+  return <Navigate to={`/games?community_id=${community.id}`} replace />;
+}
+
 function GameDetailsPageWrapper() {
   const { gameId } = useParams<{ gameId: string }>();
 
@@ -190,7 +225,15 @@ const router = createBrowserRouter([
     element: <RootLayout />,
     errorElement: <RouteErrorElement />,
     children: [
-      { path: '/community-guidelines', element: <CommunityGuidelinesPage /> },
+      { path: '/site-guidelines', element: <SiteGuidelinesPage /> },
+      // Renamed in the communities work: with communities as a real entity,
+      // "community guidelines" read as one community's rules rather than the
+      // site-wide floor they are. The old path stays as a redirect -- it is
+      // linked from outside the app and printed in older emails.
+      {
+        path: '/community-guidelines',
+        element: <Navigate to="/site-guidelines" replace />,
+      },
       { path: '/login', element: <AuthGatedLogin /> },
       { path: '/forgot-password', element: <AuthGatedForgotPassword /> },
       { path: '/reset-password', element: <AuthGatedResetPassword /> },
@@ -214,6 +257,25 @@ const router = createBrowserRouter([
       {
         path: '/admin/:tab',
         element: <ProtectedRoute requireAdmin><AdminPage /></ProtectedRoute>,
+      },
+      {
+        path: '/communities',
+        element: <ProtectedRoute><CommunitiesPage /></ProtectedRoute>,
+      },
+      {
+        path: '/communities/:slug',
+        element: <ProtectedRoute><CommunityPage /></ProtectedRoute>,
+      },
+      {
+        path: '/communities/:slug/games',
+        element: <ProtectedRoute><CommunityGamesRedirect /></ProtectedRoute>,
+      },
+      // The manage shell is reachable by moderators too, not just the owner, so
+      // it carries no requireAdmin gate. Which controls render is decided
+      // inside, and every write is re-checked server-side.
+      {
+        path: '/communities/:slug/manage/:tab',
+        element: <ProtectedRoute><CommunityManagePage /></ProtectedRoute>,
       },
       {
         path: '/theme-test',

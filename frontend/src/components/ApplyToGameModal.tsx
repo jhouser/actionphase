@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { apiClient } from '../lib/api';
+import { createAppError, getErrorMessage } from '../lib/errors';
 import type { ApplyToGameRequest } from '../types/games';
 import { Modal } from './Modal';
 import { Button, Alert, Select, Textarea } from './ui';
@@ -58,8 +59,22 @@ export const ApplyToGameModal = ({
         message: ''
       });
     } catch (err: unknown) {
-      const errorMessage = (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message || (err as Error)?.message || 'Failed to submit application';
-      setError(errorMessage);
+      // HTTP failures go through createAppError, which reads the backend's
+      // {status, error} envelope. The previous code looked for
+      // response.data.message -- a key the API never sends -- so it found
+      // undefined every time and fell back to axios's "Request failed with
+      // status code 403", hiding actionable refusals like a community ban
+      // behind a bare status number.
+      //
+      // Non-HTTP errors keep their own message instead: createAppError
+      // deliberately replaces those with a generic string, which would throw
+      // away the more specific thing a caller already said.
+      const appError = createAppError(err);
+      setError(
+        appError.statusCode
+          ? getErrorMessage(appError)
+          : (err as Error)?.message || 'Failed to submit application'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -75,9 +90,20 @@ export const ApplyToGameModal = ({
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={modalTitle}>
       <form onSubmit={handleSubmit} className="space-y-6" data-testid="application-form">
-        {error && (
-          <Alert variant="danger">{error}</Alert>
-        )}
+        {/*
+          * The live region stays mounted so screen readers announce an error in
+          * place, but takes up no space while empty: `empty:hidden` makes the
+          * div display:none when it has no children, which also collapses the
+          * form's space-y gap above the next field.
+          *
+          * An earlier version reserved a one-line Alert's height here to avoid
+          * the panel shifting when an error appears. That traded a rare reflow
+          * for a permanent blank band at the top of the form, which every
+          * applicant sees -- the wrong side of the tradeoff.
+          */}
+        <div data-testid="application-error" aria-live="polite" className="empty:hidden">
+          {error && <Alert variant="danger">{error}</Alert>}
+        </div>
 
         {!audienceOnly && (
           <Select

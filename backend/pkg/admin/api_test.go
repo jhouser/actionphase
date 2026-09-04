@@ -12,6 +12,7 @@ import (
 
 	"actionphase/pkg/core"
 	dbsvc "actionphase/pkg/db/services"
+	communitysvc "actionphase/pkg/db/services/communities"
 	messagesvc "actionphase/pkg/db/services/messages"
 	httpmiddleware "actionphase/pkg/http/middleware"
 	"actionphase/pkg/humaconfig"
@@ -52,6 +53,7 @@ func setupAdminTestRouter(app *core.App, testDB *core.TestDatabase) *chi.Mux {
 			IPBanService:          &dbsvc.IPBanService{DB: testDB.Pool, Logger: app.ObsLogger},
 			FingerprintBanService: &dbsvc.FingerprintBanService{DB: testDB.Pool, Logger: app.ObsLogger},
 			MessageService:        &messagesvc.MessageService{DB: testDB.Pool, Logger: app.ObsLogger, Metrics: app.Observability.OTELMetrics},
+			CommunityService:      &communitysvc.CommunityService{DB: testDB.Pool, Logger: app.ObsLogger},
 		}
 		// Routes are registered through huma (see huma_api.go). These tests
 		// assert on HTTP behaviour via router.ServeHTTP, so they are unchanged

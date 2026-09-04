@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { AxiosError } from 'axios';
 import { screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test-utils/render';
@@ -135,6 +136,66 @@ describe('AddParticipantModal', () => {
     await user.click(screen.getByRole('button', { name: /cancel/i }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  /**
+   * Regression: a GM adding a community-banned user saw "They may already be in
+   * the game, or the user may be invalid" -- both of which are false, and
+   * neither of which the GM can act on.
+   *
+   * The server answers 403 with the actual reason; the modal was showing a
+   * fixed string and discarding it.
+   */
+  it('shows the server error message instead of the generic fallback', async () => {
+    const banned = new AxiosError('Request failed with status code 403');
+    banned.response = {
+      status: 403,
+      data: { status: 'Forbidden.', error: "that user is banned from this game's community" },
+    } as AxiosError['response'];
+    vi.mocked(useAddParticipant).mockReturnValue(
+      makeMutation({ isError: true, error: banned }) as never
+    );
+
+    renderWithProviders(<AddParticipantModal gameId={10} role="player" isOpen onClose={vi.fn()} />);
+
+    expect(
+      screen.getByText("that user is banned from this game's community")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/may already be in the game/i)).not.toBeInTheDocument();
+  });
+
+  /**
+   * The generic wording still has a job: it covers failures that carry no
+   * server message at all, such as a dropped connection.
+   */
+  it('falls back to the generic message when the error carries no detail', () => {
+    vi.mocked(useAddParticipant).mockReturnValue(
+      makeMutation({ isError: true, error: new Error('Network Error') }) as never
+    );
+
+    renderWithProviders(<AddParticipantModal gameId={10} role="player" isOpen onClose={vi.fn()} />);
+
+    expect(screen.getByText(/failed to add player/i)).toBeInTheDocument();
+  });
+
+  /**
+   * The error box was red text on a red background -- 1.72:1 in dark mode,
+   * against a WCAG AA floor of 4.5:1 -- because it hand-rolled
+   * `text-semantic-danger` over `bg-semantic-danger-subtle`. Alert pairs that
+   * same background with `text-content-primary`, which clears the bar in every
+   * theme. Asserting on the role keeps this honest without pinning class names.
+   */
+  it('renders the error in an Alert rather than hand-rolled danger-on-danger text', () => {
+    vi.mocked(useAddParticipant).mockReturnValue(
+      makeMutation({ isError: true, error: new Error('Network Error') }) as never
+    );
+
+    renderWithProviders(<AddParticipantModal gameId={10} role="player" isOpen onClose={vi.fn()} />);
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/failed to add player/i);
+    expect(alert.className).not.toMatch(/text-semantic-danger/);
+  });
+
 });
 
 describe('AddPlayerModal wrapper', () => {

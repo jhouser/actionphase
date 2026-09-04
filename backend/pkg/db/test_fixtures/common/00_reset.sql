@@ -38,6 +38,19 @@ DELETE FROM games WHERE gm_user_id IN (SELECT id FROM test_user_ids);
 DELETE FROM ip_bans WHERE TRUE;
 DELETE FROM fingerprint_bans WHERE TRUE;
 
+-- Clean up communities. Ordered before the users DELETE because
+-- communities.owner_user_id is ON DELETE RESTRICT -- a surviving community
+-- would block its owner's deletion and fail the whole reset.
+--
+-- Bans and moderators would CASCADE from communities, but are deleted
+-- explicitly so a ban on a test user in a community owned by someone else
+-- (which is not covered by the cascade) is cleaned up too.
+DELETE FROM community_ban_events WHERE target_user_id IN (SELECT id FROM test_user_ids)
+                                    OR actor_user_id IN (SELECT id FROM test_user_ids);
+DELETE FROM community_bans WHERE user_id IN (SELECT id FROM test_user_ids);
+DELETE FROM community_moderators WHERE user_id IN (SELECT id FROM test_user_ids);
+DELETE FROM communities WHERE owner_user_id IN (SELECT id FROM test_user_ids);
+
 -- Clean up user-related tables
 DELETE FROM sessions WHERE user_id IN (SELECT id FROM test_user_ids);
 DELETE FROM users WHERE id IN (SELECT id FROM test_user_ids);

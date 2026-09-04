@@ -59,13 +59,22 @@ func bindCreate(t *testing.T, body string) (*createGameBody, error) {
 
 // validBody wraps a character_sheet fragment in an otherwise-valid game body, so
 // a rejection can only be coming from the sheet config.
+//
+// Shared with the UPDATE binding tests, so it must carry no create-only field:
+// updateGameBody has no community_id and huma rejects unknown properties.
 func validBody(characterSheet string) string {
 	return `{"title":"A Test Game","description":"A description long enough to validate.","character_sheet":` + characterSheet + `}`
 }
 
+// validCreateBody is validBody plus community_id, which create requires (req 5)
+// but which is incidental to the sheet rules under test.
+func validCreateBody(characterSheet string) string {
+	return `{"title":"A Test Game","description":"A description long enough to validate.","community_id":1,"character_sheet":` + characterSheet + `}`
+}
+
 func TestCreateGameRequestCharacterSheetBinding(t *testing.T) {
 	t.Run("absent config binds as an empty config", func(t *testing.T) {
-		data, err := bindCreate(t, `{"title":"A Test Game","description":"A description long enough to validate."}`)
+		data, err := bindCreate(t, `{"title":"A Test Game","description":"A description long enough to validate.","community_id":1}`)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -75,7 +84,7 @@ func TestCreateGameRequestCharacterSheetBinding(t *testing.T) {
 	})
 
 	t.Run("labels bind through", func(t *testing.T) {
-		data, err := bindCreate(t, validBody(`{"labels":{"skills":"Approaches"}}`))
+		data, err := bindCreate(t, validCreateBody(`{"labels":{"skills":"Approaches"}}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -90,13 +99,13 @@ func TestCreateGameRequestCharacterSheetBinding(t *testing.T) {
 	// needed. If this test fails, the strict decode has been bypassed and the
 	// blob can accumulate junk again.
 	t.Run("unknown key is rejected, not silently dropped", func(t *testing.T) {
-		if _, err := bindCreate(t, validBody(`{"labels":{},"tabs":["skills"]}`)); err == nil {
+		if _, err := bindCreate(t, validCreateBody(`{"labels":{},"tabs":["skills"]}`)); err == nil {
 			t.Fatal("expected unknown key 'tabs' to be rejected")
 		}
 	})
 
 	t.Run("unknown nested label key is rejected", func(t *testing.T) {
-		if _, err := bindCreate(t, validBody(`{"labels":{"abilities":"Powers"}}`)); err == nil {
+		if _, err := bindCreate(t, validCreateBody(`{"labels":{"abilities":"Powers"}}`)); err == nil {
 			t.Fatal("expected unknown label 'abilities' to be rejected")
 		}
 	})
@@ -107,19 +116,19 @@ func TestCreateGameRequestCharacterSheetBinding(t *testing.T) {
 	// broke. Failing during request binding makes it the 400 it actually is.
 	t.Run("over-long label is rejected at bind time, not left to the service", func(t *testing.T) {
 		long := strings.Repeat("a", 40)
-		if _, err := bindCreate(t, validBody(`{"labels":{"skills":"`+long+`"}}`)); err == nil {
+		if _, err := bindCreate(t, validCreateBody(`{"labels":{"skills":"`+long+`"}}`)); err == nil {
 			t.Fatal("expected an over-long label to be rejected during binding")
 		}
 	})
 
 	t.Run("control characters are rejected at bind time", func(t *testing.T) {
-		if _, err := bindCreate(t, validBody(`{"labels":{"skills":"Ap\nproaches"}}`)); err == nil {
+		if _, err := bindCreate(t, validCreateBody(`{"labels":{"skills":"Ap\nproaches"}}`)); err == nil {
 			t.Fatal("expected a newline in a label to be rejected during binding")
 		}
 	})
 
 	t.Run("whitespace-only label binds as no override", func(t *testing.T) {
-		data, err := bindCreate(t, validBody(`{"labels":{"skills":"   "}}`))
+		data, err := bindCreate(t, validCreateBody(`{"labels":{"skills":"   "}}`))
 		if err != nil {
 			t.Fatalf("whitespace-only is an unset label, not an error: %v", err)
 		}
@@ -129,7 +138,7 @@ func TestCreateGameRequestCharacterSheetBinding(t *testing.T) {
 	})
 
 	t.Run("labels are trimmed at bind time", func(t *testing.T) {
-		data, err := bindCreate(t, validBody(`{"labels":{"skills":"  Approaches  "}}`))
+		data, err := bindCreate(t, validCreateBody(`{"labels":{"skills":"  Approaches  "}}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

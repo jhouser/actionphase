@@ -21,6 +21,7 @@ export default defineConfig({
             { text: 'Notifications', link: '/guide/notifications' },
             { text: 'User Settings', link: '/guide/user-settings' },
             { text: 'User Profiles', link: '/guide/user-profiles' },
+            { text: 'Communities', link: '/guide/communities' },
           ]
         },
         {
@@ -30,6 +31,7 @@ export default defineConfig({
             { text: 'Game Settings', link: '/guide/game-settings' },
             { text: 'Player Applications', link: '/guide/player-applications' },
             { text: 'Deadlines', link: '/guide/deadlines' },
+            { text: 'Public Game Archive', link: '/guide/public-archive' },
           ]
         },
         {
@@ -49,12 +51,6 @@ export default defineConfig({
           text: 'Running a Game',
           items: [
             { text: 'Phases', link: '/guide/phases' },
-          ]
-        },
-        {
-          text: 'Other',
-          items: [
-            { text: 'Public Game Archive', link: '/guide/public-archive' },
           ]
         }
       ],

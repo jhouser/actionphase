@@ -31,6 +31,7 @@ func TestCreateGame_AllowGroupConversations(t *testing.T) {
 
 	t.Run("persists true when explicitly set on create", func(t *testing.T) {
 		requestBody := CreateGameRequest{
+			CommunityID:             int32(fixtures.TestCommunity.ID),
 			Title:                   "Test Game With Groups",
 			Description:             "Testing allow_group_conversations=true",
 			AllowGroupConversations: true,
@@ -54,6 +55,7 @@ func TestCreateGame_AllowGroupConversations(t *testing.T) {
 
 	t.Run("persists false when explicitly set on create", func(t *testing.T) {
 		requestBody := CreateGameRequest{
+			CommunityID:             int32(fixtures.TestCommunity.ID),
 			Title:                   "Test Game No Groups",
 			Description:             "Testing allow_group_conversations=false",
 			AllowGroupConversations: false,
@@ -80,6 +82,7 @@ func TestCreateGame_AllowGroupConversations(t *testing.T) {
 			Title:                   "Toggle Test Game",
 			Description:             "Testing toggle",
 			GMUserID:                int32(fixtures.TestUser.ID),
+			CommunityID:             int32(fixtures.TestCommunity.ID),
 			IsPublic:                true,
 			AllowGroupConversations: true,
 		})
@@ -173,6 +176,7 @@ func TestCreateGame_WithSettings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create request payload
 			requestBody := CreateGameRequest{
+				CommunityID:        int32(fixtures.TestCommunity.ID),
 				Title:              "Test Game - " + tt.name,
 				Description:        "Testing game creation with settings",
 				IsAnonymous:        tt.isAnonymous,
@@ -233,6 +237,7 @@ func TestUpdateGame_WithSettings(t *testing.T) {
 		Title:              "Test Game for Update",
 		Description:        "Testing game update with settings",
 		GMUserID:           int32(fixtures.TestUser.ID),
+		CommunityID:        int32(fixtures.TestCommunity.ID),
 		IsPublic:           true,
 		IsAnonymous:        false,
 		AutoAcceptAudience: false,
@@ -340,6 +345,7 @@ func TestCreateGame_SettingsPersistAfterRefresh(t *testing.T) {
 		Title:              "Test Persistence Game",
 		Description:        "Testing settings persistence",
 		GMUserID:           int32(fixtures.TestUser.ID),
+		CommunityID:        int32(fixtures.TestCommunity.ID),
 		IsPublic:           true,
 		IsAnonymous:        true,
 		AutoAcceptAudience: true,
@@ -399,6 +405,7 @@ func TestCreateGame_CommonRoomSchedule(t *testing.T) {
 
 	t.Run("saves schedule fields on create", func(t *testing.T) {
 		body := CreateGameRequest{
+			CommunityID:         int32(fixtures.TestCommunity.ID),
 			Title:               "Schedule Create Test",
 			Description:         "Testing schedule fields at creation",
 			CommonRoomOpenDay:   &openDay,
@@ -433,6 +440,7 @@ func TestCreateGame_CommonRoomSchedule(t *testing.T) {
 
 	t.Run("rejects partial schedule fields on create", func(t *testing.T) {
 		body := CreateGameRequest{
+			CommunityID:        int32(fixtures.TestCommunity.ID),
 			Title:              "Partial Schedule Create Test",
 			Description:        "Testing partial schedule rejection on create",
 			CommonRoomOpenDay:  &openDay,
@@ -470,6 +478,7 @@ func TestUpdateGame_CommonRoomSchedule_PartialFill(t *testing.T) {
 		Title:       "Partial Schedule Test Game",
 		Description: "Testing partial schedule rejection",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 	})
 	core.AssertNoError(t, err, "Should create game")
 
@@ -536,6 +545,7 @@ func TestUpdateGame_CommonRoomSchedule(t *testing.T) {
 		Title:       "Schedule Test Game",
 		Description: "Testing common room schedule persistence",
 		GMUserID:    int32(fixtures.TestUser.ID),
+		CommunityID: int32(fixtures.TestCommunity.ID),
 	})
 	core.AssertNoError(t, err, "Should create game")
 

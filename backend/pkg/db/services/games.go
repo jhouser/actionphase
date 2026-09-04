@@ -2,9 +2,11 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -20,6 +22,13 @@ import (
 type GameService struct {
 	DB     *pgxpool.Pool
 	Logger *observability.Logger
+
+	// WebhookNotifier posts community Discord webhooks on state transitions.
+	//
+	// NIL IS A VALID CONFIGURATION -- most tests and any deployment without
+	// Discord leave it unset -- so every dispatch path must no-op rather than
+	// panic. Best-effort: a webhook failure never fails a transition.
+	WebhookNotifier core.DiscordWebhookSender
 }
 
 // Ensure GameService implements the interface at compile time
@@ -113,6 +122,28 @@ func (gs *GameService) CreateGame(ctx context.Context, req core.CreateGameReques
 		return nil, err
 	}
 
+	// Every new game belongs to a community (req 5). Checked here rather than
+	// left to the foreign key so an unknown id is a 400 naming the problem
+	// instead of a 500, and so an INACTIVE community is refused at all -- the FK
+	// cannot express that, and an inactive community accepts no new games.
+	if err := gs.validateGameCommunity(ctx, req.CommunityID); err != nil {
+		return nil, err
+	}
+
+	// Membership is otherwise open -- anyone may create a game in any active
+	// community -- but not someone that community has banned. Without this a
+	// banned user simply spins up their own game under the community's banner.
+	banned, err := queries.IsUserBannedFromCommunity(ctx, models.IsUserBannedFromCommunityParams{
+		CommunityID: req.CommunityID,
+		UserID:      req.GMUserID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to check community ban: %w", err)
+	}
+	if banned {
+		return nil, core.ErrUserBannedFromCommunity
+	}
+
 	game, err := queries.CreateGame(ctx, models.CreateGameParams{
 		Title:                   req.Title,
 		Description:             pgtype.Text{String: req.Description, Valid: req.Description != ""},
@@ -133,6 +164,7 @@ func (gs *GameService) CreateGame(ctx context.Context, req core.CreateGameReques
 		CommonRoomCloseDay:      closeDay,
 		CommonRoomCloseTime:     closeTime,
 		ScheduleTimezone:        scheduleTimezone,
+		CommunityID:             pgtype.Int4{Int32: req.CommunityID, Valid: true},
 		CharacterSheet:          characterSheet,
 	})
 
@@ -152,6 +184,55 @@ func (gs *GameService) CreateGame(ctx context.Context, req core.CreateGameReques
 	)
 
 	return &game, nil
+}
+
+// refuseIfBannedFromGameCommunity blocks a user from joining a game whose
+// community has banned them.
+//
+// Every join path funnels through here rather than repeating the query, so a
+// new path added later has one obvious thing to call. The grandfathering rule
+// lives in the SQL: the query inner-joins through games.community_id, so a
+// legacy game with a NULL community yields no row and is never blocked.
+func (gs *GameService) refuseIfBannedFromGameCommunity(ctx context.Context, gameID, userID int32) error {
+	queries := models.New(gs.DB)
+
+	banned, err := queries.IsUserBannedFromGameCommunity(ctx, models.IsUserBannedFromGameCommunityParams{
+		GameID: gameID,
+		UserID: userID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to check community ban: %w", err)
+	}
+	if banned {
+		gs.Logger.Warn(ctx, "Refused join: user is banned from the game's community",
+			"game_id", gameID,
+			"user_id", userID,
+		)
+		return core.ErrUserBannedFromCommunity
+	}
+	return nil
+}
+
+// validateGameCommunity confirms a community may receive a game: it must exist
+// and be active.
+//
+// Shared by create and reassignment so the two cannot drift -- a rule enforced
+// on one path only is not enforced.
+func (gs *GameService) validateGameCommunity(ctx context.Context, communityID int32) error {
+	queries := models.New(gs.DB)
+
+	community, err := queries.GetCommunityByID(ctx, communityID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return core.ErrCommunityNotFound
+		}
+		return fmt.Errorf("look up game community: %w", err)
+	}
+
+	if !community.IsActive {
+		return core.ErrCommunityInactive
+	}
+	return nil
 }
 
 func (gs *GameService) GetGame(ctx context.Context, gameID int32) (*models.Game, error) {
@@ -282,6 +363,17 @@ func (gs *GameService) UpdateGameState(ctx context.Context, gameID int32, newSta
 		}
 	}
 
+	// Announce the transition to the community's Discord webhooks (req 9).
+	//
+	// Last, and deliberately so: every side effect above has already run, so the
+	// notification describes a transition that is fully complete rather than one
+	// still in progress. Returns immediately -- delivery happens on a detached
+	// goroutine and can neither block nor fail this call.
+	//
+	// `game` is passed rather than re-read: it is the post-update row, and
+	// re-reading would race a concurrent edit.
+	gs.dispatchStateChangeWebhooks(ctx, &game, newState)
+
 	return &game, nil
 }
 
@@ -406,6 +498,31 @@ func (gs *GameService) UpdateGame(ctx context.Context, req core.UpdateGameReques
 		return nil, err
 	}
 
+	// Community reassignment (decision 4). Absent means "leave it alone", which
+	// is how every existing edit behaves and why the column is preserve-on-absent
+	// in the query rather than part of the full replace.
+	//
+	// Setup-only: once a game leaves setup it has recruited under one
+	// community's rules and banlist, so moving it is not an ordinary edit.
+	//
+	// The lock is on CHANGING the community, not on naming it. A client that
+	// round-trips a GET into a PUT resends the current value on every edit; if
+	// mere presence were refused, such a client could never rename a recruiting
+	// game. So compare against what is stored and only gate an actual move.
+	var communityID pgtype.Int4
+	if req.CommunityID != nil {
+		isMove := !game.CommunityID.Valid || game.CommunityID.Int32 != *req.CommunityID
+		if isMove {
+			if game.State.String != core.GameStateSetup {
+				return nil, core.ErrGameCommunityLocked
+			}
+			if err := gs.validateGameCommunity(ctx, *req.CommunityID); err != nil {
+				return nil, err
+			}
+		}
+		communityID = pgtype.Int4{Int32: *req.CommunityID, Valid: true}
+	}
+
 	var startDate, endDate, recruitmentDeadline pgtype.Timestamptz
 
 	if req.StartDate != nil {
@@ -462,6 +579,7 @@ func (gs *GameService) UpdateGame(ctx context.Context, req core.UpdateGameReques
 		CommonRoomCloseDay:      closeDay,
 		CommonRoomCloseTime:     closeTime,
 		ScheduleTimezone:        scheduleTimezone,
+		CommunityID:             communityID,
 		CharacterSheet:          updateCharacterSheet,
 	})
 	if err != nil {
@@ -600,6 +718,10 @@ func (gs *GameService) AddGameParticipant(ctx context.Context, gameID, userID in
 		return nil, err
 	}
 
+	if err := gs.refuseIfBannedFromGameCommunity(ctx, gameID, userID); err != nil {
+		return nil, err
+	}
+
 	participant, err := queries.AddGameParticipant(ctx, models.AddGameParticipantParams{
 		GameID: gameID,
 		UserID: userID,
@@ -676,6 +798,13 @@ func (gs *GameService) GetFilteredGames(ctx context.Context, filters core.GameLi
 		adminUserID = *filters.AdminUserID
 	}
 
+	// 0 means "every community" in the SQL, which is also the zero value, so a
+	// nil filter needs no special case.
+	var communityID int32
+	if filters.CommunityID != nil {
+		communityID = *filters.CommunityID
+	}
+
 	// Set pagination defaults if not provided
 	page := filters.Page
 	if page == 0 {
@@ -699,6 +828,7 @@ func (gs *GameService) GetFilteredGames(ctx context.Context, filters core.GameLi
 		Column5: filters.AdminMode,
 		Column6: adminUserID,
 		Column7: filters.Search,
+		Column8: communityID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to count games: %w", err)
@@ -716,6 +846,7 @@ func (gs *GameService) GetFilteredGames(ctx context.Context, filters core.GameLi
 		Column8:  filters.Search,
 		Column9:  limit,
 		Column10: offset,
+		Column11: communityID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch games: %w", err)
@@ -806,6 +937,9 @@ func enrichedGameFromRow(row models.GetFilteredGamesRow) *core.EnrichedGameListI
 		AllowGroupConversations: row.AllowGroupConversations,
 		PortraitAvatars:         row.PortraitAvatars,
 		BannerURL:               nullTextToStringPtr(row.BannerUrl),
+		CommunityID:             nullInt4ToInt32Ptr(row.CommunityID),
+		CommunityName:           nullTextToStringPtr(row.CommunityName),
+		CommunitySlug:           nullTextToStringPtr(row.CommunitySlug),
 		CreatedAt:               timestamptzToTime(row.CreatedAt),
 		UpdatedAt:               timestamptzToTime(row.UpdatedAt),
 		CurrentPlayers:          int32(row.CurrentPlayers),
@@ -969,6 +1103,13 @@ func (gs *GameService) RemovePlayer(ctx context.Context, gameID, userID, gmUserI
 func (gs *GameService) AddParticipantWithRole(ctx context.Context, gameID, userID int32, role string) (*models.GameParticipant, error) {
 	queries := models.New(gs.DB)
 
+	// The GM's direct-add bypasses the application process, and with it the
+	// apply-time ban gate -- so the ban has to be re-checked here. A community
+	// ban outranks the GM: the GM runs the game, the community owns the banlist.
+	if err := gs.refuseIfBannedFromGameCommunity(ctx, gameID, userID); err != nil {
+		return nil, err
+	}
+
 	participant, err := queries.AddParticipantWithRole(ctx, models.AddParticipantWithRoleParams{
 		GameID: gameID,
 		UserID: userID,
@@ -1012,6 +1153,13 @@ func (gs *GameService) UpdateGameAutoAcceptAudience(ctx context.Context, gameID 
 // Otherwise, they are added with 'pending' status and require GM approval.
 func (gs *GameService) CreateAudienceApplication(ctx context.Context, gameID, userID int32) (*models.GameParticipant, error) {
 	queries := models.New(gs.DB)
+
+	// Checked before the auto-accept branch, so it covers both outcomes: a
+	// banned user must neither be auto-accepted nor left sitting as a pending
+	// audience request for the GM to approve.
+	if err := gs.refuseIfBannedFromGameCommunity(ctx, gameID, userID); err != nil {
+		return nil, err
+	}
 
 	// Check if auto-accept is enabled for this game
 	autoAccept, err := queries.GetGameAutoAcceptAudience(ctx, gameID)

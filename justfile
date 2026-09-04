@@ -658,14 +658,18 @@ dead-code:
 
 _dead-code-windows:
   #!pwsh.exe
-  $out = {{BE}} sh -c "deadcode ./... 2>&1 | grep -v ""pkg/core/test_\|pkg/core/mocks\|pkg/core/repository_mocks\|pkg/db/services/test_suite\|pkg/http/test_helpers\|pkg/core/test_best_practices"" || true"
+  $out = {{BE}} sh -c "deadcode ./... 2>&1 | grep -v ""pkg/core/test_\|pkg/core/mocks\|pkg/core/repository_mocks\|pkg/db/services/test_suite\|pkg/http/test_helpers\|pkg/core/test_best_practices\|pkg/discord/test_"" || true"
   if ($out) {
     Write-Host $out
   }
 _dead-code-unix:
   #!/usr/bin/env bash
+  # `pkg/discord/test_`: MockWebhookClient is imported by tests in two other
+  # packages (so it cannot be a _test.go file) and has no production
+  # instantiation to make it reachable -- webhooks ship without a mock fallback
+  # on purpose. See the note in pkg/discord/test_webhook_client.go.
   output=$({{BE}} deadcode ./... 2>&1 | grep -v \
-    "pkg/core/test_\|pkg/core/mocks\|pkg/core/repository_mocks\|pkg/db/services/test_suite\|pkg/http/test_helpers\|pkg/core/test_best_practices" || true)
+    "pkg/core/test_\|pkg/core/mocks\|pkg/core/repository_mocks\|pkg/db/services/test_suite\|pkg/http/test_helpers\|pkg/core/test_best_practices\|pkg/discord/test_" || true)
   if [ -n "$output" ]; then echo "$output"; exit 1; fi
 
 # TypeScript type-check (in frontend container).

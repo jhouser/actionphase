@@ -286,51 +286,6 @@ func TestGameApplicationService_GetGameApplications(t *testing.T) {
 	})
 }
 
-func TestGameApplicationService_BulkOperations(t *testing.T) {
-	testDB := core.NewTestDatabase(t)
-	app := core.NewTestApp(testDB.Pool)
-	defer testDB.Close()
-
-	service := &GameApplicationService{DB: testDB.Pool}
-	gameService := &GameService{DB: testDB.Pool, Logger: app.ObsLogger}
-
-	// Create test users
-	gm := testDB.CreateTestUser(t, "gm", "gm@example.com")
-	player1 := testDB.CreateTestUser(t, "player1", "player1@example.com")
-	player2 := testDB.CreateTestUser(t, "player2", "player2@example.com")
-
-	// Create game
-	game := testDB.CreateTestGame(t, int32(gm.ID), "Test Game")
-	_, err := gameService.UpdateGameState(context.Background(), game.ID, core.GameStateRecruitment)
-	require.NoError(t, err)
-
-	// Create applications
-	_, err = service.CreateGameApplication(context.Background(), core.CreateGameApplicationRequest{
-		GameID: game.ID,
-		UserID: int32(player1.ID),
-		Role:   core.RolePlayer,
-	})
-	require.NoError(t, err)
-
-	_, err = service.CreateGameApplication(context.Background(), core.CreateGameApplicationRequest{
-		GameID: game.ID,
-		UserID: int32(player2.ID),
-		Role:   core.RolePlayer,
-	})
-	require.NoError(t, err)
-
-	t.Run("bulk approves all applications", func(t *testing.T) {
-		err := service.BulkApproveApplications(context.Background(), game.ID, int32(gm.ID))
-
-		require.NoError(t, err)
-
-		// Verify all applications are approved
-		applications, err := service.GetGameApplicationsByStatus(context.Background(), game.ID, core.ApplicationStatusApproved)
-		require.NoError(t, err)
-		assert.Len(t, applications, 2)
-	})
-}
-
 func TestGameApplicationService_ConvertToParticipants(t *testing.T) {
 	testDB := core.NewTestDatabase(t)
 	app := core.NewTestApp(testDB.Pool)
@@ -364,9 +319,14 @@ func TestGameApplicationService_ConvertToParticipants(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Approve applications
-	err = service.BulkApproveApplications(context.Background(), game.ID, int32(gm.ID))
+	// Approve each application individually -- the path the review handler
+	// actually uses. (Bulk approve was removed: nothing called it. Closing
+	// recruitment rejects the pending ones and converts the approved ones.)
+	pending, err := service.GetGameApplicationsByStatus(context.Background(), game.ID, core.ApplicationStatusPending)
 	require.NoError(t, err)
+	for _, a := range pending {
+		require.NoError(t, service.ApproveGameApplication(context.Background(), a.ID, int32(gm.ID)))
+	}
 
 	t.Run("converts approved applications to participants", func(t *testing.T) {
 		err := service.ConvertApprovedApplicationsToParticipants(context.Background(), game.ID)

@@ -6,6 +6,8 @@ Audience members observe a game without being participants. They can see private
 
 During **Recruitment**, when you click to apply for a game, you can choose whether to apply as a **Player** or as an **Audience** member. After Recruitment ends, the player option is no longer available but you can still join as audience — a **Join as Audience** button appears on the game page through Character Creation, In Progress, and after Completion.
 
+Joining as audience is blocked if you're banned from the community that runs the game. See [Communities](./communities#bans).
+
 Whether you're added immediately or need GM approval depends on the game's settings. If the GM has enabled **Auto-Accept Audience**, you're added immediately. Otherwise, the GM must approve your application.
 
 ## Audience View

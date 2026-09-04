@@ -34,6 +34,7 @@ export function useGameListing() {
     const statesParam = searchParams.get('states');
     const participationParam = searchParams.get('participation');
     const openSpotsParam = searchParams.get('has_open_spots');
+    const communityParam = searchParams.get('community_id');
     const sortByParam = searchParams.get('sort_by');
     const pageParam = searchParams.get('page');
     const pageSizeParam = searchParams.get('page_size');
@@ -43,6 +44,9 @@ export function useGameListing() {
       states: statesParam ? (statesParam.split(',') as GameState[]) : undefined,
       participation: participationParam as ParticipationFilter | undefined,
       has_open_spots: openSpotsParam === 'true' ? true : openSpotsParam === 'false' ? false : undefined,
+      // Parsed defensively: a junk community_id in a shared URL should show
+      // everything rather than nothing.
+      community_id: communityParam && Number(communityParam) > 0 ? Number(communityParam) : undefined,
       sort_by: (sortByParam as SortBy) || 'recent_activity',
       admin_mode: adminModeEnabled, // Add admin mode from context
       page: pageParam ? parseInt(pageParam, 10) : 1,
@@ -91,6 +95,15 @@ export function useGameListing() {
           newParams.set('participation', updates.participation);
         } else {
           newParams.delete('participation');
+        }
+      }
+
+      // Update or remove community_id
+      if ('community_id' in updates) {
+        if (updates.community_id) {
+          newParams.set('community_id', updates.community_id.toString());
+        } else {
+          newParams.delete('community_id');
         }
       }
 
@@ -164,6 +177,14 @@ export function useGameListing() {
     [updateFilters]
   );
 
+  const setCommunity = useCallback(
+    (communityId?: number) => {
+      // Back to page 1: the current page may not exist in the narrowed set.
+      updateFilters({ community_id: communityId, page: 1 });
+    },
+    [updateFilters]
+  );
+
   const setSortBy = useCallback(
     (sortBy: SortBy) => {
       updateFilters({ sort_by: sortBy });
@@ -212,6 +233,7 @@ export function useGameListing() {
     setStates,
     setParticipation,
     setHasOpenSpots,
+    setCommunity,
     setSortBy,
     setPage,
     setPageSize,

@@ -213,7 +213,7 @@ export function GameActions({
                       setShowMenu(false);
                     }}
                     disabled={actionLoading}
-                    className="w-full text-left px-4 py-2 text-sm text-semantic-danger hover:bg-semantic-danger-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full text-left px-4 py-2 text-sm text-semantic-danger hover:bg-semantic-danger-subtle hover:text-content-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     data-testid="delete-game-button"
                   >
                     Delete Game

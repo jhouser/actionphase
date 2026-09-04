@@ -22,23 +22,25 @@ import (
 
 // CreateGameRequest represents the request to create a new game
 type CreateGameRequest struct {
-	Title                   string              `json:"title"`
-	Description             string              `json:"description"`
-	Genre                   string              `json:"genre,omitempty"`
-	StartDate               *core.LocalDateTime `json:"start_date,omitempty"`
-	EndDate                 *core.LocalDateTime `json:"end_date,omitempty"`
-	RecruitmentDeadline     *core.LocalDateTime `json:"recruitment_deadline,omitempty"`
-	MaxPlayers              int32               `json:"max_players,omitempty"`
-	IsAnonymous             bool                `json:"is_anonymous"`
-	AutoAcceptAudience      bool                `json:"auto_accept_audience"`
-	AllowGroupConversations bool                `json:"allow_group_conversations"`
-	PortraitAvatars         bool                `json:"portrait_avatars"`
-	BannerURL               *string             `json:"banner_url,omitempty"`
-	CommonRoomOpenDay       *int16              `json:"common_room_open_day,omitempty"`
-	CommonRoomOpenTime      *string             `json:"common_room_open_time,omitempty"`
-	CommonRoomCloseDay      *int16              `json:"common_room_close_day,omitempty"`
-	CommonRoomCloseTime     *string             `json:"common_room_close_time,omitempty"`
-	ScheduleTimezone        *string             `json:"schedule_timezone,omitempty"`
+	Title               string              `json:"title"`
+	Description         string              `json:"description"`
+	Genre               string              `json:"genre,omitempty"`
+	StartDate           *core.LocalDateTime `json:"start_date,omitempty"`
+	EndDate             *core.LocalDateTime `json:"end_date,omitempty"`
+	RecruitmentDeadline *core.LocalDateTime `json:"recruitment_deadline,omitempty"`
+	MaxPlayers          int32               `json:"max_players,omitempty"`
+	// Required on create (req 5); see the huma createGameBody twin.
+	CommunityID             int32   `json:"community_id"`
+	IsAnonymous             bool    `json:"is_anonymous"`
+	AutoAcceptAudience      bool    `json:"auto_accept_audience"`
+	AllowGroupConversations bool    `json:"allow_group_conversations"`
+	PortraitAvatars         bool    `json:"portrait_avatars"`
+	BannerURL               *string `json:"banner_url,omitempty"`
+	CommonRoomOpenDay       *int16  `json:"common_room_open_day,omitempty"`
+	CommonRoomOpenTime      *string `json:"common_room_open_time,omitempty"`
+	CommonRoomCloseDay      *int16  `json:"common_room_close_day,omitempty"`
+	CommonRoomCloseTime     *string `json:"common_room_close_time,omitempty"`
+	ScheduleTimezone        *string `json:"schedule_timezone,omitempty"`
 	// Typed here, unlike the chi version's json.RawMessage: that was a
 	// workaround for render.Bind's permissive decoder silently dropping unknown
 	// keys, and huma rejects them natively.
