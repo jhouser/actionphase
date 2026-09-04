@@ -10248,6 +10248,8 @@ paths:
                     description: OK
                 "401":
                     description: Not authenticated
+                "404":
+                    description: No such message
                 "422":
                     description: Request failed validation
             security:
@@ -11189,6 +11191,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not allowed to delete this comment
+                "404":
+                    description: No such comment
                 "422":
                     description: Request failed validation
             security:
@@ -11242,6 +11246,8 @@ paths:
                     description: Not authenticated
                 "403":
                     description: Not the comment's author, or the character is not the caller's
+                "404":
+                    description: No such comment
                 "422":
                     description: Request failed validation
             security:
